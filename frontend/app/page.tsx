@@ -1,24 +1,26 @@
+import Link from "next/link";
+
 export default function HomePage() {
   const features = [
     {
-      title: "Multi-algorithm GRN inference",
+      title: "Docker-based reproducibility",
       description:
-        "Run multiple published gene regulatory network algorithms on single-cell RNA-seq datasets in one workflow.",
+        "Every algorithm runs inside a versioned, isolated container so analyses remain reproducible and easier to manage.",
     },
     {
-      title: "Consensus network analysis",
+      title: "Ensemble and individual method views",
       description:
-        "Compare algorithm outputs and build higher-confidence consensus edges from shared predictions.",
+        "Users can compare algorithm outputs side by side and compute consensus networks from shared predictions.",
     },
     {
-      title: "Interactive network exploration",
+      title: "Pseudotime integration",
       description:
-        "Inspect nodes, edges, rankings, and filtered sub-networks through an intuitive visual workspace.",
+        "The platform supports optional trajectory-aware analysis through pseudotime input and planned Slingshot-based workflows.",
     },
     {
-      title: "Reproducible execution",
+      title: "Interactive network visualization",
       description:
-        "Track preprocessing choices, selected methods, and generated outputs for each analysis job.",
+        "Explore inferred networks through an interactive graph view with node inspection, edge ranking, and sub-network analysis.",
     },
   ];
 
@@ -49,6 +51,29 @@ export default function HomePage() {
     { label: "Execution style", value: "Asynchronous" },
   ];
 
+  const recentMethods = [
+    {
+      name: "GRNBoost2",
+      publicationDate: "2019",
+      category: "Machine Learning",
+    },
+    {
+      name: "PIDC",
+      publicationDate: "2017",
+      category: "Information Theory",
+    },
+    {
+      name: "SINGE",
+      publicationDate: "2019",
+      category: "Granger Causality",
+    },
+    {
+      name: "SCRIBE",
+      publicationDate: "2018",
+      category: "Information Theory",
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="relative overflow-hidden border-b border-white/10">
@@ -68,21 +93,12 @@ export default function HomePage() {
             </div>
 
             <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
-              <a href="#workflow" className="transition hover:text-white">
-                Workflow
-              </a>
-              <a href="#features" className="transition hover:text-white">
-                Features
-              </a>
-              <a href="#stats" className="transition hover:text-white">
-                Platform
-              </a>
-              <a
+              <Link
                 href="/login"
                 className="rounded-xl border border-white/15 px-4 py-2 transition hover:border-white/30 hover:bg-white/5"
               >
                 Log in
-              </a>
+              </Link>
             </nav>
           </header>
 
@@ -93,23 +109,15 @@ export default function HomePage() {
                 place.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                GRNScope helps researchers upload datasets, run published GRN
-                inference algorithms, compare their outputs, and inspect
-                consensus networks through an interactive web interface.
+                GRN Scope enables researchers to infer gene regulatory networks from single-cell RNA-seq data using multiple algorithms and to explore consensus results through an interactive interface
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
-                <a
+                <Link
                   href="/register"
                   className="rounded-2xl bg-teal-400 px-6 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
                 >
                   Get started
-                </a>
-                <a
-                  href="#workflow"
-                  className="rounded-2xl border border-white/15 px-6 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
-                >
-                  View workflow
-                </a>
+                </Link>
               </div>
             </div>
 
@@ -197,23 +205,6 @@ export default function HomePage() {
       </section>
 
       <section
-        id="stats"
-        className="border-b border-white/10 bg-slate-900/80"
-      >
-        <div className="mx-auto grid max-w-7xl gap-6 px-6 py-8 sm:grid-cols-3 lg:px-10">
-          {stats.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-3xl border border-white/10 bg-white/[0.03] p-6"
-            >
-              <p className="text-3xl font-semibold text-white">{item.value}</p>
-              <p className="mt-2 text-sm text-slate-400">{item.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section
         id="workflow"
         className="mx-auto max-w-7xl px-6 py-20 lg:px-10"
       >
@@ -280,30 +271,53 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
-        <div className="rounded-[2rem] border border-teal-300/15 bg-gradient-to-br from-teal-400/10 via-slate-900 to-cyan-400/10 p-8 sm:p-10 lg:p-12">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-              Start building your first GRN analysis workspace.
-            </h2>
-            <p className="mt-4 text-base leading-7 text-slate-300">
-              Create an account, upload a dataset, and begin comparing
-              algorithm outputs in one organized platform.
-            </p>
-          </div>
-          <div className="mt-8 flex flex-wrap gap-4">
-            <a
-              href="/register"
-              className="rounded-2xl bg-teal-400 px-6 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
-            >
-              Create account
-            </a>
-            <a
+      <section className="border-t border-white/10 bg-slate-950/90">
+        <div className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+          <div className="flex items-end justify-between gap-6">
+            <div className="max-w-3xl">
+              <p className="text-sm font-medium uppercase tracking-[0.22em] text-teal-300">
+                Recently added methods
+              </p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                New algorithms added to the platform
+              </h2>
+            </div>
+
+            <Link
               href="/algorithms"
-              className="rounded-2xl border border-white/15 px-6 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+              className="inline-flex shrink-0 rounded-2xl border border-white/15 px-5 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
             >
-              Browse algorithms
-            </a>
+              Browse all algorithms
+            </Link>
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-4">
+            {recentMethods.map((method) => (
+              <div
+                key={method.name}
+                className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 transition hover:border-teal-300/20 hover:bg-white/[0.05]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-teal-300">
+                      Recently added
+                    </p>
+                    <h3 className="mt-3 text-xl font-semibold text-white">
+                      {method.name}
+                    </h3>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+                    {method.publicationDate}
+                  </span>
+                </div>
+
+                <div className="mt-6">
+                  <span className="inline-flex rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+                    {method.category}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
