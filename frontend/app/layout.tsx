@@ -37,9 +37,6 @@ export default function RootLayout({
                 <p className="text-lg font-semibold tracking-tight text-white">
                   GRN Scope
                 </p>
-                <p className="text-sm text-slate-400">
-                  Gene regulatory network analysis platform
-                </p>
               </div>
             </Link>
 
