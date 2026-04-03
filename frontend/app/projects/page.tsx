@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 const projects = [
   {
     id: "project-1",
@@ -26,6 +29,26 @@ const projects = [
 ];
 
 export default function ProjectsPage() {
+  const [isCreateVisible, setIsCreateVisible] = useState(false);
+  const [isCreateClosing, setIsCreateClosing] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
+  const [expressionFileName, setExpressionFileName] = useState("");
+  const [pseudotimeFileName, setPseudotimeFileName] = useState("");
+
+  const openCreateModal = () => {
+    setIsCreateClosing(false);
+    setIsCreateVisible(true);
+  };
+
+  const closeCreateModal = () => {
+    setIsCreateClosing(true);
+    window.setTimeout(() => {
+      setIsCreateVisible(false);
+      setIsCreateClosing(false);
+    }, 280);
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
@@ -39,11 +62,203 @@ export default function ProjectsPage() {
 
           <button
             type="button"
+            onClick={openCreateModal}
             className="rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
           >
             Create New Project
           </button>
         </div>
+
+        {isCreateVisible && (
+        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-6 py-10 backdrop-blur-sm ${isCreateClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"}`}>
+            <div className={`max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"}`}>
+              <div className="flex items-start justify-between gap-6 border-b border-white/10 pb-5">
+                <div>
+                  <p className="text-sm font-medium uppercase tracking-[0.22em] text-teal-300">
+                    New project
+                  </p>
+                  <h2 className="mt-3 text-3xl font-semibold text-white">
+                    Create project and upload dataset
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                    Upload a single-cell RNA-seq expression matrix in CSV format. You may also upload an optional pseudotime file for methods that require trajectory information.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeCreateModal}
+                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <form className="mt-8 space-y-8">
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="projectName"
+                      className="mb-2 block text-sm font-medium text-slate-200"
+                    >
+                      Project name
+                    </label>
+                    <input
+                      id="projectName"
+                      type="text"
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      placeholder="Enter project name"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="projectDescription"
+                      className="mb-2 block text-sm font-medium text-slate-200"
+                    >
+                      Description (optional)
+                    </label>
+                    <input
+                      id="projectDescription"
+                      type="text"
+                      value={projectDescription}
+                      onChange={(e) => setProjectDescription(e.target.value)}
+                      placeholder="Add a short description"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-white">
+                          Expression matrix upload
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                          Required input. Upload a CSV matrix where rows are genes, columns are cells, the first row contains cell identifiers, the first column contains gene names, and the interior values are numeric expression counts.
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+                        Required
+                      </span>
+                    </div>
+
+                    <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 px-6 py-10 text-center transition hover:border-teal-300/30 hover:bg-slate-950/80">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        onChange={(e) =>
+                          setExpressionFileName(e.target.files?.[0]?.name ?? "")
+                        }
+                      />
+                      <span className="text-base font-medium text-white">
+                        {expressionFileName || "Choose expression matrix CSV"}
+                      </span>
+                      <span className="mt-2 text-sm text-slate-400">
+                        Drag and drop or browse from your computer
+                      </span>
+                      <span className="mt-4 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+                        Maximum file size: 500 MB
+                      </span>
+                    </label>
+
+                    <div className="mt-5 grid gap-3 text-sm text-slate-400">
+                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                        <p className="font-medium text-white">Validation requirements</p>
+                        <ul className="mt-3 space-y-2 leading-6">
+                          <li>• File must be a valid CSV.</li>
+                          <li>• Header row and first column must be parseable as identifiers.</li>
+                          <li>• Interior values must be numeric.</li>
+                          <li>• The system should extract gene count, cell count, and gene names.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-xl font-semibold text-white">
+                            Pseudotime upload
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-400">
+                            Optional input for methods that require a one-dimensional trajectory over cells.
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+                          Optional
+                        </span>
+                      </div>
+
+                      <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 px-5 py-8 text-center transition hover:border-teal-300/30 hover:bg-slate-950/80">
+                        <input
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
+                          onChange={(e) =>
+                            setPseudotimeFileName(e.target.files?.[0]?.name ?? "")
+                          }
+                        />
+                        <span className="text-sm font-medium text-white">
+                          {pseudotimeFileName || "Choose pseudotime CSV"}
+                        </span>
+                        <span className="mt-2 text-xs leading-5 text-slate-400">
+                          Single-column CSV with one floating-point value per cell in the same order as the expression matrix columns.
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
+                      <h3 className="text-lg font-semibold text-white">
+                        Sample dataset
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        The platform also provides a downloadable sample dataset so new users can explore the workflow without preparing their own data first.
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-5 rounded-2xl border border-white/15 px-4 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+                      >
+                        Download sample dataset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[2rem] border border-amber-300/20 bg-amber-300/10 p-5">
+                  <p className="text-sm font-medium text-amber-200">
+                    Upload behavior summary
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    After upload, the system should validate the CSV structure, file size, identifiers, numeric interior values, and the matching length of the optional pseudotime file before moving to preprocessing and algorithm selection.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 pt-6">
+                  <button
+                    type="button"
+                    onClick={closeCreateModal}
+                    className="rounded-2xl border border-white/15 px-5 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                  >
+                    Save project and continue
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-6">
           {projects.map((project) => (
