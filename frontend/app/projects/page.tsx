@@ -74,24 +74,10 @@ export default function ProjectsPage() {
             <div className={`max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"}`}>
               <div className="flex items-start justify-between gap-6 border-b border-white/10 pb-5">
                 <div>
-                  <p className="text-sm font-medium uppercase tracking-[0.22em] text-teal-300">
-                    New project
-                  </p>
                   <h2 className="mt-3 text-3xl font-semibold text-white">
-                    Create project and upload dataset
+                    Create New Project
                   </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-                    Upload a single-cell RNA-seq expression matrix in CSV format. You may also upload an optional pseudotime file for methods that require trajectory information.
-                  </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={closeCreateModal}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:bg-white/5 hover:text-white"
-                >
-                  Close
-                </button>
               </div>
 
               <form className="mt-8 space-y-8">
