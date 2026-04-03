@@ -29,74 +29,20 @@ export default function ProjectsPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-2xl">
-              <h2 className="text-2xl font-semibold text-white">
-                Create new project
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                Projects are the top-level organizational unit. Every dataset,
-                job, and result belongs to exactly one project.
-              </p>
-            </div>
-          </div>
 
-          <form className="mt-6 grid gap-5 lg:grid-cols-[1fr_1fr_auto]">
-            <div>
-              <label
-                htmlFor="projectName"
-                className="mb-2 block text-sm font-medium text-slate-200"
-              >
-                Project name
-              </label>
-              <input
-                id="projectName"
-                type="text"
-                placeholder="Enter project name"
-                className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="projectDescription"
-                className="mb-2 block text-sm font-medium text-slate-200"
-              >
-                Description
-              </label>
-              <input
-                id="projectDescription"
-                type="text"
-                placeholder="Optional description"
-                className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                className="w-full rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300 lg:w-auto"
-              >
-                Create project
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div className="mt-10 flex items-end justify-between gap-6">
+        <div className="flex items-end justify-between gap-6">
           <div>
             <h2 className="text-2xl font-semibold text-white">
-              Project dashboard
+              Project History
             </h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Projects are listed by creation date, most recent first.
-            </p>
           </div>
 
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
-            {projects.length} projects
-          </span>
+          <button
+            type="button"
+            className="rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+          >
+            Create New Project
+          </button>
         </div>
 
         <div className="mt-8 grid gap-6">
@@ -148,17 +94,6 @@ export default function ProjectsPage() {
               </div>
             </div>
           ))}
-        </div>
-
-        <div className="mt-10 rounded-[2rem] border border-amber-300/20 bg-amber-300/10 p-5">
-          <p className="text-sm font-medium text-amber-200">
-            Delete confirmation
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-300">
-            Project deletion should require explicit confirmation because it
-            also removes associated datasets, jobs, task records, and stored
-            files.
-          </p>
         </div>
       </section>
     </main>
