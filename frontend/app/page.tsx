@@ -78,30 +78,7 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="relative overflow-hidden border-b border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(20,184,166,0.18),transparent_28%)]" />
-        <div className="relative mx-auto flex max-w-7xl flex-col gap-16 px-6 py-8 lg:px-10">
-          <header className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-teal-400/20 text-lg font-semibold text-teal-300 ring-1 ring-teal-300/30">
-                G
-              </div>
-              <div>
-                <p className="text-lg font-semibold tracking-tight">GRN Scope</p>
-                <p className="text-sm text-slate-400">
-                  Gene regulatory network analysis platform
-                </p>
-              </div>
-            </div>
-
-            <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
-              <Link
-                href="/login"
-                className="rounded-xl border border-white/15 px-4 py-2 transition hover:border-white/30 hover:bg-white/5"
-              >
-                Log in
-              </Link>
-            </nav>
-          </header>
-
+        <div className="relative mx-auto flex max-w-7xl flex-col gap-16 px-6 py-16 lg:px-10">
           <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="max-w-3xl">
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
@@ -109,16 +86,10 @@ export default function HomePage() {
                 place.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                GRN Scope enables researchers to infer gene regulatory networks from single-cell RNA-seq data using multiple algorithms and to explore consensus results through an interactive interface
+                GRN Scope enables researchers to infer gene regulatory networks
+                from single-cell RNA-seq data using multiple algorithms and to
+                explore consensus results through an interactive interface
               </p>
-              <div className="mt-8 flex flex-wrap gap-4">
-                <Link
-                  href="/register"
-                  className="rounded-2xl bg-teal-400 px-6 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
-                >
-                  Get started
-                </Link>
-              </div>
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-950/30 backdrop-blur">
@@ -181,8 +152,8 @@ export default function HomePage() {
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-white">
-                            {source}{" "}
-                            <span className="text-slate-500">→</span> {target}
+                            {source} <span className="text-slate-500">→</span>{" "}
+                            {target}
                           </p>
                         </div>
                         <span className="rounded-full bg-teal-400/10 px-3 py-1 text-xs text-teal-200">
@@ -242,7 +213,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="features" className="border-t border-white/10 bg-slate-900/70">
+      <section
+        id="features"
+        className="border-t border-white/10 bg-slate-900/70"
+      >
         <div className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
           <div className="max-w-2xl">
             <p className="text-sm font-medium uppercase tracking-[0.22em] text-teal-300">
