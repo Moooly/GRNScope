@@ -60,7 +60,7 @@ export default function HomePage() {
                 G
               </div>
               <div>
-                <p className="text-lg font-semibold tracking-tight">GRNScope</p>
+                <p className="text-lg font-semibold tracking-tight">GRN Scope</p>
                 <p className="text-sm text-slate-400">
                   Gene regulatory network analysis platform
                 </p>
@@ -88,9 +88,6 @@ export default function HomePage() {
 
           <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="max-w-3xl">
-              <div className="mb-6 inline-flex items-center rounded-full border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm text-teal-200">
-                Multi-algorithm GRN inference for single-cell RNA-seq
-              </div>
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
                 Infer, compare, and explore gene regulatory networks in one
                 place.
