@@ -80,6 +80,7 @@ export default function ProjectsPage() {
 
   const handleUploadStepNext = () => {
     const newErrors: string[] = [];
+    const maxFileSize = 500 * 1024 * 1024;
 
     if (!projectName.trim()) {
       newErrors.push("Project name is required.");
@@ -87,6 +88,24 @@ export default function ProjectsPage() {
 
     if (!expressionFile) {
       newErrors.push("Expression matrix CSV is required.");
+    } else {
+      if (!expressionFile.name.toLowerCase().endsWith(".csv")) {
+        newErrors.push("Expression matrix must be a CSV file.");
+      }
+
+      if (expressionFile.size > maxFileSize) {
+        newErrors.push("Expression matrix file size must be 500 MB or smaller.");
+      }
+    }
+
+    if (pseudotimeFile) {
+      if (!pseudotimeFile.name.toLowerCase().endsWith(".csv")) {
+        newErrors.push("Pseudotime file must be a CSV file.");
+      }
+
+      if (pseudotimeFile.size > maxFileSize) {
+        newErrors.push("Pseudotime file size must be 500 MB or smaller.");
+      }
     }
 
     if (newErrors.length > 0) {
