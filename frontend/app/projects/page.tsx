@@ -131,7 +131,7 @@ export default function ProjectsPage() {
                           Expression matrix upload
                         </h3>
                         <p className="mt-2 text-sm leading-6 text-slate-400">
-                          Required input. Upload a CSV matrix where rows are genes, columns are cells, the first row contains cell identifiers, the first column contains gene names, and the interior values are numeric expression counts.
+                          Upload a CSV file where rows are genes, columns are cells, the first row contains cell identifiers, the first column contains gene names, and the interior values are numeric expression counts.
                         </p>
                       </div>
                       <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
@@ -151,25 +151,10 @@ export default function ProjectsPage() {
                       <span className="text-base font-medium text-white">
                         {expressionFileName || "Choose expression matrix CSV"}
                       </span>
-                      <span className="mt-2 text-sm text-slate-400">
-                        Drag and drop or browse from your computer
-                      </span>
                       <span className="mt-4 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
                         Maximum file size: 500 MB
                       </span>
                     </label>
-
-                    <div className="mt-5 grid gap-3 text-sm text-slate-400">
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                        <p className="font-medium text-white">Validation requirements</p>
-                        <ul className="mt-3 space-y-2 leading-6">
-                          <li>• File must be a valid CSV.</li>
-                          <li>• Header row and first column must be parseable as identifiers.</li>
-                          <li>• Interior values must be numeric.</li>
-                          <li>• The system should extract gene count, cell count, and gene names.</li>
-                        </ul>
-                      </div>
-                    </div>
                   </div>
 
                   <div className="space-y-6">
