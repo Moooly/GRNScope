@@ -229,7 +229,7 @@ export default function ProjectsPage() {
                     type="button"
                     className="rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
                   >
-                    Save project and continue
+                    Next
                   </button>
                 </div>
               </form>
