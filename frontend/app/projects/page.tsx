@@ -63,7 +63,7 @@ export default function ProjectsPage() {
           <button
             type="button"
             onClick={openCreateModal}
-            className="rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+            className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
           >
             Create New Project
           </button>
