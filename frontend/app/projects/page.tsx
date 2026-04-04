@@ -70,8 +70,14 @@ export default function ProjectsPage() {
         </div>
 
         {isCreateVisible && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-6 py-10 backdrop-blur-sm ${isCreateClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"}`}>
-            <div className={`max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"}`}>
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-6 py-10 backdrop-blur-sm ${isCreateClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"}`}
+          onClick={closeCreateModal}
+        >
+            <div
+              className={`max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"}`}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-6 border-b border-white/10 pb-5">
                 <div>
                   <h2 className="mt-3 text-3xl font-semibold text-white">
