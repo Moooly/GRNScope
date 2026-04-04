@@ -1,0 +1,30 @@
+{
+  "project_id": "48801149-6ff0-4a4b-b9f4-7fe5cf5cde93",
+  "project_name": "Testing Round - 1",
+  "project_description": "",
+  "expression_filename": "ExpressionData.csv",
+  "pseudotime_filename": null,
+  "gene_count": 19,
+  "cell_count": 2000,
+  "gene_names": [
+    "DMRT1",
+    "FGF9",
+    "RSPO1",
+    "DHH",
+    "CTNNB1",
+    "PGD2",
+    "WT1mKTS",
+    "SRY",
+    "DKK1",
+    "WNT4",
+    "CBX2",
+    "AMH",
+    "NR0B1",
+    "NR5A1",
+    "WT1pKTS",
+    "FOXL2",
+    "UGR",
+    "SOX9",
+    "GATA4"
+  ]
+}
