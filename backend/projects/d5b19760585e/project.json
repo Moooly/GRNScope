@@ -1,0 +1,13 @@
+{
+  "project_id": "d5b19760585e",
+  "project_name": "ss",
+  "project_description": "",
+  "top_variable_genes": "19",
+  "include_all_tfs": "true",
+  "normalize_enabled": "true",
+  "log_transform_enabled": "true",
+  "selected_algorithms": "[\"pidc\",\"genie3\",\"grnboost2\"]",
+  "ensemble_enabled": "true",
+  "expression_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/d5b19760585e/expression__ExpressionData.csv",
+  "pseudotime_path": null
+}

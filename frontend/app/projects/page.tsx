@@ -32,7 +32,7 @@ export default function ProjectsPage() {
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(recommendedIds);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [ensembleEnabled, setEnsembleEnabled] = useState(true);
 
   const [errors, setErrors] = useState<string[]>([]);

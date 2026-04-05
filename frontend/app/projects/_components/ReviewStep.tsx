@@ -78,9 +78,6 @@ export default function ReviewStep({
             <p className="mt-3 text-lg font-semibold text-white">
               {estimatedTotalRuntime}
             </p>
-            <p className="mt-2 text-sm text-slate-400">
-              Based on the current algorithm selection.
-            </p>
           </div>
         </div>
 

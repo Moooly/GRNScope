@@ -40,7 +40,7 @@ export default function AlgorithmStep({
               <button
                 type="button"
                 onClick={onRecommended}
-                className="cursor-pointer rounded-xl border border-white/15 px-3 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+                className="cursor-pointer rounded-xl bg-teal-400 px-3 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
               >
                 Recommended preset
               </button>
