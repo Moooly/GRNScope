@@ -1,23 +1,19 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 
 
-class DatasetSummary(BaseModel):
-    gene_count: int
-    cell_count: int
-    has_pseudotime: bool
-    expression_filename: str
+class TempUploadResponse(BaseModel):
+    ok: bool
+    temp_upload_id: Optional[str] = None
+    expression_filename: Optional[str] = None
     pseudotime_filename: Optional[str] = None
+    gene_count: Optional[int] = None
+    cell_count: Optional[int] = None
+    has_pseudotime: Optional[bool] = None
+    errors: list[str] = []
 
 
-class UploadSuccessResponse(BaseModel):
+class CreateProjectResponse(BaseModel):
     ok: bool
-    project_id: str
-    project_name: str
-    description: Optional[str] = None
-    dataset: DatasetSummary
-
-
-class UploadErrorResponse(BaseModel):
-    ok: bool
-    errors: List[str]
+    project_id: Optional[str] = None
+    errors: list[str] = []

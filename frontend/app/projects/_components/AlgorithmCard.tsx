@@ -5,6 +5,7 @@ interface AlgorithmCardProps {
   checked: boolean;
   disabled: boolean;
   onToggle: () => void;
+  showCheckbox?: boolean;
 }
 
 export default function AlgorithmCard({
@@ -12,6 +13,7 @@ export default function AlgorithmCard({
   checked,
   disabled,
   onToggle,
+  showCheckbox = true,
 }: AlgorithmCardProps) {
   return (
     <button
@@ -29,7 +31,14 @@ export default function AlgorithmCard({
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <input type="checkbox" checked={checked} readOnly className="h-4 w-4" />
+            {showCheckbox && (
+              <input
+                type="checkbox"
+                checked={checked}
+                readOnly
+                className="h-4 w-4"
+              />
+            )}
             <h3 className="text-xl font-semibold text-white">{algorithm.name}</h3>
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-300">
@@ -62,12 +71,6 @@ export default function AlgorithmCard({
         <span>{algorithm.year}</span>
         <span>{algorithm.journal}</span>
       </div>
-
-      {disabled && (
-        <p className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-200">
-          This method is unavailable because the uploaded dataset does not include pseudotime.
-        </p>
-      )}
     </button>
   );
 }

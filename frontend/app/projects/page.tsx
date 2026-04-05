@@ -22,6 +22,11 @@ export default function ProjectsPage() {
   const [expressionFileName, setExpressionFileName] = useState("");
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
 
+  const [tempUploadId, setTempUploadId] = useState("");
+  const [geneCount, setGeneCount] = useState<number | null>(null);
+  const [cellCount, setCellCount] = useState<number | null>(null);
+  const [isUploadingTempDataset, setIsUploadingTempDataset] = useState(false);
+
   const [topVariableGenes, setTopVariableGenes] = useState("2000");
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
@@ -35,7 +40,10 @@ export default function ProjectsPage() {
   const [showSubmittedBanner, setShowSubmittedBanner] = useState(false);
 
   const datasetSummary = {
-    dimensions: "2,000 genes × 12,400 cells",
+    dimensions:
+      geneCount !== null && cellCount !== null
+        ? `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`
+        : "Matrix size pending upload validation",
     hasPseudotime: Boolean(pseudotimeFile),
     preprocessingSummary: [
       `Top variable genes retained: ${topVariableGenes || "2000"}`,
@@ -79,6 +87,10 @@ export default function ProjectsPage() {
     setIncludeAllTFs(true);
     setNormalizeEnabled(true);
     setLogTransformEnabled(true);
+    setTempUploadId("");
+    setGeneCount(null);
+    setCellCount(null);
+    setIsUploadingTempDataset(false);
     setIsCreateClosing(false);
     setIsCreateVisible(true);
   };
@@ -96,11 +108,15 @@ export default function ProjectsPage() {
   const clearExpressionFile = () => {
     setExpressionFile(null);
     setExpressionFileName("");
+    setTempUploadId("");
+    setGeneCount(null);
+    setCellCount(null);
   };
 
   const clearPseudotimeFile = () => {
     setPseudotimeFile(null);
     setPseudotimeFileName("");
+    setTempUploadId("");
   };
 
   const validateUploadStep = () => {
@@ -136,7 +152,7 @@ export default function ProjectsPage() {
     return newErrors;
   };
 
-  const handleUploadStepNext = () => {
+  const handleUploadStepNext = async () => {
     const newErrors = validateUploadStep();
 
     if (newErrors.length > 0) {
@@ -144,8 +160,51 @@ export default function ProjectsPage() {
       return;
     }
 
-    setErrors([]);
-    setCreateStep("preprocessing");
+    if (!expressionFile) {
+      setErrors(["Expression matrix CSV is required."]);
+      return;
+    }
+
+    try {
+      setErrors([]);
+      setIsUploadingTempDataset(true);
+
+      const formData = new FormData();
+      formData.append("expression_matrix", expressionFile);
+
+      if (pseudotimeFile) {
+        formData.append("pseudotime", pseudotimeFile);
+      }
+
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/uploads/temp-dataset",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        setErrors(data.errors || ["Temporary dataset upload failed."]);
+        return;
+      }
+
+      setTempUploadId(data.temp_upload_id || "");
+      setGeneCount(data.gene_count ?? null);
+      setCellCount(data.cell_count ?? null);
+      setTopVariableGenes(
+        data.gene_count !== null && data.gene_count !== undefined
+          ? String(data.gene_count)
+          : ""
+      );
+      setCreateStep("preprocessing");
+    } catch {
+      setErrors(["Could not connect to the server for temporary upload."]);
+    } finally {
+      setIsUploadingTempDataset(false);
+    }
   };
 
   const handlePreprocessingStepNext = () => {
@@ -223,29 +282,27 @@ export default function ProjectsPage() {
         return;
       }
 
-      if (!expressionFile) {
-        setErrors(["Expression matrix CSV is required."]);
+      if (!tempUploadId) {
+        setErrors([
+          "Temporary upload is missing. Please return to the upload step and upload the dataset again.",
+        ]);
         setCreateStep("upload");
         return;
       }
 
       const formData = new FormData();
+      formData.append("temp_upload_id", tempUploadId);
       formData.append("project_name", projectName);
       formData.append("project_description", projectDescription);
       formData.append("top_variable_genes", topVariableGenes);
       formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
       formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
       formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
-      formData.append("expression_matrix", expressionFile);
       formData.append("selected_algorithms", JSON.stringify(selectedIds));
       formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
 
-      if (pseudotimeFile) {
-        formData.append("pseudotime", pseudotimeFile);
-      }
-
       const response = await fetch(
-        "http://127.0.0.1:8000/api/projects/create-with-dataset",
+        "http://127.0.0.1:8000/api/projects/create-from-temp",
         {
           method: "POST",
           body: formData,
@@ -302,6 +359,9 @@ export default function ProjectsPage() {
           projectDescription={projectDescription}
           expressionFileName={expressionFileName}
           pseudotimeFileName={pseudotimeFileName}
+          geneCount={geneCount}
+          cellCount={cellCount}
+          isUploadingTempDataset={isUploadingTempDataset}
           topVariableGenes={topVariableGenes}
           includeAllTFs={includeAllTFs}
           normalizeEnabled={normalizeEnabled}

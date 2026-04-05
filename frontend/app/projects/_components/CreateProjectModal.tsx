@@ -19,6 +19,9 @@ interface CreateProjectModalProps {
   projectDescription: string;
   expressionFileName: string;
   pseudotimeFileName: string;
+  geneCount: number | null;
+  cellCount: number | null;
+  isUploadingTempDataset: boolean;
   topVariableGenes: string;
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
@@ -66,6 +69,9 @@ export default function CreateProjectModal({
   projectDescription,
   expressionFileName,
   pseudotimeFileName,
+  geneCount,
+  cellCount,
+  isUploadingTempDataset,
   topVariableGenes,
   includeAllTFs,
   normalizeEnabled,
@@ -189,9 +195,13 @@ export default function CreateProjectModal({
           {createStep === "preprocessing" && (
             <div className="space-y-6">
               <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-                <h2 className="text-2xl font-semibold text-white">Data preprocessing</h2>
+                <h2 className="text-2xl font-semibold text-white">
+                  Data preprocessing
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Configure the preprocessing pipeline before algorithm execution. These parameters are recorded with the analysis for reproducibility.
+                  Configure the preprocessing pipeline before algorithm execution.
+                  These parameters are recorded with the analysis for
+                  reproducibility.
                 </p>
               </div>
 
@@ -199,9 +209,12 @@ export default function CreateProjectModal({
                 <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="text-xl font-semibold text-white">Gene filtering by variability</h3>
+                      <h3 className="text-xl font-semibold text-white">
+                        Gene filtering by variability
+                      </h3>
                       <p className="mt-2 text-sm leading-6 text-slate-400">
-                        Retain the top most-variable genes for downstream inference. The default is 2,000.
+                        Retain the top most-variable genes for downstream
+                        inference.
                       </p>
                     </div>
                     <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
@@ -216,11 +229,36 @@ export default function CreateProjectModal({
                     <input
                       type="number"
                       min="1"
+                      max={geneCount ?? undefined}
                       step="1"
                       value={topVariableGenes}
-                      onChange={(e) => setTopVariableGenes(e.target.value)}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+
+                        if (nextValue === "") {
+                          setTopVariableGenes("");
+                          return;
+                        }
+
+                        const parsedValue = Number(nextValue);
+                        if (Number.isNaN(parsedValue)) {
+                          return;
+                        }
+
+                        if (geneCount !== null && parsedValue > geneCount) {
+                          setTopVariableGenes(String(geneCount));
+                          return;
+                        }
+
+                        setTopVariableGenes(nextValue);
+                      }}
                       className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
                     />
+                    <p className="mt-3 text-xs leading-5 text-slate-400">
+                      {geneCount !== null
+                        ? `This dataset contains ${geneCount.toLocaleString()} genes, so the value cannot be larger than ${geneCount.toLocaleString()}.`
+                        : "The maximum value will match the number of genes detected in the uploaded dataset after validation."}
+                    </p>
                   </div>
                 </div>
 
@@ -228,23 +266,24 @@ export default function CreateProjectModal({
                   <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-xl font-semibold text-white">Transcription factor inclusion override</h3>
+                        <h3 className="text-xl font-semibold text-white">
+                          Transcription factor inclusion override
+                        </h3>
                         <p className="mt-2 text-sm leading-6 text-slate-400">
-                          Retain all known transcription factors even if they fall outside the top-N variability cutoff.
+                          Retain all known transcription factors even if they
+                          fall outside the top-N variability cutoff.
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setIncludeAllTFs(!includeAllTFs)}
-                        className={`relative h-7 w-14 rounded-full transition ${
-                          includeAllTFs ? "cursor-pointer bg-teal-400" : "cursor-pointer bg-white/20"
+                        className={`shrink-0 self-start appearance-none border-0 inline-flex h-7 w-14 items-center rounded-full px-1 transition ${
+                          includeAllTFs
+                            ? "cursor-pointer justify-end bg-teal-400"
+                            : "cursor-pointer justify-start bg-white/20"
                         }`}
                       >
-                        <span
-                          className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
-                            includeAllTFs ? "left-8" : "left-1"
-                          }`}
-                        />
+                        <span className="h-5 w-5 rounded-full bg-slate-950" />
                       </button>
                     </div>
                   </div>
@@ -252,23 +291,24 @@ export default function CreateProjectModal({
                   <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-xl font-semibold text-white">Normalization</h3>
+                        <h3 className="text-xl font-semibold text-white">
+                          Normalization
+                        </h3>
                         <p className="mt-2 text-sm leading-6 text-slate-400">
-                          Apply library-size normalization to correct for sequencing-depth variation across cells.
+                          Apply library-size normalization to correct for
+                          sequencing-depth variation across cells.
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setNormalizeEnabled(!normalizeEnabled)}
-                        className={`relative h-7 w-14 rounded-full transition ${
-                          normalizeEnabled ? "cursor-pointer bg-teal-400" : "cursor-pointer bg-white/20"
+                        className={`shrink-0 self-start appearance-none border-0 inline-flex h-7 w-14 items-center rounded-full px-1 transition ${
+                          normalizeEnabled
+                            ? "cursor-pointer justify-end bg-teal-400"
+                            : "cursor-pointer justify-start bg-white/20"
                         }`}
                       >
-                        <span
-                          className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
-                            normalizeEnabled ? "left-8" : "left-1"
-                          }`}
-                        />
+                        <span className="h-5 w-5 rounded-full bg-slate-950" />
                       </button>
                     </div>
                   </div>
@@ -276,40 +316,43 @@ export default function CreateProjectModal({
                   <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-xl font-semibold text-white">Log-transformation</h3>
+                        <h3 className="text-xl font-semibold text-white">
+                          Log-transformation
+                        </h3>
                         <p className="mt-2 text-sm leading-6 text-slate-400">
                           Apply a log₂(x + 1) transformation after normalization.
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setLogTransformEnabled(!logTransformEnabled)}
-                        className={`relative h-7 w-14 rounded-full transition ${
-                          logTransformEnabled ? "cursor-pointer bg-teal-400" : "cursor-pointer bg-white/20"
+                        onClick={() =>
+                          setLogTransformEnabled(!logTransformEnabled)
+                        }
+                        className={`shrink-0 self-start appearance-none border-0 inline-flex h-7 w-14 items-center rounded-full px-1 transition ${
+                          logTransformEnabled
+                            ? "cursor-pointer justify-end bg-teal-400"
+                            : "cursor-pointer justify-start bg-white/20"
                         }`}
                       >
-                        <span
-                          className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
-                            logTransformEnabled ? "left-8" : "left-1"
-                          }`}
-                        />
+                        <span className="h-5 w-5 rounded-full bg-slate-950" />
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-                <h3 className="text-xl font-semibold text-white">Preprocessing summary</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-400">
-                  Your current configuration will retain the top {topVariableGenes || "2000"} most-variable genes before algorithm execution.
-                </p>
-                <ul className="mt-4 space-y-2 text-sm text-slate-300">
-                  <li>• Transcription factor override: {includeAllTFs ? "enabled" : "disabled"}</li>
-                  <li>• Library-size normalization: {normalizeEnabled ? "enabled" : "disabled"}</li>
-                  <li>• log₂(x + 1) transformation: {logTransformEnabled ? "enabled" : "disabled"}</li>
-                </ul>
-              </div>
+          {createStep === "preprocessing" && (
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+              <h3 className="text-xl font-semibold text-white">
+                Preprocessing summary
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-400">
+                {geneCount !== null && cellCount !== null
+                  ? `Your ${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells matrix will be filtered to ${topVariableGenes || "0"} genes.`
+                  : `Your uploaded matrix will be filtered to ${topVariableGenes || "0"} genes.`}
+              </p>
             </div>
           )}
 
@@ -373,9 +416,10 @@ export default function CreateProjectModal({
               <button
                 type="button"
                 onClick={onUploadNext}
-                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                disabled={isUploadingTempDataset}
+                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Next
+                {isUploadingTempDataset ? "Uploading..." : "Next"}
               </button>
             )}
 

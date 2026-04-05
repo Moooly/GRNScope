@@ -1,0 +1,31 @@
+{
+  "temp_upload_id": "9b1b35b725ff48f1aa471c76c5e11c36",
+  "expression_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/temp_uploads/9b1b35b725ff48f1aa471c76c5e11c36__expression__ExpressionData.csv",
+  "pseudotime_path": null,
+  "expression_filename": "ExpressionData.csv",
+  "pseudotime_filename": null,
+  "gene_count": 19,
+  "cell_count": 2000,
+  "gene_names": [
+    "DMRT1",
+    "FGF9",
+    "RSPO1",
+    "DHH",
+    "CTNNB1",
+    "PGD2",
+    "WT1mKTS",
+    "SRY",
+    "DKK1",
+    "WNT4",
+    "CBX2",
+    "AMH",
+    "NR0B1",
+    "NR5A1",
+    "WT1pKTS",
+    "FOXL2",
+    "UGR",
+    "SOX9",
+    "GATA4"
+  ],
+  "has_pseudotime": false
+}

@@ -1,4 +1,5 @@
 import { Algorithm } from "../_types/algorithm";
+import AlgorithmCard from "./AlgorithmCard";
 
 interface DatasetSummary {
   dimensions: string;
@@ -31,53 +32,104 @@ export default function ReviewStep({
           Job review and submission
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Review dataset details, preprocessing settings, selected algorithms, and total runtime before submission.
+          Review the project setup before creating the job.
         </p>
 
-        <div className="mt-6 space-y-5 text-sm text-slate-300">
-          <div>
-            <p className="font-medium text-white">Project</p>
-            <p className="mt-2">{projectName}</p>
+        <div className="mt-6 grid gap-4 lg:grid-cols-4">
+          <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+              Project
+            </p>
+            <p className="mt-3 text-lg font-semibold text-white">{projectName}</p>
             {projectDescription && (
-              <p className="mt-1 text-slate-400">{projectDescription}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                {projectDescription}
+              </p>
             )}
           </div>
 
-          <div>
-            <p className="font-medium text-white">Dataset</p>
-            <p className="mt-2">{expressionFileName || "-"}</p>
-            <p className="mt-1 text-slate-400">{datasetSummary.dimensions}</p>
-            <p className="mt-1 text-slate-400">
-              Pseudotime: {pseudotimeFileName || "Not provided"}
+          <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+              Expression matrix
+            </p>
+            <p className="mt-3 text-base font-medium text-white">
+              {datasetSummary.dimensions}
             </p>
           </div>
 
-          <div>
-            <p className="font-medium text-white">Preprocessing parameters</p>
-            <ul className="mt-2 space-y-2 text-slate-400">
-              {datasetSummary.preprocessingSummary.map((item) => (
-                <li key={item}>• {item}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="font-medium text-white">Selected algorithms</p>
-            {selectedAlgorithms.length > 0 ? (
-              <ul className="mt-2 space-y-2 text-slate-400">
-                {selectedAlgorithms.map((algorithm) => (
-                  <li key={algorithm.id}>• {algorithm.name}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-slate-400">No algorithms selected yet.</p>
+          <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+              Pseudotime file
+            </p>
+            <p className="mt-3 text-base font-medium text-white">
+              {pseudotimeFileName ? "Provided" : "Not provided"}
+            </p>
+            {pseudotimeFileName && (
+              <p className="mt-2 text-sm text-slate-400">
+                One value per cell is included.
+              </p>
             )}
           </div>
 
-          <div>
-            <p className="font-medium text-white">Estimated total runtime</p>
-            <p className="mt-2 text-slate-400">{estimatedTotalRuntime}</p>
+          <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+              Runtime
+            </p>
+            <p className="mt-3 text-lg font-semibold text-white">
+              {estimatedTotalRuntime}
+            </p>
+            <p className="mt-2 text-sm text-slate-400">
+              Based on the current algorithm selection.
+            </p>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                Preprocessing parameters
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            {datasetSummary.preprocessingSummary.map((item) => (
+              <span
+                key={item}
+                className="rounded-full border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm text-teal-100"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                Selected algorithms
+              </p>
+            </div>
+          </div>
+
+          {selectedAlgorithms.length > 0 ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {selectedAlgorithms.map((algorithm) => (
+                <AlgorithmCard
+                  key={algorithm.id}
+                  algorithm={algorithm}
+                  checked={true}
+                  disabled={false}
+                  onToggle={() => {}}
+                  showCheckbox={false}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-slate-400">No algorithms selected yet.</p>
+          )}
         </div>
       </div>
     </div>

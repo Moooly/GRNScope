@@ -1,137 +1,171 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
+import uuid
 from pathlib import Path
-import json
 
-from app.schemas import UploadSuccessResponse, UploadErrorResponse
-from app.utils import (
-    MAX_FILE_SIZE,
-    generate_project_id,
-    save_upload_file,
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+
+from .schemas import CreateProjectResponse, TempUploadResponse
+from .storage import (
+    create_temp_upload_id,
+    move_temp_upload_to_project,
+    save_json,
+    temp_expression_path,
+    temp_metadata_path,
+    temp_pseudotime_path,
+)
+from .validators import (
+    MAX_FILE_SIZE_BYTES,
+    parse_expression_matrix,
+    parse_pseudotime,
     validate_csv_extension,
-    validate_expression_matrix_csv,
-    validate_pseudotime_csv,
-    ensure_directory,
 )
 
-app = FastAPI(title="GRNScope Backend")
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-UPLOAD_ROOT = Path("data/uploads")
-ensure_directory(UPLOAD_ROOT)
+
+async def save_upload_file(upload: UploadFile, destination: Path) -> int:
+    size = 0
+    with destination.open("wb") as f:
+        while True:
+            chunk = await upload.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_FILE_SIZE_BYTES:
+                raise ValueError("File size must be 500 MB or smaller.")
+            f.write(chunk)
+    await upload.close()
+    return size
 
 
-@app.get("/")
-def root():
-    return {"ok": True, "message": "GRNScope backend is running."}
-
-
-@app.post("/api/projects/create-with-dataset")
-async def create_project_with_dataset(
-    project_name: str = Form(...),
-    project_description: str = Form(""),
+@app.post("/api/uploads/temp-dataset", response_model=TempUploadResponse)
+async def temp_dataset_upload(
     expression_matrix: UploadFile = File(...),
-    pseudotime: UploadFile | None = File(None),
+    pseudotime: UploadFile | None = File(default=None),
 ):
     errors: list[str] = []
 
-    # Basic project validation
-    if not project_name.strip():
-        errors.append("Project name is required.")
+    expression_ext_error = validate_csv_extension(expression_matrix.filename or "")
+    if expression_ext_error:
+        errors.append(f"Expression matrix: {expression_ext_error}")
 
-    # File presence / extension checks
-    if not expression_matrix.filename:
-        errors.append("Expression matrix file is required.")
-    elif not validate_csv_extension(expression_matrix.filename):
-        errors.append("Expression matrix must be a CSV file.")
-
-    if pseudotime and pseudotime.filename and not validate_csv_extension(pseudotime.filename):
-        errors.append("Pseudotime file must be a CSV file.")
+    if pseudotime:
+        pseudo_ext_error = validate_csv_extension(pseudotime.filename or "")
+        if pseudo_ext_error:
+            errors.append(f"Pseudotime: {pseudo_ext_error}")
 
     if errors:
-        return {"ok": False, "errors": errors}
+        return TempUploadResponse(ok=False, errors=errors)
 
-    project_id = generate_project_id()
-    project_dir = UPLOAD_ROOT / project_id
-    ensure_directory(project_dir)
+    temp_upload_id = create_temp_upload_id()
+    expression_path = temp_expression_path(temp_upload_id, expression_matrix.filename or "expression.csv")
 
-    expression_path = project_dir / "expression.csv"
-    expression_size = save_upload_file(expression_matrix, expression_path)
+    pseudotime_path: Path | None = None
+    if pseudotime:
+        pseudotime_path = temp_pseudotime_path(temp_upload_id, pseudotime.filename or "pseudotime.csv")
 
-    if expression_size > MAX_FILE_SIZE:
-        expression_path.unlink(missing_ok=True)
-        return {
-            "ok": False,
-            "errors": ["Expression matrix exceeds the 500 MB size limit."],
-        }
+    try:
+        await save_upload_file(expression_matrix, expression_path)
+        expression_info = parse_expression_matrix(expression_path)
 
-    expression_errors, metadata = validate_expression_matrix_csv(expression_path)
-    errors.extend(expression_errors)
-
-    pseudotime_path = None
-    if pseudotime and pseudotime.filename:
-        pseudotime_path = project_dir / "pseudotime.csv"
-        pseudotime_size = save_upload_file(pseudotime, pseudotime_path)
-
-        if pseudotime_size > MAX_FILE_SIZE:
-            errors.append("Pseudotime file exceeds the 500 MB size limit.")
-        else:
-            errors.extend(
-                validate_pseudotime_csv(
-                    pseudotime_path,
-                    expected_cell_count=metadata.get("cell_count", 0),
-                )
+        pseudotime_info = None
+        if pseudotime and pseudotime_path is not None:
+            await save_upload_file(pseudotime, pseudotime_path)
+            pseudotime_info = parse_pseudotime(
+                pseudotime_path, expression_info["cell_count"]
             )
 
-    if errors:
-        # remove invalid saved files
-        expression_path.unlink(missing_ok=True)
-        if pseudotime_path:
-            pseudotime_path.unlink(missing_ok=True)
-        return {"ok": False, "errors": errors}
-
-    # save metadata JSON for now
-    metadata_path = project_dir / "metadata.json"
-    metadata_json = {
-        "project_id": project_id,
-        "project_name": project_name,
-        "project_description": project_description,
-        "expression_filename": expression_matrix.filename,
-        "pseudotime_filename": pseudotime.filename if pseudotime and pseudotime.filename else None,
-        "gene_count": metadata["gene_count"],
-        "cell_count": metadata["cell_count"],
-        "gene_names": metadata["gene_names"],
-    }
-    metadata_path.write_text(json.dumps(metadata_json, indent=2), encoding="utf-8")
-
-    return {
-        "ok": True,
-        "project_id": project_id,
-        "project_name": project_name,
-        "description": project_description or None,
-        "dataset": {
-            "gene_count": metadata["gene_count"],
-            "cell_count": metadata["cell_count"],
-            "has_pseudotime": pseudotime_path is not None,
+        metadata = {
+            "temp_upload_id": temp_upload_id,
+            "expression_path": str(expression_path),
+            "pseudotime_path": str(pseudotime_path) if pseudotime_path else None,
             "expression_filename": expression_matrix.filename,
-            "pseudotime_filename": pseudotime.filename if pseudotime and pseudotime.filename else None,
-        },
-    }
+            "pseudotime_filename": pseudotime.filename if pseudotime else None,
+            "gene_count": expression_info["gene_count"],
+            "cell_count": expression_info["cell_count"],
+            "gene_names": expression_info["gene_names"],
+            "cell_names": expression_info["cell_names"],
+            "has_pseudotime": pseudotime is not None,
+            "pseudotime_count": pseudotime_info["pseudotime_count"] if pseudotime_info else None,
+        }
+        save_json(temp_metadata_path(temp_upload_id), metadata)
+
+        return TempUploadResponse(
+            ok=True,
+            temp_upload_id=temp_upload_id,
+            expression_filename=expression_matrix.filename,
+            pseudotime_filename=pseudotime.filename if pseudotime else None,
+            gene_count=expression_info["gene_count"],
+            cell_count=expression_info["cell_count"],
+            has_pseudotime=pseudotime is not None,
+            errors=[],
+        )
+    except Exception as e:
+        if expression_path.exists():
+            expression_path.unlink()
+        if pseudotime_path and pseudotime_path.exists():
+            pseudotime_path.unlink()
+
+        meta_path = temp_metadata_path(temp_upload_id)
+        if meta_path.exists():
+            meta_path.unlink()
+
+        return TempUploadResponse(ok=False, errors=[str(e)])
 
 
-@app.get("/api/projects/{project_id}/algorithms")
-def get_algorithm_page_info(project_id: str):
-    return {
-        "ok": True,
-        "project_id": project_id,
-        "message": "Ready for algorithm selection.",
-    }
+@app.post("/api/projects/create-from-temp", response_model=CreateProjectResponse)
+async def create_project_from_temp(
+    temp_upload_id: str = Form(...),
+    project_name: str = Form(...),
+    project_description: str = Form(""),
+    top_variable_genes: str = Form(...),
+    include_all_tfs: str = Form(...),
+    normalize_enabled: str = Form(...),
+    log_transform_enabled: str = Form(...),
+    selected_algorithms: str = Form(...),
+    ensemble_enabled: str = Form(...),
+):
+    meta_path = temp_metadata_path(temp_upload_id)
+    if not meta_path.exists():
+        return CreateProjectResponse(
+            ok=False,
+            errors=["Temporary upload not found or expired."],
+        )
+
+    project_id = uuid.uuid4().hex[:12]
+
+    try:
+        move_result = move_temp_upload_to_project(temp_upload_id, project_id)
+
+        project_dir = Path(move_result["project_dir"])
+        project_manifest = {
+            "project_id": project_id,
+            "project_name": project_name,
+            "project_description": project_description,
+            "top_variable_genes": top_variable_genes,
+            "include_all_tfs": include_all_tfs,
+            "normalize_enabled": normalize_enabled,
+            "log_transform_enabled": log_transform_enabled,
+            "selected_algorithms": selected_algorithms,
+            "ensemble_enabled": ensemble_enabled,
+            "expression_path": move_result["expression_path"],
+            "pseudotime_path": move_result.get("pseudotime_path"),
+        }
+        (project_dir / "project.json").write_text(
+            __import__("json").dumps(project_manifest, indent=2),
+            encoding="utf-8",
+        )
+
+        return CreateProjectResponse(ok=True, project_id=project_id, errors=[])
+    except Exception as e:
+        return CreateProjectResponse(ok=False, errors=[str(e)])
