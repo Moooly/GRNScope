@@ -194,17 +194,6 @@ export default function CreateProjectModal({
 
           {createStep === "preprocessing" && (
             <div className="space-y-6">
-              <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-                <h2 className="text-2xl font-semibold text-white">
-                  Data preprocessing
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Configure the preprocessing pipeline before algorithm execution.
-                  These parameters are recorded with the analysis for
-                  reproducibility.
-                </p>
-              </div>
-
               <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
                 <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
                   <div className="flex items-start justify-between gap-4">
