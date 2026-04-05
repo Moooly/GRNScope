@@ -31,9 +31,6 @@ export default function ReviewStep({
         <h2 className="text-2xl font-semibold text-white">
           Job review and submission
         </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          Review the project setup before creating the job.
-        </p>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-4">
           <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">

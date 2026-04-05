@@ -76,7 +76,7 @@ export default function ProjectsPage() {
       ...selectedAlgorithms.map((algorithm) => algorithm.runtimeMinutes)
     );
 
-    return `~${longestRuntime} min (parallel execution estimate)`;
+    return `~ ${longestRuntime} minutes`;
   }, [selectedAlgorithms]);
 
   const openCreateModal = () => {
