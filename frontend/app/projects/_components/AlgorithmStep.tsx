@@ -29,45 +29,32 @@ export default function AlgorithmStep({
   onSelectAll,
 }: AlgorithmStepProps) {
   return (
-    <div className="grid gap-8 xl:grid-cols-[1.35fr_0.65fr]">
+    <div className="space-y-8">
       <section className="space-y-8">
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold text-white">Algorithm cards</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                Cards are grouped by pseudotime requirement and include directory-style metadata, a checkbox, and an estimated runtime badge.
-              </p>
-            </div>
+
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl font-semibold text-white">
+              Methods that do not require pseudotime
+            </h2>
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={onRecommended}
-                className="cursor-pointer rounded-2xl border border-white/15 px-4 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+                className="cursor-pointer rounded-xl border border-white/15 px-3 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
               >
                 Recommended preset
               </button>
               <button
                 type="button"
                 onClick={onSelectAll}
-                className="cursor-pointer rounded-2xl bg-teal-400 px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                className="cursor-pointer rounded-xl bg-teal-400 px-3 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
               >
                 Select all compatible
               </button>
             </div>
           </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-white">
-              Methods that do not require pseudotime
-            </h2>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
-              Always compatible
-            </span>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {algorithms
               .filter((algorithm) => !algorithm.requiresPseudotime)
               .map((algorithm) => (
@@ -90,10 +77,10 @@ export default function AlgorithmStep({
             <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-200">
               {datasetSummary.hasPseudotime
                 ? "Available"
-                : "Unavailable for current dataset"}
+                : "Unavailable methods, pseudotime file is required"}
             </span>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {algorithms
               .filter((algorithm) => algorithm.requiresPseudotime)
               .map((algorithm) => {
@@ -101,7 +88,7 @@ export default function AlgorithmStep({
                 return (
                   <AlgorithmCard
                     key={algorithm.id}
-                    algorithm={algorithm}
+                    algorithm={{ ...algorithm, description: disabled ? "" : algorithm.description }}
                     checked={selectedIds.includes(algorithm.id)}
                     disabled={disabled}
                     onToggle={() => onToggleAlgorithm(algorithm.id, disabled)}
@@ -114,18 +101,8 @@ export default function AlgorithmStep({
 
       <aside className="space-y-6">
         <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-semibold text-white">Ensemble analysis</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Enable consensus analysis to compute an aggregated network alongside each selected algorithm output. This toggle defaults to on when two or more algorithms are selected.
-          </p>
-
-          <div className="mt-5 flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-slate-950/60 px-4 py-4">
-            <div>
-              <p className="text-sm font-medium text-white">Consensus network</p>
-              <p className="mt-1 text-xs text-slate-400">
-                Aggregates predictions from all selected methods.
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-semibold text-white">Ensemble analysis</h2>
             <button
               type="button"
               onClick={() => setEnsembleEnabled((current) => !current)}
@@ -146,15 +123,11 @@ export default function AlgorithmStep({
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-slate-400">
-            {selectedIds.length < 2
-              ? "Select at least two algorithms to enable consensus analysis."
-              : "Consensus analysis is available for the current selection."}
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Enable consensus analysis to compute an aggregated network alongside each selected algorithm output. It's available when two or more algorithms are selected.
           </p>
 
-          <p className="mt-5 text-xs text-slate-400">
-            Compatible methods available: {compatibleAlgorithms.length}
-          </p>
+
         </div>
       </aside>
     </div>

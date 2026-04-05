@@ -36,7 +36,7 @@ export default function AlgorithmCard({
             {algorithm.description}
           </p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+        <span className="min-w-[84px] rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-center text-xs whitespace-nowrap text-slate-300">
           {algorithm.runtime}
         </span>
       </div>
