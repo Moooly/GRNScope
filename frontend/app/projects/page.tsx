@@ -6,7 +6,7 @@ import ProjectCard from "./_components/ProjectCard";
 import { algorithms, recommendedIds } from "./_data/algorithms";
 import { projects } from "./_data/projects";
 
-type CreateStep = "upload" | "algorithms" | "review";
+type CreateStep = "upload" | "preprocessing" | "algorithms" | "review";
 
 export default function ProjectsPage() {
   const [isCreateVisible, setIsCreateVisible] = useState(false);
@@ -22,6 +22,11 @@ export default function ProjectsPage() {
   const [expressionFileName, setExpressionFileName] = useState("");
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
 
+  const [topVariableGenes, setTopVariableGenes] = useState("2000");
+  const [includeAllTFs, setIncludeAllTFs] = useState(true);
+  const [normalizeEnabled, setNormalizeEnabled] = useState(true);
+  const [logTransformEnabled, setLogTransformEnabled] = useState(true);
+
   const [selectedIds, setSelectedIds] = useState<string[]>(recommendedIds);
   const [ensembleEnabled, setEnsembleEnabled] = useState(true);
 
@@ -33,10 +38,10 @@ export default function ProjectsPage() {
     dimensions: "2,000 genes × 12,400 cells",
     hasPseudotime: Boolean(pseudotimeFile),
     preprocessingSummary: [
-      "Top variable genes retained: 2,000",
-      "Transcription factor override: enabled",
-      "Library-size normalization: enabled",
-      "log₂(x + 1) transformation: enabled",
+      `Top variable genes retained: ${topVariableGenes || "2000"}`,
+      `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
+      `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
+      `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
     ],
   };
 
@@ -70,6 +75,10 @@ export default function ProjectsPage() {
     setErrors([]);
     setShowSubmittedBanner(false);
     setCreateStep("upload");
+    setTopVariableGenes("2000");
+    setIncludeAllTFs(true);
+    setNormalizeEnabled(true);
+    setLogTransformEnabled(true);
     setIsCreateClosing(false);
     setIsCreateVisible(true);
   };
@@ -81,7 +90,6 @@ export default function ProjectsPage() {
       setIsCreateClosing(false);
       setCreateStep("upload");
       setErrors([]);
-      setShowSubmittedBanner(false);
     }, 280);
   };
 
@@ -130,6 +138,25 @@ export default function ProjectsPage() {
 
   const handleUploadStepNext = () => {
     const newErrors = validateUploadStep();
+
+    if (newErrors.length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setErrors([]);
+    setCreateStep("preprocessing");
+  };
+
+  const handlePreprocessingStepNext = () => {
+    const newErrors: string[] = [];
+    const parsedTopGenes = Number(topVariableGenes);
+
+    if (!topVariableGenes.trim()) {
+      newErrors.push("Top variable genes is required.");
+    } else if (!Number.isInteger(parsedTopGenes) || parsedTopGenes <= 0) {
+      newErrors.push("Top variable genes must be a positive integer.");
+    }
 
     if (newErrors.length > 0) {
       setErrors(newErrors);
@@ -205,6 +232,10 @@ export default function ProjectsPage() {
       const formData = new FormData();
       formData.append("project_name", projectName);
       formData.append("project_description", projectDescription);
+      formData.append("top_variable_genes", topVariableGenes);
+      formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
+      formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
+      formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
       formData.append("expression_matrix", expressionFile);
       formData.append("selected_algorithms", JSON.stringify(selectedIds));
       formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
@@ -271,6 +302,10 @@ export default function ProjectsPage() {
           projectDescription={projectDescription}
           expressionFileName={expressionFileName}
           pseudotimeFileName={pseudotimeFileName}
+          topVariableGenes={topVariableGenes}
+          includeAllTFs={includeAllTFs}
+          normalizeEnabled={normalizeEnabled}
+          logTransformEnabled={logTransformEnabled}
           selectedIds={selectedIds}
           compatibleAlgorithms={compatibleAlgorithms}
           selectedAlgorithms={selectedAlgorithms}
@@ -282,8 +317,10 @@ export default function ProjectsPage() {
           algorithms={algorithms}
           onClose={closeCreateModal}
           onBackToUpload={() => setCreateStep("upload")}
+          onBackToPreprocessing={() => setCreateStep("preprocessing")}
           onBackToAlgorithms={() => setCreateStep("algorithms")}
           onUploadNext={handleUploadStepNext}
+          onPreprocessingNext={handlePreprocessingStepNext}
           onAlgorithmsNext={handleAlgorithmsStepNext}
           onCreateProject={handleCreateProject}
           onRecommended={handleRecommended}
@@ -295,6 +332,10 @@ export default function ProjectsPage() {
           setExpressionFileName={setExpressionFileName}
           setPseudotimeFile={setPseudotimeFile}
           setPseudotimeFileName={setPseudotimeFileName}
+          setTopVariableGenes={setTopVariableGenes}
+          setIncludeAllTFs={setIncludeAllTFs}
+          setNormalizeEnabled={setNormalizeEnabled}
+          setLogTransformEnabled={setLogTransformEnabled}
           clearExpressionFile={clearExpressionFile}
           clearPseudotimeFile={clearPseudotimeFile}
           setEnsembleEnabled={setEnsembleEnabled}

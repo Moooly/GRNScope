@@ -3,7 +3,7 @@ import AlgorithmStep from "./AlgorithmStep";
 import ReviewStep from "./ReviewStep";
 import UploadStep from "./UploadStep";
 
-type CreateStep = "upload" | "algorithms" | "review";
+type CreateStep = "upload" | "preprocessing" | "algorithms" | "review";
 
 interface DatasetSummary {
   dimensions: string;
@@ -19,6 +19,10 @@ interface CreateProjectModalProps {
   projectDescription: string;
   expressionFileName: string;
   pseudotimeFileName: string;
+  topVariableGenes: string;
+  includeAllTFs: boolean;
+  normalizeEnabled: boolean;
+  logTransformEnabled: boolean;
   selectedIds: string[];
   compatibleAlgorithms: Algorithm[];
   selectedAlgorithms: Algorithm[];
@@ -30,8 +34,10 @@ interface CreateProjectModalProps {
   algorithms: Algorithm[];
   onClose: () => void;
   onBackToUpload: () => void;
+  onBackToPreprocessing: () => void;
   onBackToAlgorithms: () => void;
   onUploadNext: () => void;
+  onPreprocessingNext: () => void;
   onAlgorithmsNext: () => void;
   onCreateProject: () => void;
   onRecommended: () => void;
@@ -43,6 +49,10 @@ interface CreateProjectModalProps {
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
+  setTopVariableGenes: (value: string) => void;
+  setIncludeAllTFs: (value: boolean) => void;
+  setNormalizeEnabled: (value: boolean) => void;
+  setLogTransformEnabled: (value: boolean) => void;
   clearExpressionFile: () => void;
   clearPseudotimeFile: () => void;
   setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
@@ -56,6 +66,10 @@ export default function CreateProjectModal({
   projectDescription,
   expressionFileName,
   pseudotimeFileName,
+  topVariableGenes,
+  includeAllTFs,
+  normalizeEnabled,
+  logTransformEnabled,
   selectedIds,
   compatibleAlgorithms,
   selectedAlgorithms,
@@ -67,8 +81,10 @@ export default function CreateProjectModal({
   algorithms,
   onClose,
   onBackToUpload,
+  onBackToPreprocessing,
   onBackToAlgorithms,
   onUploadNext,
+  onPreprocessingNext,
   onAlgorithmsNext,
   onCreateProject,
   onRecommended,
@@ -80,6 +96,10 @@ export default function CreateProjectModal({
   setExpressionFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
+  setTopVariableGenes,
+  setIncludeAllTFs,
+  setNormalizeEnabled,
+  setLogTransformEnabled,
   clearExpressionFile,
   clearPseudotimeFile,
   setEnsembleEnabled,
@@ -109,7 +129,7 @@ export default function CreateProjectModal({
           </div>
         </div>
 
-        <div className="mt-8 flex items-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <span
             className={`rounded-full px-3 py-1 text-xs font-medium ${
               createStep === "upload"
@@ -121,12 +141,21 @@ export default function CreateProjectModal({
           </span>
           <span
             className={`rounded-full px-3 py-1 text-xs font-medium ${
+              createStep === "preprocessing"
+                ? "bg-teal-300/10 text-teal-200"
+                : "bg-white/[0.04] text-slate-400"
+            }`}
+          >
+            2. Data preprocessing
+          </span>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
               createStep === "algorithms"
                 ? "bg-teal-300/10 text-teal-200"
                 : "bg-white/[0.04] text-slate-400"
             }`}
           >
-            2. Algorithms
+            3. Algorithms
           </span>
           <span
             className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -135,7 +164,7 @@ export default function CreateProjectModal({
                 : "bg-white/[0.04] text-slate-400"
             }`}
           >
-            3. Review
+            4. Review
           </span>
         </div>
 
@@ -155,6 +184,133 @@ export default function CreateProjectModal({
               clearExpressionFile={clearExpressionFile}
               clearPseudotimeFile={clearPseudotimeFile}
             />
+          )}
+
+          {createStep === "preprocessing" && (
+            <div className="space-y-6">
+              <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                <h2 className="text-2xl font-semibold text-white">Data preprocessing</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-400">
+                  Configure the preprocessing pipeline before algorithm execution. These parameters are recorded with the analysis for reproducibility.
+                </p>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+                <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-xl font-semibold text-white">Gene filtering by variability</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        Retain the top most-variable genes for downstream inference. The default is 2,000.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+                      Required
+                    </span>
+                  </div>
+
+                  <div className="mt-6">
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Top variable genes
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={topVariableGenes}
+                      onChange={(e) => setTopVariableGenes(e.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-white">Transcription factor inclusion override</h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                          Retain all known transcription factors even if they fall outside the top-N variability cutoff.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIncludeAllTFs(!includeAllTFs)}
+                        className={`relative h-7 w-14 rounded-full transition ${
+                          includeAllTFs ? "cursor-pointer bg-teal-400" : "cursor-pointer bg-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
+                            includeAllTFs ? "left-8" : "left-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-white">Normalization</h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                          Apply library-size normalization to correct for sequencing-depth variation across cells.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNormalizeEnabled(!normalizeEnabled)}
+                        className={`relative h-7 w-14 rounded-full transition ${
+                          normalizeEnabled ? "cursor-pointer bg-teal-400" : "cursor-pointer bg-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
+                            normalizeEnabled ? "left-8" : "left-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-white">Log-transformation</h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                          Apply a log₂(x + 1) transformation after normalization.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLogTransformEnabled(!logTransformEnabled)}
+                        className={`relative h-7 w-14 rounded-full transition ${
+                          logTransformEnabled ? "cursor-pointer bg-teal-400" : "cursor-pointer bg-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
+                            logTransformEnabled ? "left-8" : "left-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                <h3 className="text-xl font-semibold text-white">Preprocessing summary</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-400">
+                  Your current configuration will retain the top {topVariableGenes || "2000"} most-variable genes before algorithm execution.
+                </p>
+                <ul className="mt-4 space-y-2 text-sm text-slate-300">
+                  <li>• Transcription factor override: {includeAllTFs ? "enabled" : "disabled"}</li>
+                  <li>• Library-size normalization: {normalizeEnabled ? "enabled" : "disabled"}</li>
+                  <li>• log₂(x + 1) transformation: {logTransformEnabled ? "enabled" : "disabled"}</li>
+                </ul>
+              </div>
+            </div>
           )}
 
           {createStep === "algorithms" && (
@@ -202,9 +358,11 @@ export default function CreateProjectModal({
               onClick={
                 createStep === "upload"
                   ? onClose
-                  : createStep === "algorithms"
+                  : createStep === "preprocessing"
                     ? onBackToUpload
-                    : onBackToAlgorithms
+                    : createStep === "algorithms"
+                      ? onBackToPreprocessing
+                      : onBackToAlgorithms
               }
               className="cursor-pointer rounded-2xl border border-white/15 px-5 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
             >
@@ -215,6 +373,16 @@ export default function CreateProjectModal({
               <button
                 type="button"
                 onClick={onUploadNext}
+                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+              >
+                Next
+              </button>
+            )}
+
+            {createStep === "preprocessing" && (
+              <button
+                type="button"
+                onClick={onPreprocessingNext}
                 className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
               >
                 Next

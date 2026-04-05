@@ -31,7 +31,6 @@ export default function AlgorithmStep({
   return (
     <div className="space-y-8">
       <section className="space-y-8">
-
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-2xl font-semibold text-white">
@@ -70,7 +69,7 @@ export default function AlgorithmStep({
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <h2 className="text-2xl font-semibold text-white">
               Methods that require pseudotime
             </h2>
@@ -88,7 +87,10 @@ export default function AlgorithmStep({
                 return (
                   <AlgorithmCard
                     key={algorithm.id}
-                    algorithm={{ ...algorithm, description: disabled ? "" : algorithm.description }}
+                    algorithm={{
+                      ...algorithm,
+                      description: disabled ? "" : algorithm.description,
+                    }}
                     checked={selectedIds.includes(algorithm.id)}
                     disabled={disabled}
                     onToggle={() => onToggleAlgorithm(algorithm.id, disabled)}
@@ -99,37 +101,33 @@ export default function AlgorithmStep({
         </div>
       </section>
 
-      <aside className="space-y-6">
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold text-white">Ensemble analysis</h2>
-            <button
-              type="button"
-              onClick={() => setEnsembleEnabled((current) => !current)}
-              disabled={selectedIds.length < 2}
-              className={`relative h-7 w-14 rounded-full transition ${
-                selectedIds.length < 2
-                  ? "cursor-not-allowed bg-white/10"
-                  : ensembleEnabled
-                    ? "cursor-pointer bg-teal-400"
-                    : "cursor-pointer bg-white/20"
+      <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-2xl font-semibold text-white">Ensemble analysis</h2>
+          <button
+            type="button"
+            onClick={() => setEnsembleEnabled((current) => !current)}
+            disabled={selectedIds.length < 2}
+            className={`relative h-7 w-14 rounded-full transition ${
+              selectedIds.length < 2
+                ? "cursor-not-allowed bg-white/10"
+                : ensembleEnabled
+                  ? "cursor-pointer bg-teal-400"
+                  : "cursor-pointer bg-white/20"
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
+                ensembleEnabled ? "left-8" : "left-1"
               }`}
-            >
-              <span
-                className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
-                  ensembleEnabled ? "left-8" : "left-1"
-                }`}
-              />
-            </button>
-          </div>
-
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Enable consensus analysis to compute an aggregated network alongside each selected algorithm output. It's available when two or more algorithms are selected.
-          </p>
-
-
+            />
+          </button>
         </div>
-      </aside>
+
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          Enable consensus analysis to compute an aggregated network alongside each selected algorithm output. It&apos;s available when two or more algorithms are selected.
+        </p>
+      </div>
     </div>
   );
 }
