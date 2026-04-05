@@ -1,14 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import CreateProjectModal from "./_components/CreateProjectModal";
 import ProjectCard from "./_components/ProjectCard";
 import { algorithms, recommendedIds } from "./_data/algorithms";
-import { projects } from "./_data/projects";
+import { Project, ProjectJob } from "./_types/project";
+import DeleteProjectModal from "./_components/DeleteProjectModal";
+import EmptyProjectHistory from "./_components/EmptyProjectHistory";
 
 type CreateStep = "upload" | "preprocessing" | "algorithms" | "review";
 
 export default function ProjectsPage() {
+  const router = useRouter();
+
   const [isCreateVisible, setIsCreateVisible] = useState(false);
   const [isCreateClosing, setIsCreateClosing] = useState(false);
   const [createStep, setCreateStep] = useState<CreateStep>("upload");
@@ -37,7 +42,12 @@ export default function ProjectsPage() {
 
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showSubmittedBanner, setShowSubmittedBanner] = useState(false);
+  const [projectHistory, setProjectHistory] = useState<Project[]>([]);
+  const [projectPendingDelete, setProjectPendingDelete] =
+    useState<Project | null>(null);
+  const [isDeleteModalClosing, setIsDeleteModalClosing] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   const datasetSummary = {
     dimensions:
@@ -52,6 +62,124 @@ export default function ProjectsPage() {
       `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
     ],
   };
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadProjectHistory = async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:8000/api/projects");
+
+        if (!response.ok) {
+          setProjectHistory([]);
+          return;
+        }
+
+        const data = await response.json();
+
+        if (isCancelled) {
+          return;
+        }
+
+        if (data.ok && Array.isArray(data.projects)) {
+          setProjectHistory(data.projects as Project[]);
+        } else {
+          setProjectHistory([]);
+        }
+      } catch {
+        if (!isCancelled) {
+          setProjectHistory([]);
+        }
+      }
+    };
+
+    loadProjectHistory();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const activeProjectIds = useMemo(
+    () =>
+      projectHistory
+        .filter((project) => {
+          const status = project.latestJob?.overall_status;
+          return status === "Queued" || status === "Running";
+        })
+        .map((project) => project.id),
+    [projectHistory]
+  );
+
+  useEffect(() => {
+    if (activeProjectIds.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const updateProjectStatuses = async () => {
+      try {
+        const responses = await Promise.all(
+          activeProjectIds.map(async (projectId) => {
+            try {
+              const response = await fetch(
+                `http://127.0.0.1:8000/api/projects/${projectId}`
+              );
+
+              if (!response.ok) {
+                return null;
+              }
+
+              const data = await response.json();
+              return {
+                projectId,
+                latestJob: (data.latest_job ?? null) as ProjectJob | null,
+              };
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        if (isCancelled) {
+          return;
+        }
+
+        const latestJobMap = new Map(
+          responses
+            .filter(
+              (item): item is { projectId: string; latestJob: ProjectJob | null } =>
+                item !== null
+            )
+            .map((item) => [item.projectId, item.latestJob])
+        );
+
+        setProjectHistory((currentProjects) =>
+          currentProjects.map((project) => {
+            if (!latestJobMap.has(project.id)) {
+              return project;
+            }
+
+            return {
+              ...project,
+              latestJob: latestJobMap.get(project.id) ?? null,
+            };
+          })
+        );
+      } catch {
+        return;
+      }
+    };
+
+    updateProjectStatuses();
+    const intervalId = window.setInterval(updateProjectStatuses, 5000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeProjectIds]);
 
   const compatibleAlgorithms = useMemo(
     () =>
@@ -76,12 +204,11 @@ export default function ProjectsPage() {
       ...selectedAlgorithms.map((algorithm) => algorithm.runtimeMinutes)
     );
 
-    return `~ ${longestRuntime} minutes`;
+    return `~${longestRuntime} min (parallel execution estimate)`;
   }, [selectedAlgorithms]);
 
   const openCreateModal = () => {
     setErrors([]);
-    setShowSubmittedBanner(false);
     setCreateStep("upload");
     setTopVariableGenes("2000");
     setIncludeAllTFs(true);
@@ -91,6 +218,14 @@ export default function ProjectsPage() {
     setGeneCount(null);
     setCellCount(null);
     setIsUploadingTempDataset(false);
+    setSelectedIds([]);
+    setEnsembleEnabled(true);
+    setProjectName("");
+    setProjectDescription("");
+    setExpressionFile(null);
+    setPseudotimeFile(null);
+    setExpressionFileName("");
+    setPseudotimeFileName("");
     setIsCreateClosing(false);
     setIsCreateVisible(true);
   };
@@ -215,6 +350,8 @@ export default function ProjectsPage() {
       newErrors.push("Top variable genes is required.");
     } else if (!Number.isInteger(parsedTopGenes) || parsedTopGenes <= 0) {
       newErrors.push("Top variable genes must be a positive integer.");
+    } else if (geneCount !== null && parsedTopGenes > geneCount) {
+      newErrors.push("Top variable genes cannot be larger than the uploaded gene count.");
     }
 
     if (newErrors.length > 0) {
@@ -317,13 +454,104 @@ export default function ProjectsPage() {
         return;
       }
 
-      setShowSubmittedBanner(true);
+      const now = new Date();
+      const createdProject: Project = {
+        id: data.project_id || `project-${now.getTime()}`,
+        name: projectName,
+        description:
+          projectDescription || "Single-cell RNA-seq dataset for GRN inference.",
+        createdAt: now
+          .toLocaleString("en-CA", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })
+          .replace(",", ""),
+        datasetCount: 1,
+        jobCount: 1,
+        latestJob: {
+          job_id: data.job_id || "pending",
+          overall_status: "Queued",
+          ensemble_enabled: ensembleEnabled,
+          tasks: selectedIds.map((algorithmId) => ({
+            algorithm_id: algorithmId,
+            status: "Queued",
+            elapsed_seconds: 0,
+            error_message: null,
+          })),
+        },
+      };
+      setProjectHistory((currentProjects) => [createdProject, ...currentProjects]);
+
       closeCreateModal();
+      router.push("/projects");
     } catch {
       setErrors(["Could not connect to the server."]);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDeleteProject = (project: Project) => {
+    setIsDeleteModalClosing(false);
+    setProjectPendingDelete(project);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!projectPendingDelete) {
+      return;
+    }
+
+    try {
+      setIsDeletingProject(true);
+
+      const response = await fetch(
+        `http://127.0.0.1:8000/api/projects/${projectPendingDelete.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        setErrors(["Failed to delete the project."]);
+        return;
+      }
+
+      const targetProjectId = projectPendingDelete.id;
+      setDeletingProjectId(targetProjectId);
+      setIsDeleteModalClosing(true);
+
+      window.setTimeout(() => {
+        setProjectPendingDelete(null);
+        setIsDeleteModalClosing(false);
+      }, 280);
+
+      window.setTimeout(() => {
+        setProjectHistory((currentProjects) =>
+          currentProjects.filter((item) => item.id !== targetProjectId)
+        );
+        setDeletingProjectId(null);
+      }, 300);
+    } catch {
+      setErrors(["Could not connect to the server."]);
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
+  const handleCancelDeleteProject = () => {
+    if (isDeletingProject || !projectPendingDelete) {
+      return;
+    }
+
+    setIsDeleteModalClosing(true);
+    window.setTimeout(() => {
+      setProjectPendingDelete(null);
+      setIsDeleteModalClosing(false);
+    }, 280);
   };
 
   return (
@@ -344,12 +572,6 @@ export default function ProjectsPage() {
             Create New Project
           </button>
         </div>
-
-        {showSubmittedBanner && (
-          <div className="mt-6 rounded-[2rem] border border-emerald-300/20 bg-emerald-300/10 p-5 text-sm leading-6 text-emerald-100">
-            Job submitted. You may navigate away while analysis runs asynchronously. Results will become available as individual algorithms complete.
-          </div>
-        )}
 
         <CreateProjectModal
           isCreateVisible={isCreateVisible}
@@ -401,11 +623,40 @@ export default function ProjectsPage() {
           setEnsembleEnabled={setEnsembleEnabled}
         />
 
-        <div className="mt-8 grid gap-6">
-          {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
+        <DeleteProjectModal
+          project={projectPendingDelete}
+          isDeleting={isDeletingProject}
+          isClosing={isDeleteModalClosing}
+          onCancel={handleCancelDeleteProject}
+          onConfirm={handleConfirmDeleteProject}
+        />
+        {projectHistory.length > 0 ? (
+          <div className="mt-8 grid gap-6">
+            {projectHistory.map((project) => (
+              <div
+                key={project.id}
+                className="origin-top overflow-hidden"
+                style={{
+                  opacity: deletingProjectId === project.id ? 0 : 1,
+                  transform:
+                    deletingProjectId === project.id
+                      ? "translateY(12px) scale(0.95)"
+                      : "translateY(0px) scale(1)",
+                  transition: "opacity 280ms ease-out, transform 280ms ease-out",
+                  pointerEvents:
+                    deletingProjectId === project.id ? "none" : "auto",
+                }}
+              >
+                <ProjectCard
+                  project={project}
+                  onDelete={handleDeleteProject}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyProjectHistory />
+        )}
       </section>
     </main>
   );

@@ -122,11 +122,12 @@ export default function CreateProjectModal({
       onClick={onClose}
     >
       <div
-        className={`max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${
+        className={`w-full max-w-6xl rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${
           isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-6 border-b border-white/10 pb-5">
           <div>
             <h2 className="mt-3 text-3xl font-semibold text-white">
@@ -443,6 +444,7 @@ export default function CreateProjectModal({
               </button>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,66 @@
+[
+  {
+    "job_id": "d48fdedb4253",
+    "project_id": "7a26d1da0126",
+    "overall_status": "Completed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "genie3",
+        "status": "Completed",
+        "elapsed_seconds": 4,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/genie3.json",
+        "completed_at": "2026-04-05 16:26:47"
+      },
+      {
+        "algorithm_id": "grnboost2",
+        "status": "Completed",
+        "elapsed_seconds": 4,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/grnboost2.json",
+        "completed_at": "2026-04-05 16:26:47"
+      },
+      {
+        "algorithm_id": "pidc",
+        "status": "Completed",
+        "elapsed_seconds": 5,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/pidc.json",
+        "completed_at": "2026-04-05 16:26:48"
+      },
+      {
+        "algorithm_id": "ppcor",
+        "status": "Completed",
+        "elapsed_seconds": 5,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/ppcor.json",
+        "completed_at": "2026-04-05 16:26:48"
+      },
+      {
+        "algorithm_id": "pearson",
+        "status": "Completed",
+        "elapsed_seconds": 4,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/pearson.json",
+        "completed_at": "2026-04-05 16:26:47"
+      },
+      {
+        "algorithm_id": "grnvbem",
+        "status": "Completed",
+        "elapsed_seconds": 3,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/grnvbem.json",
+        "completed_at": "2026-04-05 16:26:46"
+      },
+      {
+        "algorithm_id": "jump3",
+        "status": "Completed",
+        "elapsed_seconds": 3,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results/jump3.json",
+        "completed_at": "2026-04-05 16:26:46"
+      }
+    ]
+  }
+]

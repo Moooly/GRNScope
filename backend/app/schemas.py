@@ -16,4 +16,5 @@ class TempUploadResponse(BaseModel):
 class CreateProjectResponse(BaseModel):
     ok: bool
     project_id: Optional[str] = None
+    job_id: Optional[str] = None
     errors: list[str] = []

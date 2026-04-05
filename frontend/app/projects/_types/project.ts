@@ -1,3 +1,17 @@
+export type ProjectTask = {
+  algorithm_id: string;
+  status: string;
+  elapsed_seconds: number;
+  error_message: string | null;
+};
+
+export type ProjectJob = {
+  job_id: string;
+  overall_status: string;
+  ensemble_enabled: string | boolean;
+  tasks: ProjectTask[];
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -5,4 +19,5 @@ export type Project = {
   createdAt: string;
   datasetCount: number;
   jobCount: number;
+  latestJob?: ProjectJob | null;
 };
