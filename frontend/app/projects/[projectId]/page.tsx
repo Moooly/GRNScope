@@ -120,7 +120,8 @@ export default function ProjectDetailPage() {
   const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
   const [selectedView, setSelectedView] = useState<string>("consensus");
-  const [topN, setTopN] = useState(5000);
+  const [topN, setTopN] = useState(1);
+  const [hasTouchedTopN, setHasTouchedTopN] = useState(false);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [geneSearch, setGeneSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
@@ -365,8 +366,8 @@ export default function ProjectDetailPage() {
   }, [completedAlgorithmIds]);
 
   useEffect(() => {
-    setTopN((current) => clamp(current, 1, maxAvailableTopN));
-  }, [maxAvailableTopN]);
+    setTopN((current) => (hasTouchedTopN ? clamp(current, 1, maxAvailableTopN) : maxAvailableTopN));
+  }, [hasTouchedTopN, maxAvailableTopN]);
 
   useEffect(() => {
     const validViews = ["consensus", ...completedAlgorithmIds];
@@ -794,19 +795,25 @@ export default function ProjectDetailPage() {
               <div className="min-w-[260px] flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-slate-500">
                   <span>Top-N edges per algorithm</span>
-                  <span>{Math.min(topN, maxAvailableTopN).toLocaleString()}</span>
+                  <span>
+                    {Math.min(topN, maxAvailableTopN).toLocaleString()} / {maxAvailableTopN.toLocaleString()}
+                  </span>
                 </div>
                 <input
+                  key={`${selectedView}-${maxAvailableTopN}`}
                   type="range"
                   min={1}
                   max={maxAvailableTopN}
                   step={1}
                   value={Math.min(topN, maxAvailableTopN)}
-                  onChange={(e) => setTopN(Number(e.target.value))}
+                  onChange={(e) => {
+                    setHasTouchedTopN(true);
+                    setTopN(Number(e.target.value));
+                  }}
                   className="mt-3 w-full accent-teal-400"
                 />
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Truncate each algorithm's output to top N edges to exclude low-confidence predictions.
+                  Truncate each algorithm's output to top N edges to exclude low-confidence predictions. Maximum available for this view: {maxAvailableTopN.toLocaleString()}.
                 </p>
               </div>
 

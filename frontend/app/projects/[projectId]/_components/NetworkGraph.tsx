@@ -152,12 +152,6 @@ function getStylesheet() {
       },
     },
     {
-      selector: 'node[degree < 2]',
-      style: {
-        label: "",
-      },
-    },
-    {
       selector: "edge",
       style: {
         width: "mapData(score, 0, 1, 1, 4.6)",
@@ -465,6 +459,10 @@ export default function NetworkGraph({
     const cachedPositionsForSignature =
       positionCacheRef.current[elementsSignature] ?? preservedPositions;
 
+    const nextNodeIds = nodes.map((node) => node.id);
+    const hasCompleteSavedPositions =
+      nextNodeIds.length > 0 && nextNodeIds.every((id) => Boolean(cachedPositionsForSignature[id]));
+
     const elementsWithPositions = elements.map((element) => {
       const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
       if (!elementId || element.group === "edges") {
@@ -488,7 +486,7 @@ export default function NetworkGraph({
     cy.style(getStylesheet() as any);
     cy.resize();
 
-    if (layoutChanged) {
+    if (layoutChanged || !hasCompleteSavedPositions) {
       cy.endBatch();
       const rerunLayout = cy.layout(
         getLayoutConfig(layout, graphCounts.nodeCount, graphCounts.edgeCount) as any
