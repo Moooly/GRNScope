@@ -1,4 +1,5 @@
 import { Project } from "../_types/project";
+import Link from "next/link";
 
 interface ProjectCardProps {
   project: Project;
@@ -102,12 +103,12 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
+          <Link
+            href={`/projects/${project.id}`}
             className="rounded-2xl border border-white/15 px-4 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
           >
             View detail
-          </button>
+          </Link>
 
           <button
             type="button"

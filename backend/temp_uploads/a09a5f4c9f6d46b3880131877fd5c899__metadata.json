@@ -1,7 +1,7 @@
 {
-  "project_id": "7a26d1da0126",
-  "project_name": "test-1",
-  "project_description": "",
+  "temp_upload_id": "a09a5f4c9f6d46b3880131877fd5c899",
+  "expression_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/temp_uploads/a09a5f4c9f6d46b3880131877fd5c899__expression__ExpressionData.csv",
+  "pseudotime_path": null,
   "expression_filename": "ExpressionData.csv",
   "pseudotime_filename": null,
   "gene_count": 19,
@@ -2030,26 +2030,5 @@
     "E14_3_685"
   ],
   "has_pseudotime": false,
-  "pseudotime_count": null,
-  "preprocessing": {
-    "top_variable_genes": "19",
-    "include_all_tfs": "true",
-    "normalize_enabled": "true",
-    "log_transform_enabled": "true"
-  },
-  "selected_algorithms": [
-    "genie3",
-    "grnboost2",
-    "pidc",
-    "ppcor",
-    "pearson",
-    "grnvbem",
-    "jump3"
-  ],
-  "results_directory": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/7a26d1da0126/results",
-  "ensemble_enabled": "true",
-  "job": {
-    "job_id": "d48fdedb4253",
-    "overall_status": "Queued"
-  }
+  "pseudotime_count": null
 }

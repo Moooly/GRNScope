@@ -104,8 +104,21 @@ export default function ProjectsPage() {
     () =>
       projectHistory
         .filter((project) => {
-          const status = project.latestJob?.overall_status;
-          return status === "Queued" || status === "Running";
+          const latestJob = project.latestJob;
+          if (!latestJob) {
+            return false;
+          }
+
+          const overallStatus = latestJob.overall_status;
+          const hasActiveTasks = latestJob.tasks?.some(
+            (task) => task.status === "Queued" || task.status === "Running"
+          );
+
+          return (
+            overallStatus === "Queued" ||
+            overallStatus === "Running" ||
+            Boolean(hasActiveTasks)
+          );
         })
         .map((project) => project.id),
     [projectHistory]
@@ -204,7 +217,7 @@ export default function ProjectsPage() {
       ...selectedAlgorithms.map((algorithm) => algorithm.runtimeMinutes)
     );
 
-    return `~${longestRuntime} min (parallel execution estimate)`;
+    return `~${longestRuntime} minutes`;
   }, [selectedAlgorithms]);
 
   const openCreateModal = () => {

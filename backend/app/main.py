@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
+import os
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -9,6 +14,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .schemas import CreateProjectResponse, TempUploadResponse
 from .storage import (
@@ -38,6 +44,312 @@ app.add_middleware(
 
 JOB_FILE_LOCK = threading.Lock()
 
+PROJECTS_ROOT = Path(__file__).resolve().parent.parent / "projects"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+BEELINE_ROOT_CANDIDATES = [
+    Path(os.environ.get("BEELINE_ROOT", "")).expanduser() if os.environ.get("BEELINE_ROOT") else None,
+    Path("/Users/molyloo/Documents/TRU/Beeline"),
+    PROJECT_ROOT.parent / "Beeline",
+    PROJECT_ROOT.parent / "beeline",
+    Path.home() / "Beeline",
+    Path.home() / "beeline",
+]
+
+
+ALGORITHM_IMAGE_MAP = {
+    "GENIE3": "grnbeeline/arboreto:base",
+    "GRISLI": "grnbeeline/grisli:base",
+    "GRNBOOST2": "grnbeeline/arboreto:base",
+    "GRNVBEM": "grnbeeline/grnvbem:base",
+    "JUMP3": "jump3:base",
+    "LEAP": "grnbeeline/leap:base",
+    "PEARSON": "local",
+    "PIDC": "grnbeeline/pidc:base",
+    "PPCOR": "grnbeeline/ppcor:base",
+    "SCODE": "grnbeeline/scode:base",
+    "SCRIBE": "grnbeeline/scribe:base",
+    "SCSGL": "scsgl:base",
+    "SINCERITIES": "grnbeeline/sincerities:base",
+    "SINGE": "grnbeeline/singe:0.4.1",
+}
+
+# Default parameters for algorithms that require them
+ALGORITHM_DEFAULT_PARAMS = {
+    "PPCOR": {
+        "pVal": [0.05],
+    },
+}
+
+
+def resolve_beeline_root() -> Path:
+    for candidate in BEELINE_ROOT_CANDIDATES:
+        if not candidate:
+            continue
+        blrunner_path = candidate / "BLRunner.py"
+        if candidate.exists() and blrunner_path.exists():
+            return candidate
+    raise FileNotFoundError(
+        "BEELINE repository not found. Set BEELINE_ROOT to the local Beeline repo path."
+    )
+
+
+def yaml_scalar(value: str) -> str:
+    return json.dumps(str(value))
+
+
+def prepare_beeline_runtime(
+    project_id: str,
+    algorithm_id: str,
+    project_manifest: dict,
+) -> tuple[Path, Path, Path, str, str]:
+    runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
+    if runtime_root.exists():
+        shutil.rmtree(runtime_root)
+    runtime_root.mkdir(parents=True, exist_ok=True)
+
+    input_dir = runtime_root / "inputs"
+    output_dir = runtime_root / "outputs"
+    dataset_id = project_id
+    run_id = "run-1"
+    run_dir = input_dir / dataset_id / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    expression_path = project_manifest.get("expression_path")
+    pseudotime_path = project_manifest.get("pseudotime_path")
+
+    if not expression_path:
+        raise FileNotFoundError("Project expression_path is missing.")
+
+    source_expression = Path(expression_path)
+    if not source_expression.exists():
+        raise FileNotFoundError("Expression matrix file not found on disk.")
+
+    shutil.copy2(source_expression, run_dir / "ExpressionData.csv")
+
+    if pseudotime_path:
+        source_pseudotime = Path(pseudotime_path)
+        if source_pseudotime.exists():
+            shutil.copy2(source_pseudotime, run_dir / "PseudoTime.csv")
+
+    return runtime_root, input_dir, output_dir, dataset_id, run_id
+
+
+def build_beeline_config(
+    input_dir: Path,
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+    include_pseudotime: bool,
+) -> str:
+    normalized_algorithm_id = algorithm_id.upper()
+    image_name = ALGORITHM_IMAGE_MAP.get(normalized_algorithm_id)
+    if not image_name:
+        raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}")
+
+    run_lines = [
+        f"        - run_id: {yaml_scalar(run_id)}",
+        '          exprData: "ExpressionData.csv"',
+    ]
+    if include_pseudotime:
+        run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
+
+    params = ALGORITHM_DEFAULT_PARAMS.get(normalized_algorithm_id, {})
+
+    config_lines = [
+        "input_settings:",
+        f"  input_dir: {yaml_scalar(input_dir)}",
+        "  datasets:",
+        f"    - dataset_id: {yaml_scalar(dataset_id)}",
+        "      should_run: [True]",
+        "      runs:",
+        *run_lines,
+        "  algorithms:",
+        f"    - algorithm_id: {yaml_scalar(normalized_algorithm_id)}",
+        f"      image: {yaml_scalar(image_name)}",
+        "      should_run: [True]",
+        "      params:",
+    ]
+
+    if params:
+        for key, value in params.items():
+            config_lines.append(f"        {key}: {json.dumps(value)}")
+    else:
+        config_lines.append("        {}")
+
+    config_lines.extend(
+        [
+            "output_settings:",
+            f"  output_dir: {yaml_scalar(output_dir)}",
+        ]
+    )
+    return "\n".join(config_lines) + "\n"
+
+
+def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
+    if not ranked_edges_path.exists():
+        raise FileNotFoundError(f"rankedEdges.csv not found at {ranked_edges_path}")
+
+    raw_text = ranked_edges_path.read_text(encoding="utf-8")
+    if not raw_text.strip():
+        raise ValueError("rankedEdges.csv is empty.")
+
+    sample = raw_text[:4096]
+    delimiter = ","
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+        delimiter = dialect.delimiter
+    except csv.Error:
+        first_line = raw_text.splitlines()[0] if raw_text.splitlines() else ""
+        if "\t" in first_line:
+            delimiter = "\t"
+        elif ";" in first_line:
+            delimiter = ";"
+
+    reader = csv.DictReader(io.StringIO(raw_text), delimiter=delimiter)
+    fieldnames = reader.fieldnames or []
+    rows = list(reader)
+
+    if not fieldnames:
+        raise ValueError("rankedEdges.csv has no header row.")
+
+    normalized_field_map = {
+        key.strip().replace('"', ""): key for key in fieldnames if key is not None
+    }
+
+    def find_field(candidates: list[str]) -> str | None:
+        for candidate in candidates:
+            if candidate in normalized_field_map:
+                return normalized_field_map[candidate]
+        return None
+
+    source_key = find_field(["Gene1", "TF", "source", "Source"])
+    target_key = find_field(["Gene2", "Target", "target", "TargetGene"])
+    score_key = find_field(["EdgeWeight", "weight", "score", "Score"])
+
+    if source_key is None or target_key is None:
+        raise ValueError(
+            f"Could not identify source/target columns in rankedEdges.csv. Found columns: {fieldnames}"
+        )
+
+    if score_key is None:
+        numeric_candidates: list[str] = []
+        for key in fieldnames:
+            sample_value = None
+            for row in rows:
+                value = row.get(key)
+                if value not in (None, ""):
+                    sample_value = str(value).strip()
+                    break
+            if sample_value is None:
+                continue
+            try:
+                float(sample_value)
+                numeric_candidates.append(key)
+            except (TypeError, ValueError):
+                continue
+        score_key = numeric_candidates[-1] if numeric_candidates else None
+
+    if score_key is None:
+        raise ValueError(
+            f"Could not identify a score column in rankedEdges.csv. Found columns: {fieldnames}"
+        )
+
+    parsed_edges: list[dict] = []
+    node_names: set[str] = set()
+
+    for row in rows:
+        source = str(row.get(source_key, "")).strip()
+        target = str(row.get(target_key, "")).strip()
+        score_raw = str(row.get(score_key, "")).strip()
+
+        if not source or not target:
+            continue
+
+        try:
+            score = float(score_raw)
+        except (TypeError, ValueError):
+            continue
+
+        parsed_edges.append(
+            {
+                "source": source,
+                "target": target,
+                "score": score,
+            }
+        )
+        node_names.add(source)
+        node_names.add(target)
+
+    if not parsed_edges:
+        raise ValueError("rankedEdges.csv did not contain any valid edges.")
+
+    return parsed_edges, {
+        "edge_count": len(parsed_edges),
+        "node_count": len(node_names),
+    }
+
+
+def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
+    project_dir = PROJECTS_ROOT / project_id
+    project_manifest = read_project_manifest(project_dir)
+    beeline_root = resolve_beeline_root()
+
+    runtime_root, input_dir, output_dir, dataset_id, run_id = prepare_beeline_runtime(
+        project_id,
+        algorithm_id,
+        project_manifest,
+    )
+
+    config_path = runtime_root / "config.yaml"
+    config_text = build_beeline_config(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        dataset_id=dataset_id,
+        run_id=run_id,
+        algorithm_id=algorithm_id,
+        include_pseudotime=bool(project_manifest.get("pseudotime_path")),
+    )
+    config_path.write_text(config_text, encoding="utf-8")
+
+    python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
+    command = [python_executable, "BLRunner.py", "-c", str(config_path)]
+
+    completed_process = subprocess.run(
+        command,
+        cwd=beeline_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    (runtime_root / "stdout.log").write_text(
+        completed_process.stdout or "",
+        encoding="utf-8",
+    )
+    (runtime_root / "stderr.log").write_text(
+        completed_process.stderr or "",
+        encoding="utf-8",
+    )
+
+    if completed_process.returncode != 0:
+        raise RuntimeError(
+            f"BEELINE failed for {algorithm_id}. See {runtime_root / 'stderr.log'} for details."
+        )
+
+    ranked_edges_path = output_dir / dataset_id / run_id / algorithm_id / "rankedEdges.csv"
+    top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
+
+    return {
+        "project_id": project_id,
+        "algorithm_id": algorithm_id,
+        "network_summary": network_summary,
+        "top_edges": top_edges,
+        "runtime_root": str(runtime_root),
+        "ranked_edges_path": str(ranked_edges_path),
+    }
+
 
 async def save_upload_file(upload: UploadFile, destination: Path) -> int:
     size = 0
@@ -64,7 +376,7 @@ def read_project_manifest(project_dir: Path) -> dict:
 
 
 def list_project_directories() -> list[Path]:
-    projects_root = Path(__file__).resolve().parent.parent / "projects"
+    projects_root = PROJECTS_ROOT
     if not projects_root.exists():
         return []
     return [path for path in projects_root.iterdir() if path.is_dir()]
@@ -181,7 +493,7 @@ def recompute_overall_status(project_dir: Path, job_id: str) -> None:
 
 
 def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> None:
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         return
@@ -198,48 +510,28 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
     recompute_overall_status(project_dir, job_id)
 
     try:
-        # Temporary simulation of independent algorithm execution.
-        # Replace this block later with the real algorithm runner.
-        simulated_duration = 3 + (sum(ord(char) for char in algorithm_id) % 3)
-        time.sleep(simulated_duration)
+        beeline_result = execute_beeline_algorithm(project_id, algorithm_id)
 
         elapsed = int(time.time() - started_at)
         completed_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
-        simulated_result = {
+        actual_result = {
             "project_id": project_id,
             "job_id": job_id,
             "algorithm_id": algorithm_id,
             "status": "Completed",
             "generated_at": completed_at,
             "elapsed_seconds": elapsed,
-            "network_summary": {
-                "edge_count": 25 + (sum(ord(char) for char in algorithm_id) % 50),
-                "node_count": 10 + (sum(ord(char) for char in algorithm_id) % 20),
-            },
-            "top_edges": [
-                {
-                    "source": "GeneA",
-                    "target": "GeneB",
-                    "score": 0.91,
-                },
-                {
-                    "source": "GeneC",
-                    "target": "GeneD",
-                    "score": 0.87,
-                },
-                {
-                    "source": "GeneE",
-                    "target": "GeneF",
-                    "score": 0.83,
-                },
-            ],
+            "network_summary": beeline_result["network_summary"],
+            "top_edges": beeline_result["top_edges"],
+            "beeline_runtime_root": beeline_result["runtime_root"],
+            "ranked_edges_path": beeline_result["ranked_edges_path"],
         }
 
         saved_result_path = write_algorithm_result(
             project_dir,
             algorithm_id,
-            simulated_result,
+            actual_result,
         )
 
         update_job_state(
@@ -271,7 +563,7 @@ def launch_independent_algorithm_tasks(
     job_id: str,
     selected_algorithms_list: list[str],
 ) -> None:
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         return
@@ -286,10 +578,84 @@ def launch_independent_algorithm_tasks(
         )
         worker.start()
 
+@app.get("/api/projects/{project_id}/download/expression")
+async def download_expression_file(project_id: str):
+    project_dir = PROJECTS_ROOT / project_id
 
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    metadata_path = project_dir / "metadata.json"
+    project_manifest_path = project_dir / "project.json"
+
+    if not metadata_path.exists() or not project_manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Project metadata not found.")
+
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        project_manifest = json.loads(project_manifest_path.read_text(encoding="utf-8"))
+
+        expression_path = project_manifest.get("expression_path")
+        expression_filename = metadata.get("expression_filename") or "dataset.csv"
+
+        if not expression_path:
+            raise HTTPException(status_code=404, detail="Expression file path not found.")
+
+        file_path = Path(expression_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Expression file not found.")
+
+        return FileResponse(
+            path=file_path,
+            filename=expression_filename,
+            media_type="text/csv",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/download/pseudotime")
+async def download_pseudotime_file(project_id: str):
+    project_dir = PROJECTS_ROOT / project_id
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    metadata_path = project_dir / "metadata.json"
+    project_manifest_path = project_dir / "project.json"
+
+    if not metadata_path.exists() or not project_manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Project metadata not found.")
+
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        project_manifest = json.loads(project_manifest_path.read_text(encoding="utf-8"))
+
+        pseudotime_path = project_manifest.get("pseudotime_path")
+        pseudotime_filename = metadata.get("pseudotime_filename") or "pseudotime.csv"
+
+        if not pseudotime_path:
+            raise HTTPException(status_code=404, detail="Pseudotime file path not found.")
+
+        file_path = Path(pseudotime_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Pseudotime file not found.")
+
+        return FileResponse(
+            path=file_path,
+            filename=pseudotime_filename,
+            media_type="text/csv",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -573,7 +939,7 @@ async def list_projects():
 
 @app.get("/api/projects/{project_id}")
 async def get_project(project_id: str):
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -595,9 +961,30 @@ async def get_project(project_id: str):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.get("/api/projects/{project_id}/metadata")
+async def get_project_metadata(project_id: str):
+    project_dir = PROJECTS_ROOT / project_id
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    metadata_path = project_dir / "metadata.json"
+    if not metadata_path.exists():
+        raise HTTPException(status_code=404, detail="Metadata not found.")
+
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "metadata": metadata,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 @app.get("/api/projects/{project_id}/jobs")
 async def get_project_jobs(project_id: str):
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -618,7 +1005,7 @@ async def get_project_jobs(project_id: str):
 
 @app.get("/api/projects/{project_id}/results")
 async def get_project_results(project_id: str):
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -658,7 +1045,7 @@ async def get_project_results(project_id: str):
 
 @app.get("/api/projects/{project_id}/results/{algorithm_id}")
 async def get_algorithm_result(project_id: str, algorithm_id: str):
-    project_dir = Path(__file__).resolve().parent.parent / "projects" / project_id
+    project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project not found.")

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "cytoscape": "^3.33.2",
+    "cytoscape-cose-bilkent": "^4.1.0"
+  }
+}
