@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import NetworkGraph from "./_components/NetworkGraph";
+import ProjectHeader from "./_components/ProjectHeader";
+import ResultsSummarySection from "./_components/ResultsSummarySection";
+import ResultsControlsSection from "./_components/ResultsControlsSection";
+import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import { algorithms } from "../_data/algorithms";
 
 type ProjectTask = {
@@ -91,6 +95,22 @@ type NodeInfo = {
   topTargets: string[];
 };
 
+type OverlapEntry = {
+  key: string;
+  methods: string[];
+  count: number;
+};
+
+type BenchmarkMetrics = {
+  methodId: string;
+  evaluatedEdges: number;
+  positivesFound: number;
+  precision: number;
+  recall: number;
+  auprc: number;
+  auprcRatio: number;
+};
+
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 const POLL_INTERVAL_MS = 5000;
@@ -104,6 +124,90 @@ function boolText(value: boolean | string | undefined) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function parseGroundTruthCsv(text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const edges = new Set<string>();
+
+  lines.forEach((line, index) => {
+    const parts = line.split(/[\t,]/).map((part) => part.trim());
+    if (parts.length < 2) return;
+
+    const source = parts[0];
+    const target = parts[1];
+
+    const lowerSource = source.toLowerCase();
+    const lowerTarget = target.toLowerCase();
+    const isHeaderLike =
+      index === 0 &&
+      ((lowerSource.includes("source") || lowerSource.includes("tf") || lowerSource.includes("regulator")) &&
+        (lowerTarget.includes("target") || lowerTarget.includes("gene")));
+
+    if (isHeaderLike || !source || !target) return;
+    edges.add(`${source}|||${target}`);
+  });
+
+  return edges;
+}
+
+function computeBenchmarkMetrics(
+  methodId: string,
+  rows: AggregatedEdge[],
+  groundTruthEdges: Set<string>,
+  baselineUniverseSize: number
+): BenchmarkMetrics {
+  const rankedRows = [...rows].sort((a, b) => b.score - a.score);
+  const totalGroundTruth = groundTruthEdges.size;
+
+  if (rankedRows.length === 0 || totalGroundTruth === 0) {
+    return {
+      methodId,
+      evaluatedEdges: rankedRows.length,
+      positivesFound: 0,
+      precision: 0,
+      recall: 0,
+      auprc: 0,
+      auprcRatio: 0,
+    };
+  }
+
+  let tp = 0;
+  let fp = 0;
+  let prevRecall = 0;
+  let area = 0;
+
+  rankedRows.forEach((edge) => {
+    const key = `${edge.source}|||${edge.target}`;
+    if (groundTruthEdges.has(key)) {
+      tp += 1;
+    } else {
+      fp += 1;
+    }
+
+    const precision = tp / (tp + fp);
+    const recall = tp / totalGroundTruth;
+    area += (recall - prevRecall) * precision;
+    prevRecall = recall;
+  });
+
+  const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+  const recall = totalGroundTruth > 0 ? tp / totalGroundTruth : 0;
+  const randomBaseline = baselineUniverseSize > 0 ? totalGroundTruth / baselineUniverseSize : 0;
+
+  return {
+    methodId,
+    evaluatedEdges: rankedRows.length,
+    positivesFound: tp,
+    precision,
+    recall,
+    auprc: area,
+    auprcRatio: randomBaseline > 0 ? area / randomBaseline : 0,
+  };
 }
 
 
@@ -138,6 +242,9 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState("");
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
+  const [groundTruthEdges, setGroundTruthEdges] = useState<Set<string>>(new Set());
+  const [groundTruthFilename, setGroundTruthFilename] = useState<string>("");
+  const [groundTruthError, setGroundTruthError] = useState("");
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
 
 
@@ -292,6 +399,86 @@ export default function ProjectDetailPage() {
     [networkNodes, selectedGene]
   );
 
+  const perAlgorithmEdgeCounts = useMemo(() => {
+    return completedAlgorithmIds.map((algorithmId) => ({
+      algorithmId,
+      count: algorithmEdgeRows[algorithmId]?.length ?? 0,
+    }));
+  }, [algorithmEdgeRows, completedAlgorithmIds]);
+
+  const maxAlgorithmEdgeCount = useMemo(() => {
+    return Math.max(...perAlgorithmEdgeCounts.map((item) => item.count), 1);
+  }, [perAlgorithmEdgeCounts]);
+
+  const overlapEntries = useMemo<OverlapEntry[]>(() => {
+    if (completedAlgorithmIds.length < 2) return [];
+
+    const edgeMembership = new Map<string, string[]>();
+    completedAlgorithmIds.forEach((algorithmId) => {
+      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
+        const key = `${edge.source}|||${edge.target}`;
+        const current = edgeMembership.get(key) ?? [];
+        if (!current.includes(algorithmId)) current.push(algorithmId);
+        edgeMembership.set(key, current);
+      });
+    });
+
+    const buckets = new Map<string, OverlapEntry>();
+    edgeMembership.forEach((methods) => {
+      const sortedMethods = [...methods].sort();
+      const key = sortedMethods.join(" + ");
+      const current = buckets.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        buckets.set(key, {
+          key,
+          methods: sortedMethods,
+          count: 1,
+        });
+      }
+    });
+
+    return Array.from(buckets.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, completedAlgorithmIds.length >= 4 ? 10 : 7);
+  }, [algorithmEdgeRows, completedAlgorithmIds]);
+
+  const maxOverlapCount = useMemo(() => {
+    return Math.max(...overlapEntries.map((entry) => entry.count), 1);
+  }, [overlapEntries]);
+
+  const benchmarkMetrics = useMemo<BenchmarkMetrics[]>(() => {
+    if (groundTruthEdges.size === 0) return [];
+
+    const universe = new Set<string>();
+    completedAlgorithmIds.forEach((algorithmId) => {
+      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
+        universe.add(`${edge.source}|||${edge.target}`);
+      });
+    });
+    consensusRows.forEach((edge) => {
+      universe.add(`${edge.source}|||${edge.target}`);
+    });
+    groundTruthEdges.forEach((edgeKey) => universe.add(edgeKey));
+
+    const baselineUniverseSize = universe.size;
+
+    const methodRows: BenchmarkMetrics[] = completedAlgorithmIds.map((algorithmId) =>
+      computeBenchmarkMetrics(
+        algorithmId,
+        algorithmEdgeRows[algorithmId] ?? [],
+        groundTruthEdges,
+        baselineUniverseSize
+      )
+    );
+
+    return [
+      computeBenchmarkMetrics("Consensus", consensusRows, groundTruthEdges, baselineUniverseSize),
+      ...methodRows,
+    ];
+  }, [algorithmEdgeRows, completedAlgorithmIds, consensusRows, groundTruthEdges]);
+
 
 
 
@@ -420,6 +607,29 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     setTablePage((current) => Math.min(current, totalTablePages));
   }, [totalTablePages]);
+
+  const handleGroundTruthUpload = async (file: File | null) => {
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsedEdges = parseGroundTruthCsv(text);
+      if (parsedEdges.size === 0) {
+        setGroundTruthError("Ground-truth file could not be parsed. Use a CSV with Source and Target columns.");
+        setGroundTruthEdges(new Set());
+        setGroundTruthFilename("");
+        return;
+      }
+
+      setGroundTruthEdges(parsedEdges);
+      setGroundTruthFilename(file.name);
+      setGroundTruthError("");
+    } catch {
+      setGroundTruthError("Ground-truth file could not be read.");
+      setGroundTruthEdges(new Set());
+      setGroundTruthFilename("");
+    }
+  };
 
 
   useEffect(() => {
@@ -576,28 +786,11 @@ export default function ProjectDetailPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <Link
-              href="/projects"
-              className="inline-flex rounded-2xl border border-white/15 px-4 py-2 text-sm text-white transition hover:border-white/30 hover:bg-white/5"
-            >
-              Back to projects
-            </Link>
-            <h1 className="mt-5 text-3xl font-semibold text-white">
-              {project?.project_name ?? "Project detail"}
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              {project?.project_description || "No project description provided."}
-            </p>
-          </div>
-
-          {latestJob?.overall_status && (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200">
-              {latestJob.overall_status}
-            </span>
-          )}
-        </div>
+        <ProjectHeader
+          projectName={project?.project_name ?? "Project detail"}
+          projectDescription={project?.project_description || "No project description provided."}
+          overallStatus={latestJob?.overall_status}
+        />
 
         <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
           <h2 className="text-xl font-semibold text-white">Dataset and preprocessing</h2>
@@ -782,483 +975,225 @@ export default function ProjectDetailPage() {
                 <h2 className="text-xl font-semibold text-white">Results hub</h2>
               </div>
 
-              <div className="flex flex-wrap items-stretch gap-3">
-              <div className="rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">View</p>
-                <select
-                  value={selectedView}
-                  onChange={(e) => {
-                    setSelectedView(e.target.value);
-                    setSelectedGene(null);
-                    setSelectedEdgeKey(null);
-                    setIsolatedGene(null);
-                  }}
-                  className="mt-2 w-[210px] rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none"
-                >
-                  <option value="consensus">Consensus network</option>
-                  {completedAlgorithmIds.map((algorithmId) => (
-                    <option key={algorithmId} value={algorithmId}>
-                      {algorithmId}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <ResultsSummarySection
+                perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
+                maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
+                completedAlgorithmIds={completedAlgorithmIds}
+                overlapEntries={overlapEntries}
+                maxOverlapCount={maxOverlapCount}
+                groundTruthFilename={groundTruthFilename}
+                groundTruthEdgeCount={groundTruthEdges.size}
+                groundTruthError={groundTruthError}
+                benchmarkMetrics={benchmarkMetrics}
+                onGroundTruthUpload={handleGroundTruthUpload}
+            />
 
-              <div className="rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Layout</p>
-                <select
-                  value={networkLayout}
-                  onChange={(e) =>
-                    setNetworkLayout(
-                      e.target.value as "force" | "hierarchical" | "concentric" | "circular"
-                    )
-                  }
-                  className="mt-2 w-[180px] rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none"
-                >
-                  <option value="force">Force-directed</option>
-                  <option value="hierarchical">Hierarchical</option>
-                  <option value="concentric">Concentric</option>
-                  <option value="circular">Circular</option>
-                </select>
-              </div>
+              <ResultsControlsSection
+                selectedView={selectedView}
+                completedAlgorithmIds={completedAlgorithmIds}
+                onChangeView={(value) => {
+                  setSelectedView(value);
+                  setSelectedGene(null);
+                  setSelectedEdgeKey(null);
+                  setIsolatedGene(null);
+                }}
+                networkLayout={networkLayout}
+                onChangeLayout={setNetworkLayout}
+                topN={topN}
+                maxAvailableTopN={maxAvailableTopN}
+                onChangeTopN={(value) => {
+                  setHasTouchedTopN(true);
+                  setTopN(value);
+                }}
+                consensusThreshold={consensusThreshold}
+                maxConsensusThreshold={Math.max(completedAlgorithmIds.length, 1)}
+                onChangeConsensusThreshold={setConsensusThreshold}
+                isConsensusView={selectedView === "consensus"}
+              />
 
-              <div className="min-w-[260px] flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                  <span>Top-N edges per algorithm</span>
-                  <span>
-                    {Math.min(topN, maxAvailableTopN).toLocaleString()} / {maxAvailableTopN.toLocaleString()}
-                  </span>
-                </div>
-                <input
-                  key={`${selectedView}-${maxAvailableTopN}`}
-                  type="range"
-                  min={1}
-                  max={maxAvailableTopN}
-                  step={1}
-                  value={Math.min(topN, maxAvailableTopN)}
-                  onChange={(e) => {
-                    setHasTouchedTopN(true);
-                    setTopN(Number(e.target.value));
-                  }}
-                  className="mt-3 w-full accent-teal-400"
-                />
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Truncate each algorithm's output to top N edges to exclude low-confidence predictions. Maximum available for this view: {maxAvailableTopN.toLocaleString()}.
-                </p>
-              </div>
-
-              <div className="min-w-[260px] flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                  <span>Consensus threshold</span>
-                  <span>{consensusThreshold}</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={Math.max(completedAlgorithmIds.length, 1)}
-                  value={Math.min(consensusThreshold, Math.max(completedAlgorithmIds.length, 1))}
-                  onChange={(e) => setConsensusThreshold(Number(e.target.value))}
-                  disabled={selectedView !== "consensus"}
-                  className="mt-3 w-full accent-teal-400 disabled:opacity-40"
-                />
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  An edge is included only if the number of algorithms supporting it meets or exceeds the threshold.
-                </p>
-              </div>
-            </div>
-          </div>
-          </div>
-
-          <div className="h-4" />
-
-          {/* Metrics/summary area removed */}
-
-          <div className="mt-6">
-            <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Network Visualization</h3>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                    TF nodes = teal diamonds
-                  </span>
-                  <span className="rounded-full border border-slate-400/20 bg-slate-400/10 px-3 py-1 text-slate-200">
-                    Target genes = slate circles
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                    Node size ∝ degree
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                    Edge width ∝ score
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                    Edge color ∝ support count
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
-                <div className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6] p-4">
-                  <NetworkGraph
-                    key={`${selectedView}-${networkLayout}`}
-                    nodes={networkNodes.map((node) => ({
-                      id: node.id,
-                      inDegree: node.inDegree,
-                      outDegree: node.outDegree,
-                      degree: node.degree,
-                      isTF: node.isTF,
-                    }))}
-                    edges={filteredNetworkEdges.slice(0, 220).map((edge) => ({
-                      key: edge.key,
-                      source: edge.source,
-                      target: edge.target,
-                      score: edge.score,
-                      count: edge.count,
-                      rank: edge.rank,
-                      supportingAlgorithms: edge.supportingAlgorithms,
-                    }))}
-                    selectedGene={selectedGene}
-                    selectedEdgeKey={selectedEdgeKey}
-                    layout={networkLayout}
-                    onSelectGene={setSelectedGene}
-                    onSelectEdge={setSelectedEdgeKey}
-                  />
+              <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Network Visualization</h3>
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                      TF nodes = teal diamonds
+                    </span>
+                    <span className="rounded-full border border-slate-400/20 bg-slate-400/10 px-3 py-1 text-slate-200">
+                      Target genes = slate circles
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                      Node size ∝ degree
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                      Edge width ∝ score
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                      Edge color ∝ support count
+                    </span>
+                  </div>
                 </div>
 
-                <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h4 className="text-base font-semibold text-white">Node Inspection</h4>
-                    {selectedNode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedGene(null);
-                          setSelectedEdgeKey(null);
-                        }}
-                        className="rounded-2xl border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:border-white/20 hover:bg-white/[0.04]"
-                      >
-                        Clear
-                      </button>
-                    )}
+                <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
+                  <div className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6] p-4">
+                    <NetworkGraph
+                      key={`${selectedView}-${networkLayout}`}
+                      nodes={networkNodes.map((node) => ({
+                        id: node.id,
+                        inDegree: node.inDegree,
+                        outDegree: node.outDegree,
+                        degree: node.degree,
+                        isTF: node.isTF,
+                      }))}
+                      edges={filteredNetworkEdges.slice(0, 220).map((edge) => ({
+                        key: edge.key,
+                        source: edge.source,
+                        target: edge.target,
+                        score: edge.score,
+                        count: edge.count,
+                        rank: edge.rank,
+                        supportingAlgorithms: edge.supportingAlgorithms,
+                      }))}
+                      selectedGene={selectedGene}
+                      selectedEdgeKey={selectedEdgeKey}
+                      layout={networkLayout}
+                      onSelectGene={setSelectedGene}
+                      onSelectEdge={setSelectedEdgeKey}
+                    />
                   </div>
 
-                  {selectedNode ? (
-                    <>
-                      <div className="mt-4 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
-                        <p className="text-lg font-semibold text-white">{selectedNode.id}</p>
-                        <p className="mt-2 text-sm text-slate-400">
-                          {selectedNode.isTF ? "Transcription factor" : "Target gene"}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
-                          In-degree: {selectedNode.inDegree}
-                        </div>
-                        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
-                          Out-degree: {selectedNode.outDegree}
-                        </div>
-                      </div>
-
-
-                                            <div className="mt-4 space-y-4">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                            Top regulators
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {selectedNode.topRegulators.slice(0, 8).map((gene) => (
-                              <span
-                                key={gene}
-                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300"
-                              >
-                                {gene}
-                              </span>
-                            ))}
-                            {selectedNode.topRegulators.length === 0 && (
-                              <span className="text-xs text-slate-500">None</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                            Top target genes
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {selectedNode.topTargets.slice(0, 8).map((gene) => (
-                              <span
-                                key={gene}
-                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300"
-                              >
-                                {gene}
-                              </span>
-                            ))}
-                            {selectedNode.topTargets.length === 0 && (
-                              <span className="text-xs text-slate-500">None</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                  <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-base font-semibold text-white">Node Inspection</h4>
+                      {selectedNode && (
                         <button
                           type="button"
                           onClick={() => {
-                            setIsolatedGene(selectedNode.id);
+                            setSelectedGene(null);
                             setSelectedEdgeKey(null);
                           }}
-                          className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-teal-300/35 hover:bg-teal-300/10 hover:text-teal-50"
+                          className="rounded-2xl border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:border-white/20 hover:bg-white/[0.04]"
                         >
-                          Isolate Sub-network
+                          Clear
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsolatedGene(null);
-                            setSelectedEdgeKey(null);
-                          }}
-                          className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-white/20 hover:bg-white/[0.07]"
-                        >
-                          Reset View
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="mt-4 rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm leading-6 text-slate-400">
-                      Click a node in the network to inspect the gene name, transcription-factor status, in-degree, out-degree, top regulators, and top target genes.
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
-          </div>
+                    {selectedNode ? (
+                      <>
+                        <div className="mt-4 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
+                          <p className="text-lg font-semibold text-white">{selectedNode.id}</p>
+                          <p className="mt-2 text-sm text-slate-400">
+                            {selectedNode.isTF ? "Transcription factor" : "Target gene"}
+                          </p>
+                        </div>
 
-          <div
-            className={`mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5 ${
-              isTableFullscreen ? "fixed inset-6 z-[65] overflow-auto" : ""
-            }`}
-          >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <h3 className="text-lg font-semibold text-white">Edge Analysis Table</h3>
-
-              <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
-                <input
-                  value={tableSearch}
-                  onChange={(e) => setTableSearch(e.target.value)}
-                  placeholder="Search gene name"
-                  aria-label="Search gene name"
-                  className="w-full min-w-0 rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 sm:min-w-[260px] lg:w-[320px]"
-                />
-
-                <div ref={columnMenuRef} className="relative w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setIsColumnMenuOpen((current) => !current)}
-                    className="w-full rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] sm:w-auto"
-                  >
-                    Algorithms Filter
-                  </button>
-
-                  {isColumnMenuOpen && (
-                    <div className="absolute right-0 top-[calc(100%+0.75rem)] z-20 w-full min-w-[18rem] rounded-[1.25rem] border border-white/10 bg-slate-900/95 p-4 shadow-2xl shadow-slate-950/40 backdrop-blur-md sm:w-72">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-white">Algorithm columns</p>
-                        <button
-                          type="button"
-                          onClick={() => setVisibleAlgorithmColumns(completedAlgorithmIds)}
-                          className="text-xs text-teal-300 transition hover:text-teal-200"
-                        >
-                          Show all
-                        </button>
-                      </div>
-
-                      <p className="mt-2 text-xs leading-5 text-slate-400">
-                        Show or hide algorithm-specific columns to focus the table on the methods you want to compare.
-                      </p>
-
-                      <div className="mt-4 space-y-2">
-                        {completedAlgorithmIds.length > 0 ? (
-                          completedAlgorithmIds.map((algorithmId) => {
-                            const isChecked = visibleAlgorithmColumns.includes(algorithmId);
-                            return (
-                              <label
-                                key={algorithmId}
-                                className="flex cursor-pointer items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 transition hover:border-white/15 hover:bg-white/[0.05]"
-                              >
-                                <span>{algorithmId}</span>
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    setVisibleAlgorithmColumns((current) =>
-                                      current.includes(algorithmId)
-                                        ? current.filter((id) => id !== algorithmId)
-                                        : [...current, algorithmId]
-                                    );
-                                  }}
-                                  className="h-4 w-4 rounded border-white/20 bg-slate-950 text-teal-400 accent-teal-400"
-                                />
-                              </label>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-3 py-4 text-sm text-slate-400">
-                            No algorithm columns available yet.
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
+                            In-degree: {selectedNode.inDegree}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
+                            Out-degree: {selectedNode.outDegree}
+                          </div>
+                        </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsTableFullscreen((current) => !current)}
-                  className="w-full rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] sm:w-auto"
-                >
-                  {isTableFullscreen ? "Exit full-screen" : "Full-screen"}
-                </button>
-              </div>
-            </div>
-
-
-
-            <div className="mt-5 overflow-x-auto rounded-[1.5rem] border border-white/10">
-              <table className="min-w-full divide-y divide-white/10 text-sm">
-                <thead className="bg-slate-900/90 text-left text-slate-300">
-                  <tr>
-                    {[
-                      ["rank", selectedView === "consensus" ? "Consensus Rank" : "Rank"],
-                      ["source", "Source Gene"],
-                      ["target", "Target Gene"],
-                      ["count", "Consensus Count"],
-                      ["score", selectedView === "consensus" ? "Consensus Score" : "Score"],
-                    ].map(([key, label]) => (
-                      <th key={key} className="px-4 py-3 font-medium">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTablePage(1);
-                            if (tableSortKey === key) {
-                              setTableSortDirection((current) =>
-                                current === "asc" ? "desc" : "asc"
-                              );
-                            } else {
-                              setTableSortKey(
-                                key as "rank" | "source" | "target" | "score" | "count"
-                              );
-                              setTableSortDirection("asc");
-                            }
-                          }}
-                          className="inline-flex items-center gap-2 text-left text-slate-300 transition hover:text-white"
-                        >
-                          <span>{label}</span>
-                          {tableSortKey === key && (
-                            <span>{tableSortDirection === "asc" ? "↑" : "↓"}</span>
-                          )}
-                        </button>
-                      </th>
-                    ))}
-
-                    {visibleAlgorithmColumns.map((algorithmId) => (
-                      <th key={algorithmId} className="px-4 py-3 font-medium">
-                        {algorithmId}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10 bg-slate-950/60">
-                  {displayedTableRows.length > 0 ? (
-                    displayedTableRows.map((edge) => {
-                      const isSelected = selectedEdgeKey === edge.key;
-                      return (
-                        <tr
-                          key={edge.key}
-                          onClick={() => {
-                            setSelectedEdgeKey(edge.key);
-                            setSelectedGene(edge.source);
-                          }}
-                          className={`cursor-pointer transition hover:bg-white/[0.04] ${
-                            isSelected ? "bg-teal-300/10" : ""
-                          }`}
-                          title={`${edge.source} → ${edge.target} · score ${edge.score.toFixed(3)} · ${edge.supportingAlgorithms.join(", ")}`}
-                        >
-                          <td className="px-4 py-3 text-slate-300">{edge.rank}</td>
-                          <td className="px-4 py-3 text-white">{edge.source}</td>
-                          <td className="px-4 py-3 text-white">{edge.target}</td>
-                          <td className="px-4 py-3 text-slate-300">{edge.count}</td>
-                          <td className="px-4 py-3 text-slate-300">{edge.score.toFixed(3)}</td>
-                          {visibleAlgorithmColumns.map((algorithmId) => (
-                            <td key={algorithmId} className="px-4 py-3">
-                              {edge.perAlgorithmScores[algorithmId] !== undefined ? (
-                                <span className="text-slate-300">
-                                  {edge.perAlgorithmScores[algorithmId].toFixed(3)}
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                              Top regulators
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {selectedNode.topRegulators.slice(0, 8).map((gene) => (
+                                <span
+                                  key={gene}
+                                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300"
+                                >
+                                  {gene}
                                 </span>
-                              ) : (
-                                <span className="rounded-md bg-white/[0.03] px-2 py-1 text-xs text-slate-500">
-                                  -
-                                </span>
+                              ))}
+                              {selectedNode.topRegulators.length === 0 && (
+                                <span className="text-xs text-slate-500">None</span>
                               )}
-                            </td>
-                          ))}
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td
-                        className="px-4 py-6 text-center text-slate-500"
-                        colSpan={5 + visibleAlgorithmColumns.length}
-                      >
-                        No matching edges.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            </div>
+                          </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
-              <p>
-                Page {tablePage.toLocaleString()} of {totalTablePages.toLocaleString()} · {sortedTableRows.length.toLocaleString()} matching rows
-              </p>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                              Top target genes
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {selectedNode.topTargets.slice(0, 8).map((gene) => (
+                                <span
+                                  key={gene}
+                                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300"
+                                >
+                                  {gene}
+                                </span>
+                              ))}
+                              {selectedNode.topTargets.length === 0 && (
+                                <span className="text-xs text-slate-500">None</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTablePage(1)}
-                  disabled={tablePage === 1}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  First
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTablePage((current) => Math.max(1, current - 1))}
-                  disabled={tablePage === 1}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTablePage((current) => Math.min(totalTablePages, current + 1))}
-                  disabled={tablePage === totalTablePages}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTablePage(totalTablePages)}
-                  disabled={tablePage === totalTablePages}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Last
-                </button>
+                        <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsolatedGene(selectedNode.id);
+                              setSelectedEdgeKey(null);
+                            }}
+                            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-teal-300/35 hover:bg-teal-300/10 hover:text-teal-50"
+                          >
+                            Isolate Sub-network
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsolatedGene(null);
+                              setSelectedEdgeKey(null);
+                            }}
+                            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-white/20 hover:bg-white/[0.07]"
+                          >
+                            Reset View
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-4 rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm leading-6 text-slate-400">
+                        Click a node in the network to inspect the gene name, transcription-factor status, in-degree, out-degree, top regulators, and top target genes.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
+
+            <EdgeAnalysisTableSection
+              isTableFullscreen={isTableFullscreen}
+              setIsTableFullscreen={setIsTableFullscreen}
+              tableSearch={tableSearch}
+              setTableSearch={setTableSearch}
+              columnMenuRef={columnMenuRef}
+              isColumnMenuOpen={isColumnMenuOpen}
+              setIsColumnMenuOpen={setIsColumnMenuOpen}
+              completedAlgorithmIds={completedAlgorithmIds}
+              visibleAlgorithmColumns={visibleAlgorithmColumns}
+              setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
+              selectedView={selectedView}
+              tableSortKey={tableSortKey}
+              tableSortDirection={tableSortDirection}
+              setTableSortKey={setTableSortKey}
+              setTableSortDirection={setTableSortDirection}
+              setTablePage={setTablePage}
+              displayedTableRows={displayedTableRows}
+              selectedEdgeKey={selectedEdgeKey}
+              setSelectedEdgeKey={setSelectedEdgeKey}
+              setSelectedGene={setSelectedGene}
+              totalTablePages={totalTablePages}
+              sortedTableRows={sortedTableRows}
+              tablePage={tablePage}
+            />
           </div>
         </div>
       </section>
