@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NetworkGraph from "./_components/NetworkGraph";
 import { algorithms } from "../_data/algorithms";
 
@@ -131,11 +131,14 @@ export default function ProjectDetailPage() {
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [isTableFullscreen, setIsTableFullscreen] = useState(false);
   const [visibleAlgorithmColumns, setVisibleAlgorithmColumns] = useState<string[]>([]);
+  const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
+  const [tablePage, setTablePage] = useState(1);
   const [tableSortKey, setTableSortKey] = useState<"rank" | "source" | "target" | "score" | "count">("rank");
   const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
   const [error, setError] = useState("");
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
+  const columnMenuRef = useRef<HTMLDivElement | null>(null);
 
 
   const completedTasks = useMemo(
@@ -318,6 +321,17 @@ export default function ProjectDetailPage() {
     return rows;
   }, [visibleTableRows, tableSortDirection, tableSortKey]);
 
+  const TABLE_PAGE_SIZE = 25;
+
+  const totalTablePages = useMemo(() => {
+    return Math.max(1, Math.ceil(sortedTableRows.length / TABLE_PAGE_SIZE));
+  }, [sortedTableRows.length]);
+
+  const displayedTableRows = useMemo(() => {
+    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
+    return sortedTableRows.slice(start, start + TABLE_PAGE_SIZE);
+  }, [sortedTableRows, tablePage]);
+
 
 
   const maxAvailableTopN = useMemo(() => {
@@ -366,6 +380,22 @@ export default function ProjectDetailPage() {
   }, [completedAlgorithmIds]);
 
   useEffect(() => {
+    if (!isColumnMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!columnMenuRef.current) return;
+      if (!columnMenuRef.current.contains(event.target as Node)) {
+        setIsColumnMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isColumnMenuOpen]);
+
+  useEffect(() => {
     setTopN((current) => (hasTouchedTopN ? clamp(current, 1, maxAvailableTopN) : maxAvailableTopN));
   }, [hasTouchedTopN, maxAvailableTopN]);
 
@@ -382,6 +412,14 @@ export default function ProjectDetailPage() {
       setSelectedGene(null);
     }
   }, [networkNodes, selectedGene]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [tableSearch, tableSortDirection, tableSortKey, selectedView, consensusThreshold, topN, isolatedGene, geneSearch]);
+
+  useEffect(() => {
+    setTablePage((current) => Math.min(current, totalTablePages));
+  }, [totalTablePages]);
 
 
   useEffect(() => {
@@ -742,14 +780,6 @@ export default function ProjectDetailPage() {
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3 px-2">
                 <h2 className="text-xl font-semibold text-white">Results hub</h2>
-
-                <input
-                  list="gene-search-options"
-                  value={geneSearch}
-                  onChange={(e) => setGeneSearch(e.target.value)}
-                  placeholder="Search gene..."
-                  className="w-full max-w-xs rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500"
-                />
               </div>
 
               <div className="flex flex-wrap items-stretch gap-3">
@@ -1009,56 +1039,90 @@ export default function ProjectDetailPage() {
               isTableFullscreen ? "fixed inset-6 z-[65] overflow-auto" : ""
             }`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Edge Analysis Table</h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  The table shows one row per predicted regulatory edge, with sortable columns, search filtering, per-algorithm visibility toggles, and row-to-network cross-linking.
-                </p>
-              </div>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <h3 className="text-lg font-semibold text-white">Edge Analysis Table</h3>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
                 <input
                   value={tableSearch}
                   onChange={(e) => setTableSearch(e.target.value)}
-                  placeholder="Filter by source or target gene..."
-                  className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+                  placeholder="Search gene name"
+                  aria-label="Search gene name"
+                  className="w-full min-w-0 rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 sm:min-w-[260px] lg:w-[320px]"
                 />
+
+                <div ref={columnMenuRef} className="relative w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsColumnMenuOpen((current) => !current)}
+                    className="w-full rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] sm:w-auto"
+                  >
+                    Algorithms Filter
+                  </button>
+
+                  {isColumnMenuOpen && (
+                    <div className="absolute right-0 top-[calc(100%+0.75rem)] z-20 w-full min-w-[18rem] rounded-[1.25rem] border border-white/10 bg-slate-900/95 p-4 shadow-2xl shadow-slate-950/40 backdrop-blur-md sm:w-72">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-white">Algorithm columns</p>
+                        <button
+                          type="button"
+                          onClick={() => setVisibleAlgorithmColumns(completedAlgorithmIds)}
+                          className="text-xs text-teal-300 transition hover:text-teal-200"
+                        >
+                          Show all
+                        </button>
+                      </div>
+
+                      <p className="mt-2 text-xs leading-5 text-slate-400">
+                        Show or hide algorithm-specific columns to focus the table on the methods you want to compare.
+                      </p>
+
+                      <div className="mt-4 space-y-2">
+                        {completedAlgorithmIds.length > 0 ? (
+                          completedAlgorithmIds.map((algorithmId) => {
+                            const isChecked = visibleAlgorithmColumns.includes(algorithmId);
+                            return (
+                              <label
+                                key={algorithmId}
+                                className="flex cursor-pointer items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 transition hover:border-white/15 hover:bg-white/[0.05]"
+                              >
+                                <span>{algorithmId}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setVisibleAlgorithmColumns((current) =>
+                                      current.includes(algorithmId)
+                                        ? current.filter((id) => id !== algorithmId)
+                                        : [...current, algorithmId]
+                                    );
+                                  }}
+                                  className="h-4 w-4 rounded border-white/20 bg-slate-950 text-teal-400 accent-teal-400"
+                                />
+                              </label>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-3 py-4 text-sm text-slate-400">
+                            No algorithm columns available yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setIsTableFullscreen((current) => !current)}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04]"
+                  className="w-full rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] sm:w-auto"
                 >
                   {isTableFullscreen ? "Exit full-screen" : "Full-screen"}
                 </button>
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {completedAlgorithmIds.map((algorithmId) => {
-                const isVisible = visibleAlgorithmColumns.includes(algorithmId);
-                return (
-                  <button
-                    key={algorithmId}
-                    type="button"
-                    onClick={() => {
-                      setVisibleAlgorithmColumns((current) =>
-                        current.includes(algorithmId)
-                          ? current.filter((id) => id !== algorithmId)
-                          : [...current, algorithmId]
-                      );
-                    }}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      isVisible
-                        ? "border-teal-300/25 bg-teal-300/10 text-teal-100"
-                        : "border-white/10 bg-white/[0.04] text-slate-300"
-                    }`}
-                  >
-                    {algorithmId}
-                  </button>
-                );
-              })}
-            </div>
+
 
             <div className="mt-5 overflow-x-auto rounded-[1.5rem] border border-white/10">
               <table className="min-w-full divide-y divide-white/10 text-sm">
@@ -1075,6 +1139,7 @@ export default function ProjectDetailPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            setTablePage(1);
                             if (tableSortKey === key) {
                               setTableSortDirection((current) =>
                                 current === "asc" ? "desc" : "asc"
@@ -1104,8 +1169,8 @@ export default function ProjectDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10 bg-slate-950/60">
-                  {sortedTableRows.length > 0 ? (
-                    sortedTableRows.map((edge) => {
+                  {displayedTableRows.length > 0 ? (
+                    displayedTableRows.map((edge) => {
                       const isSelected = selectedEdgeKey === edge.key;
                       return (
                         <tr
@@ -1152,6 +1217,47 @@ export default function ProjectDetailPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
+              <p>
+                Page {tablePage.toLocaleString()} of {totalTablePages.toLocaleString()} · {sortedTableRows.length.toLocaleString()} matching rows
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTablePage(1)}
+                  disabled={tablePage === 1}
+                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  First
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTablePage((current) => Math.max(1, current - 1))}
+                  disabled={tablePage === 1}
+                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTablePage((current) => Math.min(totalTablePages, current + 1))}
+                  disabled={tablePage === totalTablePages}
+                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTablePage(totalTablePages)}
+                  disabled={tablePage === totalTablePages}
+                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Last
+                </button>
+              </div>
             </div>
           </div>
         </div>
