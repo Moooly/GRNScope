@@ -9,211 +9,23 @@ import ResultsControlsSection from "./_components/ResultsControlsSection";
 import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
 import { algorithms } from "../_data/algorithms";
-
-type ProjectTask = {
-  algorithm_id: string;
-  status: string;
-  elapsed_seconds: number;
-  error_message: string | null;
-  result_path?: string | null;
-  completed_at?: string | null;
-};
-
-type ProjectJob = {
-  job_id: string;
-  overall_status: string;
-  ensemble_enabled: boolean | string;
-  tasks: ProjectTask[];
-};
-
-type ProjectManifest = {
-  project_id: string;
-  project_name: string;
-  project_description: string;
-  expression_path?: string;
-  expression_filename?: string | null;
-  pseudotime_path?: string | null;
-  pseudotime_filename?: string | null;
-};
-
-type MetadataManifest = {
-  expression_filename?: string | null;
-  pseudotime_filename?: string | null;
-  gene_count?: number | null;
-  cell_count?: number | null;
-  has_pseudotime?: boolean | null;
-  preprocessing?: {
-    top_variable_genes?: string;
-    include_all_tfs?: boolean | string;
-    normalize_enabled?: boolean | string;
-    log_transform_enabled?: boolean | string;
-  };
-};
-
-type AlgorithmStoredResult = {
-  algorithm_id: string;
-  generated_at: string;
-  elapsed_seconds: number;
-  network_summary?: {
-    edge_count?: number;
-    node_count?: number;
-  };
-  top_edges?: Array<{
-    source: string;
-    target: string;
-    score: number;
-  }>;
-};
-
-type AlgorithmCatalogItem = {
-  id: string;
-  category?: string;
-  publicationYear?: string | number;
-  publishedYear?: string | number;
-  year?: string | number;
-  journal?: string;
-};
-
-type AggregatedEdge = {
-  key: string;
-  source: string;
-  target: string;
-  score: number;
-  count: number;
-  rank: number;
-  perAlgorithmScores: Record<string, number>;
-  supportingAlgorithms: string[];
-};
-
-type NodeInfo = {
-  id: string;
-  inDegree: number;
-  outDegree: number;
-  degree: number;
-  isTF: boolean;
-  topRegulators: string[];
-  topTargets: string[];
-};
-
-type OverlapEntry = {
-  key: string;
-  methods: string[];
-  count: number;
-};
-
-type BenchmarkMetrics = {
-  methodId: string;
-  evaluatedEdges: number;
-  positivesFound: number;
-  precision: number;
-  recall: number;
-  auprc: number;
-  auprcRatio: number;
-};
+import {
+  type AggregatedEdge,
+  type AlgorithmCatalogItem,
+  type AlgorithmStoredResult,
+  type BenchmarkMetrics,
+  type MetadataManifest,
+  type NodeInfo,
+  type OverlapEntry,
+  type ProjectJob,
+  type ProjectManifest,
+} from "./_lib/types";
+import { boolText, clamp } from "./_lib/utils";
+import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 const POLL_INTERVAL_MS = 5000;
-
-function boolText(value: boolean | string | undefined) {
-  if (typeof value === "boolean") return value ? "Enabled" : "Disabled";
-  if (value === "true") return "Enabled";
-  if (value === "false") return "Disabled";
-  return "-";
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function parseGroundTruthCsv(text: string) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const edges = new Set<string>();
-
-  lines.forEach((line, index) => {
-    const parts = line.split(/[\t,]/).map((part) => part.trim());
-    if (parts.length < 2) return;
-
-    const source = parts[0];
-    const target = parts[1];
-
-    const lowerSource = source.toLowerCase();
-    const lowerTarget = target.toLowerCase();
-    const isHeaderLike =
-      index === 0 &&
-      ((lowerSource.includes("source") || lowerSource.includes("tf") || lowerSource.includes("regulator")) &&
-        (lowerTarget.includes("target") || lowerTarget.includes("gene")));
-
-    if (isHeaderLike || !source || !target) return;
-    edges.add(`${source}|||${target}`);
-  });
-
-  return edges;
-}
-
-function computeBenchmarkMetrics(
-  methodId: string,
-  rows: AggregatedEdge[],
-  groundTruthEdges: Set<string>,
-  baselineUniverseSize: number
-): BenchmarkMetrics {
-  const rankedRows = [...rows].sort((a, b) => b.score - a.score);
-  const totalGroundTruth = groundTruthEdges.size;
-
-  if (rankedRows.length === 0 || totalGroundTruth === 0) {
-    return {
-      methodId,
-      evaluatedEdges: rankedRows.length,
-      positivesFound: 0,
-      precision: 0,
-      recall: 0,
-      auprc: 0,
-      auprcRatio: 0,
-    };
-  }
-
-  let tp = 0;
-  let fp = 0;
-  let prevRecall = 0;
-  let area = 0;
-
-  rankedRows.forEach((edge) => {
-    const key = `${edge.source}|||${edge.target}`;
-    if (groundTruthEdges.has(key)) {
-      tp += 1;
-    } else {
-      fp += 1;
-    }
-
-    const precision = tp / (tp + fp);
-    const recall = tp / totalGroundTruth;
-    area += (recall - prevRecall) * precision;
-    prevRecall = recall;
-  });
-
-  const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
-  const recall = totalGroundTruth > 0 ? tp / totalGroundTruth : 0;
-  const randomBaseline = baselineUniverseSize > 0 ? totalGroundTruth / baselineUniverseSize : 0;
-
-  return {
-    methodId,
-    evaluatedEdges: rankedRows.length,
-    positivesFound: tp,
-    precision,
-    recall,
-    auprc: area,
-    auprcRatio: randomBaseline > 0 ? area / randomBaseline : 0,
-  };
-}
-
-
-
-
-
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
@@ -968,88 +780,86 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-          <div className="-mx-2 rounded-[1.75rem] border border-white/10 bg-slate-950/90 px-2 py-2 shadow-xl shadow-slate-950/20 backdrop-blur-md">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-2">
-                <h2 className="text-xl font-semibold text-white">Results hub</h2>
-              </div>
-
-              <ResultsSummarySection
-                perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
-                maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
-                completedAlgorithmIds={completedAlgorithmIds}
-                overlapEntries={overlapEntries}
-                maxOverlapCount={maxOverlapCount}
-                groundTruthFilename={groundTruthFilename}
-                groundTruthEdgeCount={groundTruthEdges.size}
-                groundTruthError={groundTruthError}
-                benchmarkMetrics={benchmarkMetrics}
-                onGroundTruthUpload={handleGroundTruthUpload}
-              />
-
-              <ResultsControlsSection
-                selectedView={selectedView}
-                completedAlgorithmIds={completedAlgorithmIds}
-                onChangeView={(value) => {
-                  setSelectedView(value);
-                  setSelectedGene(null);
-                  setSelectedEdgeKey(null);
-                  setIsolatedGene(null);
-                }}
-                networkLayout={networkLayout}
-                onChangeLayout={setNetworkLayout}
-                topN={topN}
-                maxAvailableTopN={maxAvailableTopN}
-                onChangeTopN={(value) => {
-                  setHasTouchedTopN(true);
-                  setTopN(value);
-                }}
-                consensusThreshold={consensusThreshold}
-                maxConsensusThreshold={Math.max(completedAlgorithmIds.length, 1)}
-                onChangeConsensusThreshold={setConsensusThreshold}
-                isConsensusView={selectedView === "consensus"}
-              />
-
-              <NetworkVisualizationSection
-                selectedView={selectedView}
-                networkLayout={networkLayout}
-                networkNodes={networkNodes}
-                filteredNetworkEdges={filteredNetworkEdges}
-                selectedGene={selectedGene}
-                selectedEdgeKey={selectedEdgeKey}
-                setSelectedGene={setSelectedGene}
-                setSelectedEdgeKey={setSelectedEdgeKey}
-                selectedNode={selectedNode}
-                setIsolatedGene={setIsolatedGene}
-              />
-
-              <EdgeAnalysisTableSection
-                isTableFullscreen={isTableFullscreen}
-                setIsTableFullscreen={setIsTableFullscreen}
-                tableSearch={tableSearch}
-                setTableSearch={setTableSearch}
-                columnMenuRef={columnMenuRef}
-                isColumnMenuOpen={isColumnMenuOpen}
-                setIsColumnMenuOpen={setIsColumnMenuOpen}
-                completedAlgorithmIds={completedAlgorithmIds}
-                visibleAlgorithmColumns={visibleAlgorithmColumns}
-                setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
-                selectedView={selectedView}
-                tableSortKey={tableSortKey}
-                tableSortDirection={tableSortDirection}
-                setTableSortKey={setTableSortKey}
-                setTableSortDirection={setTableSortDirection}
-                setTablePage={setTablePage}
-                displayedTableRows={displayedTableRows}
-                selectedEdgeKey={selectedEdgeKey}
-                setSelectedEdgeKey={setSelectedEdgeKey}
-                setSelectedGene={setSelectedGene}
-                totalTablePages={totalTablePages}
-                sortedTableRows={sortedTableRows}
-                tablePage={tablePage}
-              />
+        <div className="mt-8 rounded-[2rem] border border-white/10 bg-slate-950/90 p-6 shadow-xl shadow-slate-950/20 backdrop-blur-md">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold text-white">Results hub</h2>
             </div>
+
+            <ResultsSummarySection
+              perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
+              maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
+              completedAlgorithmIds={completedAlgorithmIds}
+              overlapEntries={overlapEntries}
+              maxOverlapCount={maxOverlapCount}
+              groundTruthFilename={groundTruthFilename}
+              groundTruthEdgeCount={groundTruthEdges.size}
+              groundTruthError={groundTruthError}
+              benchmarkMetrics={benchmarkMetrics}
+              onGroundTruthUpload={handleGroundTruthUpload}
+            />
+
+            <ResultsControlsSection
+              selectedView={selectedView}
+              completedAlgorithmIds={completedAlgorithmIds}
+              onChangeView={(value) => {
+                setSelectedView(value);
+                setSelectedGene(null);
+                setSelectedEdgeKey(null);
+                setIsolatedGene(null);
+              }}
+              networkLayout={networkLayout}
+              onChangeLayout={setNetworkLayout}
+              topN={topN}
+              maxAvailableTopN={maxAvailableTopN}
+              onChangeTopN={(value) => {
+                setHasTouchedTopN(true);
+                setTopN(value);
+              }}
+              consensusThreshold={consensusThreshold}
+              maxConsensusThreshold={Math.max(completedAlgorithmIds.length, 1)}
+              onChangeConsensusThreshold={setConsensusThreshold}
+              isConsensusView={selectedView === "consensus"}
+            />
+
+            <NetworkVisualizationSection
+              selectedView={selectedView}
+              networkLayout={networkLayout}
+              networkNodes={networkNodes}
+              filteredNetworkEdges={filteredNetworkEdges}
+              selectedGene={selectedGene}
+              selectedEdgeKey={selectedEdgeKey}
+              setSelectedGene={setSelectedGene}
+              setSelectedEdgeKey={setSelectedEdgeKey}
+              selectedNode={selectedNode}
+              setIsolatedGene={setIsolatedGene}
+            />
+
+            <EdgeAnalysisTableSection
+              isTableFullscreen={isTableFullscreen}
+              setIsTableFullscreen={setIsTableFullscreen}
+              tableSearch={tableSearch}
+              setTableSearch={setTableSearch}
+              columnMenuRef={columnMenuRef}
+              isColumnMenuOpen={isColumnMenuOpen}
+              setIsColumnMenuOpen={setIsColumnMenuOpen}
+              completedAlgorithmIds={completedAlgorithmIds}
+              visibleAlgorithmColumns={visibleAlgorithmColumns}
+              setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
+              selectedView={selectedView}
+              tableSortKey={tableSortKey}
+              tableSortDirection={tableSortDirection}
+              setTableSortKey={setTableSortKey}
+              setTableSortDirection={setTableSortDirection}
+              setTablePage={setTablePage}
+              displayedTableRows={displayedTableRows}
+              selectedEdgeKey={selectedEdgeKey}
+              setSelectedEdgeKey={setSelectedEdgeKey}
+              setSelectedGene={setSelectedGene}
+              totalTablePages={totalTablePages}
+              sortedTableRows={sortedTableRows}
+              tablePage={tablePage}
+            />
           </div>
         </div>
       </section>
