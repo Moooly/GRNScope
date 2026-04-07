@@ -163,7 +163,10 @@ function getStylesheet() {
         width: "mapData(score, 0, 1, 1, 4.6)",
         "line-color": "#cbd5e1",
         opacity: 0.34,
-        "curve-style": "bezier",
+        "curve-style": "straight",
+        "source-endpoint": "outside-to-node",
+        "target-endpoint": "outside-to-node",
+        "line-cap": "round",
         "target-arrow-shape": "none",
         "overlay-opacity": 0,
       },
@@ -426,7 +429,7 @@ export default function NetworkGraph({
       cy.destroy();
       cyRef.current = null;
     };
-  }, [layout, onSelectEdge, onSelectGene, graphCounts.nodeCount, graphCounts.edgeCount]);
+  }, []);
 
   useEffect(() => {
     const cy = cyRef.current;

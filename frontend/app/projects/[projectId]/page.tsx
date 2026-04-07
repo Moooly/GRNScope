@@ -838,12 +838,9 @@ export default function ProjectDetailPage() {
 
           <div className="mt-6">
             <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Network Visualization</h3>
-                </div>
-
-                <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Network Visualization</h3>
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
                     TF nodes = teal diamonds
                   </span>
@@ -925,9 +922,6 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
-                        Total degree: {selectedNode.degree}
-                      </div>
 
                                             <div className="mt-4 space-y-4">
                         <div>
