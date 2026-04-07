@@ -57,9 +57,11 @@ function getLayoutConfig(
     return {
       name: "breadthfirst",
       directed: true,
-      spacingFactor: 1.18,
+      spacingFactor: 1.32,
       animate: false,
-      padding: 52,
+      padding: 64,
+      circle: false,
+      grid: false,
     } as const;
   }
 
@@ -67,10 +69,13 @@ function getLayoutConfig(
     return {
       name: "concentric",
       animate: false,
-      minNodeSpacing: 34,
-      padding: 52,
+      minNodeSpacing: 42,
+      padding: 60,
       concentric: (node: cytoscape.NodeSingular) => node.data("degree") || 1,
       levelWidth: () => 2,
+      startAngle: (-Math.PI * 3) / 4,
+      sweep: undefined,
+      clockwise: true,
     } as const;
   }
 
@@ -78,8 +83,10 @@ function getLayoutConfig(
     return {
       name: "circle",
       animate: false,
-      padding: 52,
-      spacingFactor: 1.12,
+      padding: 60,
+      spacingFactor: 1.18,
+      startAngle: (-Math.PI * 3) / 4,
+      clockwise: true,
     } as const;
   }
 
@@ -89,13 +96,14 @@ function getLayoutConfig(
     name: "cose-bilkent",
     animate: false,
     fit: true,
-    padding: 60,
-    nodeRepulsion: 18000 * densityFactor,
-    idealEdgeLength: 150 * densityFactor,
+    padding: 74,
+    nodeRepulsion: 26000 * densityFactor,
+    idealEdgeLength: 185 * densityFactor,
     edgeElasticity: 0.06,
-    nestingFactor: 0.9,
-    gravity: 0.18,
-    numIter: 1800,
+    nestingFactor: 1,
+    gravity: 0.14,
+    gravityRangeCompound: 1.25,
+    numIter: 2600,
     tile: true,
   } as const;
 }
@@ -106,19 +114,28 @@ function getStylesheet() {
       selector: "node",
       style: {
         label: "data(label)",
-        color: "#ffffff",
+        color: "#f8fafc",
         "font-size": 11,
         "font-weight": 700,
         "text-wrap": "none",
         "text-max-width": 96,
         "text-valign": "center",
         "text-halign": "center",
-        "text-outline-width": 2,
+        "text-outline-width": 3,
         "text-outline-color": "#0f172a",
         "min-zoomed-font-size": 9,
-        width: "mapData(degree, 1, 20, 22, 76)",
-        height: "mapData(degree, 1, 20, 22, 76)",
+        width: "mapData(degree, 1, 20, 24, 78)",
+        height: "mapData(degree, 1, 20, 24, 78)",
         "overlay-opacity": 0,
+        "border-width": 2,
+        "border-opacity": 0.95,
+        "background-opacity": 0.97,
+        "shadow-blur": 18,
+        "shadow-opacity": 0.2,
+        "shadow-offset-x": 0,
+        "shadow-offset-y": 8,
+        "shadow-color": "#0f172a",
+        "text-margin-y": 0,
       },
     },
     {
@@ -126,7 +143,7 @@ function getStylesheet() {
       style: {
         shape: "diamond",
         "background-color": "#14b8a6",
-        "border-width": 2.5,
+        "border-width": 3,
         "border-color": "#0f766e",
       },
     },
@@ -135,7 +152,7 @@ function getStylesheet() {
       style: {
         shape: "ellipse",
         "background-color": "#64748b",
-        "border-width": 2.5,
+        "border-width": 3,
         "border-color": "#334155",
       },
     },
@@ -154,14 +171,16 @@ function getStylesheet() {
     {
       selector: "edge",
       style: {
-        width: "mapData(score, 0, 1, 1, 4.6)",
-        "line-color": "#cbd5e1",
-        opacity: 0.34,
-        "curve-style": "straight",
+        width: "mapData(score, 0, 1, 0.9, 3.8)",
+        "line-color": "#9fb1c5",
+        opacity: 0.28,
+        "curve-style": "bezier",
         "source-endpoint": "outside-to-node",
         "target-endpoint": "outside-to-node",
         "line-cap": "round",
-        "target-arrow-shape": "none",
+        "target-arrow-shape": "triangle",
+        "target-arrow-color": "#9fb1c5",
+        "arrow-scale": 0.72,
         "overlay-opacity": 0,
         "z-index": 1,
       },
@@ -170,54 +189,66 @@ function getStylesheet() {
       selector: 'edge[supportRatio >= 0.25]',
       style: {
         "line-color": "#94a3b8",
-        opacity: 0.42,
+        "target-arrow-color": "#94a3b8",
+        opacity: 0.34,
       },
     },
     {
       selector: 'edge[supportRatio >= 0.5]',
       style: {
         "line-color": "#5eead4",
-        opacity: 0.52,
+        "target-arrow-color": "#5eead4",
+        opacity: 0.46,
       },
     },
     {
       selector: 'edge[supportRatio >= 0.75]',
       style: {
         "line-color": "#2dd4bf",
-        opacity: 0.66,
+        "target-arrow-color": "#2dd4bf",
+        opacity: 0.58,
       },
     },
     {
       selector: 'edge[supportRatio >= 0.99]',
       style: {
         "line-color": "#0f766e",
-        opacity: 0.8,
+        "target-arrow-color": "#0f766e",
+        opacity: 0.72,
       },
     },
     {
       selector: "node:selected",
       style: {
-        "border-width": 4,
+        "border-width": 5,
         "border-color": "#2563eb",
+        "shadow-blur": 28,
+        "shadow-opacity": 0.32,
+        "shadow-color": "#60a5fa",
       },
     },
     {
       selector: "edge:selected",
       style: {
-        width: 6,
+        width: 5.8,
         "line-color": "#2563eb",
+        "target-arrow-color": "#2563eb",
         opacity: 1,
         "z-index": 12,
+        "underlay-color": "rgba(37, 99, 235, 0.18)",
+        "underlay-padding": 4,
+        "underlay-opacity": 1,
       },
     },
     {
       selector: "edge.hovered",
       style: {
-        width: 7,
+        width: 6.6,
         "line-color": "#14b8a6",
-        opacity: 0.95,
+        "target-arrow-color": "#14b8a6",
+        opacity: 0.96,
         "z-index": 11,
-        "underlay-color": "rgba(20, 184, 166, 0.22)",
+        "underlay-color": "rgba(20, 184, 166, 0.2)",
         "underlay-padding": 4,
         "underlay-opacity": 1,
       },
@@ -614,48 +645,58 @@ export default function NetworkGraph({
   }, [hoveredEdgeKey, selectedEdgeKey]);
 
   return (
-    <div className="relative h-[680px] w-full overflow-hidden rounded-[1.5rem] border border-slate-300/70 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.12),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f7_100%)] shadow-[0_20px_45px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.75)]">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:32px_32px] opacity-50" />
-      <div className="pointer-events-none absolute left-6 top-6 h-28 w-28 rounded-full bg-teal-300/20 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-8 right-8 h-36 w-36 rounded-full bg-blue-300/15 blur-3xl" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/35 to-transparent" />
-      <div className="pointer-events-none absolute inset-0 rounded-[1.5rem] ring-1 ring-white/40" />
-      <div className="pointer-events-none absolute left-5 top-5 z-20 flex items-center gap-2 rounded-full border border-white/60 bg-white/75 px-3 py-1.5 text-[11px] font-semibold tracking-[0.16em] text-slate-600 shadow-sm backdrop-blur-md">
-        NETWORK CANVAS
+    <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.14),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(96,165,250,0.12),_transparent_22%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.08),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#eef4fb_52%,_#eaf1f8_100%)] shadow-[0_24px_60px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.86)]">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-45" />
+      <div className="pointer-events-none absolute left-8 top-8 h-36 w-36 rounded-full bg-teal-300/20 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-10 right-10 h-40 w-40 rounded-full bg-blue-300/18 blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/50 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] ring-1 ring-white/55" />
+      <div className="pointer-events-none absolute left-5 top-5 z-20 flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.18em] text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-md">
+        NETWORK VIEW
       </div>
-      <div className="pointer-events-none absolute right-5 top-5 z-20 rounded-full border border-slate-300/70 bg-white/70 px-3 py-1.5 text-[11px] font-medium text-slate-500 shadow-sm backdrop-blur-md">
-        Scroll to zoom · Drag to pan
+      <div className="pointer-events-none absolute right-5 top-5 z-20 rounded-full border border-slate-200/80 bg-white/78 px-3.5 py-1.5 text-[11px] font-medium text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-md">
+        Scroll to zoom · Drag to pan · Click to inspect
       </div>
       <div
         ref={containerRef}
         className="absolute inset-0 z-10 h-full w-full"
+        style={{ filter: "saturate(0.94) contrast(0.98)" }}
       />
       {edgeTooltip && (
         <div
-          className="pointer-events-none absolute z-30 max-w-[280px] rounded-2xl border border-slate-300/80 bg-white/92 px-4 py-3 text-xs text-slate-700 shadow-xl backdrop-blur-md"
+          className="pointer-events-none absolute z-30 max-w-[300px] rounded-2xl border border-white/70 bg-white/88 px-4 py-3 text-xs text-slate-700 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl"
           style={{
             left: Math.min(edgeTooltip.x + 18, 760),
             top: Math.max(edgeTooltip.y - 12, 16),
           }}
         >
-          <div className="space-y-1.5">
-            <p className="font-semibold text-slate-900">
-              {edgeTooltip.source} → {edgeTooltip.target}
-            </p>
-            <p>
-              <span className="font-medium text-slate-900">Score:</span>{" "}
-              {edgeTooltip.score.toFixed(3)}
-            </p>
-            <p>
-              <span className="font-medium text-slate-900">Rank:</span>{" "}
-              {edgeTooltip.rank}
-            </p>
-            <p>
-              <span className="font-medium text-slate-900">Algorithms:</span>{" "}
-              {edgeTooltip.supportingAlgorithms.length > 0
-                ? edgeTooltip.supportingAlgorithms.join(", ")
-                : "-"}
-            </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-slate-900">
+                {edgeTooltip.source} → {edgeTooltip.target}
+              </p>
+              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-700">
+                Edge
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
+                <p className="text-slate-500">Score</p>
+                <p className="mt-1 font-semibold text-slate-900">{edgeTooltip.score.toFixed(3)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
+                <p className="text-slate-500">Rank</p>
+                <p className="mt-1 font-semibold text-slate-900">{edgeTooltip.rank}</p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2 text-[11px]">
+              <p className="text-slate-500">Supporting algorithms</p>
+              <p className="mt-1 font-medium leading-5 text-slate-900">
+                {edgeTooltip.supportingAlgorithms.length > 0
+                  ? edgeTooltip.supportingAlgorithms.join(", ")
+                  : "-"}
+              </p>
+            </div>
           </div>
         </div>
       )}
