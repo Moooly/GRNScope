@@ -163,6 +163,7 @@ function getStylesheet() {
         "line-cap": "round",
         "target-arrow-shape": "none",
         "overlay-opacity": 0,
+        "z-index": 1,
       },
     },
     {
@@ -206,6 +207,19 @@ function getStylesheet() {
         width: 6,
         "line-color": "#2563eb",
         opacity: 1,
+        "z-index": 12,
+      },
+    },
+    {
+      selector: "edge.hovered",
+      style: {
+        width: 7,
+        "line-color": "#14b8a6",
+        opacity: 0.95,
+        "z-index": 11,
+        "underlay-color": "rgba(20, 184, 166, 0.22)",
+        "underlay-padding": 4,
+        "underlay-opacity": 1,
       },
     },
   ];
@@ -230,6 +244,7 @@ export default function NetworkGraph({
   const lastNodePositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const positionCacheRef = useRef<Record<string, Record<string, { x: number; y: number }>>>({});
   const [edgeTooltip, setEdgeTooltip] = useState<EdgeTooltipState | null>(null);
+  const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
 
   const elements = useMemo<ElementDefinition[]>(() => {
     const maxSupportCount = Math.max(...edges.map((edge) => edge.count), 1);
@@ -325,6 +340,12 @@ export default function NetworkGraph({
 
     cy.on("mouseover", "edge", (event) => {
       const renderedPosition = event.renderedPosition || { x: 0, y: 0 };
+      const edgeId = event.target.id();
+
+      cy.edges().removeClass("hovered");
+      event.target.addClass("hovered");
+      setHoveredEdgeKey(edgeId);
+
       setEdgeTooltip({
         x: renderedPosition.x,
         y: renderedPosition.y,
@@ -351,7 +372,9 @@ export default function NetworkGraph({
       );
     });
 
-    cy.on("mouseout", "edge", () => {
+    cy.on("mouseout", "edge", (event) => {
+      event.target.removeClass("hovered");
+      setHoveredEdgeKey((current) => (current === event.target.id() ? null : current));
       setEdgeTooltip(null);
     });
 
@@ -359,6 +382,8 @@ export default function NetworkGraph({
       if (event.target === cy) {
         onSelectGene(null);
         onSelectEdge(null);
+        cy.edges().removeClass("hovered");
+        setHoveredEdgeKey(null);
         setEdgeTooltip(null);
       }
     });
@@ -409,6 +434,7 @@ export default function NetworkGraph({
     });
 
     return () => {
+      setHoveredEdgeKey(null);
       setEdgeTooltip(null);
       if (outerRafRef.current !== null) {
         window.cancelAnimationFrame(outerRafRef.current);
@@ -570,6 +596,22 @@ export default function NetworkGraph({
       }
     }
   }, [selectedGene, selectedEdgeKey]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) {
+      return;
+    }
+
+    cy.edges().removeClass("hovered");
+
+    if (hoveredEdgeKey && hoveredEdgeKey !== selectedEdgeKey) {
+      const edge = cy.getElementById(hoveredEdgeKey);
+      if (edge.nonempty()) {
+        edge.addClass("hovered");
+      }
+    }
+  }, [hoveredEdgeKey, selectedEdgeKey]);
 
   return (
     <div className="relative h-[680px] w-full overflow-hidden rounded-[1.5rem] border border-slate-300/70 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.12),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f7_100%)] shadow-[0_20px_45px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.75)]">
