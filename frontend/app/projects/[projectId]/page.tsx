@@ -792,11 +792,6 @@ export default function ProjectDetailPage() {
               completedAlgorithmIds={completedAlgorithmIds}
               overlapEntries={overlapEntries}
               maxOverlapCount={maxOverlapCount}
-              groundTruthFilename={groundTruthFilename}
-              groundTruthEdgeCount={groundTruthEdges.size}
-              groundTruthError={groundTruthError}
-              benchmarkMetrics={benchmarkMetrics}
-              onGroundTruthUpload={handleGroundTruthUpload}
             />
 
             <ResultsControlsSection
