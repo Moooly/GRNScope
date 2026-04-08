@@ -730,8 +730,8 @@ export default function ProjectDetailPage() {
                               setActiveAlgorithmErrorTask({
                                 algorithmId: task.algorithm_id,
                                 errorMessage:
-                                  task.error_message ||
-                                  "This algorithm failed. Check the backend logs or runtime output for details.",
+                                  task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
+                                  "This algorithm failed. The server did not return a detailed message.",
                               })
                             }
                             className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border border-rose-300/20 bg-rose-300/10 px-2 text-sm font-semibold text-rose-200 transition hover:border-rose-300/35 hover:bg-rose-300/15"

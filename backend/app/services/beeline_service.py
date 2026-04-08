@@ -34,6 +34,74 @@ def resolve_beeline_root() -> Path:
 def yaml_scalar(value: str) -> str:
     return json.dumps(str(value))
 
+def extract_user_friendly_beeline_error(stderr_text: str, algorithm_id: str) -> str:
+    if not stderr_text or not stderr_text.strip():
+        return f"{algorithm_id} failed during execution, but no detailed error message was returned by BEELINE."
+
+    lines = [line.strip() for line in stderr_text.splitlines() if line.strip()]
+
+    ignore_prefixes = (
+        "traceback",
+        'file "',
+        "during handling of the above exception",
+        "return future.result()",
+        "await ",
+        "raise ",
+        "self.",
+        "module = ",
+        "config.load()",
+        "response = ",
+        "raw_response = ",
+        "return await",
+    )
+
+    useful_lines: list[str] = []
+    for line in lines:
+        lowered = line.lower()
+        if lowered.startswith(ignore_prefixes):
+            continue
+        if lowered.startswith("line ") and " in " in lowered:
+            continue
+        if "/site-packages/" in line or "/python3." in line:
+            continue
+        useful_lines.append(line)
+
+    priority_markers = (
+        "error",
+        "exception",
+        "failed",
+        "no such file",
+        "not found",
+        "cannot",
+        "missing",
+        "invalid",
+        "valueerror",
+        "keyerror",
+        "typeerror",
+        "runtimeerror",
+        "importerror",
+        "filenotfounderror",
+    )
+
+    prioritized = [
+        line for line in useful_lines if any(marker in line.lower() for marker in priority_markers)
+    ]
+
+    chosen_lines = prioritized[:3] if prioritized else useful_lines[-3:]
+    message = " ".join(chosen_lines).strip()
+
+    if not message:
+        return f"{algorithm_id} failed during execution. Check the server logs for more details."
+
+    message = message.replace("BEELINE failed for", "")
+    message = message.replace("Traceback (most recent call last):", "")
+    message = " ".join(message.split())
+
+    if len(message) > 400:
+        message = message[:397].rstrip() + "..."
+
+    return message
+
 
 def prepare_beeline_runtime(
     project_id: str,
@@ -271,9 +339,11 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
     )
 
     if completed_process.returncode != 0:
-        raise RuntimeError(
-            f"BEELINE failed for {algorithm_id}. See {runtime_root / 'stderr.log'} for details."
+        friendly_error = extract_user_friendly_beeline_error(
+            completed_process.stderr or "",
+            algorithm_id,
         )
+        raise RuntimeError(friendly_error)
 
     ranked_edges_path = output_dir / dataset_id / run_id / algorithm_id / "rankedEdges.csv"
     top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
@@ -362,9 +432,8 @@ def run_beeline_with_progress(
     (runtime_root / "stderr.log").write_text(stderr_text or "", encoding="utf-8")
 
     if process.returncode != 0:
-        raise RuntimeError(
-            f"BEELINE failed for {algorithm_id}. See {runtime_root / 'stderr.log'} for details."
-        )
+        friendly_error = extract_user_friendly_beeline_error(stderr_text or "", algorithm_id)
+        raise RuntimeError(friendly_error)
 
     update_job_state_fn(
         project_dir,
