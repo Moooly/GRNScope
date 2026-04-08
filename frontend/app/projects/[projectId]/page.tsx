@@ -181,7 +181,8 @@ export default function ProjectDetailPage() {
 
   const networkNodes = useMemo(() => {
     const nodes = new Map<string, NodeInfo>();
-    filteredNetworkEdges.forEach((edge) => {
+
+    activeEdges.forEach((edge) => {
       if (!nodes.has(edge.source)) {
         nodes.set(edge.source, {
           id: edge.source,
@@ -213,8 +214,17 @@ export default function ProjectDetailPage() {
       if (!source.topTargets.includes(edge.target)) source.topTargets.push(edge.target);
       if (!target.topRegulators.includes(edge.source)) target.topRegulators.push(edge.source);
     });
-    return Array.from(nodes.values()).sort((a, b) => b.degree - a.degree);
-  }, [filteredNetworkEdges]);
+
+    const visibleNodeIds = new Set<string>();
+    filteredNetworkEdges.forEach((edge) => {
+      visibleNodeIds.add(edge.source);
+      visibleNodeIds.add(edge.target);
+    });
+
+    return Array.from(nodes.values())
+      .filter((node) => visibleNodeIds.has(node.id))
+      .sort((a, b) => b.degree - a.degree);
+  }, [activeEdges, filteredNetworkEdges]);
 
   const selectedNode = useMemo(
     () => networkNodes.find((node) => node.id === selectedGene) ?? null,

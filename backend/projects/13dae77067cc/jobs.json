@@ -2,18 +2,18 @@
   {
     "job_id": "457d068c3d06",
     "project_id": "13dae77067cc",
-    "overall_status": "Running",
+    "overall_status": "Completed",
     "ensemble_enabled": "true",
     "tasks": [
       {
         "algorithm_id": "genie3",
-        "status": "Running",
-        "elapsed_seconds": 36,
+        "status": "Completed",
+        "elapsed_seconds": 49,
         "error_message": null,
-        "result_path": null,
-        "completed_at": null,
-        "progress_percent": 38,
-        "progress_label": "Running BEELINE"
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/13dae77067cc/results/genie3.json",
+        "completed_at": "2026-04-08 07:42:25",
+        "progress_percent": 100,
+        "progress_label": "Completed"
       },
       {
         "algorithm_id": "ppcor",
