@@ -617,14 +617,14 @@ export default function ProjectDetailPage() {
 
           <div className="relative mt-5 overflow-hidden">
             <div className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex gap-4 pr-32">
+              <div className="flex min-w-max gap-4 pr-32">
                 {(latestJob?.tasks ?? []).map((task) => {
                   const meta = algorithmMetaMap.get(task.algorithm_id);
                   const hasError = task.status === "Failed";
                   return (
                     <div
                       key={task.algorithm_id}
-                      className="w-[calc((100%-1rem)/2.5)] shrink-0 rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 sm:w-[calc((100%-1rem)/2.5)] md:w-[calc((100%-2rem)/3.5)] xl:w-[calc((100%-3rem)/4.5)]"
+                      className="w-[19rem] shrink-0 rounded-[2rem] border border-white/10 bg-white/[0.03] p-5"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
