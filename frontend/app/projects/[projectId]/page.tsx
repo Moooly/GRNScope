@@ -57,6 +57,7 @@ export default function ProjectDetailPage() {
   const [groundTruthEdges, setGroundTruthEdges] = useState<Set<string>>(new Set());
   const [groundTruthFilename, setGroundTruthFilename] = useState<string>("");
   const [groundTruthError, setGroundTruthError] = useState("");
+  const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
 
 
@@ -79,6 +80,7 @@ export default function ProjectDetailPage() {
     const status = latestJob?.overall_status;
     return status === "Queued" || status === "Running";
   }, [latestJob]);
+
 
   const algorithmEdgeRows = useMemo(() => {
     const next: Record<string, AggregatedEdge[]> = {};
@@ -601,8 +603,92 @@ export default function ProjectDetailPage() {
         <ProjectHeader
           projectName={project?.project_name ?? "Project detail"}
           projectDescription={project?.project_description || "No project description provided."}
-          overallStatus={latestJob?.overall_status}
         />
+
+        <div className="group mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Algorithms used</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Scroll horizontally to view all selected algorithms. The status marker in the top-right corner updates for each algorithm independently.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative mt-5 overflow-hidden">
+            <div className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-4 pr-32">
+                {(latestJob?.tasks ?? []).map((task) => {
+                  const meta = algorithmMetaMap.get(task.algorithm_id);
+                  const hasError = task.status === "Failed";
+                  return (
+                    <div
+                      key={task.algorithm_id}
+                      className="w-[calc((100%-1rem)/2.5)] shrink-0 rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 sm:w-[calc((100%-1rem)/2.5)] md:w-[calc((100%-2rem)/3.5)] xl:w-[calc((100%-3rem)/4.5)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-2xl font-semibold text-white">{task.algorithm_id}</p>
+                        </div>
+
+                        {task.status === "Completed" ? (
+                          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 text-sm font-semibold text-emerald-200">
+                            ✓
+                          </span>
+                        ) : task.status === "Failed" ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveAlgorithmErrorTask({
+                                algorithmId: task.algorithm_id,
+                                errorMessage:
+                                  task.error_message ||
+                                  "This algorithm failed. Check the backend logs or runtime output for details.",
+                              })
+                            }
+                            className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border border-rose-300/20 bg-rose-300/10 px-2 text-sm font-semibold text-rose-200 transition hover:border-rose-300/35 hover:bg-rose-300/15"
+                            aria-label={`View error for ${task.algorithm_id}`}
+                            title="View error"
+                          >
+                            !
+                          </button>
+                        ) : task.status === "Running" ? (
+                          <span className="relative inline-flex h-8 w-8 items-center justify-center" aria-label={`Running ${task.algorithm_id}`} title="Running">
+                            <span className="h-8 w-8 animate-spin rounded-full border-2 border-sky-300/20 border-t-sky-300" />
+                            <span className="absolute h-2.5 w-2.5 rounded-full bg-sky-300" />
+                          </span>
+                        ) : task.status === "Queued" ? (
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-amber-300/30 bg-amber-300/10" aria-label={`Queued ${task.algorithm_id}`} title="Queued">
+                            <span className="h-2.5 w-2.5 rounded-full bg-amber-300/80" />
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-teal-300/25 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-100">
+                          {meta?.category ?? "Algorithm"}
+                        </span>
+                      </div>
+
+
+                      <div className="mt-8 flex items-end justify-between gap-3 text-sm text-slate-400">
+                        <span>{String(meta?.publicationYear || meta?.publishedYear || meta?.year || "-")}</span>
+                        <span className="text-right text-xs text-slate-500">{meta?.journal ?? ""}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {(latestJob?.tasks.length ?? 0) > 4 && (
+              <div className="pointer-events-none absolute inset-y-0 right-0 hidden group-hover:flex items-center">
+                <div className="flex h-full w-16 items-center justify-center bg-gradient-to-l from-slate-950/90 via-slate-950/70 to-transparent text-5xl text-white/90">
+                  ›
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
           <h2 className="text-xl font-semibold text-white">Dataset and preprocessing</h2>
@@ -692,51 +778,6 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        <div className="group mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold text-white">Algorithms used</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                Scroll horizontally to view all selected algorithms.
-              </p>
-            </div>
-          </div>
-
-          <div className="relative mt-5 overflow-hidden">
-            <div className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex gap-4 pr-20">
-                {(latestJob?.tasks ?? []).map((task) => {
-                  const meta = algorithmMetaMap.get(task.algorithm_id);
-                  return (
-                    <div
-                      key={task.algorithm_id}
-                      className="w-[calc((100%-1rem)/2.5)] shrink-0 rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 sm:w-[calc((100%-1rem)/2.5)] md:w-[calc((100%-2rem)/3.5)] xl:w-[calc((100%-3rem)/4.5)]"
-                    >
-                      <p className="text-2xl font-semibold text-white">{task.algorithm_id}</p>
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        <span className="rounded-full border border-teal-300/25 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-100">
-                          {meta?.category ?? "Algorithm"}
-                        </span>
-                      </div>
-                      <div className="mt-8 flex items-end justify-between gap-3 text-sm text-slate-400">
-                        <span>{String(meta?.publicationYear || meta?.publishedYear || meta?.year || "-")}</span>
-                        <span className="text-right text-xs text-slate-500">{meta?.journal ?? ""}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            {(latestJob?.tasks.length ?? 0) > 4 && (
-              <div className="pointer-events-none absolute inset-y-0 right-0 hidden group-hover:flex">
-                <div className="flex h-full w-20 items-center justify-center border-l border-white/10 bg-slate-950/70 text-5xl text-white shadow-lg shadow-slate-950/30 backdrop-blur-[1px]">
-                  ›
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
         {pendingDownload && (
           <div
             className={`fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 px-6 py-10 backdrop-blur-sm ${
@@ -774,6 +815,62 @@ export default function ProjectDetailPage() {
                   className="rounded-2xl border border-teal-300/30 bg-teal-300/10 px-5 py-3 text-sm font-medium text-teal-50 transition hover:border-teal-300/45 hover:bg-teal-300/15"
                 >
                   Download
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeAlgorithmErrorTask && (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/80 px-6 py-10 backdrop-blur-md">
+            <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-slate-950/40">
+              <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-5">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-[0.22em] text-rose-200/80">
+                    Algorithm error
+                  </p>
+                  <h3 className="mt-3 break-words text-2xl font-semibold text-white">
+                    {activeAlgorithmErrorTask.algorithmId}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-400">
+                    This algorithm did not finish successfully. Review the message below for details.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveAlgorithmErrorTask(null)}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 text-lg text-slate-300 transition hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
+                  aria-label="Close error dialog"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mt-6 rounded-[1.5rem] border border-rose-300/15 bg-rose-300/[0.08] p-5">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-rose-300/20 bg-rose-300/10 px-2 text-sm font-semibold text-rose-200">
+                    !
+                  </span>
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-rose-100/80">
+                    Error message
+                  </p>
+                </div>
+
+                <div className="mt-4 max-h-[40vh] overflow-y-auto rounded-[1.25rem] border border-white/10 bg-slate-950/50 p-4">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-100">
+                    {activeAlgorithmErrorTask.errorMessage}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setActiveAlgorithmErrorTask(null)}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/[0.07]"
+                >
+                  Close
                 </button>
               </div>
             </div>

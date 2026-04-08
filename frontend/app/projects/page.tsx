@@ -124,6 +124,7 @@ export default function ProjectsPage() {
     [projectHistory]
   );
 
+
   useEffect(() => {
     if (activeProjectIds.length === 0) {
       return;
@@ -217,7 +218,7 @@ export default function ProjectsPage() {
       ...selectedAlgorithms.map((algorithm) => algorithm.runtimeMinutes)
     );
 
-    return `~${longestRuntime} minutes`;
+    return `~ ${longestRuntime} minutes`;
   }, [selectedAlgorithms]);
 
   const openCreateModal = () => {
@@ -572,9 +573,7 @@ export default function ProjectsPage() {
       <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
         <div className="flex items-end justify-between gap-6">
           <div>
-            <h2 className="text-2xl font-semibold text-white">
-              Project History
-            </h2>
+            <h2 className="text-2xl font-semibold text-white">My Projects</h2>
           </div>
 
           <button

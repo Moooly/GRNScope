@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { Algorithm } from "../_types/algorithm";
 import AlgorithmStep from "./AlgorithmStep";
 import ReviewStep from "./ReviewStep";
@@ -110,6 +111,13 @@ export default function CreateProjectModal({
   clearPseudotimeFile,
   setEnsembleEnabled,
 }: CreateProjectModalProps) {
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isCreateVisible) return;
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [createStep, isCreateVisible]);
+
   if (!isCreateVisible) {
     return null;
   }
@@ -127,7 +135,7 @@ export default function CreateProjectModal({
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="max-h-[90vh] overflow-y-auto">
+        <div ref={contentScrollRef} className="max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-6 border-b border-white/10 pb-5">
           <div>
             <h2 className="mt-3 text-3xl font-semibold text-white">

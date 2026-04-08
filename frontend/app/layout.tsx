@@ -72,7 +72,7 @@ export default function RootLayout({
                     />
                   </svg>
                 )}
-                {isLoggedIn ? "Home" : "Log in"}
+                {isLoggedIn ? "My Projects" : "Log in"}
               </Link>
             </nav>
           </div>
