@@ -8,6 +8,7 @@ from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMP_UPLOAD_DIR = BASE_DIR / "temp_uploads"
+TEMP_UPLOAD_ROOT = TEMP_UPLOAD_DIR
 PROJECTS_DIR = BASE_DIR / "projects"
 
 TEMP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -30,6 +31,12 @@ def temp_pseudotime_path(temp_upload_id: str, original_name: str) -> Path:
 
 def temp_metadata_path(temp_upload_id: str) -> Path:
     return TEMP_UPLOAD_DIR / f"{temp_upload_id}__metadata.json"
+
+
+def save_upload_file(upload_file, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("wb") as output:
+        shutil.copyfileobj(upload_file.file, output)
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:

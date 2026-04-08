@@ -1,0 +1,40 @@
+[
+  {
+    "job_id": "a0d717cdda88",
+    "project_id": "c3d8b9201d3c",
+    "overall_status": "Completed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "grnboost2",
+        "status": "Completed",
+        "elapsed_seconds": 26,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/c3d8b9201d3c/results/grnboost2.json",
+        "completed_at": "2026-04-08 08:43:54",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "pearson",
+        "status": "Completed",
+        "elapsed_seconds": 1,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/c3d8b9201d3c/results/pearson.json",
+        "completed_at": "2026-04-08 08:43:29",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "pidc",
+        "status": "Completed",
+        "elapsed_seconds": 19,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/c3d8b9201d3c/results/pidc.json",
+        "completed_at": "2026-04-08 08:43:47",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      }
+    ]
+  }
+]
