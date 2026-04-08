@@ -25,7 +25,7 @@ import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
 
 const API_BASE_URL = "http://127.0.0.1:8000";
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 1000;
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
