@@ -433,6 +433,8 @@ def update_job_state(
     elapsed_seconds: int | None = None,
     error_message: str | None = None,
     result_path: str | None = None,
+    progress_percent: int | None = None,
+    progress_label: str | None = None,
     completed_at: str | None = None,
 ) -> None:
     with JOB_FILE_LOCK:
@@ -458,12 +460,124 @@ def update_job_state(
                         task["error_message"] = error_message
                     if result_path is not None:
                         task["result_path"] = result_path
+                    if progress_percent is not None:
+                        task["progress_percent"] = progress_percent
+                    if progress_label is not None:
+                        task["progress_label"] = progress_label
                     if completed_at is not None:
                         task["completed_at"] = completed_at
                     break
 
             write_jobs_manifest(project_dir, jobs_manifest)
             return
+
+
+# --- BEELINE execution with progress reporting ---
+
+def run_beeline_with_progress(
+    project_id: str,
+    job_id: str,
+    algorithm_id: str,
+) -> dict:
+    project_dir = PROJECTS_ROOT / project_id
+    project_manifest = read_project_manifest(project_dir)
+    beeline_root = resolve_beeline_root()
+
+    update_job_state(
+        project_dir,
+        job_id,
+        algorithm_id=algorithm_id,
+        progress_percent=5,
+        progress_label="Preparing runtime",
+    )
+
+    runtime_root, input_dir, output_dir, dataset_id, run_id = prepare_beeline_runtime(
+        project_id,
+        algorithm_id,
+        project_manifest,
+    )
+
+    config_path = runtime_root / "config.yaml"
+    config_text = build_beeline_config(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        dataset_id=dataset_id,
+        run_id=run_id,
+        algorithm_id=algorithm_id,
+        include_pseudotime=bool(project_manifest.get("pseudotime_path")),
+    )
+    config_path.write_text(config_text, encoding="utf-8")
+
+    update_job_state(
+        project_dir,
+        job_id,
+        algorithm_id=algorithm_id,
+        progress_percent=15,
+        progress_label="Launching BEELINE",
+    )
+
+    python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
+    command = [python_executable, "BLRunner.py", "-c", str(config_path)]
+
+    started_at = time.time()
+    process = subprocess.Popen(
+        command,
+        cwd=beeline_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    while process.poll() is None:
+        elapsed = int(time.time() - started_at)
+        synthetic_progress = min(85, 20 + elapsed // 2)
+        update_job_state(
+            project_dir,
+            job_id,
+            algorithm_id=algorithm_id,
+            elapsed_seconds=elapsed,
+            progress_percent=synthetic_progress,
+            progress_label="Running BEELINE",
+        )
+        time.sleep(1)
+
+    stdout_text, stderr_text = process.communicate()
+
+    (runtime_root / "stdout.log").write_text(stdout_text or "", encoding="utf-8")
+    (runtime_root / "stderr.log").write_text(stderr_text or "", encoding="utf-8")
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"BEELINE failed for {algorithm_id}. See {runtime_root / 'stderr.log'} for details."
+        )
+
+    update_job_state(
+        project_dir,
+        job_id,
+        algorithm_id=algorithm_id,
+        progress_percent=92,
+        progress_label="Parsing ranked edges",
+    )
+
+    ranked_edges_path = output_dir / dataset_id / run_id / algorithm_id / "rankedEdges.csv"
+    top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
+
+    update_job_state(
+        project_dir,
+        job_id,
+        algorithm_id=algorithm_id,
+        progress_percent=98,
+        progress_label="Finalizing result",
+    )
+
+    return {
+        "project_id": project_id,
+        "algorithm_id": algorithm_id,
+        "network_summary": network_summary,
+        "top_edges": top_edges,
+        "runtime_root": str(runtime_root),
+        "ranked_edges_path": str(ranked_edges_path),
+    }
 
 
 def recompute_overall_status(project_dir: Path, job_id: str) -> None:
@@ -506,11 +620,13 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
         task_status="Running",
         elapsed_seconds=0,
         error_message=None,
+        progress_percent=1,
+        progress_label="Starting",
     )
     recompute_overall_status(project_dir, job_id)
 
     try:
-        beeline_result = execute_beeline_algorithm(project_id, algorithm_id)
+        beeline_result = run_beeline_with_progress(project_id, job_id, algorithm_id)
 
         elapsed = int(time.time() - started_at)
         completed_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -542,6 +658,8 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             elapsed_seconds=elapsed,
             error_message=None,
             result_path=saved_result_path,
+            progress_percent=100,
+            progress_label="Completed",
             completed_at=completed_at,
         )
     except Exception as exc:
@@ -552,6 +670,8 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             algorithm_id=algorithm_id,
             task_status="Failed",
             elapsed_seconds=elapsed,
+            progress_percent=0,
+            progress_label="Failed",
             error_message=str(exc),
         )
     finally:
@@ -800,6 +920,8 @@ async def create_project_from_temp(
                     "error_message": None,
                     "result_path": None,
                     "completed_at": None,
+                    "progress_percent": 0,
+                    "progress_label": "Queued",
                 }
                 for algorithm_id in selected_algorithms_list
             ],
@@ -1030,6 +1152,8 @@ async def get_project_results(project_id: str):
                     "result_path": task.get("result_path"),
                     "completed_at": task.get("completed_at"),
                     "elapsed_seconds": task.get("elapsed_seconds"),
+                    "progress_percent": task.get("progress_percent"),
+                    "progress_label": task.get("progress_label"),
                 }
             )
 

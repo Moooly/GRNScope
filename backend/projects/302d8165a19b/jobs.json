@@ -1,0 +1,26 @@
+[
+  {
+    "job_id": "4b81d3b982d5",
+    "project_id": "302d8165a19b",
+    "overall_status": "Completed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "pearson",
+        "status": "Completed",
+        "elapsed_seconds": 1,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/302d8165a19b/results/pearson.json",
+        "completed_at": "2026-04-08 07:00:57"
+      },
+      {
+        "algorithm_id": "ppcor",
+        "status": "Completed",
+        "elapsed_seconds": 2,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/302d8165a19b/results/ppcor.json",
+        "completed_at": "2026-04-08 07:00:58"
+      }
+    ]
+  }
+]

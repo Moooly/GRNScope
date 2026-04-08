@@ -1,0 +1,16 @@
+input_settings:
+  input_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/302d8165a19b/_beeline_runtime/pearson/inputs"
+  datasets:
+    - dataset_id: "302d8165a19b"
+      should_run: [True]
+      runs:
+        - run_id: "run-1"
+          exprData: "ExpressionData.csv"
+  algorithms:
+    - algorithm_id: "PEARSON"
+      image: "local"
+      should_run: [True]
+      params:
+        {}
+output_settings:
+  output_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/302d8165a19b/_beeline_runtime/pearson/outputs"

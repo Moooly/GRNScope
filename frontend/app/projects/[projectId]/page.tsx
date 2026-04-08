@@ -61,14 +61,21 @@ export default function ProjectDetailPage() {
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
 
 
+  const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
+
   const completedTasks = useMemo(
-    () => latestJob?.tasks.filter((task) => task.status === "Completed") ?? [],
-    [latestJob]
+    () => allJobTasks.filter((task) => task.status === "Completed"),
+    [allJobTasks]
   );
 
   const completedAlgorithmIds = useMemo(
     () => completedTasks.map((task) => task.algorithm_id),
     [completedTasks]
+  );
+
+  const allAlgorithmIds = useMemo(
+    () => allJobTasks.map((task) => task.algorithm_id),
+    [allJobTasks]
   );
 
   const algorithmMetaMap = useMemo(
@@ -77,9 +84,10 @@ export default function ProjectDetailPage() {
   );
 
   const hasActiveTasks = useMemo(() => {
-    const status = latestJob?.overall_status;
-    return status === "Queued" || status === "Running";
-  }, [latestJob]);
+    return allJobTasks.some(
+      (task) => task.status === "Queued" || task.status === "Running"
+    );
+  }, [allJobTasks]);
 
 
   const algorithmEdgeRows = useMemo(() => {
@@ -294,6 +302,68 @@ export default function ProjectDetailPage() {
   }, [algorithmEdgeRows, completedAlgorithmIds, consensusRows, groundTruthEdges]);
 
 
+  const selectedTask = useMemo(() => {
+    if (selectedView === "consensus") return null;
+    return allJobTasks.find((task) => task.algorithm_id === selectedView) ?? null;
+  }, [allJobTasks, selectedView]);
+
+  const isConsensusUnavailable = useMemo(() => {
+    return selectedView === "consensus" && hasActiveTasks;
+  }, [hasActiveTasks, selectedView]);
+
+  const selectedAlgorithmUnavailableReason = useMemo(() => {
+    if (selectedView === "consensus" || !selectedTask) return null;
+    if (selectedTask.status === "Completed") return null;
+    if (selectedTask.status === "Running") {
+      return {
+        title: `${selectedTask.algorithm_id} is still running`,
+        description:
+          "The network visualization and edge analysis table will appear automatically after this algorithm finishes.",
+      };
+    }
+    if (selectedTask.status === "Queued") {
+      return {
+        title: `${selectedTask.algorithm_id} has not started yet`,
+        description:
+          "This algorithm is still queued. The network visualization and edge analysis table will appear after it starts and finishes.",
+      };
+    }
+    if (selectedTask.status === "Failed") {
+      return {
+        title: `${selectedTask.algorithm_id} did not finish successfully`,
+        description:
+          "Its network visualization and edge analysis table are unavailable. Click the red ! on the algorithm card above to review the error message.",
+      };
+    }
+    return {
+      title: `${selectedTask.algorithm_id} is not available yet`,
+      description:
+        "The network visualization and edge analysis table will appear after the algorithm finishes.",
+    };
+  }, [selectedTask, selectedView]);
+
+  const resultsAvailabilityNotice = useMemo(() => {
+    if (isConsensusUnavailable) {
+      return {
+        title: "Consensus network is not available yet",
+        description:
+          "Consensus becomes available only after all selected algorithms have finished. While the project is still running, you can inspect completed algorithms individually.",
+      };
+    }
+    if (selectedAlgorithmUnavailableReason) {
+      return selectedAlgorithmUnavailableReason;
+    }
+    if (selectedView === "consensus" && completedAlgorithmIds.length === 0) {
+      return {
+        title: "No completed algorithm results yet",
+        description:
+          "The network visualization and edge analysis table will appear after at least one algorithm finishes successfully.",
+      };
+    }
+    return null;
+  }, [completedAlgorithmIds.length, isConsensusUnavailable, selectedAlgorithmUnavailableReason, selectedView]);
+
+
 
 
   const visibleTableRows = useMemo(() => {
@@ -401,11 +471,11 @@ export default function ProjectDetailPage() {
   }, [hasTouchedTopN, maxAvailableTopN]);
 
   useEffect(() => {
-    const validViews = ["consensus", ...completedAlgorithmIds];
+    const validViews = ["consensus", ...allAlgorithmIds];
     if (!validViews.includes(selectedView)) {
       setSelectedView("consensus");
     }
-  }, [completedAlgorithmIds, selectedView]);
+  }, [allAlgorithmIds, selectedView]);
 
   useEffect(() => {
     if (!selectedGene) return;
@@ -621,6 +691,14 @@ export default function ProjectDetailPage() {
                 {(latestJob?.tasks ?? []).map((task) => {
                   const meta = algorithmMetaMap.get(task.algorithm_id);
                   const hasError = task.status === "Failed";
+                  const progressPercent = Math.max(
+                    0,
+                    Math.min(100, Number(task.progress_percent ?? 0))
+                  );
+                  const progressLabel =
+                    typeof task.progress_label === "string" && task.progress_label.trim().length > 0
+                      ? task.progress_label
+                      : task.status;
                   return (
                     <div
                       key={task.algorithm_id}
@@ -653,9 +731,19 @@ export default function ProjectDetailPage() {
                             !
                           </button>
                         ) : task.status === "Running" ? (
-                          <span className="relative inline-flex h-8 w-8 items-center justify-center" aria-label={`Running ${task.algorithm_id}`} title="Running">
-                            <span className="h-8 w-8 animate-spin rounded-full border-2 border-sky-300/20 border-t-sky-300" />
-                            <span className="absolute h-2.5 w-2.5 rounded-full bg-sky-300" />
+                          <span
+                            className="relative inline-flex h-11 w-11 items-center justify-center"
+                            aria-label={`${progressPercent}% complete for ${task.algorithm_id}`}
+                            title={`${progressPercent}% • ${progressLabel}`}
+                            style={{
+                              background: `conic-gradient(rgb(125 211 252) ${progressPercent * 3.6}deg, rgba(125,211,252,0.14) 0deg)`,
+                              borderRadius: "9999px",
+                            }}
+                          >
+                            <span className="absolute inset-[2px] rounded-full bg-slate-950" />
+                            <span className="relative text-[10px] font-semibold text-sky-200">
+                              {progressPercent}%
+                            </span>
                           </span>
                         ) : task.status === "Queued" ? (
                           <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-amber-300/30 bg-amber-300/10" aria-label={`Queued ${task.algorithm_id}`} title="Queued">
@@ -668,6 +756,17 @@ export default function ProjectDetailPage() {
                         <span className="rounded-full border border-teal-300/25 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-100">
                           {meta?.category ?? "Algorithm"}
                         </span>
+                        {(task.status === "Running" || task.status === "Queued") && (
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${
+                              task.status === "Running"
+                                ? "border border-sky-300/20 bg-sky-300/10 text-sky-200"
+                                : "border border-amber-300/20 bg-amber-300/10 text-amber-200"
+                            }`}
+                          >
+                            {progressLabel}
+                          </span>
+                        )}
                       </div>
 
 
@@ -893,7 +992,7 @@ export default function ProjectDetailPage() {
 
             <ResultsControlsSection
               selectedView={selectedView}
-              completedAlgorithmIds={completedAlgorithmIds}
+              completedAlgorithmIds={allAlgorithmIds}
               onChangeView={(value) => {
                 setSelectedView(value);
                 setSelectedGene(null);
@@ -914,44 +1013,55 @@ export default function ProjectDetailPage() {
               isConsensusView={selectedView === "consensus"}
             />
 
-            <NetworkVisualizationSection
-              selectedView={selectedView}
-              networkLayout={networkLayout}
-              networkNodes={networkNodes}
-              filteredNetworkEdges={filteredNetworkEdges}
-              selectedGene={selectedGene}
-              selectedEdgeKey={selectedEdgeKey}
-              setSelectedGene={setSelectedGene}
-              setSelectedEdgeKey={setSelectedEdgeKey}
-              selectedNode={selectedNode}
-              setIsolatedGene={setIsolatedGene}
-            />
+            {resultsAvailabilityNotice ? (
+              <div className="rounded-[1.75rem] border border-dashed border-white/10 bg-white/[0.03] p-8 text-center">
+                <p className="text-lg font-semibold text-white">{resultsAvailabilityNotice.title}</p>
+                <p className="mt-3 text-sm leading-6 text-slate-400">
+                  {resultsAvailabilityNotice.description}
+                </p>
+              </div>
+            ) : (
+              <>
+                <NetworkVisualizationSection
+                  selectedView={selectedView}
+                  networkLayout={networkLayout}
+                  networkNodes={networkNodes}
+                  filteredNetworkEdges={filteredNetworkEdges}
+                  selectedGene={selectedGene}
+                  selectedEdgeKey={selectedEdgeKey}
+                  setSelectedGene={setSelectedGene}
+                  setSelectedEdgeKey={setSelectedEdgeKey}
+                  selectedNode={selectedNode}
+                  setIsolatedGene={setIsolatedGene}
+                />
 
-            <EdgeAnalysisTableSection
-              isTableFullscreen={isTableFullscreen}
-              setIsTableFullscreen={setIsTableFullscreen}
-              tableSearch={tableSearch}
-              setTableSearch={setTableSearch}
-              columnMenuRef={columnMenuRef}
-              isColumnMenuOpen={isColumnMenuOpen}
-              setIsColumnMenuOpen={setIsColumnMenuOpen}
-              completedAlgorithmIds={completedAlgorithmIds}
-              visibleAlgorithmColumns={visibleAlgorithmColumns}
-              setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
-              selectedView={selectedView}
-              tableSortKey={tableSortKey}
-              tableSortDirection={tableSortDirection}
-              setTableSortKey={setTableSortKey}
-              setTableSortDirection={setTableSortDirection}
-              setTablePage={setTablePage}
-              displayedTableRows={displayedTableRows}
-              selectedEdgeKey={selectedEdgeKey}
-              setSelectedEdgeKey={setSelectedEdgeKey}
-              setSelectedGene={setSelectedGene}
-              totalTablePages={totalTablePages}
-              sortedTableRows={sortedTableRows}
-              tablePage={tablePage}
-            />
+                <EdgeAnalysisTableSection
+                  isTableFullscreen={isTableFullscreen}
+                  setIsTableFullscreen={setIsTableFullscreen}
+                  tableSearch={tableSearch}
+                  setTableSearch={setTableSearch}
+                  columnMenuRef={columnMenuRef}
+                  isColumnMenuOpen={isColumnMenuOpen}
+                  setIsColumnMenuOpen={setIsColumnMenuOpen}
+                  completedAlgorithmIds={completedAlgorithmIds}
+                  visibleAlgorithmColumns={visibleAlgorithmColumns}
+                  setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
+                  selectedView={selectedView}
+                  tableSortKey={tableSortKey}
+                  tableSortDirection={tableSortDirection}
+                  setTableSortKey={setTableSortKey}
+                  setTableSortDirection={setTableSortDirection}
+                  setTablePage={setTablePage}
+                  displayedTableRows={displayedTableRows}
+                  selectedEdgeKey={selectedEdgeKey}
+                  setSelectedEdgeKey={setSelectedEdgeKey}
+                  setSelectedGene={setSelectedGene}
+                  totalTablePages={totalTablePages}
+                  sortedTableRows={sortedTableRows}
+                  tablePage={tablePage}
+                />
+              </>
+            )}
           </div>
         </div>
       </section>
