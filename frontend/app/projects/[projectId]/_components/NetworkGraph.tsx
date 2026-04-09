@@ -644,6 +644,26 @@ export default function NetworkGraph({
     }
   }, [hoveredEdgeKey, selectedEdgeKey]);
 
+  const containerWidth = containerRef.current?.clientWidth ?? 0;
+  const containerHeight = containerRef.current?.clientHeight ?? 0;
+  const tooltipWidth = 300;
+  const tooltipHeight = 170;
+  const tooltipPadding = 16;
+
+  const tooltipLeft = edgeTooltip
+    ? Math.min(
+        Math.max(edgeTooltip.x + 8, tooltipPadding),
+        Math.max(tooltipPadding, containerWidth - tooltipWidth - tooltipPadding)
+      )
+    : tooltipPadding;
+
+  const tooltipTop = edgeTooltip
+    ? Math.min(
+        Math.max(edgeTooltip.y - 4, tooltipPadding),
+        Math.max(tooltipPadding, containerHeight - tooltipHeight - tooltipPadding)
+      )
+    : tooltipPadding;
+
   return (
     <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.14),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(96,165,250,0.12),_transparent_22%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.08),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#eef4fb_52%,_#eaf1f8_100%)] shadow-[0_24px_60px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.86)]">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-45" />
@@ -666,8 +686,8 @@ export default function NetworkGraph({
         <div
           className="pointer-events-none absolute z-30 max-w-[300px] rounded-2xl border border-white/70 bg-white/88 px-4 py-3 text-xs text-slate-700 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl"
           style={{
-            left: Math.min(edgeTooltip.x + 18, 760),
-            top: Math.max(edgeTooltip.y - 12, 16),
+            left: tooltipLeft,
+            top: tooltipTop,
           }}
         >
           <div className="space-y-2">

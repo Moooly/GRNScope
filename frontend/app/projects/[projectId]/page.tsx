@@ -94,7 +94,19 @@ export default function ProjectDetailPage() {
     const next: Record<string, AggregatedEdge[]> = {};
 
     completedAlgorithmIds.forEach((algorithmId) => {
-      const edges = (algorithmResults[algorithmId]?.top_edges ?? []).slice(0, topN);
+      // Deduplicate edges by (source, target) before applying topN
+      const rawEdges = algorithmResults[algorithmId]?.top_edges ?? [];
+      const uniqueEdges: typeof rawEdges = [];
+      const seenEdgeKeys = new Set<string>();
+
+      rawEdges.forEach((edge) => {
+        const edgeKey = `${edge.source}|||${edge.target}`;
+        if (seenEdgeKeys.has(edgeKey)) return;
+        seenEdgeKeys.add(edgeKey);
+        uniqueEdges.push(edge);
+      });
+
+      const edges = uniqueEdges.slice(0, topN);
       const scores = edges.map((edge) => edge.score);
       const minScore = scores.length > 0 ? Math.min(...scores) : 0;
       const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
@@ -271,9 +283,7 @@ export default function ProjectDetailPage() {
       }
     });
 
-    return Array.from(buckets.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, completedAlgorithmIds.length >= 4 ? 10 : 7);
+    return Array.from(buckets.values()).sort((a, b) => b.count - a.count);
   }, [algorithmEdgeRows, completedAlgorithmIds]);
 
   const maxOverlapCount = useMemo(() => {
@@ -987,41 +997,45 @@ export default function ProjectDetailPage() {
         )}
 
         <div className="mt-8 rounded-[2rem] border border-white/10 bg-slate-950/90 p-6 shadow-xl shadow-slate-950/20 backdrop-blur-md">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-6">
+            <div>
               <h2 className="text-xl font-semibold text-white">Results hub</h2>
             </div>
 
-            <ResultsSummarySection
-              perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
-              maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
-              completedAlgorithmIds={completedAlgorithmIds}
-              overlapEntries={overlapEntries}
-              maxOverlapCount={maxOverlapCount}
-            />
+            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.02] p-4">
+              <ResultsControlsSection
+                selectedView={selectedView}
+                completedAlgorithmIds={allAlgorithmIds}
+                onChangeView={(value) => {
+                  setSelectedView(value);
+                  setSelectedGene(null);
+                  setSelectedEdgeKey(null);
+                  setIsolatedGene(null);
+                }}
+                networkLayout={networkLayout}
+                onChangeLayout={setNetworkLayout}
+                topN={topN}
+                maxAvailableTopN={maxAvailableTopN}
+                onChangeTopN={(value) => {
+                  setHasTouchedTopN(true);
+                  setTopN(value);
+                }}
+                consensusThreshold={consensusThreshold}
+                maxConsensusThreshold={Math.max(completedAlgorithmIds.length, 1)}
+                onChangeConsensusThreshold={setConsensusThreshold}
+                isConsensusView={selectedView === "consensus"}
+              />
+            </div>
 
-            <ResultsControlsSection
-              selectedView={selectedView}
-              completedAlgorithmIds={allAlgorithmIds}
-              onChangeView={(value) => {
-                setSelectedView(value);
-                setSelectedGene(null);
-                setSelectedEdgeKey(null);
-                setIsolatedGene(null);
-              }}
-              networkLayout={networkLayout}
-              onChangeLayout={setNetworkLayout}
-              topN={topN}
-              maxAvailableTopN={maxAvailableTopN}
-              onChangeTopN={(value) => {
-                setHasTouchedTopN(true);
-                setTopN(value);
-              }}
-              consensusThreshold={consensusThreshold}
-              maxConsensusThreshold={Math.max(completedAlgorithmIds.length, 1)}
-              onChangeConsensusThreshold={setConsensusThreshold}
-              isConsensusView={selectedView === "consensus"}
-            />
+            <div className="w-full">
+              <ResultsSummarySection
+                perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
+                maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
+                completedAlgorithmIds={completedAlgorithmIds}
+                overlapEntries={overlapEntries}
+                maxOverlapCount={maxOverlapCount}
+              />
+            </div>
 
             {resultsAvailabilityNotice ? (
               <div className="rounded-[1.75rem] border border-dashed border-white/10 bg-white/[0.03] p-8 text-center">
