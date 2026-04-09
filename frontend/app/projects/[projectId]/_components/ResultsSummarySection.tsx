@@ -173,7 +173,6 @@ function UpSetSummary({
 }) {
   const rows: UpSetRow[] = [...overlapEntries]
     .sort((a, b) => b.count - a.count)
-    .slice(0, 12)
     .map((entry) => ({
       key: entry.key,
       methods: entry.methods,
@@ -192,153 +191,167 @@ function UpSetSummary({
   const chartHeight = 220;
   const rowHeight = 52;
   const columnWidth = 72;
-  const setPanelWidth = 300;
+  const setPanelWidth = 340;
   const matrixWidth = Math.max(rows.length * columnWidth, 420);
 
   const rowIndexToY = (rowIndex: number, rowHeightValue: number) => rowIndex * rowHeightValue + rowHeightValue / 2;
   return (
-    <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
-      <div className="w-full overflow-x-auto">
-        <div className="mx-auto" style={{ width: `${setPanelWidth + matrixWidth + 24}px` }}>
-          <div className="flex flex-col gap-6">
-            {/* Intersection size card (aligned with set columns) */}
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 pt-5 pb-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
-                Intersection size
-              </p>
-              <div className="mt-4" style={{ paddingLeft: `${setPanelWidth}px` }}>
-                <div
-                  className="grid items-end border-b border-white/10"
-                  style={{
-                    gridTemplateColumns: `repeat(${rows.length}, ${columnWidth}px)`,
-                    height: `${chartHeight - 56}px`,
-                    width: `${matrixWidth}px`,
-                  }}
-                >
-                {rows.map((row) => {
-                  const barHeight =
-                    (row.count / Math.max(maxOverlapCount, 1)) * (chartHeight - 102);
-
-                  return (
-                    <div
-                      key={`bar-${row.key}`}
-                      className="flex h-full flex-col items-center justify-end gap-2"
-                    >
-                      <span className="text-sm font-semibold text-white">
-                        {row.count.toLocaleString()}
-                      </span>
-                      <div
-                        className="w-11 rounded-t-[0.8rem] bg-gradient-to-t from-teal-400 to-cyan-300"
-                        style={{
-                          height: `${Math.max(barHeight, 8)}px`,
-                          boxShadow: "0 0 0 1px rgba(125,211,252,0.14) inset",
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-                </div>
-              </div>
-            </div>
-
-            {/* Shared panel with Set size label integrated */}
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-5">
+    <div className="mt-5">
+      <div className="w-full pb-2">
+        <div className="mx-auto" style={{ width: `100%` }}>
+          <div className="grid items-end gap-6" style={{ gridTemplateColumns: `${setPanelWidth}px minmax(0, 1fr)` }}>
+            <div className="self-end rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-5">
               <div className="mb-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
-                  Set size and membership
+                  Set size
                 </p>
               </div>
-              <div className="relative" style={{ width: `${setPanelWidth + matrixWidth + 20}px` }}>
-                {rows.map((row, columnIndex) => {
-                  const includedIndexes = setSummaries
-                    .map((item, index) => (row.methods.includes(item.algorithmId) ? index : -1))
-                    .filter((index) => index >= 0);
-
-                  if (includedIndexes.length < 2) {
-                    return null;
-                  }
-
-                  const top = rowIndexToY(includedIndexes[0], rowHeight);
-                  const bottom = rowIndexToY(includedIndexes[includedIndexes.length - 1], rowHeight);
-
-                  return (
-                    <div
-                      key={`connector-${row.key}`}
-                      className="pointer-events-none absolute z-0"
-                      style={{
-                        left: `${setPanelWidth + columnIndex * columnWidth + columnWidth / 2 - 2}px`,
-                        top: `${top}px`,
-                        width: "4px",
-                        height: `${bottom - top}px`,
-                        background: "rgba(226,232,240,0.6)",
-                      }}
-                    />
-                  );
-                })}
-
+              <div>
                 {setSummaries.map((item, rowIndex) => {
                   const color = getMethodColorById(methodIds, item.algorithmId);
                   const barWidth = (item.count / maxSetSize) * 100;
 
                   return (
                     <div
-                      key={`shared-row-${item.algorithmId}`}
-                      className="grid items-center"
+                      key={`legend-row-${item.algorithmId}`}
+                      className={`grid items-center gap-4 pr-2 ${rowIndex % 2 === 1 ? "bg-white/[0.035]" : "bg-transparent"}`}
                       style={{
-                        gridTemplateColumns: `${setPanelWidth}px ${matrixWidth}px`,
+                        gridTemplateColumns: "72px minmax(0, 1fr) 128px",
                         height: `${rowHeight}px`,
                       }}
                     >
-                      <div className="grid items-center gap-4 pr-5" style={{ gridTemplateColumns: "64px minmax(0, 1fr) 110px" }}>
-                        <div className="text-right text-sm font-semibold text-white">
-                          {item.count.toLocaleString()}
-                        </div>
-                        <div className="h-4 overflow-hidden rounded-full bg-white/[0.05]">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${barWidth}%`,
-                              background: color,
-                              boxShadow: `0 0 0 1px ${color}22 inset`,
-                            }}
-                          />
-                        </div>
-                        <div className="text-sm font-medium text-white whitespace-nowrap text-left">
-                          {item.algorithmId}
-                        </div>
+                      <div className="text-right text-sm font-semibold tabular-nums text-white">
+                        {item.count.toLocaleString()}
                       </div>
-
-                      <div
-                        className={`grid items-center rounded-[0.75rem] ${rowIndex % 2 === 1 ? "bg-white/[0.035]" : "bg-transparent"}`}
-                        style={{
-                          gridTemplateColumns: `repeat(${rows.length}, ${columnWidth}px)`,
-                          height: `${rowHeight}px`,
-                        }}
-                      >
-                        {rows.map((row) => {
-                          const included = row.methods.includes(item.algorithmId);
-
-                          return (
-                            <div
-                              key={`cell-${item.algorithmId}-${row.key}`}
-                              className="relative z-10 flex h-full items-center justify-center"
-                            >
-                              <div className="absolute left-1/2 top-1/2 h-[2px] w-10 -translate-x-1/2 -translate-y-1/2 bg-white/[0.08]" />
-                              <div
-                                className="relative h-9 w-9 rounded-full border"
-                                style={{
-                                  background: included ? color : "rgba(148,163,184,0.16)",
-                                  borderColor: included ? color : "rgba(148,163,184,0.10)",
-                                  boxShadow: included ? `0 0 0 1px ${color}33 inset` : "none",
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
+                      <div className="h-4 overflow-hidden rounded-full bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${barWidth}%`,
+                            background: color,
+                            boxShadow: `0 0 0 1px ${color}22 inset`,
+                          }}
+                        />
+                      </div>
+                      <div className="text-sm font-medium text-white whitespace-nowrap text-left">
+                        {item.algorithmId}
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto pb-1">
+              <div className="min-w-fit rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-5">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                    Intersection size
+                  </p>
+                  <div
+                    className="mt-4 grid items-end border-b border-white/10"
+                    style={{
+                      gridTemplateColumns: `repeat(${rows.length}, ${columnWidth}px)`,
+                      height: `${chartHeight - 56}px`,
+                      width: `${matrixWidth}px`,
+                    }}
+                  >
+                    {rows.map((row) => {
+                      const barHeight =
+                        (row.count / Math.max(maxOverlapCount, 1)) * (chartHeight - 102);
+
+                      return (
+                        <div
+                          key={`bar-${row.key}`}
+                          className="flex h-full flex-col items-center justify-end gap-2"
+                        >
+                          <span className="text-sm font-semibold text-white">
+                            {row.count.toLocaleString()}
+                          </span>
+                          <div
+                            className="w-11 rounded-t-[0.8rem] bg-gradient-to-t from-teal-400 to-cyan-300"
+                            style={{
+                              height: `${Math.max(barHeight, 8)}px`,
+                              boxShadow: "0 0 0 1px rgba(125,211,252,0.14) inset",
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+           <div className="mt-6 pt-6">
+                  <div className="mb-4">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                      Membership
+                    </p>
+                  </div>
+                  <div className="relative" style={{ width: `${matrixWidth}px` }}>
+                    {rows.map((row, columnIndex) => {
+                      const includedIndexes = setSummaries
+                        .map((item, index) => (row.methods.includes(item.algorithmId) ? index : -1))
+                        .filter((index) => index >= 0);
+
+                      if (includedIndexes.length < 2) {
+                        return null;
+                      }
+
+                      const top = rowIndexToY(includedIndexes[0], rowHeight);
+                      const bottom = rowIndexToY(includedIndexes[includedIndexes.length - 1], rowHeight);
+
+                      return (
+                        <div
+                          key={`connector-${row.key}`}
+                          className="pointer-events-none absolute z-0"
+                          style={{
+                            left: `${columnIndex * columnWidth + columnWidth / 2 - 2}px`,
+                            top: `${top}px`,
+                            width: "4px",
+                            height: `${bottom - top}px`,
+                            background: "rgba(226,232,240,0.6)",
+                          }}
+                        />
+                      );
+                    })}
+
+                    {setSummaries.map((item, rowIndex) => {
+                      const color = getMethodColorById(methodIds, item.algorithmId);
+
+                      return (
+                        <div
+                          key={`shared-row-${item.algorithmId}`}
+                          className={`grid items-center ${rowIndex % 2 === 1 ? "bg-white/[0.035]" : "bg-transparent"}`}
+                          style={{
+                            gridTemplateColumns: `repeat(${rows.length}, ${columnWidth}px)`,
+                            height: `${rowHeight}px`,
+                          }}
+                        >
+                          {rows.map((row) => {
+                            const included = row.methods.includes(item.algorithmId);
+
+                            return (
+                              <div
+                                key={`cell-${item.algorithmId}-${row.key}`}
+                                className="relative z-10 flex h-full items-center justify-center"
+                              >
+                                <div className="absolute left-1/2 top-1/2 h-[2px] w-10 -translate-x-1/2 -translate-y-1/2 bg-white/[0.08]" />
+                                <div
+                                  className="relative h-9 w-9 rounded-full border"
+                                  style={{
+                                    background: included ? color : "rgba(148,163,184,0.16)",
+                                    borderColor: included ? color : "rgba(148,163,184,0.10)",
+                                    boxShadow: included ? `0 0 0 1px ${color}33 inset` : "none",
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -398,7 +411,7 @@ export default function ResultsSummarySection({
               <h4 className="text-base font-semibold text-white">Method Overlap Visualization</h4>
               <p className="mt-1 text-sm text-slate-400">
                 {completedAlgorithmIds.length >= 4
-                  ? "UpSet plot showing intersection sizes, set sizes, and membership across methods."
+                  ? "UpSet plot showing intersection sizes, set sizes, and membership across methods. Scroll horizontally to view all overlap groups."
                   : "Venn diagram showing exclusive overlap regions among the selected methods."}
               </p>
             </div>
