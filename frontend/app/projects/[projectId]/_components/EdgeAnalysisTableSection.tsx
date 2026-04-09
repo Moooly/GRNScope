@@ -16,14 +16,7 @@ type EdgeAnalysisTableSectionProps = {
   setIsTableFullscreen: (updater: (current: boolean) => boolean) => void;
   tableSearch: string;
   setTableSearch: (value: string) => void;
-  columnMenuRef: RefObject<HTMLDivElement | null>;
-  isColumnMenuOpen: boolean;
-  setIsColumnMenuOpen: (updater: (current: boolean) => boolean) => void;
   completedAlgorithmIds: string[];
-  visibleAlgorithmColumns: string[];
-  setVisibleAlgorithmColumns: (
-    updater: (current: string[]) => string[]
-  ) => void;
   selectedView: string;
   tableSortKey: "rank" | "source" | "target" | "score" | "count";
   tableSortDirection: "asc" | "desc";
@@ -46,12 +39,7 @@ export default function EdgeAnalysisTableSection({
   setIsTableFullscreen,
   tableSearch,
   setTableSearch,
-  columnMenuRef,
-  isColumnMenuOpen,
-  setIsColumnMenuOpen,
   completedAlgorithmIds,
-  visibleAlgorithmColumns,
-  setVisibleAlgorithmColumns,
   selectedView,
   tableSortKey,
   tableSortDirection,
@@ -83,67 +71,6 @@ export default function EdgeAnalysisTableSection({
             aria-label="Search gene name"
             className="w-full min-w-0 rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 sm:min-w-[260px] lg:w-[320px]"
           />
-
-          <div ref={columnMenuRef} className="relative w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setIsColumnMenuOpen((current) => !current)}
-              className="w-full rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] sm:w-auto"
-            >
-              Algorithms Filter
-            </button>
-
-            {isColumnMenuOpen && (
-              <div className="absolute right-0 top-[calc(100%+0.75rem)] z-20 w-full min-w-[18rem] rounded-[1.25rem] border border-white/10 bg-slate-900/95 p-4 shadow-2xl shadow-slate-950/40 backdrop-blur-md sm:w-72">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-white">Algorithm columns</p>
-                  <button
-                    type="button"
-                    onClick={() => setVisibleAlgorithmColumns(() => completedAlgorithmIds)}
-                    className="text-xs text-teal-300 transition hover:text-teal-200"
-                  >
-                    Show all
-                  </button>
-                </div>
-
-                <p className="mt-2 text-xs leading-5 text-slate-400">
-                  Show or hide algorithm-specific columns to focus the table on the methods you want to compare.
-                </p>
-
-                <div className="mt-4 space-y-2">
-                  {completedAlgorithmIds.length > 0 ? (
-                    completedAlgorithmIds.map((algorithmId) => {
-                      const isChecked = visibleAlgorithmColumns.includes(algorithmId);
-                      return (
-                        <label
-                          key={algorithmId}
-                          className="flex cursor-pointer items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 transition hover:border-white/15 hover:bg-white/[0.05]"
-                        >
-                          <span>{algorithmId}</span>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              setVisibleAlgorithmColumns((current) =>
-                                current.includes(algorithmId)
-                                  ? current.filter((id) => id !== algorithmId)
-                                  : [...current, algorithmId]
-                              );
-                            }}
-                            className="h-4 w-4 rounded border-white/20 bg-slate-950 text-teal-400 accent-teal-400"
-                          />
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-3 py-4 text-sm text-slate-400">
-                      No algorithm columns available yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
 
           <button
             type="button"
@@ -192,7 +119,7 @@ export default function EdgeAnalysisTableSection({
                 </th>
               ))}
 
-              {visibleAlgorithmColumns.map((algorithmId) => (
+              {completedAlgorithmIds.map((algorithmId) => (
                 <th key={algorithmId} className="px-4 py-3 font-medium">
                   {algorithmId}
                 </th>
@@ -222,7 +149,7 @@ export default function EdgeAnalysisTableSection({
                     <td className="px-4 py-3 text-slate-300">{edge.count}</td>
                     <td className="px-4 py-3 text-slate-300">{edge.score.toFixed(3)}</td>
 
-                    {visibleAlgorithmColumns.map((algorithmId) => (
+                    {completedAlgorithmIds.map((algorithmId) => (
                       <td key={algorithmId} className="px-4 py-3">
                         {edge.perAlgorithmScores[algorithmId] !== undefined ? (
                           <span className="text-slate-300">
@@ -242,7 +169,7 @@ export default function EdgeAnalysisTableSection({
               <tr>
                 <td
                   className="px-4 py-6 text-center text-slate-500"
-                  colSpan={5 + visibleAlgorithmColumns.length}
+                  colSpan={5 + completedAlgorithmIds.length}
                 >
                   No matching edges.
                 </td>

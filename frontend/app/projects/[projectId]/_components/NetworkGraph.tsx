@@ -671,12 +671,6 @@ export default function NetworkGraph({
       <div className="pointer-events-none absolute bottom-10 right-10 h-40 w-40 rounded-full bg-blue-300/18 blur-3xl" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/50 to-transparent" />
       <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] ring-1 ring-white/55" />
-      <div className="pointer-events-none absolute left-5 top-5 z-20 flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.18em] text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-md">
-        NETWORK VIEW
-      </div>
-      <div className="pointer-events-none absolute right-5 top-5 z-20 rounded-full border border-slate-200/80 bg-white/78 px-3.5 py-1.5 text-[11px] font-medium text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-md">
-        Scroll to zoom · Drag to pan · Click to inspect
-      </div>
       <div
         ref={containerRef}
         className="absolute inset-0 z-10 h-full w-full"

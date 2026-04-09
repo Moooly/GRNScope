@@ -24,6 +24,7 @@ type AggregatedEdge = {
 type NetworkVisualizationSectionProps = {
   selectedView: string;
   networkLayout: "force" | "hierarchical" | "concentric" | "circular";
+  setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular") => void;
   networkNodes: NodeInfo[];
   filteredNetworkEdges: AggregatedEdge[];
   selectedGene: string | null;
@@ -37,6 +38,7 @@ type NetworkVisualizationSectionProps = {
 export default function NetworkVisualizationSection({
   selectedView,
   networkLayout,
+  setNetworkLayout,
   networkNodes,
   filteredNetworkEdges,
   selectedGene,
@@ -70,7 +72,33 @@ export default function NetworkVisualizationSection({
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
-        <div className="min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6] p-4">
+        <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6]">
+          <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-end">
+            <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-300/70 bg-white/85 p-1 shadow-sm backdrop-blur">
+              {([
+                ["force", "Force"],
+                ["hierarchical", "Hierarchical"],
+                ["concentric", "Concentric"],
+                ["circular", "Circular"],
+              ] as const).map(([value, label]) => {
+                const isActive = networkLayout === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setNetworkLayout(value)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                      isActive
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-200/70 hover:text-slate-900"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <NetworkGraph
             key={`${selectedView}-${networkLayout}`}
             nodes={networkNodes.map((node) => ({

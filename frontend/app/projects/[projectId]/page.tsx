@@ -23,7 +23,6 @@ import {
 import { boolText, clamp } from "./_lib/utils";
 import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
-
 const API_BASE_URL = "http://127.0.0.1:8000";
 const POLL_INTERVAL_MS = 1000;
 
@@ -35,7 +34,7 @@ export default function ProjectDetailPage() {
   const [metadata, setMetadata] = useState<MetadataManifest | null>(null);
   const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
-  const [selectedView, setSelectedView] = useState<string>("consensus");
+  const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
   const [topN, setTopN] = useState(1);
   const [hasTouchedTopN, setHasTouchedTopN] = useState(false);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
@@ -60,7 +59,6 @@ export default function ProjectDetailPage() {
   const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
 
-
   const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
 
   const completedTasks = useMemo(
@@ -73,10 +71,22 @@ export default function ProjectDetailPage() {
     [completedTasks]
   );
 
-  const allAlgorithmIds = useMemo(
-    () => allJobTasks.map((task) => task.algorithm_id),
-    [allJobTasks]
-  );
+  useEffect(() => {
+    if (completedAlgorithmIds.length === 0) {
+      setSelectedAlgorithmIds([]);
+      return;
+    }
+
+    setSelectedAlgorithmIds((prev) => {
+      const filtered = prev.filter((id) => completedAlgorithmIds.includes(id));
+      if (filtered.length > 0) return filtered;
+      return completedAlgorithmIds;
+    });
+  }, [completedAlgorithmIds]);
+
+  const activeAlgorithmIds = useMemo(() => {
+    return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
+  }, [completedAlgorithmIds, selectedAlgorithmIds]);
 
   const algorithmMetaMap = useMemo(
     () => new Map((algorithms as AlgorithmCatalogItem[]).map((item) => [item.id, item])),
@@ -89,12 +99,10 @@ export default function ProjectDetailPage() {
     );
   }, [allJobTasks]);
 
-
   const algorithmEdgeRows = useMemo(() => {
     const next: Record<string, AggregatedEdge[]> = {};
 
     completedAlgorithmIds.forEach((algorithmId) => {
-      // Deduplicate edges by (source, target) before applying topN
       const rawEdges = algorithmResults[algorithmId]?.top_edges ?? [];
       const uniqueEdges: typeof rawEdges = [];
       const seenEdgeKeys = new Set<string>();
@@ -132,7 +140,7 @@ export default function ProjectDetailPage() {
   const consensusRows = useMemo(() => {
     const bucket = new Map<string, AggregatedEdge>();
 
-    completedAlgorithmIds.forEach((algorithmId) => {
+    activeAlgorithmIds.forEach((algorithmId) => {
       (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
         const key = `${edge.source}|||${edge.target}`;
         const current = bucket.get(key);
@@ -168,14 +176,13 @@ export default function ProjectDetailPage() {
       .filter((edge) => edge.count >= consensusThreshold)
       .sort((a, b) => b.score - a.score)
       .map((edge, index) => ({ ...edge, rank: index + 1 }));
-  }, [algorithmEdgeRows, completedAlgorithmIds, consensusThreshold]);
+  }, [activeAlgorithmIds, algorithmEdgeRows, consensusThreshold]);
 
-  const activeEdges = useMemo(
-    () => (selectedView === "consensus" ? consensusRows : algorithmEdgeRows[selectedView] ?? []),
-    [algorithmEdgeRows, consensusRows, selectedView]
-  );
-
-  const activeMethodLabel = selectedView === "consensus" ? "Consensus network" : selectedView;
+  const activeEdges = useMemo(() => {
+    if (activeAlgorithmIds.length >= 2) return consensusRows;
+    if (activeAlgorithmIds.length === 1) return algorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
+    return [];
+  }, [activeAlgorithmIds, algorithmEdgeRows, consensusRows]);
 
   const filteredNetworkEdges = useMemo(() => {
     const query = geneSearch.trim().toLowerCase();
@@ -189,7 +196,6 @@ export default function ProjectDetailPage() {
       return matchesSearch && matchesIsolation;
     });
   }, [activeEdges, geneSearch, isolatedGene]);
-
 
   const networkNodes = useMemo(() => {
     const nodes = new Map<string, NodeInfo>();
@@ -244,21 +250,21 @@ export default function ProjectDetailPage() {
   );
 
   const perAlgorithmEdgeCounts = useMemo(() => {
-    return completedAlgorithmIds.map((algorithmId) => ({
+    return activeAlgorithmIds.map((algorithmId) => ({
       algorithmId,
       count: algorithmEdgeRows[algorithmId]?.length ?? 0,
     }));
-  }, [algorithmEdgeRows, completedAlgorithmIds]);
+  }, [activeAlgorithmIds, algorithmEdgeRows]);
 
   const maxAlgorithmEdgeCount = useMemo(() => {
     return Math.max(...perAlgorithmEdgeCounts.map((item) => item.count), 1);
   }, [perAlgorithmEdgeCounts]);
 
   const overlapEntries = useMemo<OverlapEntry[]>(() => {
-    if (completedAlgorithmIds.length < 2) return [];
+    if (activeAlgorithmIds.length < 2) return [];
 
     const edgeMembership = new Map<string, string[]>();
-    completedAlgorithmIds.forEach((algorithmId) => {
+    activeAlgorithmIds.forEach((algorithmId) => {
       (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
         const key = `${edge.source}|||${edge.target}`;
         const current = edgeMembership.get(key) ?? [];
@@ -284,7 +290,7 @@ export default function ProjectDetailPage() {
     });
 
     return Array.from(buckets.values()).sort((a, b) => b.count - a.count);
-  }, [algorithmEdgeRows, completedAlgorithmIds]);
+  }, [activeAlgorithmIds, algorithmEdgeRows]);
 
   const maxOverlapCount = useMemo(() => {
     return Math.max(...overlapEntries.map((entry) => entry.count), 1);
@@ -321,70 +327,23 @@ export default function ProjectDetailPage() {
     ];
   }, [algorithmEdgeRows, completedAlgorithmIds, consensusRows, groundTruthEdges]);
 
-
-  const selectedTask = useMemo(() => {
-    if (selectedView === "consensus") return null;
-    return allJobTasks.find((task) => task.algorithm_id === selectedView) ?? null;
-  }, [allJobTasks, selectedView]);
-
-  const isConsensusUnavailable = useMemo(() => {
-    return selectedView === "consensus" && hasActiveTasks;
-  }, [hasActiveTasks, selectedView]);
-
-  const selectedAlgorithmUnavailableReason = useMemo(() => {
-    if (selectedView === "consensus" || !selectedTask) return null;
-    if (selectedTask.status === "Completed") return null;
-    if (selectedTask.status === "Running") {
-      return {
-        title: `${selectedTask.algorithm_id} is still running`,
-        description:
-          "The network visualization and edge analysis table will appear automatically after this algorithm finishes.",
-      };
-    }
-    if (selectedTask.status === "Queued") {
-      return {
-        title: `${selectedTask.algorithm_id} has not started yet`,
-        description:
-          "This algorithm is still queued. The network visualization and edge analysis table will appear after it starts and finishes.",
-      };
-    }
-    if (selectedTask.status === "Failed") {
-      return {
-        title: `${selectedTask.algorithm_id} did not finish successfully`,
-        description:
-          "Its network visualization and edge analysis table are unavailable. Click the red ! on the algorithm card above to review the error message.",
-      };
-    }
-    return {
-      title: `${selectedTask.algorithm_id} is not available yet`,
-      description:
-        "The network visualization and edge analysis table will appear after the algorithm finishes.",
-    };
-  }, [selectedTask, selectedView]);
-
   const resultsAvailabilityNotice = useMemo(() => {
-    if (isConsensusUnavailable) {
-      return {
-        title: "Consensus network is not available yet",
-        description:
-          "Consensus becomes available only after all selected algorithms have finished. While the project is still running, you can inspect completed algorithms individually.",
-      };
-    }
-    if (selectedAlgorithmUnavailableReason) {
-      return selectedAlgorithmUnavailableReason;
-    }
-    if (selectedView === "consensus" && completedAlgorithmIds.length === 0) {
+    if (completedAlgorithmIds.length === 0) {
       return {
         title: "No completed algorithm results yet",
         description:
           "The network visualization and edge analysis table will appear after at least one algorithm finishes successfully.",
       };
     }
+    if (activeAlgorithmIds.length === 0) {
+      return {
+        title: "No algorithms selected",
+        description:
+          "Select at least one completed algorithm to view the network, edge table, and overlap summary.",
+      };
+    }
     return null;
-  }, [completedAlgorithmIds.length, isConsensusUnavailable, selectedAlgorithmUnavailableReason, selectedView]);
-
-
-
+  }, [activeAlgorithmIds.length, completedAlgorithmIds.length]);
 
   const visibleTableRows = useMemo(() => {
     if (!tableSearch.trim()) {
@@ -423,18 +382,20 @@ export default function ProjectDetailPage() {
     return sortedTableRows.slice(start, start + TABLE_PAGE_SIZE);
   }, [sortedTableRows, tablePage]);
 
-
-
   const maxAvailableTopN = useMemo(() => {
-    if (selectedView === "consensus") {
-      const counts = completedAlgorithmIds.map(
+    if (activeAlgorithmIds.length >= 2) {
+      const counts = activeAlgorithmIds.map(
         (algorithmId) => algorithmResults[algorithmId]?.top_edges?.length ?? 0
       );
       return Math.max(...counts, 1);
     }
 
-    return Math.max(algorithmResults[selectedView]?.top_edges?.length ?? 0, 1);
-  }, [algorithmResults, completedAlgorithmIds, selectedView]);
+    if (activeAlgorithmIds.length === 1) {
+      return Math.max(algorithmResults[activeAlgorithmIds[0]]?.top_edges?.length ?? 0, 1);
+    }
+
+    return 1;
+  }, [activeAlgorithmIds, algorithmResults]);
 
   const openDownloadModal = (label: string, href: string, filename: string) => {
     setIsDownloadModalClosing(false);
@@ -461,14 +422,10 @@ export default function ProjectDetailPage() {
     closeDownloadModal();
   };
 
-
-
-
-
   useEffect(() => {
-    setVisibleAlgorithmColumns(completedAlgorithmIds);
-    setConsensusThreshold((current) => clamp(current, 1, Math.max(completedAlgorithmIds.length, 1)));
-  }, [completedAlgorithmIds]);
+    setVisibleAlgorithmColumns(activeAlgorithmIds);
+    setConsensusThreshold((current) => clamp(current, 1, Math.max(activeAlgorithmIds.length, 1)));
+  }, [activeAlgorithmIds]);
 
   useEffect(() => {
     if (!isColumnMenuOpen) return;
@@ -491,13 +448,6 @@ export default function ProjectDetailPage() {
   }, [hasTouchedTopN, maxAvailableTopN]);
 
   useEffect(() => {
-    const validViews = ["consensus", ...allAlgorithmIds];
-    if (!validViews.includes(selectedView)) {
-      setSelectedView("consensus");
-    }
-  }, [allAlgorithmIds, selectedView]);
-
-  useEffect(() => {
     if (!selectedGene) return;
     if (!networkNodes.some((node) => node.id === selectedGene)) {
       setSelectedGene(null);
@@ -506,7 +456,7 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     setTablePage(1);
-  }, [tableSearch, tableSortDirection, tableSortKey, selectedView, consensusThreshold, topN, isolatedGene, geneSearch]);
+  }, [tableSearch, tableSortDirection, tableSortKey, selectedAlgorithmIds, consensusThreshold, topN, isolatedGene, geneSearch]);
 
   useEffect(() => {
     setTablePage((current) => Math.min(current, totalTablePages));
@@ -534,7 +484,6 @@ export default function ProjectDetailPage() {
       setGroundTruthFilename("");
     }
   };
-
 
   useEffect(() => {
     if (!projectId) return;
@@ -710,7 +659,6 @@ export default function ProjectDetailPage() {
               <div className="flex min-w-max gap-4 pr-32">
                 {(latestJob?.tasks ?? []).map((task) => {
                   const meta = algorithmMetaMap.get(task.algorithm_id);
-                  const hasError = task.status === "Failed";
                   const progressPercent = Math.max(
                     0,
                     Math.min(100, Number(task.progress_percent ?? 0))
@@ -788,7 +736,6 @@ export default function ProjectDetailPage() {
                           </span>
                         )}
                       </div>
-
 
                       <div className="mt-8 flex items-end justify-between gap-3 text-sm text-slate-400">
                         <span>{String(meta?.publicationYear || meta?.publishedYear || meta?.year || "-")}</span>
@@ -1002,18 +949,16 @@ export default function ProjectDetailPage() {
               <h2 className="text-xl font-semibold text-white">Results hub</h2>
             </div>
 
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.02] p-4">
+            <div className="sticky top-[76px] z-[60]">
               <ResultsControlsSection
-                selectedView={selectedView}
-                completedAlgorithmIds={allAlgorithmIds}
-                onChangeView={(value) => {
-                  setSelectedView(value);
+                completedAlgorithmIds={completedAlgorithmIds}
+                selectedAlgorithmIds={selectedAlgorithmIds}
+                onChangeSelectedAlgorithmIds={(value) => {
+                  setSelectedAlgorithmIds(value);
                   setSelectedGene(null);
                   setSelectedEdgeKey(null);
                   setIsolatedGene(null);
                 }}
-                networkLayout={networkLayout}
-                onChangeLayout={setNetworkLayout}
                 topN={topN}
                 maxAvailableTopN={maxAvailableTopN}
                 onChangeTopN={(value) => {
@@ -1021,21 +966,23 @@ export default function ProjectDetailPage() {
                   setTopN(value);
                 }}
                 consensusThreshold={consensusThreshold}
-                maxConsensusThreshold={Math.max(completedAlgorithmIds.length, 1)}
+                maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
                 onChangeConsensusThreshold={setConsensusThreshold}
-                isConsensusView={selectedView === "consensus"}
+                isConsensusView={activeAlgorithmIds.length >= 2}
               />
             </div>
 
-            <div className="w-full">
-              <ResultsSummarySection
-                perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
-                maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
-                completedAlgorithmIds={completedAlgorithmIds}
-                overlapEntries={overlapEntries}
-                maxOverlapCount={maxOverlapCount}
-              />
-            </div>
+            {activeAlgorithmIds.length >= 2 && (
+              <div className="w-full">
+                <ResultsSummarySection
+                  perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
+                  maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
+                  completedAlgorithmIds={activeAlgorithmIds}
+                  overlapEntries={overlapEntries}
+                  maxOverlapCount={maxOverlapCount}
+                />
+              </div>
+            )}
 
             {resultsAvailabilityNotice ? (
               <div className="rounded-[1.75rem] border border-dashed border-white/10 bg-white/[0.03] p-8 text-center">
@@ -1047,8 +994,9 @@ export default function ProjectDetailPage() {
             ) : (
               <>
                 <NetworkVisualizationSection
-                  selectedView={selectedView}
+                  selectedView={activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus"}
                   networkLayout={networkLayout}
+                  setNetworkLayout={setNetworkLayout}
                   networkNodes={networkNodes}
                   filteredNetworkEdges={filteredNetworkEdges}
                   selectedGene={selectedGene}
@@ -1067,10 +1015,10 @@ export default function ProjectDetailPage() {
                   columnMenuRef={columnMenuRef}
                   isColumnMenuOpen={isColumnMenuOpen}
                   setIsColumnMenuOpen={setIsColumnMenuOpen}
-                  completedAlgorithmIds={completedAlgorithmIds}
+                  completedAlgorithmIds={activeAlgorithmIds}
                   visibleAlgorithmColumns={visibleAlgorithmColumns}
                   setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
-                  selectedView={selectedView}
+                  selectedView={activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus"}
                   tableSortKey={tableSortKey}
                   tableSortDirection={tableSortDirection}
                   setTableSortKey={setTableSortKey}

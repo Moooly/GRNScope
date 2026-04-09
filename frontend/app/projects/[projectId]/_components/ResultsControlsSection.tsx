@@ -1,9 +1,9 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+
 type ResultsControlsSectionProps = {
-  selectedView: string;
   completedAlgorithmIds: string[];
-  onChangeView: (value: string) => void;
-  networkLayout: "force" | "hierarchical" | "concentric" | "circular";
-  onChangeLayout: (value: "force" | "hierarchical" | "concentric" | "circular") => void;
+  selectedAlgorithmIds: string[];
+  onChangeSelectedAlgorithmIds: (value: string[]) => void;
   topN: number;
   maxAvailableTopN: number;
   onChangeTopN: (value: number) => void;
@@ -14,11 +14,9 @@ type ResultsControlsSectionProps = {
 };
 
 export default function ResultsControlsSection({
-  selectedView,
   completedAlgorithmIds,
-  onChangeView,
-  networkLayout,
-  onChangeLayout,
+  selectedAlgorithmIds,
+  onChangeSelectedAlgorithmIds,
   topN,
   maxAvailableTopN,
   onChangeTopN,
@@ -27,40 +25,89 @@ export default function ResultsControlsSection({
   onChangeConsensusThreshold,
   isConsensusView,
 }: ResultsControlsSectionProps) {
-  return (
-    <div className="flex flex-wrap items-stretch gap-3">
-      <div className="rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">View</p>
-        <select
-          value={selectedView}
-          onChange={(e) => onChangeView(e.target.value)}
-          className="mt-2 w-[210px] rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none"
-        >
-          <option value="consensus">Consensus network</option>
-          {completedAlgorithmIds.map((algorithmId) => (
-            <option key={algorithmId} value={algorithmId}>
-              {algorithmId}
-            </option>
-          ))}
-        </select>
-      </div>
+  const [isAlgorithmMenuOpen, setIsAlgorithmMenuOpen] = useState(false);
+  const algorithmMenuRef = useRef<HTMLDivElement | null>(null);
 
-      <div className="rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Layout</p>
-        <select
-          value={networkLayout}
-          onChange={(e) =>
-            onChangeLayout(
-              e.target.value as "force" | "hierarchical" | "concentric" | "circular"
-            )
-          }
-          className="mt-2 w-[180px] rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none"
+  const algorithmButtonLabel = useMemo(() => {
+    if (selectedAlgorithmIds.length === 0) return "Choose algorithms";
+    if (selectedAlgorithmIds.length === completedAlgorithmIds.length) return "All algorithms";
+    if (selectedAlgorithmIds.length === 1) return selectedAlgorithmIds[0];
+    return `${selectedAlgorithmIds.length} algorithms selected`;
+  }, [completedAlgorithmIds.length, selectedAlgorithmIds]);
+
+  const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
+
+  const toggleAlgorithm = (algorithmId: string) => {
+    const isSelected = selectedAlgorithmIds.includes(algorithmId);
+    if (isSelected) {
+      if (selectedAlgorithmIds.length === 1) return;
+      onChangeSelectedAlgorithmIds(selectedAlgorithmIds.filter((id) => id !== algorithmId));
+      return;
+    }
+    onChangeSelectedAlgorithmIds([...selectedAlgorithmIds, algorithmId]);
+  };
+
+  useEffect(() => {
+    if (!isAlgorithmMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!algorithmMenuRef.current) return;
+      if (!algorithmMenuRef.current.contains(event.target as Node)) {
+        setIsAlgorithmMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isAlgorithmMenuOpen]);
+
+  return (
+    <div className="flex flex-wrap items-stretch gap-3 rounded-[1.5rem] border border-white/10 bg-slate-950/90 p-3 shadow-[0_18px_50px_rgba(2,6,23,0.45)] backdrop-blur-md">
+      <div
+        ref={algorithmMenuRef}
+        className="relative rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3"
+      >
+        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Algorithms</p>
+        <button
+          type="button"
+          onClick={() => setIsAlgorithmMenuOpen((prev) => !prev)}
+          className="mt-2 flex w-[260px] items-center justify-between rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none"
         >
-          <option value="force">Force-directed</option>
-          <option value="hierarchical">Hierarchical</option>
-          <option value="concentric">Concentric</option>
-          <option value="circular">Circular</option>
-        </select>
+          <span className="truncate">{algorithmButtonLabel}</span>
+          <span className="text-slate-400">▾</span>
+        </button>
+        <p className="mt-2 max-w-[260px] text-xs leading-5 text-slate-500">
+          Select algorithms to control the overlap view, network visualization, and edge table.
+        </p>
+
+        {isAlgorithmMenuOpen && (
+          <div className="absolute left-4 top-[76px] z-30 w-[260px] rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+            <div className="mb-2 px-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              Select one or more algorithms
+            </div>
+            <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+              {completedAlgorithmIds.map((algorithmId) => {
+                const checked = selectedAlgorithmIds.includes(algorithmId);
+                return (
+                  <label
+                    key={algorithmId}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-white hover:bg-white/[0.04]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleAlgorithm(algorithmId)}
+                      className="h-4 w-4 accent-teal-400"
+                    />
+                    <span>{algorithmId}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="min-w-[260px] flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
@@ -71,7 +118,7 @@ export default function ResultsControlsSection({
           </span>
         </div>
         <input
-          key={`${selectedView}-${maxAvailableTopN}`}
+          key={`${selectedAlgorithmIds.join(",")}-${maxAvailableTopN}`}
           type="range"
           min={1}
           max={maxAvailableTopN}
@@ -93,8 +140,8 @@ export default function ResultsControlsSection({
         <input
           type="range"
           min={1}
-          max={maxConsensusThreshold}
-          value={Math.min(consensusThreshold, maxConsensusThreshold)}
+          max={effectiveMaxConsensusThreshold}
+          value={Math.min(consensusThreshold, effectiveMaxConsensusThreshold)}
           onChange={(e) => onChangeConsensusThreshold(Number(e.target.value))}
           disabled={!isConsensusView}
           className="mt-3 w-full accent-teal-400 disabled:opacity-40"
