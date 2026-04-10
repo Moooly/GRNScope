@@ -35,6 +35,13 @@ type NetworkVisualizationSectionProps = {
   setIsolatedGene: (value: string | null) => void;
 };
 
+const layoutOptions = [
+  { value: "force", label: "Force" },
+  { value: "hierarchical", label: "Hierarchical" },
+  { value: "concentric", label: "Concentric" },
+  { value: "circular", label: "Circular" },
+] as const;
+
 export default function NetworkVisualizationSection({
   selectedView,
   networkLayout,
@@ -75,13 +82,9 @@ export default function NetworkVisualizationSection({
         <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6]">
           <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-end">
             <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-300/70 bg-white/85 p-1 shadow-sm backdrop-blur">
-              {([
-                ["force", "Force"],
-                ["hierarchical", "Hierarchical"],
-                ["concentric", "Concentric"],
-                ["circular", "Circular"],
-              ] as const).map(([value, label]) => {
+              {layoutOptions.map(({ value, label }) => {
                 const isActive = networkLayout === value;
+
                 return (
                   <button
                     key={value}
@@ -100,7 +103,6 @@ export default function NetworkVisualizationSection({
             </div>
           </div>
           <NetworkGraph
-            key={`${selectedView}-${networkLayout}`}
             nodes={networkNodes.map((node) => ({
               id: node.id,
               inDegree: node.inDegree,

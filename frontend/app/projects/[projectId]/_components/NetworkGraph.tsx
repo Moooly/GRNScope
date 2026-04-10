@@ -1,3 +1,4 @@
+// REPLACED BY REQUEST
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -41,7 +42,7 @@ export default function NetworkGraph({
   const lastAppliedSignatureRef = useRef<string>("");
   const lastLayoutRef = useRef<NetworkLayoutMode>(layout);
   const lastNodePositionsRef = useRef<PositionMap>({});
-  const positionCacheRef = useRef<Record<string, PositionMap>>({});
+  const layoutPositionCacheRef = useRef<Record<string, PositionMap>>({});
   const onSelectGeneRef = useRef(onSelectGene);
   const onSelectEdgeRef = useRef(onSelectEdge);
 
@@ -52,6 +53,26 @@ export default function NetworkGraph({
     () => buildGraphElements(nodes, edges),
     [nodes, edges]
   );
+
+  const layoutCacheSignature = useMemo(() => {
+    const nodePart = nodes
+      .map((node) => node.id)
+      .sort()
+      .join("|");
+
+    const edgePart = edges
+      .map((edge) => {
+        if (typeof edge.id === "string" && edge.id.length > 0) {
+          return edge.id;
+        }
+
+        return `${edge.source}->${edge.target}`;
+      })
+      .sort()
+      .join("|");
+
+    return `${nodePart}__${edgePart}`;
+  }, [nodes, edges]);
 
   const graphCounts = useMemo(
     () => ({
@@ -75,6 +96,36 @@ export default function NetworkGraph({
     () => buildCircularPositions(nodes),
     [nodes]
   );
+
+  const getLayoutCacheKey = (layoutMode: NetworkLayoutMode, signature: string) =>
+    `${layoutMode}::${signature}`;
+
+  const getLayoutOptions = (
+    layoutMode: NetworkLayoutMode,
+    signature: string,
+    allowRandomizeOnFirstForceRun = false
+  ) => {
+    const baseConfig = getLayoutConfig(
+      layoutMode,
+      graphCounts,
+      hierarchicalPositions,
+      concentricPositions,
+      circularPositions
+    ) as Record<string, unknown>;
+
+    if (layoutMode !== "force") {
+      return baseConfig;
+    }
+
+    const hasCachedForcePositions = Boolean(
+      layoutPositionCacheRef.current[getLayoutCacheKey(layoutMode, signature)]
+    );
+
+    return {
+      ...baseConfig,
+      randomize: allowRandomizeOnFirstForceRun && !hasCachedForcePositions,
+    };
+  };
 
   useEffect(() => {
     onSelectGeneRef.current = onSelectGene;
@@ -178,20 +229,18 @@ export default function NetworkGraph({
         cy.resize();
 
         const initialLayout = cy.layout({
-          ...getLayoutConfig(
-            layout,
-            graphCounts,
-            hierarchicalPositions,
-            concentricPositions,
-            circularPositions
-          ),
+          ...getLayoutOptions(layout, layoutCacheSignature, true),
           fit: false,
         } as any);
 
         activeLayoutRef.current = initialLayout;
 
         initialLayout.on("layoutstop", () => {
-          if (activeLayoutRef.current !== initialLayout || !cyRef.current || cy.destroyed()) {
+          if (
+            activeLayoutRef.current !== initialLayout ||
+            !cyRef.current ||
+            cy.destroyed()
+          ) {
             return;
           }
 
@@ -209,7 +258,9 @@ export default function NetworkGraph({
             ...initialPositions,
           };
 
-          positionCacheRef.current[elementsSignature] = initialPositions;
+          layoutPositionCacheRef.current[
+            getLayoutCacheKey(layout, layoutCacheSignature)
+          ] = initialPositions;
         });
 
         if (!cy.destroyed()) {
@@ -268,13 +319,20 @@ export default function NetworkGraph({
       ...previousPositions,
     };
 
+    const layoutCacheKey = getLayoutCacheKey(layout, layoutCacheSignature);
+    const cachedPositionsForLayout =
+      layoutPositionCacheRef.current[layoutCacheKey];
+
     const cachedPositionsForSignature =
-      positionCacheRef.current[elementsSignature] ?? preservedPositions;
+      cachedPositionsForLayout ?? preservedPositions;
 
     const nextNodeIds = nodes.map((node) => node.id);
     const hasCompleteSavedPositions =
       nextNodeIds.length > 0 &&
       nextNodeIds.every((id) => Boolean(cachedPositionsForSignature[id]));
+
+    const canRestoreExactLayout =
+      hasCompleteSavedPositions && Boolean(cachedPositionsForLayout);
 
     const elementsWithPositions = elements.map((element) => {
       const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
@@ -300,17 +358,11 @@ export default function NetworkGraph({
     cy.style(getNetworkGraphStylesheet() as any);
     cy.resize();
 
-    if (layoutChanged || !hasCompleteSavedPositions) {
+    if ((layoutChanged && !canRestoreExactLayout) || !hasCompleteSavedPositions) {
       cy.endBatch();
 
       const rerunLayout = cy.layout(
-        getLayoutConfig(
-          layout,
-          graphCounts,
-          hierarchicalPositions,
-          concentricPositions,
-          circularPositions
-        ) as any
+        getLayoutOptions(layout, layoutCacheSignature, true) as any
       );
 
       activeLayoutRef.current = rerunLayout;
@@ -334,7 +386,7 @@ export default function NetworkGraph({
           ...nextPositions,
         };
 
-        positionCacheRef.current[elementsSignature] = nextPositions;
+        layoutPositionCacheRef.current[layoutCacheKey] = nextPositions;
         lastAppliedSignatureRef.current = elementsSignature;
         lastLayoutRef.current = layout;
       });
@@ -369,7 +421,7 @@ export default function NetworkGraph({
       ...nextPositions,
     };
 
-    positionCacheRef.current[elementsSignature] = nextPositions;
+    layoutPositionCacheRef.current[layoutCacheKey] = nextPositions;
     lastAppliedSignatureRef.current = elementsSignature;
     lastLayoutRef.current = layout;
   }, [
@@ -380,6 +432,7 @@ export default function NetworkGraph({
     graphCounts,
     hierarchicalPositions,
     layout,
+    layoutCacheSignature,
     nodes,
   ]);
 

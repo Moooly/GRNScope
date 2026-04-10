@@ -268,6 +268,7 @@ export function getLayoutConfig(
   return {
     name: "cose-bilkent",
     animate: false,
+    randomize: false,
     fit: true,
     padding: 74,
     nodeRepulsion: 26000 * densityFactor,
