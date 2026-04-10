@@ -45,7 +45,6 @@ export default function ProjectDetailPage() {
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
-  const [isTableFullscreen, setIsTableFullscreen] = useState(false);
   const [visibleAlgorithmColumns, setVisibleAlgorithmColumns] = useState<string[]>([]);
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
   const [tablePage, setTablePage] = useState(1);
@@ -874,6 +873,23 @@ export default function ProjectDetailPage() {
                         <span>{String(meta?.publicationYear || meta?.publishedYear || meta?.year || "-")}</span>
                         <span className="text-right text-xs text-slate-500">{meta?.journal ?? ""}</span>
                       </div>
+
+                      {task.status === "Completed" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!projectId) return;
+                            openDownloadModal(
+                              `${task.algorithm_id} raw result`,
+                              `${API_BASE_URL}/api/projects/${projectId}/download/result/${task.algorithm_id}`,
+                              `${task.algorithm_id}-raw-ranked-edges.csv`
+                            );
+                          }}
+                          className="mt-4 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/[0.07]"
+                        >
+                          Download raw result
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1146,8 +1162,6 @@ export default function ProjectDetailPage() {
                 />
 
                 <EdgeAnalysisTableSection
-                  isTableFullscreen={isTableFullscreen}
-                  setIsTableFullscreen={setIsTableFullscreen}
                   tableSearch={tableSearch}
                   setTableSearch={setTableSearch}
                   onExportEdgeList={handleExportEdgeList}
