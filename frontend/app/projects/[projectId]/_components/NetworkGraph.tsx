@@ -415,11 +415,12 @@ export default function NetworkGraph({
 
         activeLayoutRef.current = null;
 
-        if (cachedViewportForLayout) {
+        if (layoutChanged && cachedViewportForLayout) {
           cy.zoom(cachedViewportForLayout.zoom);
           cy.pan(cachedViewportForLayout.pan);
         } else {
-          cy.fit(cy.elements(), 52);
+          cy.zoom(existingViewport.zoom);
+          cy.pan(existingViewport.pan);
         }
 
         const nextPositions: PositionMap = {};
@@ -450,13 +451,12 @@ export default function NetworkGraph({
       }
     });
 
-    if (cachedViewportForLayout) {
+    if (layoutChanged && cachedViewportForLayout) {
       cy.zoom(cachedViewportForLayout.zoom);
       cy.pan(cachedViewportForLayout.pan);
     } else {
-      cy.endBatch();
-      cy.fit(cy.elements(), 52);
-      cy.startBatch();
+      cy.zoom(existingViewport.zoom);
+      cy.pan(existingViewport.pan);
     }
     cy.endBatch();
 

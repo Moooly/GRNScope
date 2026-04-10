@@ -198,6 +198,31 @@ export default function ProjectDetailPage() {
     });
   }, [activeEdges, geneSearch, isolatedGene]);
 
+  const stableTFGeneIds = useMemo(() => {
+    const metadataWithTFs = metadata as
+      | (MetadataManifest & {
+          known_tf_genes?: string[];
+          known_tf_gene_names?: string[];
+        })
+      | null;
+
+    const metadataTFList =
+      (Array.isArray(metadataWithTFs?.known_tf_genes) ? metadataWithTFs.known_tf_genes : null) ??
+      (Array.isArray(metadataWithTFs?.known_tf_gene_names)
+        ? metadataWithTFs.known_tf_gene_names
+        : null);
+
+    if (!metadataTFList || metadataTFList.length === 0) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      metadataTFList
+        .map((gene) => String(gene).trim().toUpperCase())
+        .filter((gene) => gene.length > 0)
+    );
+  }, [metadata]);
+
   const networkNodes = useMemo(() => {
     const nodes = new Map<string, NodeInfo>();
 
@@ -208,7 +233,7 @@ export default function ProjectDetailPage() {
           inDegree: 0,
           outDegree: 0,
           degree: 0,
-          isTF: true,
+          isTF: stableTFGeneIds.has(edge.source.toUpperCase()),
           topRegulators: [],
           topTargets: [],
         });
@@ -219,13 +244,15 @@ export default function ProjectDetailPage() {
           inDegree: 0,
           outDegree: 0,
           degree: 0,
-          isTF: false,
+          isTF: stableTFGeneIds.has(edge.target.toUpperCase()),
           topRegulators: [],
           topTargets: [],
         });
       }
       const source = nodes.get(edge.source)!;
       const target = nodes.get(edge.target)!;
+      source.isTF = stableTFGeneIds.has(edge.source.toUpperCase());
+      target.isTF = stableTFGeneIds.has(edge.target.toUpperCase());
       source.outDegree += 1;
       source.degree += 1;
       target.inDegree += 1;
@@ -243,7 +270,7 @@ export default function ProjectDetailPage() {
     return Array.from(nodes.values())
       .filter((node) => visibleNodeIds.has(node.id))
       .sort((a, b) => b.degree - a.degree);
-  }, [activeEdges, filteredNetworkEdges]);
+  }, [activeEdges, filteredNetworkEdges, stableTFGeneIds]);
 
   const selectedNode = useMemo(
     () => networkNodes.find((node) => node.id === selectedGene) ?? null,

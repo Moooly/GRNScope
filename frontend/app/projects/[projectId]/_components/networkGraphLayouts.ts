@@ -244,7 +244,7 @@ export function getLayoutConfig(
     return {
       name: "preset",
       animate: false,
-      fit: true,
+      fit: false,
       padding: 120,
       positions: hierarchicalPositions ?? {},
     } as const;
@@ -254,7 +254,7 @@ export function getLayoutConfig(
     return {
       name: "preset",
       animate: false,
-      fit: true,
+      fit: false,
       padding: 128,
       positions: concentricPositions ?? {},
     } as const;
@@ -264,7 +264,7 @@ export function getLayoutConfig(
     return {
       name: "preset",
       animate: false,
-      fit: true,
+      fit: false,
       padding: 132,
       positions: circularPositions ?? {},
     } as const;
@@ -279,7 +279,7 @@ export function getLayoutConfig(
     name: "cose-bilkent",
     animate: false,
     randomize: false,
-    fit: true,
+    fit: false,
     padding: 74,
     nodeRepulsion: 26000 * densityFactor,
     idealEdgeLength: 185 * densityFactor,

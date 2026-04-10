@@ -24,6 +24,26 @@ from ..services.job_service import launch_independent_algorithm_tasks
 
 router = APIRouter()
 
+
+def load_known_tf_gene_names() -> list[str]:
+    candidate_paths = [
+        PROJECTS_ROOT.parent / "data" / "known_tf_gene_names.txt",
+        PROJECTS_ROOT.parent / "reference" / "known_tf_gene_names.txt",
+        PROJECTS_ROOT.parent / "data" / "human_tf_gene_names.txt",
+        PROJECTS_ROOT.parent / "reference" / "human_tf_gene_names.txt",
+    ]
+
+    for path in candidate_paths:
+        if path.exists() and path.is_file():
+            return [
+                line.strip()
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+    return []
+
+
 @router.post("/api/projects/create-from-temp", response_model=CreateProjectResponse)
 async def create_project_from_temp(
     background_tasks: BackgroundTasks,
@@ -59,6 +79,7 @@ async def create_project_from_temp(
             upload_metadata = json.loads(
                 upload_metadata_path.read_text(encoding="utf-8")
             )
+        known_tf_gene_names = load_known_tf_gene_names()
 
         job_manifest = {
             "job_id": job_id,
@@ -107,6 +128,7 @@ async def create_project_from_temp(
             "cell_count": upload_metadata.get("cell_count"),
             "gene_names": upload_metadata.get("gene_names", []),
             "cell_names": upload_metadata.get("cell_names", []),
+            "known_tf_gene_names": known_tf_gene_names,
             "has_pseudotime": upload_metadata.get("has_pseudotime"),
             "pseudotime_count": upload_metadata.get("pseudotime_count"),
             "preprocessing": {

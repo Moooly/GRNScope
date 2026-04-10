@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
+from math import fsum
 from pathlib import Path
 
 from ..config import (
@@ -40,6 +41,155 @@ def resolve_algorithm_image(algorithm_id: str) -> str:
     if not image_name:
         raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}")
     return image_name
+
+
+def parse_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def parse_positive_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def detect_csv_dialect(raw_text: str) -> csv.Dialect | type[csv.Dialect]:
+    sample = raw_text[:4096]
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",\t;")
+    except csv.Error:
+        first_line = raw_text.splitlines()[0] if raw_text.splitlines() else ""
+        if "\t" in first_line:
+            return csv.excel_tab
+        if ";" in first_line:
+            class SemicolonDialect(csv.excel):
+                delimiter = ";"
+            return SemicolonDialect
+        return csv.excel
+
+
+def resolve_known_tf_list_path(project_manifest: dict) -> Path | None:
+    explicit_path = project_manifest.get("known_tf_list_path") or os.environ.get("KNOWN_TF_LIST_PATH")
+    candidate_paths: list[Path] = []
+    if explicit_path:
+        candidate_paths.append(Path(str(explicit_path)))
+
+    project_root = PROJECTS_ROOT.parent
+    candidate_paths.extend(
+        [
+            project_root / "reference" / "human_tf_gene_names.txt",
+            project_root / "reference" / "known_tf_gene_names.txt",
+            project_root / "data" / "human_tf_gene_names.txt",
+            project_root / "data" / "known_tf_gene_names.txt",
+        ]
+    )
+
+    for candidate in candidate_paths:
+        resolved = candidate if candidate.is_absolute() else candidate.resolve()
+        if resolved.exists() and resolved.is_file():
+            return resolved
+    return None
+
+
+def load_known_tf_genes(project_manifest: dict) -> set[str]:
+    tf_list_path = resolve_known_tf_list_path(project_manifest)
+    if not tf_list_path:
+        return set()
+
+    return {
+        line.strip()
+        for line in tf_list_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+
+
+def compute_row_variance(values: list[float]) -> float:
+    if len(values) <= 1:
+        return 0.0
+    mean_value = fsum(values) / len(values)
+    return fsum((value - mean_value) ** 2 for value in values) / len(values)
+
+
+def preprocess_expression_matrix(
+    source_expression: Path,
+    destination_expression: Path,
+    project_manifest: dict,
+) -> None:
+    raw_text = source_expression.read_text(encoding="utf-8")
+    if not raw_text.strip():
+        raise ValueError("Expression matrix file is empty.")
+
+    dialect = detect_csv_dialect(raw_text)
+    rows = list(csv.reader(io.StringIO(raw_text), dialect=dialect))
+    if not rows:
+        raise ValueError("Expression matrix file has no rows.")
+
+    header = rows[0]
+    data_rows = rows[1:]
+    if not data_rows:
+        destination_expression.write_text(raw_text, encoding="utf-8")
+        return
+
+    top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
+    include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
+
+    tf_genes = load_known_tf_genes(project_manifest) if include_all_tfs else set()
+
+    scored_rows: list[tuple[float, int, list[str], str]] = []
+    for index, row in enumerate(data_rows):
+        if not row:
+            continue
+
+        gene_name = str(row[0]).strip()
+        numeric_values: list[float] = []
+        for value in row[1:]:
+            try:
+                numeric_values.append(float(str(value).strip()))
+            except (TypeError, ValueError):
+                continue
+
+        variance = compute_row_variance(numeric_values)
+        scored_rows.append((variance, index, row, gene_name))
+
+    if not scored_rows:
+        destination_expression.write_text(raw_text, encoding="utf-8")
+        return
+
+    retained_indices: set[int]
+    if top_variable_genes is None or top_variable_genes >= len(scored_rows):
+        retained_indices = {index for _, index, _, _ in scored_rows}
+    else:
+        sorted_rows = sorted(scored_rows, key=lambda item: (-item[0], item[1]))
+        retained_indices = {index for _, index, _, _ in sorted_rows[:top_variable_genes]}
+
+    if include_all_tfs and tf_genes:
+        for _, index, _, gene_name in scored_rows:
+            if gene_name in tf_genes:
+                retained_indices.add(index)
+
+    filtered_rows = [header]
+    for index, row in enumerate(data_rows):
+        if index in retained_indices:
+            filtered_rows.append(row)
+
+    output_buffer = io.StringIO()
+    writer = csv.writer(
+        output_buffer,
+        delimiter=getattr(dialect, "delimiter", ","),
+        quotechar=getattr(dialect, "quotechar", '"'),
+        lineterminator="\n",
+    )
+    writer.writerows(filtered_rows)
+    destination_expression.write_text(output_buffer.getvalue(), encoding="utf-8")
+
 
 def extract_user_friendly_beeline_error(stderr_text: str, algorithm_id: str) -> str:
     if not stderr_text or not stderr_text.strip():
@@ -137,7 +287,11 @@ def prepare_beeline_runtime(
     if not source_expression.exists():
         raise FileNotFoundError("Expression matrix file not found on disk.")
 
-    shutil.copy2(source_expression, run_dir / "ExpressionData.csv")
+    preprocess_expression_matrix(
+        source_expression=source_expression,
+        destination_expression=run_dir / "ExpressionData.csv",
+        project_manifest=project_manifest,
+    )
 
     if pseudotime_path:
         source_pseudotime = Path(pseudotime_path)
