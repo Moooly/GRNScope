@@ -32,6 +32,7 @@ type NetworkVisualizationSectionProps = {
   setSelectedGene: (value: string | null) => void;
   setSelectedEdgeKey: (value: string | null) => void;
   selectedNode: NodeInfo | null;
+  isolatedGene: string | null;
   setIsolatedGene: (value: string | null) => void;
 };
 
@@ -53,6 +54,7 @@ export default function NetworkVisualizationSection({
   setSelectedGene,
   setSelectedEdgeKey,
   selectedNode,
+  isolatedGene,
   setIsolatedGene,
 }: NetworkVisualizationSectionProps) {
   return (
@@ -202,27 +204,52 @@ export default function NetworkVisualizationSection({
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedGene(selectedNode.id);
-                    setSelectedEdgeKey(null);
-                  }}
-                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-teal-300/35 hover:bg-teal-300/10 hover:text-teal-50"
-                >
-                  Isolate Sub-network
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsolatedGene(null);
-                    setSelectedEdgeKey(null);
-                  }}
-                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-white/20 hover:bg-white/[0.07]"
-                >
-                  Reset View
-                </button>
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {isolatedGene ? (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/25 bg-teal-400/10 px-3 py-1.5 text-xs font-medium text-teal-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                      <span className="h-2 w-2 rounded-full bg-teal-300 shadow-[0_0_0_4px_rgba(45,212,191,0.14)]" />
+                      Isolating sub-network for <span className="font-semibold text-white">{isolatedGene}</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-300">
+                      <span className="h-2 w-2 rounded-full bg-slate-500" />
+                      Full network view
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-nowrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsolatedGene(selectedNode.id);
+                      setSelectedEdgeKey(null);
+                    }}
+                    className={`inline-flex flex-1 whitespace-nowrap items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      isolatedGene === selectedNode.id
+                        ? "border border-teal-300/35 bg-teal-400/14 text-teal-50 shadow-[0_12px_28px_rgba(13,148,136,0.18),inset_0_1px_0_rgba(255,255,255,0.08)]"
+                        : "border border-white/10 bg-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-teal-300/35 hover:bg-teal-300/10 hover:text-teal-50"
+                    }`}
+                  >
+                    {isolatedGene === selectedNode.id ? "Currently Isolating" : "Isolate Sub-network"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsolatedGene(null);
+                      setSelectedEdgeKey(null);
+                    }}
+                    disabled={!isolatedGene}
+                    className={`inline-flex flex-1 items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      isolatedGene
+                        ? "border border-slate-300/18 bg-slate-900/55 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-white/20 hover:bg-slate-800/70"
+                        : "cursor-not-allowed border border-white/8 bg-white/[0.03] text-slate-500"
+                    }`}
+                  >
+                    Reset View
+                  </button>
+                </div>
               </div>
             </>
           ) : (

@@ -1004,6 +1004,7 @@ export default function ProjectDetailPage() {
                   setSelectedGene={setSelectedGene}
                   setSelectedEdgeKey={setSelectedEdgeKey}
                   selectedNode={selectedNode}
+                  isolatedGene={isolatedGene}
                   setIsolatedGene={setIsolatedGene}
                 />
 
