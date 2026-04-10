@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+
 type AggregatedEdge = {
   key: string;
   source: string;
@@ -14,6 +16,7 @@ type EdgeAnalysisTableSectionProps = {
   setIsTableFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   tableSearch: string;
   setTableSearch: (value: string) => void;
+  onExportEdgeList: () => void;
   columnMenuRef?: React.RefObject<HTMLDivElement | null>;
   isColumnMenuOpen?: boolean;
   setIsColumnMenuOpen?: React.Dispatch<React.SetStateAction<boolean>>;
@@ -42,6 +45,7 @@ export default function EdgeAnalysisTableSection({
   setIsTableFullscreen,
   tableSearch,
   setTableSearch,
+  onExportEdgeList,
   columnMenuRef,
   isColumnMenuOpen,
   setIsColumnMenuOpen,
@@ -67,10 +71,12 @@ export default function EdgeAnalysisTableSection({
   void setIsColumnMenuOpen;
   void visibleAlgorithmColumns;
   void setVisibleAlgorithmColumns;
-  return (
+  const tableContent = (
     <div
-      className={`mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5 ${
-        isTableFullscreen ? "fixed inset-6 z-[65] overflow-auto" : ""
+      className={`rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5 ${
+        isTableFullscreen
+          ? "h-[calc(100vh-3rem)] w-[calc(100vw-3rem)] overflow-auto bg-slate-950/95 shadow-[0_24px_80px_rgba(15,23,42,0.45)]"
+          : "mt-6"
       }`}
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -84,6 +90,14 @@ export default function EdgeAnalysisTableSection({
             aria-label="Search gene name"
             className="w-full min-w-0 rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 sm:min-w-[260px] lg:w-[320px]"
           />
+
+          <button
+            type="button"
+            onClick={onExportEdgeList}
+            className="w-full rounded-2xl border border-teal-300/20 bg-teal-400/10 px-4 py-2 text-sm font-medium text-teal-50 transition hover:border-teal-300/35 hover:bg-teal-400/16 sm:w-auto"
+          >
+            Export CSV
+          </button>
 
           <button
             type="button"
@@ -234,4 +248,15 @@ export default function EdgeAnalysisTableSection({
       </div>
     </div>
   );
+
+  if (isTableFullscreen && typeof document !== "undefined") {
+    return createPortal(
+      <div className="fixed inset-0 z-[120] bg-slate-950/55 p-6 backdrop-blur-sm">
+        {tableContent}
+      </div>,
+      document.body
+    );
+  }
+
+  return tableContent;
 }

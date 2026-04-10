@@ -495,6 +495,66 @@ export default function ProjectDetailPage() {
     [activeAlgorithmIds, isolatedGene, networkLayout, projectId]
   );
 
+  const handleExportEdgeList = useCallback(() => {
+    const escapeCsvValue = (value: string | number) => {
+      const stringValue = String(value);
+      if (/[",\n]/.test(stringValue)) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    const selectedView = activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus";
+
+    const headerColumns = [
+      selectedView === "consensus" ? "Consensus Rank" : "Rank",
+      "Source Gene",
+      "Target Gene",
+      "Consensus Count",
+      selectedView === "consensus" ? "Consensus Score" : "Score",
+      ...activeAlgorithmIds,
+      "Supporting Algorithms",
+    ];
+
+    const lines = [
+      headerColumns.join(","),
+      ...sortedTableRows.map((edge) => {
+        const row = [
+          edge.rank,
+          edge.source,
+          edge.target,
+          edge.count,
+          edge.score.toFixed(3),
+          ...activeAlgorithmIds.map((algorithmId) =>
+            edge.perAlgorithmScores[algorithmId] !== undefined
+              ? edge.perAlgorithmScores[algorithmId].toFixed(3)
+              : ""
+          ),
+          edge.supportingAlgorithms.join("; "),
+        ];
+
+        return row.map(escapeCsvValue).join(",");
+      }),
+    ];
+
+    const csvContent = lines.join("\n");
+    const searchLabel =
+      tableSearch.trim().length > 0
+        ? `-search-${tableSearch.trim().replace(/\s+/g, "-")}`
+        : "";
+    const filename = `${projectId ?? "project"}-${selectedView}-edge-list${searchLabel}.csv`;
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }, [activeAlgorithmIds, projectId, sortedTableRows, tableSearch]);
+
   useEffect(() => {
     setVisibleAlgorithmColumns(activeAlgorithmIds);
     setConsensusThreshold((current) => clamp(current, 1, Math.max(activeAlgorithmIds.length, 1)));
@@ -1090,6 +1150,7 @@ export default function ProjectDetailPage() {
                   setIsTableFullscreen={setIsTableFullscreen}
                   tableSearch={tableSearch}
                   setTableSearch={setTableSearch}
+                  onExportEdgeList={handleExportEdgeList}
                   columnMenuRef={columnMenuRef}
                   isColumnMenuOpen={isColumnMenuOpen}
                   setIsColumnMenuOpen={setIsColumnMenuOpen}
