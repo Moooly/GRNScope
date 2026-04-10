@@ -43,8 +43,17 @@ export default function NetworkGraph({
   const lastLayoutRef = useRef<NetworkLayoutMode>(layout);
   const lastNodePositionsRef = useRef<PositionMap>({});
   const layoutPositionCacheRef = useRef<Record<string, PositionMap>>({});
+  const layoutViewportCacheRef = useRef<
+    Record<string, { zoom: number; pan: { x: number; y: number } }>
+  >({});
   const onSelectGeneRef = useRef(onSelectGene);
   const onSelectEdgeRef = useRef(onSelectEdge);
+  const cacheViewportForKey = (cacheKey: string, cy: Core) => {
+    layoutViewportCacheRef.current[cacheKey] = {
+      zoom: cy.zoom(),
+      pan: { ...cy.pan() },
+    };
+  };
 
   const [edgeTooltip, setEdgeTooltip] = useState<EdgeTooltipState | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
@@ -262,9 +271,9 @@ export default function NetworkGraph({
             ...initialPositions,
           };
 
-          layoutPositionCacheRef.current[
-            getLayoutCacheKey(layout, layoutCacheSignature)
-          ] = initialPositions;
+          const initialCacheKey = getLayoutCacheKey(layout, layoutCacheSignature);
+          layoutPositionCacheRef.current[initialCacheKey] = initialPositions;
+          cacheViewportForKey(initialCacheKey, cy);
         });
 
         if (!cy.destroyed()) {
@@ -326,6 +335,8 @@ export default function NetworkGraph({
     const layoutCacheKey = getLayoutCacheKey(layout, layoutCacheSignature);
     const cachedPositionsForLayout =
       layoutPositionCacheRef.current[layoutCacheKey];
+    const cachedViewportForLayout =
+      layoutViewportCacheRef.current[layoutCacheKey];
 
     const cachedPositionsForSignature =
       cachedPositionsForLayout ?? preservedPositions;
@@ -377,8 +388,13 @@ export default function NetworkGraph({
         }
 
         activeLayoutRef.current = null;
-        cy.zoom(existingViewport.zoom);
-        cy.pan(existingViewport.pan);
+
+        if (cachedViewportForLayout) {
+          cy.zoom(cachedViewportForLayout.zoom);
+          cy.pan(cachedViewportForLayout.pan);
+        } else {
+          cy.fit(cy.elements(), 52);
+        }
 
         const nextPositions: PositionMap = {};
         cy.nodes().forEach((node) => {
@@ -391,6 +407,7 @@ export default function NetworkGraph({
         };
 
         layoutPositionCacheRef.current[layoutCacheKey] = nextPositions;
+        cacheViewportForKey(layoutCacheKey, cy);
         lastAppliedSignatureRef.current = elementsSignature;
         lastLayoutRef.current = layout;
       });
@@ -407,8 +424,14 @@ export default function NetworkGraph({
       }
     });
 
-    cy.zoom(existingViewport.zoom);
-    cy.pan(existingViewport.pan);
+    if (cachedViewportForLayout) {
+      cy.zoom(cachedViewportForLayout.zoom);
+      cy.pan(cachedViewportForLayout.pan);
+    } else {
+      cy.endBatch();
+      cy.fit(cy.elements(), 52);
+      cy.startBatch();
+    }
     cy.endBatch();
 
     cy.nodes().forEach((node) => {
@@ -426,6 +449,7 @@ export default function NetworkGraph({
     };
 
     layoutPositionCacheRef.current[layoutCacheKey] = nextPositions;
+    cacheViewportForKey(layoutCacheKey, cy);
     lastAppliedSignatureRef.current = elementsSignature;
     lastLayoutRef.current = layout;
   }, [
