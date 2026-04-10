@@ -3,258 +3,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, {
   type Core,
-  type ElementDefinition,
   type Layouts,
 } from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
+import {
+  buildCircularPositions,
+  buildConcentricPositions,
+  buildGraphElements,
+  buildHierarchicalPositions,
+  getLayoutConfig,
+} from "./networkGraphLayouts";
+import { getNetworkGraphStylesheet } from "./networkGraphStyles";
+import type {
+  EdgeTooltipState,
+  NetworkGraphProps,
+  NetworkLayoutMode,
+  PositionMap,
+} from "./networkGraphTypes";
 
 cytoscape.use(coseBilkent);
-
-type NetworkNode = {
-  id: string;
-  inDegree: number;
-  outDegree: number;
-  degree: number;
-  isTF: boolean;
-};
-
-type NetworkEdge = {
-  key: string;
-  source: string;
-  target: string;
-  score: number;
-  count: number;
-  rank: number;
-  supportingAlgorithms: string[];
-};
-
-type NetworkGraphProps = {
-  nodes: NetworkNode[];
-  edges: NetworkEdge[];
-  selectedGene: string | null;
-  selectedEdgeKey: string | null;
-  layout: "force" | "hierarchical" | "concentric" | "circular";
-  onSelectGene: (geneId: string | null) => void;
-  onSelectEdge: (edgeKey: string | null) => void;
-};
-
-type EdgeTooltipState = {
-  x: number;
-  y: number;
-  source: string;
-  target: string;
-  score: number;
-  rank: number;
-  supportingAlgorithms: string[];
-};
-
-function getLayoutConfig(
-  layout: NetworkGraphProps["layout"],
-  nodeCount: number,
-  edgeCount: number
-) {
-  if (layout === "hierarchical") {
-    return {
-      name: "breadthfirst",
-      directed: true,
-      spacingFactor: 1.32,
-      animate: false,
-      padding: 64,
-      circle: false,
-      grid: false,
-    } as const;
-  }
-
-  if (layout === "concentric") {
-    return {
-      name: "concentric",
-      animate: false,
-      minNodeSpacing: 42,
-      padding: 60,
-      concentric: (node: cytoscape.NodeSingular) => node.data("degree") || 1,
-      levelWidth: () => 2,
-      startAngle: (-Math.PI * 3) / 4,
-      sweep: undefined,
-      clockwise: true,
-    } as const;
-  }
-
-  if (layout === "circular") {
-    return {
-      name: "circle",
-      animate: false,
-      padding: 60,
-      spacingFactor: 1.18,
-      startAngle: (-Math.PI * 3) / 4,
-      clockwise: true,
-    } as const;
-  }
-
-  const densityFactor = Math.max(1, Math.min(2.2, edgeCount / Math.max(nodeCount, 1) / 2));
-
-  return {
-    name: "cose-bilkent",
-    animate: false,
-    fit: true,
-    padding: 74,
-    nodeRepulsion: 26000 * densityFactor,
-    idealEdgeLength: 185 * densityFactor,
-    edgeElasticity: 0.06,
-    nestingFactor: 1,
-    gravity: 0.14,
-    gravityRangeCompound: 1.25,
-    numIter: 2600,
-    tile: true,
-  } as const;
-}
-
-function getStylesheet() {
-  return [
-    {
-      selector: "node",
-      style: {
-        label: "data(label)",
-        color: "#f8fafc",
-        "font-size": 11,
-        "font-weight": 700,
-        "text-wrap": "none",
-        "text-max-width": 96,
-        "text-valign": "center",
-        "text-halign": "center",
-        "text-outline-width": 3,
-        "text-outline-color": "#0f172a",
-        "min-zoomed-font-size": 9,
-        width: "mapData(degree, 1, 20, 24, 78)",
-        height: "mapData(degree, 1, 20, 24, 78)",
-        "overlay-opacity": 0,
-        "border-width": 2,
-        "border-opacity": 0.95,
-        "background-opacity": 0.97,
-        "shadow-blur": 18,
-        "shadow-opacity": 0.2,
-        "shadow-offset-x": 0,
-        "shadow-offset-y": 8,
-        "shadow-color": "#0f172a",
-        "text-margin-y": 0,
-      },
-    },
-    {
-      selector: 'node[isTF = 1]',
-      style: {
-        shape: "diamond",
-        "background-color": "#14b8a6",
-        "border-width": 3,
-        "border-color": "#0f766e",
-      },
-    },
-    {
-      selector: 'node[isTF = 0]',
-      style: {
-        shape: "ellipse",
-        "background-color": "#64748b",
-        "border-width": 3,
-        "border-color": "#334155",
-      },
-    },
-    {
-      selector: 'node[degree >= 8]',
-      style: {
-        "font-size": 12,
-      },
-    },
-    {
-      selector: 'node[degree < 3]',
-      style: {
-        "font-size": 9,
-      },
-    },
-    {
-      selector: "edge",
-      style: {
-        width: "mapData(score, 0, 1, 0.9, 3.8)",
-        "line-color": "#9fb1c5",
-        opacity: 0.28,
-        "curve-style": "bezier",
-        "source-endpoint": "outside-to-node",
-        "target-endpoint": "outside-to-node",
-        "line-cap": "round",
-        "target-arrow-shape": "triangle",
-        "target-arrow-color": "#9fb1c5",
-        "arrow-scale": 0.72,
-        "overlay-opacity": 0,
-        "z-index": 1,
-      },
-    },
-    {
-      selector: 'edge[supportRatio >= 0.25]',
-      style: {
-        "line-color": "#94a3b8",
-        "target-arrow-color": "#94a3b8",
-        opacity: 0.34,
-      },
-    },
-    {
-      selector: 'edge[supportRatio >= 0.5]',
-      style: {
-        "line-color": "#5eead4",
-        "target-arrow-color": "#5eead4",
-        opacity: 0.46,
-      },
-    },
-    {
-      selector: 'edge[supportRatio >= 0.75]',
-      style: {
-        "line-color": "#2dd4bf",
-        "target-arrow-color": "#2dd4bf",
-        opacity: 0.58,
-      },
-    },
-    {
-      selector: 'edge[supportRatio >= 0.99]',
-      style: {
-        "line-color": "#0f766e",
-        "target-arrow-color": "#0f766e",
-        opacity: 0.72,
-      },
-    },
-    {
-      selector: "node:selected",
-      style: {
-        "border-width": 5,
-        "border-color": "#2563eb",
-        "shadow-blur": 28,
-        "shadow-opacity": 0.32,
-        "shadow-color": "#60a5fa",
-      },
-    },
-    {
-      selector: "edge:selected",
-      style: {
-        width: 5.8,
-        "line-color": "#2563eb",
-        "target-arrow-color": "#2563eb",
-        opacity: 1,
-        "z-index": 12,
-        "underlay-color": "rgba(37, 99, 235, 0.18)",
-        "underlay-padding": 4,
-        "underlay-opacity": 1,
-      },
-    },
-    {
-      selector: "edge.hovered",
-      style: {
-        width: 6.6,
-        "line-color": "#14b8a6",
-        "target-arrow-color": "#14b8a6",
-        opacity: 0.96,
-        "z-index": 11,
-        "underlay-color": "rgba(20, 184, 166, 0.2)",
-        "underlay-padding": 4,
-        "underlay-opacity": 1,
-      },
-    },
-  ];
-}
 
 export default function NetworkGraph({
   nodes,
@@ -270,62 +37,19 @@ export default function NetworkGraph({
   const activeLayoutRef = useRef<Layouts | null>(null);
   const outerRafRef = useRef<number | null>(null);
   const innerRafRef = useRef<number | null>(null);
+
   const lastAppliedSignatureRef = useRef<string>("");
-  const lastLayoutRef = useRef<NetworkGraphProps["layout"]>(layout);
-  const lastNodePositionsRef = useRef<Record<string, { x: number; y: number }>>({});
-  const positionCacheRef = useRef<Record<string, Record<string, { x: number; y: number }>>>({});
+  const lastLayoutRef = useRef<NetworkLayoutMode>(layout);
+  const lastNodePositionsRef = useRef<PositionMap>({});
+  const positionCacheRef = useRef<Record<string, PositionMap>>({});
+  const onSelectGeneRef = useRef(onSelectGene);
+  const onSelectEdgeRef = useRef(onSelectEdge);
+
   const [edgeTooltip, setEdgeTooltip] = useState<EdgeTooltipState | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
 
-  const elements = useMemo<ElementDefinition[]>(() => {
-    const maxSupportCount = Math.max(...edges.map((edge) => edge.count), 1);
-
-    const cyNodes: ElementDefinition[] = nodes.map((node) => ({
-      data: {
-        id: node.id,
-        label: node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id,
-        degree: node.degree,
-        inDegree: node.inDegree,
-        outDegree: node.outDegree,
-        isTF: node.isTF ? 1 : 0,
-      },
-    }));
-
-    const cyEdges: ElementDefinition[] = edges.map((edge) => ({
-      data: {
-        id: edge.key,
-        source: edge.source,
-        target: edge.target,
-        score: edge.score,
-        count: edge.count,
-        rank: edge.rank,
-        supportRatio: maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
-        supportingAlgorithms: edge.supportingAlgorithms,
-      },
-    }));
-
-    return [...cyNodes, ...cyEdges];
-  }, [nodes, edges]);
-
-  const elementsSignature = useMemo(
-    () =>
-      JSON.stringify({
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          inDegree: node.inDegree,
-          outDegree: node.outDegree,
-          degree: node.degree,
-          isTF: node.isTF,
-        })),
-        edges: edges.map((edge) => ({
-          key: edge.key,
-          source: edge.source,
-          target: edge.target,
-          score: edge.score,
-          count: edge.count,
-          rank: edge.rank,
-        })),
-      }),
+  const { elements, elementsSignature } = useMemo(
+    () => buildGraphElements(nodes, edges),
     [nodes, edges]
   );
 
@@ -337,6 +61,26 @@ export default function NetworkGraph({
     [nodes.length, edges.length]
   );
 
+  const hierarchicalPositions = useMemo(
+    () => buildHierarchicalPositions(nodes),
+    [nodes]
+  );
+
+  const concentricPositions = useMemo(
+    () => buildConcentricPositions(nodes),
+    [nodes]
+  );
+
+  const circularPositions = useMemo(
+    () => buildCircularPositions(nodes),
+    [nodes]
+  );
+
+  useEffect(() => {
+    onSelectGeneRef.current = onSelectGene;
+    onSelectEdgeRef.current = onSelectEdge;
+  }, [onSelectEdge, onSelectGene]);
+
   useEffect(() => {
     if (!containerRef.current || cyRef.current) {
       return;
@@ -345,7 +89,7 @@ export default function NetworkGraph({
     const cy = cytoscape({
       container: containerRef.current,
       elements,
-      style: getStylesheet() as any,
+      style: getNetworkGraphStylesheet() as any,
       wheelSensitivity: 0.14,
       minZoom: 0.3,
       maxZoom: 2.4,
@@ -358,15 +102,15 @@ export default function NetworkGraph({
 
     cy.on("tap", "node", (event) => {
       const nodeId = event.target.id();
-      onSelectGene(nodeId);
-      onSelectEdge(null);
+      onSelectGeneRef.current(nodeId);
+      onSelectEdgeRef.current(null);
     });
 
     cy.on("tap", "edge", (event) => {
       const edgeId = event.target.id();
       const sourceId = event.target.data("source") as string | undefined;
-      onSelectEdge(edgeId);
-      onSelectGene(sourceId ?? null);
+      onSelectEdgeRef.current(edgeId);
+      onSelectGeneRef.current(sourceId ?? null);
     });
 
     cy.on("mouseover", "edge", (event) => {
@@ -405,14 +149,16 @@ export default function NetworkGraph({
 
     cy.on("mouseout", "edge", (event) => {
       event.target.removeClass("hovered");
-      setHoveredEdgeKey((current) => (current === event.target.id() ? null : current));
+      setHoveredEdgeKey((current) =>
+        current === event.target.id() ? null : current
+      );
       setEdgeTooltip(null);
     });
 
     cy.on("tap", (event) => {
       if (event.target === cy) {
-        onSelectGene(null);
-        onSelectEdge(null);
+        onSelectGeneRef.current(null);
+        onSelectEdgeRef.current(null);
         cy.edges().removeClass("hovered");
         setHoveredEdgeKey(null);
         setEdgeTooltip(null);
@@ -432,9 +178,16 @@ export default function NetworkGraph({
         cy.resize();
 
         const initialLayout = cy.layout({
-          ...getLayoutConfig(layout, graphCounts.nodeCount, graphCounts.edgeCount),
+          ...getLayoutConfig(
+            layout,
+            graphCounts,
+            hierarchicalPositions,
+            concentricPositions,
+            circularPositions
+          ),
           fit: false,
         } as any);
+
         activeLayoutRef.current = initialLayout;
 
         initialLayout.on("layoutstop", () => {
@@ -446,7 +199,7 @@ export default function NetworkGraph({
           cy.resize();
           cy.fit(cy.elements(), 40);
 
-          const initialPositions: Record<string, { x: number; y: number }> = {};
+          const initialPositions: PositionMap = {};
           cy.nodes().forEach((node) => {
             initialPositions[node.id()] = { ...node.position() };
           });
@@ -455,6 +208,7 @@ export default function NetworkGraph({
             ...lastNodePositionsRef.current,
             ...initialPositions,
           };
+
           positionCacheRef.current[elementsSignature] = initialPositions;
         });
 
@@ -467,14 +221,17 @@ export default function NetworkGraph({
     return () => {
       setHoveredEdgeKey(null);
       setEdgeTooltip(null);
+
       if (outerRafRef.current !== null) {
         window.cancelAnimationFrame(outerRafRef.current);
         outerRafRef.current = null;
       }
+
       if (innerRafRef.current !== null) {
         window.cancelAnimationFrame(innerRafRef.current);
         innerRafRef.current = null;
       }
+
       activeLayoutRef.current?.stop();
       activeLayoutRef.current = null;
       cy.destroy();
@@ -484,9 +241,7 @@ export default function NetworkGraph({
 
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy) {
-      return;
-    }
+    if (!cy) return;
 
     const signatureChanged = lastAppliedSignatureRef.current !== elementsSignature;
     const layoutChanged = lastLayoutRef.current !== layout;
@@ -503,7 +258,7 @@ export default function NetworkGraph({
     activeLayoutRef.current?.stop();
     activeLayoutRef.current = null;
 
-    const previousPositions: Record<string, { x: number; y: number }> = {};
+    const previousPositions: PositionMap = {};
     cy.nodes().forEach((node) => {
       previousPositions[node.id()] = { ...node.position() };
     });
@@ -518,11 +273,13 @@ export default function NetworkGraph({
 
     const nextNodeIds = nodes.map((node) => node.id);
     const hasCompleteSavedPositions =
-      nextNodeIds.length > 0 && nextNodeIds.every((id) => Boolean(cachedPositionsForSignature[id]));
+      nextNodeIds.length > 0 &&
+      nextNodeIds.every((id) => Boolean(cachedPositionsForSignature[id]));
 
     const elementsWithPositions = elements.map((element) => {
       const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
-      if (!elementId || element.group === "edges") {
+
+      if (!elementId || (element.data && "source" in element.data && "target" in element.data)) {
         return element;
       }
 
@@ -540,15 +297,24 @@ export default function NetworkGraph({
     cy.startBatch();
     cy.elements().remove();
     cy.add(elementsWithPositions);
-    cy.style(getStylesheet() as any);
+    cy.style(getNetworkGraphStylesheet() as any);
     cy.resize();
 
     if (layoutChanged || !hasCompleteSavedPositions) {
       cy.endBatch();
+
       const rerunLayout = cy.layout(
-        getLayoutConfig(layout, graphCounts.nodeCount, graphCounts.edgeCount) as any
+        getLayoutConfig(
+          layout,
+          graphCounts,
+          hierarchicalPositions,
+          concentricPositions,
+          circularPositions
+        ) as any
       );
+
       activeLayoutRef.current = rerunLayout;
+
       rerunLayout.on("layoutstop", () => {
         if (activeLayoutRef.current !== rerunLayout || !cyRef.current) {
           return;
@@ -558,7 +324,7 @@ export default function NetworkGraph({
         cy.zoom(existingViewport.zoom);
         cy.pan(existingViewport.pan);
 
-        const nextPositions: Record<string, { x: number; y: number }> = {};
+        const nextPositions: PositionMap = {};
         cy.nodes().forEach((node) => {
           nextPositions[node.id()] = { ...node.position() };
         });
@@ -567,10 +333,12 @@ export default function NetworkGraph({
           ...lastNodePositionsRef.current,
           ...nextPositions,
         };
+
         positionCacheRef.current[elementsSignature] = nextPositions;
         lastAppliedSignatureRef.current = elementsSignature;
         lastLayoutRef.current = layout;
       });
+
       rerunLayout.run();
       return;
     }
@@ -591,7 +359,7 @@ export default function NetworkGraph({
       node.unlock();
     });
 
-    const nextPositions: Record<string, { x: number; y: number }> = {};
+    const nextPositions: PositionMap = {};
     cy.nodes().forEach((node) => {
       nextPositions[node.id()] = { ...node.position() };
     });
@@ -600,16 +368,24 @@ export default function NetworkGraph({
       ...lastNodePositionsRef.current,
       ...nextPositions,
     };
+
     positionCacheRef.current[elementsSignature] = nextPositions;
     lastAppliedSignatureRef.current = elementsSignature;
     lastLayoutRef.current = layout;
-  }, [elements, elementsSignature, layout]);
+  }, [
+    circularPositions,
+    concentricPositions,
+    elements,
+    elementsSignature,
+    graphCounts,
+    hierarchicalPositions,
+    layout,
+    nodes,
+  ]);
 
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy) {
-      return;
-    }
+    if (!cy) return;
 
     cy.elements().unselect();
 
@@ -630,9 +406,7 @@ export default function NetworkGraph({
 
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy) {
-      return;
-    }
+    if (!cy) return;
 
     cy.edges().removeClass("hovered");
 
@@ -671,11 +445,13 @@ export default function NetworkGraph({
       <div className="pointer-events-none absolute bottom-10 right-10 h-40 w-40 rounded-full bg-blue-300/18 blur-3xl" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/50 to-transparent" />
       <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] ring-1 ring-white/55" />
+
       <div
         ref={containerRef}
         className="absolute inset-0 z-10 h-full w-full"
         style={{ filter: "saturate(0.94) contrast(0.98)" }}
       />
+
       {edgeTooltip && (
         <div
           className="pointer-events-none absolute z-30 max-w-[300px] rounded-2xl border border-white/70 bg-white/88 px-4 py-3 text-xs text-slate-700 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl"
@@ -693,16 +469,23 @@ export default function NetworkGraph({
                 Edge
               </span>
             </div>
+
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
                 <p className="text-slate-500">Score</p>
-                <p className="mt-1 font-semibold text-slate-900">{edgeTooltip.score.toFixed(3)}</p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {edgeTooltip.score.toFixed(3)}
+                </p>
               </div>
+
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
                 <p className="text-slate-500">Rank</p>
-                <p className="mt-1 font-semibold text-slate-900">{edgeTooltip.rank}</p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {edgeTooltip.rank}
+                </p>
               </div>
             </div>
+
             <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2 text-[11px]">
               <p className="text-slate-500">Supporting algorithms</p>
               <p className="mt-1 font-medium leading-5 text-slate-900">
