@@ -949,7 +949,7 @@ export default function ProjectDetailPage() {
               <h2 className="text-xl font-semibold text-white">Results hub</h2>
             </div>
 
-            <div className="sticky top-[76px] z-[60]">
+              <div className="sticky top-[76px] z-[60]">
               <ResultsControlsSection
                 completedAlgorithmIds={completedAlgorithmIds}
                 selectedAlgorithmIds={selectedAlgorithmIds}

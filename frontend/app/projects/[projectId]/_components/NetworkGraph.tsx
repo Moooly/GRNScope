@@ -62,7 +62,11 @@ export default function NetworkGraph({
 
     const edgePart = edges
       .map((edge) => {
-        if (typeof edge.id === "string" && edge.id.length > 0) {
+        if (
+          "id" in edge &&
+          typeof edge.id === "string" &&
+          edge.id.length > 0
+        ) {
           return edge.id;
         }
 

@@ -3,6 +3,8 @@ export type ProjectTask = {
   status: string;
   elapsed_seconds: number;
   error_message: string | null;
+  progress_percent?: number;
+  progress_label?: string | null;
   result_path?: string | null;
   completed_at?: string | null;
 };

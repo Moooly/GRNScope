@@ -1,5 +1,3 @@
-import { RefObject } from "react";
-
 type AggregatedEdge = {
   key: string;
   source: string;
@@ -13,9 +11,14 @@ type AggregatedEdge = {
 
 type EdgeAnalysisTableSectionProps = {
   isTableFullscreen: boolean;
-  setIsTableFullscreen: (updater: (current: boolean) => boolean) => void;
+  setIsTableFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   tableSearch: string;
   setTableSearch: (value: string) => void;
+  columnMenuRef?: React.RefObject<HTMLDivElement | null>;
+  isColumnMenuOpen?: boolean;
+  setIsColumnMenuOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+  visibleAlgorithmColumns?: string[];
+  setVisibleAlgorithmColumns?: React.Dispatch<React.SetStateAction<string[]>>;
   completedAlgorithmIds: string[];
   selectedView: string;
   tableSortKey: "rank" | "source" | "target" | "score" | "count";
@@ -23,8 +26,8 @@ type EdgeAnalysisTableSectionProps = {
   setTableSortKey: (
     value: "rank" | "source" | "target" | "score" | "count"
   ) => void;
-  setTableSortDirection: (value: "asc" | "desc" | ((current: "asc" | "desc") => "asc" | "desc")) => void;
-  setTablePage: (value: number | ((current: number) => number)) => void;
+  setTableSortDirection: React.Dispatch<React.SetStateAction<"asc" | "desc">>;
+  setTablePage: React.Dispatch<React.SetStateAction<number>>;
   displayedTableRows: AggregatedEdge[];
   selectedEdgeKey: string | null;
   setSelectedEdgeKey: (value: string | null) => void;
@@ -39,6 +42,11 @@ export default function EdgeAnalysisTableSection({
   setIsTableFullscreen,
   tableSearch,
   setTableSearch,
+  columnMenuRef,
+  isColumnMenuOpen,
+  setIsColumnMenuOpen,
+  visibleAlgorithmColumns,
+  setVisibleAlgorithmColumns,
   completedAlgorithmIds,
   selectedView,
   tableSortKey,
@@ -54,6 +62,11 @@ export default function EdgeAnalysisTableSection({
   sortedTableRows,
   tablePage,
 }: EdgeAnalysisTableSectionProps) {
+  void columnMenuRef;
+  void isColumnMenuOpen;
+  void setIsColumnMenuOpen;
+  void visibleAlgorithmColumns;
+  void setVisibleAlgorithmColumns;
   return (
     <div
       className={`mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5 ${
