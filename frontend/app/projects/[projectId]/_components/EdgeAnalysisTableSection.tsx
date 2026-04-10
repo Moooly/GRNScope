@@ -1,5 +1,3 @@
-import { createPortal } from "react-dom";
-
 type AggregatedEdge = {
   key: string;
   source: string;
@@ -12,8 +10,6 @@ type AggregatedEdge = {
 };
 
 type EdgeAnalysisTableSectionProps = {
-  isTableFullscreen: boolean;
-  setIsTableFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
   tableSearch: string;
   setTableSearch: (value: string) => void;
   onExportEdgeList: () => void;
@@ -41,8 +37,6 @@ type EdgeAnalysisTableSectionProps = {
 };
 
 export default function EdgeAnalysisTableSection({
-  isTableFullscreen,
-  setIsTableFullscreen,
   tableSearch,
   setTableSearch,
   onExportEdgeList,
@@ -71,14 +65,8 @@ export default function EdgeAnalysisTableSection({
   void setIsColumnMenuOpen;
   void visibleAlgorithmColumns;
   void setVisibleAlgorithmColumns;
-  const tableContent = (
-    <div
-      className={`rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5 ${
-        isTableFullscreen
-          ? "h-[calc(100vh-3rem)] w-[calc(100vw-3rem)] overflow-auto bg-slate-950/95 shadow-[0_24px_80px_rgba(15,23,42,0.45)]"
-          : "mt-6"
-      }`}
-    >
+  return (
+    <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <h3 className="text-lg font-semibold text-white">Edge Analysis Table</h3>
 
@@ -97,14 +85,6 @@ export default function EdgeAnalysisTableSection({
             className="w-full rounded-2xl border border-teal-300/20 bg-teal-400/10 px-4 py-2 text-sm font-medium text-teal-50 transition hover:border-teal-300/35 hover:bg-teal-400/16 sm:w-auto"
           >
             Export CSV
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsTableFullscreen((current) => !current)}
-            className="w-full rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] sm:w-auto"
-          >
-            {isTableFullscreen ? "Exit full-screen" : "Full-screen"}
           </button>
         </div>
       </div>
@@ -248,15 +228,4 @@ export default function EdgeAnalysisTableSection({
       </div>
     </div>
   );
-
-  if (isTableFullscreen && typeof document !== "undefined") {
-    return createPortal(
-      <div className="fixed inset-0 z-[120] bg-slate-950/55 p-6 backdrop-blur-sm">
-        {tableContent}
-      </div>,
-      document.body
-    );
-  }
-
-  return tableContent;
 }
