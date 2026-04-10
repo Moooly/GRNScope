@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import NetworkGraph from "./NetworkGraph";
 
 type NodeInfo = {
@@ -25,6 +27,8 @@ type NetworkVisualizationSectionProps = {
   selectedView: string;
   networkLayout: "force" | "hierarchical" | "concentric" | "circular";
   setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular") => void;
+  onExportNetwork: (format: "png" | "svg") => void;
+  onGraphReady?: (cy: import("cytoscape").Core | null) => void;
   networkNodes: NodeInfo[];
   filteredNetworkEdges: AggregatedEdge[];
   selectedGene: string | null;
@@ -47,6 +51,8 @@ export default function NetworkVisualizationSection({
   selectedView,
   networkLayout,
   setNetworkLayout,
+  onExportNetwork,
+  onGraphReady,
   networkNodes,
   filteredNetworkEdges,
   selectedGene,
@@ -57,6 +63,23 @@ export default function NetworkVisualizationSection({
   isolatedGene,
   setIsolatedGene,
 }: NetworkVisualizationSectionProps) {
+  const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
+  const [isExportConfirmClosing, setIsExportConfirmClosing] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
+
+  const closeExportConfirm = () => {
+    setIsExportConfirmClosing(true);
+    window.setTimeout(() => {
+      setIsExportConfirmOpen(false);
+      setIsExportConfirmClosing(false);
+    }, 480);
+  };
+
   return (
     <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
       <div>
@@ -82,7 +105,7 @@ export default function NetworkVisualizationSection({
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
         <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6]">
-          <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-end">
+          <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-between gap-3">
             <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-300/70 bg-white/85 p-1 shadow-sm backdrop-blur">
               {layoutOptions.map(({ value, label }) => {
                 const isActive = networkLayout === value;
@@ -102,6 +125,20 @@ export default function NetworkVisualizationSection({
                   </button>
                 );
               })}
+            </div>
+            <div className="pointer-events-auto relative -top-px inline-flex items-center gap-2 rounded-2xl border border-slate-300/70 bg-white/85 p-1 shadow-sm backdrop-blur">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExportConfirmClosing(false);
+                  setIsExportConfirmOpen(true);
+                }}
+                aria-label="Download current network"
+                title="Download current network"
+                className="rounded-xl px-4 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-200/70 hover:text-slate-900"
+              >
+                Download
+              </button>
             </div>
           </div>
           <NetworkGraph
@@ -126,6 +163,7 @@ export default function NetworkVisualizationSection({
             layout={networkLayout}
             onSelectGene={setSelectedGene}
             onSelectEdge={setSelectedEdgeKey}
+            onGraphReady={onGraphReady}
           />
         </div>
 
@@ -259,6 +297,63 @@ export default function NetworkVisualizationSection({
           )}
         </div>
       </div>
+      {isMounted &&
+        isExportConfirmOpen &&
+        createPortal(
+          <div
+            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm ${
+              isExportConfirmClosing
+                ? "animate-modal-overlay-out"
+                : "animate-modal-overlay"
+            }`}
+          >
+            <div
+              className={`w-full max-w-md rounded-[1.5rem] border border-white/10 bg-slate-950/95 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.45)] ${
+                isExportConfirmClosing
+                  ? "animate-modal-panel-out"
+                  : "animate-modal-panel"
+              }`}
+            >
+              <div>
+                <h5 className="text-lg font-semibold text-white">Export current network?</h5>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Download exactly what is currently shown on the canvas, including the current zoom level, node positions, and any isolated sub-network. Choose PNG or SVG below.
+                </p>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeExportConfirm}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onExportNetwork("svg");
+                    closeExportConfirm();
+                  }}
+                  className="rounded-2xl border border-sky-300/25 bg-sky-400/12 px-4 py-2.5 text-sm font-semibold text-sky-50 transition hover:border-sky-300/40 hover:bg-sky-400/18"
+                >
+                  Download SVG
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onExportNetwork("png");
+                    closeExportConfirm();
+                  }}
+                  className="rounded-2xl border border-teal-300/25 bg-teal-400/12 px-4 py-2.5 text-sm font-semibold text-teal-50 transition hover:border-teal-300/40 hover:bg-teal-400/18"
+                >
+                  Download PNG
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

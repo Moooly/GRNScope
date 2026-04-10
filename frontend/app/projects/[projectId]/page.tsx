@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Core } from "cytoscape";
 import ProjectHeader from "./_components/ProjectHeader";
 import ResultsSummarySection from "./_components/ResultsSummarySection";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
@@ -58,6 +59,7 @@ export default function ProjectDetailPage() {
   const [groundTruthError, setGroundTruthError] = useState("");
   const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
+  const networkGraphRef = useRef<Core | null>(null);
 
   const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
 
@@ -421,6 +423,77 @@ export default function ProjectDetailPage() {
     document.body.removeChild(link);
     closeDownloadModal();
   };
+
+  const handleExportNetwork = useCallback(
+    (format: "png" | "svg") => {
+      const cy = networkGraphRef.current;
+      if (!cy) return;
+
+      const activeViewLabel =
+        activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "network";
+      const isolatedLabel = isolatedGene ? `isolated-${isolatedGene}` : "full-view";
+      const baseFilename = `${projectId ?? "project"}-${activeViewLabel}-${networkLayout}-${isolatedLabel}`;
+
+      if (format === "png") {
+        const pngDataUrl = cy.png({
+          full: false,
+          scale: 3,
+          bg: "#eef4fb",
+        });
+
+        const link = document.createElement("a");
+        link.href = pngDataUrl;
+        link.download = `${baseFilename}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      const rawSvgMarkup = cy.svg({
+        full: false,
+        scale: 1,
+        bg: "#eef4fb",
+      });
+
+      const parser = new DOMParser();
+      const svgDocument = parser.parseFromString(rawSvgMarkup, "image/svg+xml");
+      const svgElement = svgDocument.documentElement;
+
+      const widthAttr = svgElement.getAttribute("width");
+      const heightAttr = svgElement.getAttribute("height");
+      const fallbackWidth = Math.max(1, Math.round(cy.width()));
+      const fallbackHeight = Math.max(1, Math.round(cy.height()));
+      const numericWidth = widthAttr ? Number.parseFloat(widthAttr) : fallbackWidth;
+      const numericHeight = heightAttr ? Number.parseFloat(heightAttr) : fallbackHeight;
+      const safeWidth =
+        Number.isFinite(numericWidth) && numericWidth > 0 ? numericWidth : fallbackWidth;
+      const safeHeight =
+        Number.isFinite(numericHeight) && numericHeight > 0 ? numericHeight : fallbackHeight;
+
+      if (!svgElement.getAttribute("viewBox")) {
+        svgElement.setAttribute("viewBox", `0 0 ${safeWidth} ${safeHeight}`);
+      }
+
+      svgElement.setAttribute("width", "100%");
+      svgElement.setAttribute("height", "100%");
+      svgElement.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+      const serializedSvg = new XMLSerializer().serializeToString(svgDocument);
+      const blob = new Blob([serializedSvg], {
+        type: "image/svg+xml;charset=utf-8",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `${baseFilename}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    },
+    [activeAlgorithmIds, isolatedGene, networkLayout, projectId]
+  );
 
   useEffect(() => {
     setVisibleAlgorithmColumns(activeAlgorithmIds);
@@ -997,6 +1070,10 @@ export default function ProjectDetailPage() {
                   selectedView={activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus"}
                   networkLayout={networkLayout}
                   setNetworkLayout={setNetworkLayout}
+                  onExportNetwork={handleExportNetwork}
+                  onGraphReady={(cy) => {
+                    networkGraphRef.current = cy;
+                  }}
                   networkNodes={networkNodes}
                   filteredNetworkEdges={filteredNetworkEdges}
                   selectedGene={selectedGene}

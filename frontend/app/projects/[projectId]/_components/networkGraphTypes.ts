@@ -1,4 +1,4 @@
-import type { ElementDefinition } from "cytoscape";
+import type { Core, ElementDefinition } from "cytoscape";
 
 export type NetworkNode = {
   id: string;
@@ -32,6 +32,7 @@ export type NetworkGraphProps = {
   layout: NetworkLayoutMode;
   onSelectGene: (geneId: string | null) => void;
   onSelectEdge: (edgeKey: string | null) => void;
+  onGraphReady?: (cy: Core | null) => void;
 };
 
 export type EdgeTooltipState = {
