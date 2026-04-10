@@ -34,6 +34,13 @@ def resolve_beeline_root() -> Path:
 def yaml_scalar(value: str) -> str:
     return json.dumps(str(value))
 
+def resolve_algorithm_image(algorithm_id: str) -> str:
+    normalized_algorithm_id = algorithm_id.upper()
+    image_name = ALGORITHM_IMAGE_MAP.get(normalized_algorithm_id)
+    if not image_name:
+        raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}")
+    return image_name
+
 def extract_user_friendly_beeline_error(stderr_text: str, algorithm_id: str) -> str:
     if not stderr_text or not stderr_text.strip():
         return f"{algorithm_id} failed during execution, but no detailed error message was returned by BEELINE."
@@ -149,9 +156,7 @@ def build_beeline_config(
     include_pseudotime: bool,
 ) -> str:
     normalized_algorithm_id = algorithm_id.upper()
-    image_name = ALGORITHM_IMAGE_MAP.get(normalized_algorithm_id)
-    if not image_name:
-        raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}")
+    image_name = resolve_algorithm_image(algorithm_id)
 
     run_lines = [
         f"        - run_id: {yaml_scalar(run_id)}",
@@ -348,9 +353,11 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
     ranked_edges_path = output_dir / dataset_id / run_id / algorithm_id / "rankedEdges.csv"
     top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
 
+    docker_image_version = resolve_algorithm_image(algorithm_id)
     return {
         "project_id": project_id,
         "algorithm_id": algorithm_id,
+        "docker_image_version": docker_image_version,
         "network_summary": network_summary,
         "top_edges": top_edges,
         "runtime_root": str(runtime_root),
@@ -454,9 +461,11 @@ def run_beeline_with_progress(
         progress_label="Finalizing result",
     )
 
+    docker_image_version = resolve_algorithm_image(algorithm_id)
     return {
         "project_id": project_id,
         "algorithm_id": algorithm_id,
+        "docker_image_version": docker_image_version,
         "network_summary": network_summary,
         "top_edges": top_edges,
         "runtime_root": str(runtime_root),
