@@ -52,7 +52,14 @@ export function buildCircularPositions(nodes: NetworkNode[]) {
   );
 
   const positions: PositionMap = {};
-  const radius = nodes.length <= 10 ? 250 : nodes.length <= 18 ? 325 : 400;
+  const radius =
+    nodes.length <= 8
+      ? 300
+      : nodes.length <= 12
+        ? 360
+        : nodes.length <= 18
+          ? 440
+          : Math.min(620, 420 + (nodes.length - 18) * 14);
   const count = sorted.length;
 
   sorted.forEach((node, index) => {
@@ -78,14 +85,14 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
 
   const positions: PositionMap = {};
 
-  const centerCount = 1;
+  const centerCount = nodes.length <= 10 ? 1 : 2;
   const centerNodes = sorted.slice(0, centerCount);
   const remainingNodes = sorted.slice(centerCount);
 
   if (centerNodes.length === 1) {
     positions[centerNodes[0].id] = { x: 0, y: 0 };
   } else {
-    const centerRadius = 58;
+    const centerRadius = 84;
     centerNodes.forEach((node, index) => {
       const angle =
         -Math.PI / 2 + (index / centerNodes.length) * Math.PI * 2;
@@ -129,8 +136,8 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
     }
   }
 
-  const baseRadius = 170;
-  const radiusStep = 150;
+  const baseRadius = nodes.length <= 12 ? 220 : 250;
+  const radiusStep = nodes.length <= 18 ? 170 : 190;
   let offset = 0;
 
   ringSizes.forEach((ringSize, ringIndex) => {
@@ -143,7 +150,9 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
       (ringIndex % 2 === 0 ? 0 : Math.PI / Math.max(ringSize, 2));
 
     ringNodes.forEach((node, nodeIndex) => {
-      const angle = rotationOffset + (nodeIndex / ringSize) * Math.PI * 2;
+      const angle =
+        rotationOffset +
+        ((nodeIndex + (ringIndex % 2 === 0 ? 0 : 0.5)) / ringSize) * Math.PI * 2;
       positions[node.id] = polarPosition(angle, radius);
     });
   });
@@ -193,9 +202,9 @@ export function buildHierarchicalPositions(nodes: NetworkNode[]) {
   });
 
   const positions: PositionMap = {};
-  const rowGap = 170;
-  const topColumnGap = 150;
-  const bottomColumnGap = 132;
+  const rowGap = 210;
+  const topColumnGap = 210;
+  const bottomColumnGap = 178;
   const totalHeight = (levels.length - 1) * rowGap;
 
   levels.forEach((level, levelIndex) => {
@@ -211,10 +220,11 @@ export function buildHierarchicalPositions(nodes: NetworkNode[]) {
     const rowWidth = Math.max(0, (orderedLevel.length - 1) * columnGap);
     const startX = -rowWidth / 2;
     const y = levelIndex * rowGap - totalHeight / 2;
+    const staggerOffset = levelIndex % 2 === 0 ? 0 : columnGap * 0.35;
 
     orderedLevel.forEach((node, nodeIndex) => {
       positions[node.id] = {
-        x: startX + nodeIndex * columnGap,
+        x: startX + nodeIndex * columnGap + staggerOffset,
         y,
       };
     });
@@ -235,7 +245,7 @@ export function getLayoutConfig(
       name: "preset",
       animate: false,
       fit: true,
-      padding: 80,
+      padding: 120,
       positions: hierarchicalPositions ?? {},
     } as const;
   }
@@ -245,7 +255,7 @@ export function getLayoutConfig(
       name: "preset",
       animate: false,
       fit: true,
-      padding: 92,
+      padding: 128,
       positions: concentricPositions ?? {},
     } as const;
   }
@@ -255,7 +265,7 @@ export function getLayoutConfig(
       name: "preset",
       animate: false,
       fit: true,
-      padding: 96,
+      padding: 132,
       positions: circularPositions ?? {},
     } as const;
   }
