@@ -2,7 +2,7 @@ import { Algorithm } from "../_types/algorithm";
 
 export const algorithms: Algorithm[] = [
   {
-    id: "genie3",
+    id: "GENIE3",
     name: "GENIE3",
     description: "Tree-based GRN inference method that predicts regulators for each target gene.",
     category: "Random forest",
@@ -15,7 +15,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: false,
   },
   {
-    id: "grnboost2",
+    id: "GRNBOOST2",
     name: "GRNBoost2",
     description: "Gradient-boosting based GRN inference method designed as a faster tree-based alternative.",
     category: "Random forest",
@@ -28,7 +28,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: false,
   },
   {
-    id: "pidc",
+    id: "PIDC",
     name: "PIDC",
     description: "Information-theoretic method that infers gene relationships using multivariate mutual-information ideas.",
     category: "Mutual information",
@@ -41,7 +41,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: false,
   },
   {
-    id: "ppcor",
+    id: "PPCOR",
     name: "PPCOR",
     description: "Partial-correlation method that estimates direct linear associations between genes.",
     category: "Correlation",
@@ -54,7 +54,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: false,
   },
   {
-    id: "pearson",
+    id: "PEARSON",
     name: "Pearson Correlation",
     description: "Simple Pearson-correlation baseline for measuring pairwise co-expression.",
     category: "Correlation",
@@ -67,7 +67,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: false,
   },
   {
-    id: "grnvbem",
+    id: "GRNVBEM",
     name: "GRNVBEM",
     description:
       "Variational Bayesian regression method for ordered cells that outputs directed signed edges.",
@@ -81,7 +81,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: true,
   },
   {
-    id: "jump3",
+    id: "JUMP3",
     name: "JUMP3",
     description:
       "Tree-based method for ordered-cell gene regulatory network inference.",
@@ -95,7 +95,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: true,
   },
   {
-    id: "leap",
+    id: "LEAP",
     name: "LEAP",
     description:
       "Lag-based correlation method that uses ordered cells to suggest directed relationships.",
@@ -109,7 +109,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: true,
   },
   {
-    id: "scode",
+    id: "SCODE",
     name: "SCODE",
     description:
       "Ordinary-differential-equation based method for ordered cells that produces directed signed edges.",
@@ -123,7 +123,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: true,
   },
   {
-    id: "scribe",
+    id: "SCRIBE",
     name: "SCRIBE",
     description:
       "Directed-information based method for ordered cells that infers directed regulatory links.",
@@ -137,7 +137,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: true,
   },
   {
-    id: "sincerities",
+    id: "SINCERITIES",
     name: "SINCERITIES",
     description:
       "Regression-based method for ordered cells that outputs directed signed edges.",
@@ -151,7 +151,7 @@ export const algorithms: Algorithm[] = [
     requiresPseudotime: true,
   },
   {
-    id: "singe",
+    id: "SINGE",
     name: "SINGE",
     description:
       "Granger-causality based method for ordered cells that predicts directed relationships.",
@@ -166,4 +166,4 @@ export const algorithms: Algorithm[] = [
   },
 ];
 
-export const recommendedIds = ["pidc", "genie3", "grnboost2"];
+export const recommendedIds = ["PIDC", "GENIE3", "GRNBOOST2"];

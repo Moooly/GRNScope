@@ -1,0 +1,16 @@
+input_settings:
+  input_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b00fd2b317b2/_beeline_runtime/PIDC/inputs"
+  datasets:
+    - dataset_id: "b00fd2b317b2"
+      should_run: [True]
+      runs:
+        - run_id: "run-1"
+          exprData: "ExpressionData.csv"
+  algorithms:
+    - algorithm_id: "PIDC"
+      image: "grnbeeline/pidc:base"
+      should_run: [True]
+      params:
+        {}
+output_settings:
+  output_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b00fd2b317b2/_beeline_runtime/PIDC/outputs"

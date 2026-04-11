@@ -558,7 +558,8 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         )
         raise RuntimeError(friendly_error)
 
-    ranked_edges_path = output_dir / dataset_id / run_id / algorithm_id / "rankedEdges.csv"
+    normalized_algorithm_id = algorithm_id.upper()
+    ranked_edges_path = output_dir / dataset_id / run_id / normalized_algorithm_id / "rankedEdges.csv"
     top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
 
     docker_image_version = resolve_algorithm_image(algorithm_id)
@@ -658,7 +659,8 @@ def run_beeline_with_progress(
         progress_label="Parsing ranked edges",
     )
 
-    ranked_edges_path = output_dir / dataset_id / run_id / algorithm_id / "rankedEdges.csv"
+    normalized_algorithm_id = algorithm_id.upper()
+    ranked_edges_path = output_dir / dataset_id / run_id / normalized_algorithm_id / "rankedEdges.csv"
     top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
 
     update_job_state_fn(

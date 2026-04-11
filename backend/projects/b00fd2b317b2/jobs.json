@@ -1,0 +1,60 @@
+[
+  {
+    "job_id": "565e758c8f2e",
+    "project_id": "b00fd2b317b2",
+    "overall_status": "Failed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "ModuleNotFoundError: No module named 'yaml'",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "ModuleNotFoundError: No module named 'yaml'",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PIDC",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "ModuleNotFoundError: No module named 'yaml'",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "ModuleNotFoundError: No module named 'yaml'",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PEARSON",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "ModuleNotFoundError: No module named 'yaml'",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      }
+    ]
+  }
+]
