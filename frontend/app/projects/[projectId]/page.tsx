@@ -39,6 +39,7 @@ export default function ProjectDetailPage() {
   const [topN, setTopN] = useState(1);
   const [hasTouchedTopN, setHasTouchedTopN] = useState(false);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
+  const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [geneSearch, setGeneSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular">("force");
@@ -574,8 +575,17 @@ useEffect(() => {
 
   useEffect(() => {
     setVisibleAlgorithmColumns(activeAlgorithmIds);
-    setConsensusThreshold((current) => clamp(current, 1, Math.max(activeAlgorithmIds.length, 1)));
-  }, [activeAlgorithmIds]);
+
+    const maxConsensusValue = Math.max(activeAlgorithmIds.length, 1);
+    const defaultConsensusValue = Math.max(1, Math.floor(maxConsensusValue / 2));
+
+    setConsensusThreshold((current) => {
+      if (!hasTouchedConsensusThreshold) {
+        return defaultConsensusValue;
+      }
+      return clamp(current, 1, maxConsensusValue);
+    });
+  }, [activeAlgorithmIds, hasTouchedConsensusThreshold]);
 
   useEffect(() => {
     if (!isColumnMenuOpen) return;
@@ -594,7 +604,8 @@ useEffect(() => {
   }, [isColumnMenuOpen]);
 
   useEffect(() => {
-    setTopN((current) => (hasTouchedTopN ? clamp(current, 1, maxAvailableTopN) : maxAvailableTopN));
+    const defaultTopN = Math.max(1, Math.floor(maxAvailableTopN / 2));
+    setTopN((current) => (hasTouchedTopN ? clamp(current, 1, maxAvailableTopN) : defaultTopN));
   }, [hasTouchedTopN, maxAvailableTopN]);
 
   useEffect(() => {
@@ -1164,7 +1175,10 @@ useEffect(() => {
                 }}
                 consensusThreshold={consensusThreshold}
                 maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
-                onChangeConsensusThreshold={setConsensusThreshold}
+                onChangeConsensusThreshold={(value) => {
+                  setHasTouchedConsensusThreshold(true);
+                  setConsensusThreshold(value);
+                }}
                 isConsensusView={activeAlgorithmIds.length >= 2}
               />
             </div>
