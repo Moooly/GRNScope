@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
-from math import fsum
+from math import fsum, log2
 from pathlib import Path
 
 from ..config import (
@@ -111,11 +111,43 @@ def load_known_tf_genes(project_manifest: dict) -> set[str]:
     }
 
 
+
 def compute_row_variance(values: list[float]) -> float:
     if len(values) <= 1:
         return 0.0
     mean_value = fsum(values) / len(values)
     return fsum((value - mean_value) ** 2 for value in values) / len(values)
+
+
+def normalize_expression_rows(matrix_rows: list[list[float]]) -> list[list[float]]:
+    if not matrix_rows:
+        return []
+
+    column_count = max(len(row) for row in matrix_rows)
+    if column_count == 0:
+        return [list(row) for row in matrix_rows]
+
+    column_sums = [0.0] * column_count
+    for row in matrix_rows:
+        for column_index, value in enumerate(row):
+            column_sums[column_index] += value
+
+    normalized_rows: list[list[float]] = []
+    for row in matrix_rows:
+        normalized_row: list[float] = []
+        for column_index, value in enumerate(row):
+            column_sum = column_sums[column_index]
+            if column_sum <= 0:
+                normalized_row.append(value)
+            else:
+                normalized_row.append((value / column_sum) * 10000.0)
+        normalized_rows.append(normalized_row)
+
+    return normalized_rows
+
+
+def log_transform_expression_rows(matrix_rows: list[list[float]]) -> list[list[float]]:
+    return [[log2(value + 1.0) for value in row] for row in matrix_rows]
 
 
 def preprocess_expression_matrix(
@@ -140,45 +172,67 @@ def preprocess_expression_matrix(
 
     top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
     include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
+    normalize_enabled = parse_bool(project_manifest.get("normalize_enabled"))
+    log_transform_enabled = parse_bool(project_manifest.get("log_transform_enabled"))
 
     tf_genes = load_known_tf_genes(project_manifest) if include_all_tfs else set()
 
-    scored_rows: list[tuple[float, int, list[str], str]] = []
+    parsed_rows: list[tuple[int, str, list[str], list[float]]] = []
     for index, row in enumerate(data_rows):
         if not row:
             continue
 
         gene_name = str(row[0]).strip()
-        numeric_values: list[float] = []
+        raw_numeric_values: list[float] = []
         for value in row[1:]:
             try:
-                numeric_values.append(float(str(value).strip()))
+                raw_numeric_values.append(float(str(value).strip()))
             except (TypeError, ValueError):
-                continue
+                raw_numeric_values.append(0.0)
 
-        variance = compute_row_variance(numeric_values)
-        scored_rows.append((variance, index, row, gene_name))
+        parsed_rows.append((index, gene_name, row, raw_numeric_values))
 
-    if not scored_rows:
+    if not parsed_rows:
         destination_expression.write_text(raw_text, encoding="utf-8")
         return
 
+    transformed_numeric_rows = [list(values) for _, _, _, values in parsed_rows]
+    if normalize_enabled:
+        transformed_numeric_rows = normalize_expression_rows(transformed_numeric_rows)
+    if log_transform_enabled:
+        transformed_numeric_rows = log_transform_expression_rows(transformed_numeric_rows)
+
+    scored_rows: list[tuple[float, int, str, list[str], list[float]]] = []
+    for (index, gene_name, row, _), transformed_values in zip(parsed_rows, transformed_numeric_rows):
+        variance = compute_row_variance(transformed_values)
+        scored_rows.append((variance, index, gene_name, row, transformed_values))
+
     retained_indices: set[int]
     if top_variable_genes is None or top_variable_genes >= len(scored_rows):
-        retained_indices = {index for _, index, _, _ in scored_rows}
+        retained_indices = {index for _, index, _, _, _ in scored_rows}
     else:
         sorted_rows = sorted(scored_rows, key=lambda item: (-item[0], item[1]))
-        retained_indices = {index for _, index, _, _ in sorted_rows[:top_variable_genes]}
+        retained_indices = {index for _, index, _, _, _ in sorted_rows[:top_variable_genes]}
 
     if include_all_tfs and tf_genes:
-        for _, index, _, gene_name in scored_rows:
+        for _, index, gene_name, _, _ in scored_rows:
             if gene_name in tf_genes:
                 retained_indices.add(index)
 
+    transformed_row_by_index = {
+        index: (original_row, transformed_values)
+        for _, index, _, original_row, transformed_values in scored_rows
+    }
+
     filtered_rows = [header]
-    for index, row in enumerate(data_rows):
-        if index in retained_indices:
-            filtered_rows.append(row)
+    for index, _row in enumerate(data_rows):
+        if index not in retained_indices:
+            continue
+
+        original_row, transformed_values = transformed_row_by_index[index]
+        filtered_rows.append(
+            [original_row[0], *[f"{value:.10f}" for value in transformed_values]]
+        )
 
     output_buffer = io.StringIO()
     writer = csv.writer(

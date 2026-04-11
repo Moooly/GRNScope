@@ -1,0 +1,60 @@
+[
+  {
+    "job_id": "1d9128bf6232",
+    "project_id": "b2b10d7d16a9",
+    "overall_status": "Completed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "genie3",
+        "status": "Completed",
+        "elapsed_seconds": 55,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b2b10d7d16a9/results/genie3.json",
+        "completed_at": "2026-04-10 13:12:40",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "grnboost2",
+        "status": "Completed",
+        "elapsed_seconds": 33,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b2b10d7d16a9/results/grnboost2.json",
+        "completed_at": "2026-04-10 13:12:18",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "pidc",
+        "status": "Completed",
+        "elapsed_seconds": 21,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b2b10d7d16a9/results/pidc.json",
+        "completed_at": "2026-04-10 13:12:06",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "ppcor",
+        "status": "Completed",
+        "elapsed_seconds": 6,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b2b10d7d16a9/results/ppcor.json",
+        "completed_at": "2026-04-10 13:11:51",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "pearson",
+        "status": "Completed",
+        "elapsed_seconds": 2,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/b2b10d7d16a9/results/pearson.json",
+        "completed_at": "2026-04-10 13:11:47",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      }
+    ]
+  }
+]
