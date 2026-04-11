@@ -51,7 +51,7 @@ export default function AlgorithmCard({
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 font-medium text-teal-200">
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-medium text-slate-300">
           {algorithm.category}
         </span>
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-slate-300">
@@ -61,15 +61,17 @@ export default function AlgorithmCard({
           {algorithm.signed ? "Signed" : "Unsigned"}
         </span>
         {algorithm.requiresPseudotime && (
-          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-amber-200">
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-slate-300">
             Requires pseudotime
           </span>
         )}
       </div>
 
-      <div className="mt-5 flex items-center justify-between text-xs text-slate-400">
-        <span>{algorithm.year}</span>
-        <span>{algorithm.journal}</span>
+      <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3 text-xs text-slate-400">
+        <span className="whitespace-nowrap">{algorithm.year}</span>
+        <span className="truncate text-right" title={algorithm.journal}>
+          {algorithm.journal}
+        </span>
       </div>
     </button>
   );

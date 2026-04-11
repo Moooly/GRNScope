@@ -87,10 +87,7 @@ export default function AlgorithmStep({
                 return (
                   <AlgorithmCard
                     key={algorithm.id}
-                    algorithm={{
-                      ...algorithm,
-                      description: disabled ? "" : algorithm.description,
-                    }}
+                    algorithm={algorithm}
                     checked={selectedIds.includes(algorithm.id)}
                     disabled={disabled}
                     onToggle={() => onToggleAlgorithm(algorithm.id, disabled)}

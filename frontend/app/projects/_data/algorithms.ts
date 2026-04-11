@@ -4,7 +4,7 @@ export const algorithms: Algorithm[] = [
   {
     id: "genie3",
     name: "GENIE3",
-    description: "Random-forest method included in the BEELINE benchmark.",
+    description: "Tree-based GRN inference method that predicts regulators for each target gene.",
     category: "Random forest",
     year: "2010",
     journal: "PLoS One",
@@ -17,7 +17,7 @@ export const algorithms: Algorithm[] = [
   {
     id: "grnboost2",
     name: "GRNBoost2",
-    description: "Fast tree-based method included in the BEELINE benchmark.",
+    description: "Gradient-boosting based GRN inference method designed as a faster tree-based alternative.",
     category: "Random forest",
     year: "2018",
     journal: "Bioinformatics",
@@ -30,7 +30,7 @@ export const algorithms: Algorithm[] = [
   {
     id: "pidc",
     name: "PIDC",
-    description: "Mutual-information method included in the BEELINE benchmark.",
+    description: "Information-theoretic method that infers gene relationships using multivariate mutual-information ideas.",
     category: "Mutual information",
     year: "2017",
     journal: "Cell Systems",
@@ -43,7 +43,7 @@ export const algorithms: Algorithm[] = [
   {
     id: "ppcor",
     name: "PPCOR",
-    description: "Partial-correlation method included in the BEELINE benchmark.",
+    description: "Partial-correlation method that estimates direct linear associations between genes.",
     category: "Correlation",
     year: "2015",
     journal: "Communications for Statistical Applications and Methods",
@@ -56,7 +56,7 @@ export const algorithms: Algorithm[] = [
   {
     id: "pearson",
     name: "Pearson Correlation",
-    description: "Correlation-based baseline method.",
+    description: "Simple Pearson-correlation baseline for measuring pairwise co-expression.",
     category: "Correlation",
     year: "—",
     journal: "—",
@@ -70,7 +70,7 @@ export const algorithms: Algorithm[] = [
     id: "grnvbem",
     name: "GRNVBEM",
     description:
-      "Variational Bayesian regression-based method for time-ordered or pseudotime-ordered cells.",
+      "Variational Bayesian regression method for ordered cells that outputs directed signed edges.",
     category: "Regression",
     year: "2018",
     journal: "Bioinformatics",
@@ -84,7 +84,7 @@ export const algorithms: Algorithm[] = [
     id: "jump3",
     name: "JUMP3",
     description:
-      "Method included in the BEELINE codebase for ordered-cell GRN inference.",
+      "Tree-based method for ordered-cell gene regulatory network inference.",
     category: "Machine Learning",
     year: "2015",
     journal: "Bioinformatics",
@@ -98,7 +98,7 @@ export const algorithms: Algorithm[] = [
     id: "leap",
     name: "LEAP",
     description:
-      "Lag-based correlation method for time-ordered or pseudotime-ordered cells.",
+      "Lag-based correlation method that uses ordered cells to suggest directed relationships.",
     category: "Correlation",
     year: "2017",
     journal: "Bioinformatics",
@@ -112,7 +112,7 @@ export const algorithms: Algorithm[] = [
     id: "scode",
     name: "SCODE",
     description:
-      "ODE-based method for time-ordered or pseudotime-ordered cells.",
+      "Ordinary-differential-equation based method for ordered cells that produces directed signed edges.",
     category: "ODE + regression",
     year: "2017",
     journal: "Bioinformatics",
@@ -126,7 +126,7 @@ export const algorithms: Algorithm[] = [
     id: "scribe",
     name: "SCRIBE",
     description:
-      "Directed-information based method for time-ordered or pseudotime-ordered cells.",
+      "Directed-information based method for ordered cells that infers directed regulatory links.",
     category: "Mutual information",
     year: "2018",
     journal: "bioRxiv preprint",
@@ -140,7 +140,7 @@ export const algorithms: Algorithm[] = [
     id: "sincerities",
     name: "SINCERITIES",
     description:
-      "Regression-based method for time-ordered or pseudotime-ordered cells.",
+      "Regression-based method for ordered cells that outputs directed signed edges.",
     category: "Regression",
     year: "2018",
     journal: "Bioinformatics",
@@ -154,7 +154,7 @@ export const algorithms: Algorithm[] = [
     id: "singe",
     name: "SINGE",
     description:
-      "Granger-causality based method for time-ordered or pseudotime-ordered cells.",
+      "Granger-causality based method for ordered cells that predicts directed relationships.",
     category: "Granger causality",
     year: "2019",
     journal: "bioRxiv preprint",

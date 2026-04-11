@@ -38,7 +38,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "pidc",
     name: "PIDC",
-    tagline: "Mutual-information method included in the BEELINE benchmark.",
+    tagline: "Information-theoretic method that infers gene relationships using multivariate mutual-information ideas.",
     category: "Mutual information",
     requiresPseudotime: false,
     directed: false,
@@ -66,7 +66,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "genie3",
     name: "GENIE3",
-    tagline: "Random-forest method included in the BEELINE benchmark.",
+    tagline: "Tree-based GRN inference method that predicts regulators for each target gene.",
     category: "Random forest",
     requiresPseudotime: false,
     directed: true,
@@ -94,7 +94,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "grnboost2",
     name: "GRNBoost2",
-    tagline: "Fast tree-based method included in the BEELINE benchmark.",
+    tagline: "Gradient-boosting based GRN inference method designed as a faster tree-based alternative.",
     category: "Random forest",
     requiresPseudotime: false,
     directed: true,
@@ -122,7 +122,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "ppcor",
     name: "PPCOR",
-    tagline: "Partial-correlation method included in the BEELINE benchmark.",
+    tagline: "Partial-correlation method that estimates direct linear associations between genes.",
     category: "Correlation",
     requiresPseudotime: false,
     directed: false,
@@ -150,7 +150,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "scode",
     name: "SCODE",
-    tagline: "ODE-based method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Ordinary-differential-equation based method for ordered cells that produces directed signed edges.",
     category: "ODE + regression",
     requiresPseudotime: true,
     directed: true,
@@ -177,7 +177,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "sincerities",
     name: "SINCERITIES",
-    tagline: "Regression-based method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Regression-based method for ordered cells that outputs directed signed edges.",
     category: "Regression",
     requiresPseudotime: true,
     directed: true,
@@ -205,7 +205,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "scribe",
     name: "SCRIBE",
-    tagline: "Directed-information based method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Directed-information based method for ordered cells that infers directed regulatory links.",
     category: "Mutual information",
     requiresPseudotime: true,
     directed: true,
@@ -232,7 +232,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "singe",
     name: "SINGE",
-    tagline: "Granger-causality based method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Granger-causality based method for ordered cells that predicts directed relationships.",
     category: "Granger causality",
     requiresPseudotime: true,
     directed: true,
@@ -259,7 +259,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "leap",
     name: "LEAP",
-    tagline: "Lag-based correlation method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Lag-based correlation method that uses ordered cells to suggest directed relationships.",
     category: "Correlation",
     requiresPseudotime: true,
     directed: true,
@@ -286,7 +286,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "grisli",
     name: "GRISLI",
-    tagline: "ODE and regression based method for time-ordered or pseudotime-ordered cells.",
+    tagline: "ODE and regression based method for ordered cells that outputs directed edges.",
     category: "ODE + regression",
     requiresPseudotime: true,
     directed: true,
@@ -312,7 +312,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "grnvbem",
     name: "GRNVBEM",
-    tagline: "Variational Bayesian regression-based method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Variational Bayesian regression method for ordered cells that outputs directed signed edges.",
     category: "Regression",
     requiresPseudotime: true,
     directed: true,
@@ -340,7 +340,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "scns",
     name: "SCNS",
-    tagline: "Boolean-network reconstruction method for time-ordered or pseudotime-ordered cells.",
+    tagline: "Boolean-network reconstruction method for ordered cells that produces directed signed edges.",
     category: "Boolean model",
     requiresPseudotime: true,
     directed: true,
