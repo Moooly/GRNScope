@@ -12,6 +12,9 @@ import EmptyProjectHistory from "./_components/EmptyProjectHistory";
 type CreateStep = "upload" | "preprocessing" | "algorithms" | "review";
 
 export default function ProjectsPage() {
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+
   const router = useRouter();
 
   const [isCreateVisible, setIsCreateVisible] = useState(false);
@@ -68,7 +71,7 @@ export default function ProjectsPage() {
 
     const loadProjectHistory = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:8000/api/projects");
+        const response = await fetch(`${API_BASE}/projects`);
 
         if (!response.ok) {
           setProjectHistory([]);
@@ -138,7 +141,7 @@ export default function ProjectsPage() {
           activeProjectIds.map(async (projectId) => {
             try {
               const response = await fetch(
-                `http://127.0.0.1:8000/api/projects/${projectId}`
+                `${API_BASE}//projects/${projectId}`
               );
 
               if (!response.ok) {
@@ -326,7 +329,7 @@ export default function ProjectsPage() {
       }
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/uploads/temp-dataset",
+        `${API_BASE}/uploads/temp-dataset`,
         {
           method: "POST",
           body: formData,
@@ -453,7 +456,7 @@ export default function ProjectsPage() {
       formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/projects/create-from-temp",
+        `${API_BASE}/projects/create-from-temp`,
         {
           method: "POST",
           body: formData,
@@ -523,7 +526,7 @@ export default function ProjectsPage() {
       setIsDeletingProject(true);
 
       const response = await fetch(
-        `http://127.0.0.1:8000/api/projects/${projectPendingDelete.id}`,
+        `${API_BASE}/projects/${projectPendingDelete.id}`,
         {
           method: "DELETE",
         }

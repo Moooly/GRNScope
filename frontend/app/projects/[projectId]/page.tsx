@@ -24,7 +24,7 @@ import {
 import { boolText, clamp } from "./_lib/utils";
 import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const POLL_INTERVAL_MS = 1000;
 
 export default function ProjectDetailPage() {
@@ -654,9 +654,9 @@ useEffect(() => {
       try {
         setError("");
         const [projectResponse, metadataResponse, resultsResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/projects/${projectId}`),
-          fetch(`${API_BASE_URL}/api/projects/${projectId}/metadata`).catch(() => null),
-          fetch(`${API_BASE_URL}/api/projects/${projectId}/results`).catch(() => null),
+          fetch(`${API_BASE}/projects/${projectId}`),
+          fetch(`${API_BASE}/projects/${projectId}/metadata`).catch(() => null),
+          fetch(`${API_BASE}/projects/${projectId}/results`).catch(() => null),
         ]);
 
         if (!projectResponse.ok) {
@@ -689,7 +689,7 @@ useEffect(() => {
             completedRows.map(async (item: { algorithm_id: string }) => {
               try {
                 const response = await fetch(
-                  `${API_BASE_URL}/api/projects/${projectId}/results/${item.algorithm_id}`
+                  `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
                 );
                 if (!response.ok) return null;
                 const data = await response.json();
@@ -726,8 +726,8 @@ useEffect(() => {
     const poll = async () => {
       try {
         const [projectResponse, resultsResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/projects/${projectId}`),
-          fetch(`${API_BASE_URL}/api/projects/${projectId}/results`),
+          fetch(`${API_BASE}/projects/${projectId}`),
+          fetch(`${API_BASE}/projects/${projectId}/results`),
         ]);
 
         if (!projectResponse.ok) return;
@@ -747,7 +747,7 @@ useEffect(() => {
             completedRows.map(async (item: { algorithm_id: string }) => {
               try {
                 const response = await fetch(
-                  `${API_BASE_URL}/api/projects/${projectId}/results/${item.algorithm_id}`
+                  `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
                 );
                 if (!response.ok) return null;
                 const data = await response.json();
@@ -910,7 +910,7 @@ useEffect(() => {
                             if (!projectId) return;
                             openDownloadModal(
                               `${task.algorithm_id} raw result`,
-                              `${API_BASE_URL}/api/projects/${projectId}/download/result/${task.algorithm_id}`,
+                              `${API_BASE}/projects/${projectId}/download/result/${task.algorithm_id}`,
                               `${task.algorithm_id}-raw-ranked-edges.csv`
                             );
                           }}
@@ -954,7 +954,7 @@ useEffect(() => {
 
                 openDownloadModal(
                   "Analysis metadata",
-                  `${API_BASE_URL}/api/projects/${projectId}/download/metadata?${query.toString()}`,
+                  `${API_BASE}/projects/${projectId}/download/metadata?${query.toString()}`,
                   `${projectId ?? "project"}-analysis-metadata.json`
                 );
               }}
@@ -984,7 +984,7 @@ useEffect(() => {
                 if (!projectId || !metadata?.has_pseudotime) return;
                 openDownloadModal(
                   "Pseudotime file",
-                  `${API_BASE_URL}/api/projects/${projectId}/download/pseudotime`,
+                  `${API_BASE}/projects/${projectId}/download/pseudotime`,
                   metadata?.pseudotime_filename || project?.pseudotime_filename || "pseudotime.csv"
                 );
               }}
@@ -1013,7 +1013,7 @@ useEffect(() => {
                 if (!projectId) return;
                 openDownloadModal(
                   "Dataset file",
-                  `${API_BASE_URL}/api/projects/${projectId}/download/expression`,
+                  `${API_BASE}/projects/${projectId}/download/expression`,
                   metadata?.expression_filename || project?.expression_filename || "dataset.csv"
                 );
               }}
