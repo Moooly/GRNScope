@@ -83,6 +83,32 @@ export default function HomePage() {
                 Infer, compare, and explore gene regulatory networks in one
                 place.
               </h1>
+
+              <div className="mt-5 flex flex-col gap-3 rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white">Try sample data</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Download example files to test the workflow quickly.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 sm:shrink-0">
+                  <a
+                    href="/samples/sample_expression_matrix.csv"
+                    download
+                    className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                  >
+                    Expression CSV
+                  </a>
+                  <a
+                    href="/samples/sample_pseudotime.csv"
+                    download
+                    className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                  >
+                    Pseudotime CSV
+                  </a>
+                </div>
+              </div>
             </div>
 
             <div className="translate-y-2 rounded-[1.35rem] border border-white/10 bg-white/[0.04] p-2 shadow-xl shadow-cyan-950/20 backdrop-blur lg:translate-y-3 lg:p-2.5">
