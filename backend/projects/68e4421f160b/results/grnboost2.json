@@ -1,0 +1,1726 @@
+{
+  "project_id": "68e4421f160b",
+  "job_id": "173f736bb1ae",
+  "algorithm_id": "grnboost2",
+  "status": "Completed",
+  "generated_at": "2026-04-10 19:40:35",
+  "elapsed_seconds": 29,
+  "network_summary": {
+    "edge_count": 342,
+    "node_count": 19
+  },
+  "top_edges": [
+    {
+      "source": "FOXL2",
+      "target": "WT1pKTS",
+      "score": 184.7688577341804
+    },
+    {
+      "source": "FOXL2",
+      "target": "NR5A1",
+      "score": 134.261273997171
+    },
+    {
+      "source": "UGR",
+      "target": "CBX2",
+      "score": 125.09798415940028
+    },
+    {
+      "source": "DKK1",
+      "target": "DMRT1",
+      "score": 120.93428907470552
+    },
+    {
+      "source": "RSPO1",
+      "target": "NR5A1",
+      "score": 111.65300471
+    },
+    {
+      "source": "CTNNB1",
+      "target": "RSPO1",
+      "score": 106.42944245415131
+    },
+    {
+      "source": "DMRT1",
+      "target": "DKK1",
+      "score": 105.26718636006184
+    },
+    {
+      "source": "NR0B1",
+      "target": "WNT4",
+      "score": 105.04955170976582
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "FOXL2",
+      "score": 100.45479668320944
+    },
+    {
+      "source": "SRY",
+      "target": "DKK1",
+      "score": 96.9181804376428
+    },
+    {
+      "source": "NR5A1",
+      "target": "WT1pKTS",
+      "score": 92.09835163787857
+    },
+    {
+      "source": "CBX2",
+      "target": "UGR",
+      "score": 90.5158851286184
+    },
+    {
+      "source": "NR5A1",
+      "target": "RSPO1",
+      "score": 89.27200099938536
+    },
+    {
+      "source": "GATA4",
+      "target": "WT1mKTS",
+      "score": 88.83074418128531
+    },
+    {
+      "source": "UGR",
+      "target": "WT1mKTS",
+      "score": 87.11038767890668
+    },
+    {
+      "source": "WNT4",
+      "target": "RSPO1",
+      "score": 85.82435241735955
+    },
+    {
+      "source": "DMRT1",
+      "target": "SRY",
+      "score": 85.33709305768673
+    },
+    {
+      "source": "CTNNB1",
+      "target": "SRY",
+      "score": 83.75562669591054
+    },
+    {
+      "source": "NR5A1",
+      "target": "CBX2",
+      "score": 79.5613032938376
+    },
+    {
+      "source": "FOXL2",
+      "target": "CTNNB1",
+      "score": 77.55062019473417
+    },
+    {
+      "source": "SRY",
+      "target": "DMRT1",
+      "score": 77.44732561100648
+    },
+    {
+      "source": "CTNNB1",
+      "target": "NR5A1",
+      "score": 75.69237169424117
+    },
+    {
+      "source": "NR5A1",
+      "target": "FOXL2",
+      "score": 75.40633859357156
+    },
+    {
+      "source": "RSPO1",
+      "target": "CTNNB1",
+      "score": 75.0602273973293
+    },
+    {
+      "source": "DHH",
+      "target": "WT1mKTS",
+      "score": 73.13872467844955
+    },
+    {
+      "source": "NR0B1",
+      "target": "RSPO1",
+      "score": 72.21302493869773
+    },
+    {
+      "source": "SOX9",
+      "target": "DMRT1",
+      "score": 71.57402460743853
+    },
+    {
+      "source": "CTNNB1",
+      "target": "WNT4",
+      "score": 68.86987242727218
+    },
+    {
+      "source": "SOX9",
+      "target": "WNT4",
+      "score": 67.35402870352245
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "SRY",
+      "score": 67.0663411753755
+    },
+    {
+      "source": "FOXL2",
+      "target": "SRY",
+      "score": 64.16687754305349
+    },
+    {
+      "source": "RSPO1",
+      "target": "WT1pKTS",
+      "score": 63.57278118660955
+    },
+    {
+      "source": "DKK1",
+      "target": "SOX9",
+      "score": 63.17849605547546
+    },
+    {
+      "source": "RSPO1",
+      "target": "WNT4",
+      "score": 61.86615080773525
+    },
+    {
+      "source": "FGF9",
+      "target": "PGD2",
+      "score": 59.98789245053622
+    },
+    {
+      "source": "CBX2",
+      "target": "RSPO1",
+      "score": 58.59873752490044
+    },
+    {
+      "source": "CTNNB1",
+      "target": "FOXL2",
+      "score": 58.581310434851574
+    },
+    {
+      "source": "DHH",
+      "target": "FGF9",
+      "score": 58.55227933797113
+    },
+    {
+      "source": "AMH",
+      "target": "DHH",
+      "score": 58.34845023142058
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "CBX2",
+      "score": 58.30733659548699
+    },
+    {
+      "source": "AMH",
+      "target": "FGF9",
+      "score": 58.08941523666497
+    },
+    {
+      "source": "NR5A1",
+      "target": "CTNNB1",
+      "score": 56.54384094471097
+    },
+    {
+      "source": "UGR",
+      "target": "NR0B1",
+      "score": 55.793124692328945
+    },
+    {
+      "source": "RSPO1",
+      "target": "UGR",
+      "score": 55.71188767003556
+    },
+    {
+      "source": "DHH",
+      "target": "NR0B1",
+      "score": 55.71085257196418
+    },
+    {
+      "source": "DKK1",
+      "target": "WT1mKTS",
+      "score": 55.48526181235694
+    },
+    {
+      "source": "CTNNB1",
+      "target": "CBX2",
+      "score": 55.32103954973391
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "CTNNB1",
+      "score": 55.075402741187226
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "NR5A1",
+      "score": 54.880248129316726
+    },
+    {
+      "source": "FGF9",
+      "target": "NR0B1",
+      "score": 54.43411454355121
+    },
+    {
+      "source": "PGD2",
+      "target": "NR0B1",
+      "score": 54.11482137168606
+    },
+    {
+      "source": "NR5A1",
+      "target": "WNT4",
+      "score": 53.71259795976278
+    },
+    {
+      "source": "NR5A1",
+      "target": "UGR",
+      "score": 51.61991034705987
+    },
+    {
+      "source": "DKK1",
+      "target": "SRY",
+      "score": 51.01325616816682
+    },
+    {
+      "source": "AMH",
+      "target": "WNT4",
+      "score": 50.64972726677289
+    },
+    {
+      "source": "WNT4",
+      "target": "NR0B1",
+      "score": 50.5639918878769
+    },
+    {
+      "source": "SOX9",
+      "target": "RSPO1",
+      "score": 50.37764701559106
+    },
+    {
+      "source": "SRY",
+      "target": "FOXL2",
+      "score": 50.24496143123478
+    },
+    {
+      "source": "AMH",
+      "target": "PGD2",
+      "score": 50.157421494906615
+    },
+    {
+      "source": "DHH",
+      "target": "PGD2",
+      "score": 50.13044885199984
+    },
+    {
+      "source": "SOX9",
+      "target": "DKK1",
+      "score": 49.62051687704693
+    },
+    {
+      "source": "CTNNB1",
+      "target": "WT1pKTS",
+      "score": 49.56004100453671
+    },
+    {
+      "source": "FGF9",
+      "target": "DKK1",
+      "score": 48.8297115206988
+    },
+    {
+      "source": "RSPO1",
+      "target": "CBX2",
+      "score": 48.74038470979774
+    },
+    {
+      "source": "RSPO1",
+      "target": "FOXL2",
+      "score": 47.43172665234176
+    },
+    {
+      "source": "PGD2",
+      "target": "WT1mKTS",
+      "score": 47.27987650527918
+    },
+    {
+      "source": "FGF9",
+      "target": "WNT4",
+      "score": 47.18699858435505
+    },
+    {
+      "source": "DKK1",
+      "target": "GATA4",
+      "score": 47.05769493183211
+    },
+    {
+      "source": "GATA4",
+      "target": "SRY",
+      "score": 46.61663452846839
+    },
+    {
+      "source": "UGR",
+      "target": "GATA4",
+      "score": 46.28553203583241
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "RSPO1",
+      "score": 45.94148254558869
+    },
+    {
+      "source": "NR0B1",
+      "target": "CTNNB1",
+      "score": 45.854152888495925
+    },
+    {
+      "source": "DMRT1",
+      "target": "CBX2",
+      "score": 45.77211405353569
+    },
+    {
+      "source": "UGR",
+      "target": "RSPO1",
+      "score": 45.29528022929174
+    },
+    {
+      "source": "RSPO1",
+      "target": "SOX9",
+      "score": 45.29378632558649
+    },
+    {
+      "source": "FOXL2",
+      "target": "RSPO1",
+      "score": 44.82512629651843
+    },
+    {
+      "source": "AMH",
+      "target": "WT1mKTS",
+      "score": 44.31471777233382
+    },
+    {
+      "source": "WNT4",
+      "target": "NR5A1",
+      "score": 44.08296844816043
+    },
+    {
+      "source": "PGD2",
+      "target": "DHH",
+      "score": 43.51818433497179
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "SRY",
+      "score": 43.441297964038114
+    },
+    {
+      "source": "CBX2",
+      "target": "NR5A1",
+      "score": 42.80277680193794
+    },
+    {
+      "source": "SOX9",
+      "target": "GATA4",
+      "score": 42.7544857711079
+    },
+    {
+      "source": "RSPO1",
+      "target": "DKK1",
+      "score": 42.63020117830612
+    },
+    {
+      "source": "DKK1",
+      "target": "WNT4",
+      "score": 42.501247568132264
+    },
+    {
+      "source": "WNT4",
+      "target": "SRY",
+      "score": 42.42456148754432
+    },
+    {
+      "source": "FOXL2",
+      "target": "WT1mKTS",
+      "score": 41.853077761201
+    },
+    {
+      "source": "AMH",
+      "target": "NR0B1",
+      "score": 41.68077613364577
+    },
+    {
+      "source": "NR0B1",
+      "target": "FGF9",
+      "score": 41.451595988032174
+    },
+    {
+      "source": "PGD2",
+      "target": "AMH",
+      "score": 41.32687606699423
+    },
+    {
+      "source": "FGF9",
+      "target": "WT1mKTS",
+      "score": 41.12597942869179
+    },
+    {
+      "source": "NR5A1",
+      "target": "SRY",
+      "score": 41.02756369271106
+    },
+    {
+      "source": "WNT4",
+      "target": "CBX2",
+      "score": 40.19025293891104
+    },
+    {
+      "source": "CBX2",
+      "target": "NR0B1",
+      "score": 39.90347518792456
+    },
+    {
+      "source": "FOXL2",
+      "target": "CBX2",
+      "score": 39.633607110894
+    },
+    {
+      "source": "FGF9",
+      "target": "SOX9",
+      "score": 39.326594296513534
+    },
+    {
+      "source": "DMRT1",
+      "target": "WT1mKTS",
+      "score": 39.32346586211936
+    },
+    {
+      "source": "CTNNB1",
+      "target": "DKK1",
+      "score": 38.981023173678565
+    },
+    {
+      "source": "AMH",
+      "target": "GATA4",
+      "score": 38.86408737568345
+    },
+    {
+      "source": "FGF9",
+      "target": "AMH",
+      "score": 38.75305104203548
+    },
+    {
+      "source": "WNT4",
+      "target": "SOX9",
+      "score": 38.63598384031262
+    },
+    {
+      "source": "RSPO1",
+      "target": "SRY",
+      "score": 38.248967568297104
+    },
+    {
+      "source": "FGF9",
+      "target": "DHH",
+      "score": 38.22323640260738
+    },
+    {
+      "source": "DMRT1",
+      "target": "FOXL2",
+      "score": 38.18499790520982
+    },
+    {
+      "source": "FGF9",
+      "target": "GATA4",
+      "score": 38.01144598332751
+    },
+    {
+      "source": "PGD2",
+      "target": "RSPO1",
+      "score": 37.94884597919045
+    },
+    {
+      "source": "NR0B1",
+      "target": "UGR",
+      "score": 37.84881089313621
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "WT1mKTS",
+      "score": 37.771441169935336
+    },
+    {
+      "source": "SOX9",
+      "target": "CBX2",
+      "score": 37.74614307860617
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "NR0B1",
+      "score": 37.744708670585666
+    },
+    {
+      "source": "WNT4",
+      "target": "FOXL2",
+      "score": 37.73934669066693
+    },
+    {
+      "source": "DMRT1",
+      "target": "SOX9",
+      "score": 37.58236874305051
+    },
+    {
+      "source": "SOX9",
+      "target": "FGF9",
+      "score": 37.253210155810706
+    },
+    {
+      "source": "SRY",
+      "target": "NR5A1",
+      "score": 37.206018697697054
+    },
+    {
+      "source": "NR0B1",
+      "target": "PGD2",
+      "score": 36.90230275281186
+    },
+    {
+      "source": "RSPO1",
+      "target": "NR0B1",
+      "score": 36.81884070918923
+    },
+    {
+      "source": "CTNNB1",
+      "target": "NR0B1",
+      "score": 36.776536947573845
+    },
+    {
+      "source": "SRY",
+      "target": "UGR",
+      "score": 36.5547183955011
+    },
+    {
+      "source": "NR5A1",
+      "target": "DMRT1",
+      "score": 36.48797886302594
+    },
+    {
+      "source": "CBX2",
+      "target": "CTNNB1",
+      "score": 36.464544899404274
+    },
+    {
+      "source": "NR0B1",
+      "target": "NR5A1",
+      "score": 36.463536694901805
+    },
+    {
+      "source": "SOX9",
+      "target": "WT1mKTS",
+      "score": 36.374595014856304
+    },
+    {
+      "source": "GATA4",
+      "target": "DMRT1",
+      "score": 36.132912260817825
+    },
+    {
+      "source": "CBX2",
+      "target": "DMRT1",
+      "score": 35.877640750405966
+    },
+    {
+      "source": "GATA4",
+      "target": "AMH",
+      "score": 35.85789049586507
+    },
+    {
+      "source": "GATA4",
+      "target": "FGF9",
+      "score": 35.75335906421666
+    },
+    {
+      "source": "NR5A1",
+      "target": "DKK1",
+      "score": 35.7204690261716
+    },
+    {
+      "source": "SRY",
+      "target": "CTNNB1",
+      "score": 35.71166323001344
+    },
+    {
+      "source": "DKK1",
+      "target": "CBX2",
+      "score": 35.59720985500774
+    },
+    {
+      "source": "DKK1",
+      "target": "FOXL2",
+      "score": 35.411046935914655
+    },
+    {
+      "source": "NR0B1",
+      "target": "CBX2",
+      "score": 35.40461290193425
+    },
+    {
+      "source": "UGR",
+      "target": "SRY",
+      "score": 35.171830220679524
+    },
+    {
+      "source": "PGD2",
+      "target": "SOX9",
+      "score": 34.89953185574113
+    },
+    {
+      "source": "WNT4",
+      "target": "CTNNB1",
+      "score": 34.84169732744932
+    },
+    {
+      "source": "DHH",
+      "target": "SOX9",
+      "score": 34.46555432330653
+    },
+    {
+      "source": "SOX9",
+      "target": "AMH",
+      "score": 34.41699961450528
+    },
+    {
+      "source": "DMRT1",
+      "target": "WNT4",
+      "score": 34.37855546028503
+    },
+    {
+      "source": "SOX9",
+      "target": "CTNNB1",
+      "score": 34.27234048852145
+    },
+    {
+      "source": "NR0B1",
+      "target": "AMH",
+      "score": 33.854050610486944
+    },
+    {
+      "source": "GATA4",
+      "target": "NR0B1",
+      "score": 33.800201903769675
+    },
+    {
+      "source": "WNT4",
+      "target": "DMRT1",
+      "score": 33.77626126330387
+    },
+    {
+      "source": "DHH",
+      "target": "GATA4",
+      "score": 33.604388399460284
+    },
+    {
+      "source": "GATA4",
+      "target": "SOX9",
+      "score": 33.37012157021632
+    },
+    {
+      "source": "NR5A1",
+      "target": "NR0B1",
+      "score": 33.17755222548191
+    },
+    {
+      "source": "WNT4",
+      "target": "DHH",
+      "score": 33.05507880259301
+    },
+    {
+      "source": "DHH",
+      "target": "AMH",
+      "score": 32.97516769059726
+    },
+    {
+      "source": "PGD2",
+      "target": "GATA4",
+      "score": 32.960765691519754
+    },
+    {
+      "source": "DMRT1",
+      "target": "CTNNB1",
+      "score": 32.884155931282045
+    },
+    {
+      "source": "SRY",
+      "target": "WT1pKTS",
+      "score": 32.78952159640245
+    },
+    {
+      "source": "SRY",
+      "target": "WT1mKTS",
+      "score": 32.44224085452141
+    },
+    {
+      "source": "UGR",
+      "target": "WNT4",
+      "score": 32.12561365647944
+    },
+    {
+      "source": "DMRT1",
+      "target": "AMH",
+      "score": 31.75425451486414
+    },
+    {
+      "source": "RSPO1",
+      "target": "DMRT1",
+      "score": 31.73466010543949
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "AMH",
+      "score": 31.239933012914513
+    },
+    {
+      "source": "SRY",
+      "target": "SOX9",
+      "score": 31.238396317112635
+    },
+    {
+      "source": "CTNNB1",
+      "target": "UGR",
+      "score": 31.060218927451952
+    },
+    {
+      "source": "DKK1",
+      "target": "CTNNB1",
+      "score": 30.9179111220016
+    },
+    {
+      "source": "CBX2",
+      "target": "WT1pKTS",
+      "score": 30.813647538911823
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "DHH",
+      "score": 30.811878534832672
+    },
+    {
+      "source": "FOXL2",
+      "target": "GATA4",
+      "score": 30.803894698840192
+    },
+    {
+      "source": "WNT4",
+      "target": "UGR",
+      "score": 30.270663522317232
+    },
+    {
+      "source": "NR0B1",
+      "target": "DHH",
+      "score": 30.22449884020947
+    },
+    {
+      "source": "NR0B1",
+      "target": "SRY",
+      "score": 29.711451154702964
+    },
+    {
+      "source": "FOXL2",
+      "target": "DMRT1",
+      "score": 29.527187397442344
+    },
+    {
+      "source": "SOX9",
+      "target": "DHH",
+      "score": 29.188478933047623
+    },
+    {
+      "source": "DKK1",
+      "target": "DHH",
+      "score": 29.175378048269163
+    },
+    {
+      "source": "PGD2",
+      "target": "WNT4",
+      "score": 29.12320088004637
+    },
+    {
+      "source": "AMH",
+      "target": "RSPO1",
+      "score": 28.78678274987458
+    },
+    {
+      "source": "NR5A1",
+      "target": "WT1mKTS",
+      "score": 28.779167617034897
+    },
+    {
+      "source": "CBX2",
+      "target": "SRY",
+      "score": 28.65186732513163
+    },
+    {
+      "source": "GATA4",
+      "target": "DKK1",
+      "score": 28.49152871203388
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "GATA4",
+      "score": 28.014592562678416
+    },
+    {
+      "source": "UGR",
+      "target": "NR5A1",
+      "score": 27.948747908498348
+    },
+    {
+      "source": "AMH",
+      "target": "DMRT1",
+      "score": 27.90348056780287
+    },
+    {
+      "source": "SOX9",
+      "target": "SRY",
+      "score": 27.850765939251183
+    },
+    {
+      "source": "SRY",
+      "target": "RSPO1",
+      "score": 27.827314012026296
+    },
+    {
+      "source": "WNT4",
+      "target": "WT1pKTS",
+      "score": 27.59989167335243
+    },
+    {
+      "source": "WNT4",
+      "target": "DKK1",
+      "score": 27.576399772763377
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "GATA4",
+      "score": 27.34411383717325
+    },
+    {
+      "source": "DKK1",
+      "target": "PGD2",
+      "score": 27.098110123607864
+    },
+    {
+      "source": "CBX2",
+      "target": "WNT4",
+      "score": 26.96274949724508
+    },
+    {
+      "source": "DHH",
+      "target": "RSPO1",
+      "score": 26.59099551704748
+    },
+    {
+      "source": "CTNNB1",
+      "target": "WT1mKTS",
+      "score": 26.491737354682957
+    },
+    {
+      "source": "NR0B1",
+      "target": "GATA4",
+      "score": 26.446096518132585
+    },
+    {
+      "source": "SRY",
+      "target": "NR0B1",
+      "score": 26.10703982350904
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "RSPO1",
+      "score": 25.826666553654828
+    },
+    {
+      "source": "PGD2",
+      "target": "FGF9",
+      "score": 25.809436029651412
+    },
+    {
+      "source": "GATA4",
+      "target": "WNT4",
+      "score": 25.67755844224062
+    },
+    {
+      "source": "DMRT1",
+      "target": "DHH",
+      "score": 25.65406428958943
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "DKK1",
+      "score": 25.60876516016354
+    },
+    {
+      "source": "NR0B1",
+      "target": "FOXL2",
+      "score": 25.36859387659538
+    },
+    {
+      "source": "FOXL2",
+      "target": "WNT4",
+      "score": 25.296282626713793
+    },
+    {
+      "source": "WNT4",
+      "target": "FGF9",
+      "score": 25.26839209148811
+    },
+    {
+      "source": "SRY",
+      "target": "CBX2",
+      "score": 25.187060357906947
+    },
+    {
+      "source": "CBX2",
+      "target": "DKK1",
+      "score": 24.860424167764236
+    },
+    {
+      "source": "PGD2",
+      "target": "CBX2",
+      "score": 24.81790981888134
+    },
+    {
+      "source": "SRY",
+      "target": "WNT4",
+      "score": 24.817751488640997
+    },
+    {
+      "source": "NR0B1",
+      "target": "SOX9",
+      "score": 24.749929341634733
+    },
+    {
+      "source": "DKK1",
+      "target": "NR5A1",
+      "score": 24.68498310100197
+    },
+    {
+      "source": "DKK1",
+      "target": "UGR",
+      "score": 24.617330006636767
+    },
+    {
+      "source": "CTNNB1",
+      "target": "SOX9",
+      "score": 24.61376136873438
+    },
+    {
+      "source": "DMRT1",
+      "target": "GATA4",
+      "score": 24.61041198148536
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "WNT4",
+      "score": 24.575953530479683
+    },
+    {
+      "source": "RSPO1",
+      "target": "WT1mKTS",
+      "score": 24.557106455219454
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "DMRT1",
+      "score": 24.320483633350673
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "PGD2",
+      "score": 24.315474190274777
+    },
+    {
+      "source": "WNT4",
+      "target": "AMH",
+      "score": 24.268996062783135
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "SOX9",
+      "score": 24.166973861886056
+    },
+    {
+      "source": "AMH",
+      "target": "SOX9",
+      "score": 24.113503210158395
+    },
+    {
+      "source": "WNT4",
+      "target": "WT1mKTS",
+      "score": 23.857406569726788
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "FGF9",
+      "score": 23.609277593559796
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "DMRT1",
+      "score": 23.585407829065183
+    },
+    {
+      "source": "UGR",
+      "target": "CTNNB1",
+      "score": 23.5774797093634
+    },
+    {
+      "source": "DKK1",
+      "target": "WT1pKTS",
+      "score": 23.57262024568467
+    },
+    {
+      "source": "DHH",
+      "target": "WNT4",
+      "score": 23.568329387607776
+    },
+    {
+      "source": "RSPO1",
+      "target": "DHH",
+      "score": 23.524378855114406
+    },
+    {
+      "source": "FOXL2",
+      "target": "DKK1",
+      "score": 23.411461051031143
+    },
+    {
+      "source": "DHH",
+      "target": "DMRT1",
+      "score": 23.22481432034968
+    },
+    {
+      "source": "DKK1",
+      "target": "AMH",
+      "score": 23.203233971744
+    },
+    {
+      "source": "NR0B1",
+      "target": "DMRT1",
+      "score": 23.0656631070786
+    },
+    {
+      "source": "CBX2",
+      "target": "GATA4",
+      "score": 22.882818578207555
+    },
+    {
+      "source": "DHH",
+      "target": "CBX2",
+      "score": 22.814989625411812
+    },
+    {
+      "source": "DHH",
+      "target": "DKK1",
+      "score": 22.784564249774284
+    },
+    {
+      "source": "CTNNB1",
+      "target": "DMRT1",
+      "score": 22.613795000588745
+    },
+    {
+      "source": "CBX2",
+      "target": "FOXL2",
+      "score": 22.60038696175047
+    },
+    {
+      "source": "WNT4",
+      "target": "GATA4",
+      "score": 22.45167001793723
+    },
+    {
+      "source": "DMRT1",
+      "target": "WT1pKTS",
+      "score": 22.344324325579095
+    },
+    {
+      "source": "FOXL2",
+      "target": "NR0B1",
+      "score": 22.33161535342787
+    },
+    {
+      "source": "SOX9",
+      "target": "NR5A1",
+      "score": 22.24638597921786
+    },
+    {
+      "source": "FGF9",
+      "target": "RSPO1",
+      "score": 22.114376203501177
+    },
+    {
+      "source": "SRY",
+      "target": "GATA4",
+      "score": 21.742586329340924
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "NR0B1",
+      "score": 21.63404883128919
+    },
+    {
+      "source": "GATA4",
+      "target": "CBX2",
+      "score": 21.041114110750012
+    },
+    {
+      "source": "PGD2",
+      "target": "DMRT1",
+      "score": 20.722758165846113
+    },
+    {
+      "source": "UGR",
+      "target": "WT1pKTS",
+      "score": 20.64951345994193
+    },
+    {
+      "source": "DKK1",
+      "target": "FGF9",
+      "score": 20.5223939254054
+    },
+    {
+      "source": "RSPO1",
+      "target": "GATA4",
+      "score": 20.509223585697637
+    },
+    {
+      "source": "SRY",
+      "target": "AMH",
+      "score": 20.457771513383115
+    },
+    {
+      "source": "CTNNB1",
+      "target": "GATA4",
+      "score": 20.359569208894083
+    },
+    {
+      "source": "FOXL2",
+      "target": "SOX9",
+      "score": 20.035185488151253
+    },
+    {
+      "source": "WNT4",
+      "target": "PGD2",
+      "score": 19.996187320859875
+    },
+    {
+      "source": "GATA4",
+      "target": "DHH",
+      "score": 19.74272235471682
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "DKK1",
+      "score": 19.709056317566898
+    },
+    {
+      "source": "SRY",
+      "target": "FGF9",
+      "score": 19.49541676322758
+    },
+    {
+      "source": "DMRT1",
+      "target": "RSPO1",
+      "score": 19.43778899327826
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "UGR",
+      "score": 19.40579169412004
+    },
+    {
+      "source": "SOX9",
+      "target": "UGR",
+      "score": 19.393007541760472
+    },
+    {
+      "source": "GATA4",
+      "target": "PGD2",
+      "score": 19.341865385984892
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "DHH",
+      "score": 19.331363069593223
+    },
+    {
+      "source": "CBX2",
+      "target": "WT1mKTS",
+      "score": 19.09713348857083
+    },
+    {
+      "source": "DHH",
+      "target": "UGR",
+      "score": 19.08472436328726
+    },
+    {
+      "source": "PGD2",
+      "target": "DKK1",
+      "score": 19.05283705038397
+    },
+    {
+      "source": "SOX9",
+      "target": "NR0B1",
+      "score": 19.042465878753372
+    },
+    {
+      "source": "AMH",
+      "target": "DKK1",
+      "score": 18.82431997464048
+    },
+    {
+      "source": "NR0B1",
+      "target": "WT1pKTS",
+      "score": 18.75370086118596
+    },
+    {
+      "source": "DMRT1",
+      "target": "PGD2",
+      "score": 18.512516381534244
+    },
+    {
+      "source": "AMH",
+      "target": "SRY",
+      "score": 18.428932248844315
+    },
+    {
+      "source": "FGF9",
+      "target": "CTNNB1",
+      "score": 18.40376798812382
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "CBX2",
+      "score": 18.38562651613798
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "SOX9",
+      "score": 18.343369119130163
+    },
+    {
+      "source": "FGF9",
+      "target": "DMRT1",
+      "score": 18.217416492733268
+    },
+    {
+      "source": "NR0B1",
+      "target": "WT1mKTS",
+      "score": 18.166935794828355
+    },
+    {
+      "source": "DMRT1",
+      "target": "NR5A1",
+      "score": 17.951907718066586
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "UGR",
+      "score": 17.86339269467579
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "CTNNB1",
+      "score": 17.850225960279744
+    },
+    {
+      "source": "NR5A1",
+      "target": "SOX9",
+      "score": 17.537483844085166
+    },
+    {
+      "source": "DMRT1",
+      "target": "UGR",
+      "score": 17.50281240206821
+    },
+    {
+      "source": "DKK1",
+      "target": "RSPO1",
+      "score": 17.338130668913145
+    },
+    {
+      "source": "NR5A1",
+      "target": "GATA4",
+      "score": 17.29662249284936
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "WNT4",
+      "score": 17.283830002942647
+    },
+    {
+      "source": "NR5A1",
+      "target": "FGF9",
+      "score": 17.106072146408383
+    },
+    {
+      "source": "DHH",
+      "target": "NR5A1",
+      "score": 17.08462503737364
+    },
+    {
+      "source": "UGR",
+      "target": "FOXL2",
+      "score": 16.975873261045898
+    },
+    {
+      "source": "DHH",
+      "target": "SRY",
+      "score": 16.861330589831887
+    },
+    {
+      "source": "SOX9",
+      "target": "PGD2",
+      "score": 16.500568612385077
+    },
+    {
+      "source": "DHH",
+      "target": "CTNNB1",
+      "score": 16.195398560869425
+    },
+    {
+      "source": "DKK1",
+      "target": "NR0B1",
+      "score": 15.929885841788424
+    },
+    {
+      "source": "RSPO1",
+      "target": "FGF9",
+      "score": 15.821239001178776
+    },
+    {
+      "source": "DMRT1",
+      "target": "FGF9",
+      "score": 15.52543090296065
+    },
+    {
+      "source": "DMRT1",
+      "target": "NR0B1",
+      "score": 15.435947425654184
+    },
+    {
+      "source": "GATA4",
+      "target": "RSPO1",
+      "score": 15.352004901029398
+    },
+    {
+      "source": "RSPO1",
+      "target": "AMH",
+      "score": 15.278294496245582
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "FGF9",
+      "score": 15.108543826215188
+    },
+    {
+      "source": "UGR",
+      "target": "DMRT1",
+      "score": 14.853900949598868
+    },
+    {
+      "source": "SRY",
+      "target": "DHH",
+      "score": 14.214815080131851
+    },
+    {
+      "source": "CTNNB1",
+      "target": "FGF9",
+      "score": 13.933333110067831
+    },
+    {
+      "source": "UGR",
+      "target": "SOX9",
+      "score": 13.92915553016806
+    },
+    {
+      "source": "AMH",
+      "target": "CBX2",
+      "score": 13.790505855828147
+    },
+    {
+      "source": "PGD2",
+      "target": "NR5A1",
+      "score": 13.624219904557858
+    },
+    {
+      "source": "FGF9",
+      "target": "CBX2",
+      "score": 13.590805467938477
+    },
+    {
+      "source": "SRY",
+      "target": "PGD2",
+      "score": 13.54074337653571
+    },
+    {
+      "source": "NR0B1",
+      "target": "DKK1",
+      "score": 13.531166308322376
+    },
+    {
+      "source": "FGF9",
+      "target": "SRY",
+      "score": 13.267714959000209
+    },
+    {
+      "source": "UGR",
+      "target": "DKK1",
+      "score": 13.182188661949148
+    },
+    {
+      "source": "SOX9",
+      "target": "FOXL2",
+      "score": 13.049955014673428
+    },
+    {
+      "source": "PGD2",
+      "target": "SRY",
+      "score": 12.957887681306312
+    },
+    {
+      "source": "CTNNB1",
+      "target": "PGD2",
+      "score": 12.90761209839675
+    },
+    {
+      "source": "FOXL2",
+      "target": "UGR",
+      "score": 12.84880491063204
+    },
+    {
+      "source": "AMH",
+      "target": "CTNNB1",
+      "score": 12.811636502966223
+    },
+    {
+      "source": "CTNNB1",
+      "target": "AMH",
+      "score": 12.681362828352407
+    },
+    {
+      "source": "PGD2",
+      "target": "UGR",
+      "score": 12.51031046582198
+    },
+    {
+      "source": "PGD2",
+      "target": "CTNNB1",
+      "score": 12.346843581882355
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "NR5A1",
+      "score": 12.150913962621916
+    },
+    {
+      "source": "NR5A1",
+      "target": "DHH",
+      "score": 11.871641913782488
+    },
+    {
+      "source": "FOXL2",
+      "target": "FGF9",
+      "score": 11.715572107622036
+    },
+    {
+      "source": "NR5A1",
+      "target": "PGD2",
+      "score": 11.56198601301982
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "AMH",
+      "score": 11.257700008264331
+    },
+    {
+      "source": "GATA4",
+      "target": "NR5A1",
+      "score": 11.221818415310098
+    },
+    {
+      "source": "CBX2",
+      "target": "AMH",
+      "score": 10.981799633543613
+    },
+    {
+      "source": "FOXL2",
+      "target": "PGD2",
+      "score": 10.406174427977096
+    },
+    {
+      "source": "GATA4",
+      "target": "UGR",
+      "score": 10.301198639315832
+    },
+    {
+      "source": "CBX2",
+      "target": "PGD2",
+      "score": 10.156805994977027
+    },
+    {
+      "source": "CBX2",
+      "target": "FGF9",
+      "score": 9.982658414334958
+    },
+    {
+      "source": "AMH",
+      "target": "UGR",
+      "score": 9.52770186865402
+    },
+    {
+      "source": "CBX2",
+      "target": "SOX9",
+      "score": 9.519804908736525
+    },
+    {
+      "source": "CTNNB1",
+      "target": "DHH",
+      "score": 9.467267834944566
+    },
+    {
+      "source": "FGF9",
+      "target": "UGR",
+      "score": 9.362830528907317
+    },
+    {
+      "source": "NR5A1",
+      "target": "AMH",
+      "score": 9.080955481633865
+    },
+    {
+      "source": "UGR",
+      "target": "FGF9",
+      "score": 9.002374305184242
+    },
+    {
+      "source": "GATA4",
+      "target": "CTNNB1",
+      "score": 8.638090531385231
+    },
+    {
+      "source": "GATA4",
+      "target": "FOXL2",
+      "score": 8.62183461954825
+    },
+    {
+      "source": "RSPO1",
+      "target": "PGD2",
+      "score": 8.577237117450117
+    },
+    {
+      "source": "WT1pKTS",
+      "target": "PGD2",
+      "score": 8.543511365575863
+    },
+    {
+      "source": "FGF9",
+      "target": "NR5A1",
+      "score": 8.476416425461027
+    },
+    {
+      "source": "GATA4",
+      "target": "WT1pKTS",
+      "score": 8.431424928534469
+    },
+    {
+      "source": "FOXL2",
+      "target": "AMH",
+      "score": 8.328036078096117
+    },
+    {
+      "source": "CBX2",
+      "target": "DHH",
+      "score": 7.789117104142629
+    },
+    {
+      "source": "PGD2",
+      "target": "FOXL2",
+      "score": 7.762169055555982
+    },
+    {
+      "source": "PGD2",
+      "target": "WT1pKTS",
+      "score": 7.585249428290053
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "WT1pKTS",
+      "score": 7.4967040284500435
+    },
+    {
+      "source": "UGR",
+      "target": "PGD2",
+      "score": 7.36314204116638
+    },
+    {
+      "source": "DHH",
+      "target": "FOXL2",
+      "score": 7.220761798498966
+    },
+    {
+      "source": "SOX9",
+      "target": "WT1pKTS",
+      "score": 6.987841250644303
+    },
+    {
+      "source": "AMH",
+      "target": "NR5A1",
+      "score": 6.567782374464426
+    },
+    {
+      "source": "UGR",
+      "target": "AMH",
+      "score": 6.283626877690979
+    },
+    {
+      "source": "WT1mKTS",
+      "target": "FOXL2",
+      "score": 6.140476317617262
+    },
+    {
+      "source": "DHH",
+      "target": "WT1pKTS",
+      "score": 6.062926639485496
+    },
+    {
+      "source": "AMH",
+      "target": "FOXL2",
+      "score": 5.859701958814401
+    },
+    {
+      "source": "FOXL2",
+      "target": "DHH",
+      "score": 5.7638020561085686
+    },
+    {
+      "source": "AMH",
+      "target": "WT1pKTS",
+      "score": 5.667242297898623
+    },
+    {
+      "source": "FGF9",
+      "target": "WT1pKTS",
+      "score": 5.245360162433499
+    },
+    {
+      "source": "FGF9",
+      "target": "FOXL2",
+      "score": 4.945721808899454
+    },
+    {
+      "source": "UGR",
+      "target": "DHH",
+      "score": 4.095643313924322
+    }
+  ],
+  "beeline_runtime_root": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/68e4421f160b/_beeline_runtime/grnboost2",
+  "ranked_edges_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/68e4421f160b/_beeline_runtime/grnboost2/outputs/68e4421f160b/run-1/grnboost2/rankedEdges.csv"
+}

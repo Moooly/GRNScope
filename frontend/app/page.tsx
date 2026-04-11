@@ -45,11 +45,6 @@ export default function HomePage() {
     },
   ];
 
-  const stats = [
-    { label: "Supported algorithms", value: "12+" },
-    { label: "Analysis modes", value: "Individual + Consensus" },
-    { label: "Execution style", value: "Asynchronous" },
-  ];
 
   const recentMethods = [
     {
@@ -76,71 +71,69 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="relative overflow-hidden border-b border-white/10">
+      <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(20,184,166,0.18),transparent_28%)]" />
-        <div className="relative mx-auto flex max-w-7xl flex-col gap-16 px-6 py-16 lg:px-10">
-          <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="max-w-3xl">
-              <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
+        <div className="relative mx-auto flex max-w-7xl flex-col gap-5 px-6 py-6 lg:px-10 lg:py-8">
+          <div className="grid items-center gap-8 lg:grid-cols-[0.92fr_0.88fr]">
+            <div className="max-w-[36rem]">
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-teal-300/85 sm:text-sm">
+                Gene regulatory network inference platform
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-[3.15rem] lg:leading-[1.16]">
                 Infer, compare, and explore gene regulatory networks in one
                 place.
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                GRN Scope enables researchers to infer gene regulatory networks
-                from single-cell RNA-seq data using multiple algorithms and to
-                explore consensus results through an interactive interface
-              </p>
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-950/30 backdrop-blur">
-              <div className="rounded-[1.5rem] border border-white/10 bg-slate-900/90 p-5">
-                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="translate-y-2 rounded-[1.35rem] border border-white/10 bg-white/[0.04] p-2 shadow-xl shadow-cyan-950/20 backdrop-blur lg:translate-y-3 lg:p-2.5">
+              <div className="rounded-[1.1rem] border border-white/10 bg-slate-900/92 p-2.5">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div>
-                    <p className="text-sm text-slate-400">Example workspace</p>
-                    <h2 className="mt-1 text-xl font-semibold">
+                    <p className="text-xs text-slate-400">Example workspace</p>
+                    <h2 className="mt-1 text-[0.95rem] font-semibold">
                       Consensus Network
                     </h2>
                   </div>
-                  <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">
+                  <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.7rem] text-emerald-300">
                     3 methods selected
                   </span>
                 </div>
 
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-slate-800/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                  <div className="rounded-[1rem] border border-white/10 bg-slate-800/70 p-2">
+                    <p className="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">
                       Dataset
                     </p>
-                    <p className="mt-2 text-sm font-medium text-white">
+                    <p className="mt-1.5 text-[0.82rem] font-medium text-white">
                       Gonadal sex determination
                     </p>
-                    <p className="mt-1 text-sm text-slate-400">
+                    <p className="mt-1 text-[0.8rem] text-slate-400">
                       2,000 filtered genes · 12,400 cells
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-800/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                  <div className="rounded-[1rem] border border-white/10 bg-slate-800/70 p-2">
+                    <p className="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">
                       Job status
                     </p>
-                    <p className="mt-2 text-sm font-medium text-white">
+                    <p className="mt-1.5 text-[0.82rem] font-medium text-white">
                       Partially completed
                     </p>
-                    <p className="mt-1 text-sm text-slate-400">
+                    <p className="mt-1 text-[0.8rem] text-slate-400">
                       PIDC, GENIE3, GRNBoost2 finished
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-white/10 bg-slate-800/70 p-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-sm font-medium text-white">
+                <div className="mt-2 rounded-[1rem] border border-white/10 bg-slate-800/70 p-2">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-[0.82rem] font-medium text-white">
                       Top consensus edges
                     </p>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-[0.7rem] text-slate-400">
                       Threshold ≥ 2
                     </span>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     {[
                       ["SOX9", "AMH", "0.94"],
                       ["WT1", "SOX9", "0.91"],
@@ -148,20 +141,20 @@ export default function HomePage() {
                     ].map(([source, target, score]) => (
                       <div
                         key={`${source}-${target}`}
-                        className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-xl bg-slate-900/80 px-4 py-3"
+                        className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl bg-slate-900/80 px-2 py-1.5"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">
+                          <p className="truncate text-[0.82rem] font-medium text-white">
                             {source} <span className="text-slate-500">→</span>{" "}
                             {target}
                           </p>
                         </div>
-                        <span className="rounded-full bg-teal-400/10 px-3 py-1 text-xs text-teal-200">
+                        <span className="rounded-full bg-teal-400/10 px-2.5 py-1 text-[0.68rem] text-teal-200">
                           score {score}
                         </span>
-                        <span className="h-2 w-16 rounded-full bg-slate-700">
+                        <span className="h-1.5 w-14 rounded-full bg-slate-700">
                           <span
-                            className="block h-2 rounded-full bg-teal-400"
+                            className="block h-1.5 rounded-full bg-teal-400"
                             style={{ width: `${Number(score) * 100}%` }}
                           />
                         </span>
@@ -171,6 +164,58 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent via-slate-950/60 to-slate-950" />
+      </section>
+
+      <section className="bg-slate-950/95">
+        <div className="mx-auto -mt-2 max-w-7xl px-6 py-8 lg:-mt-4 lg:px-10 lg:py-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-teal-300/85 sm:text-sm">
+                Recently added methods
+              </p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                New algorithms added to the platform
+              </h2>
+            </div>
+
+            <Link
+              href="/algorithms"
+              className="inline-flex shrink-0 rounded-2xl border border-white/15 px-4 py-2.5 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+            >
+              Browse all algorithms
+            </Link>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-4">
+            {recentMethods.map((method) => (
+              <div
+                key={method.name}
+                className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-5 transition hover:border-teal-300/20 hover:bg-white/[0.05]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[0.7rem] font-medium uppercase tracking-[0.2em] text-teal-300/85">
+                      Recently added
+                    </p>
+                    <h3 className="mt-2.5 text-lg font-semibold text-white">
+                      {method.name}
+                    </h3>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300">
+                    {method.publicationDate}
+                  </span>
+                </div>
+
+                <div className="mt-5">
+                  <span className="inline-flex rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+                    {method.category}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -239,57 +284,6 @@ export default function HomePage() {
                 <p className="mt-4 leading-7 text-slate-300">
                   {feature.description}
                 </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-white/10 bg-slate-950/90">
-        <div className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
-          <div className="flex items-end justify-between gap-6">
-            <div className="max-w-3xl">
-              <p className="text-sm font-medium uppercase tracking-[0.22em] text-teal-300">
-                Recently added methods
-              </p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                New algorithms added to the platform
-              </h2>
-            </div>
-
-            <Link
-              href="/algorithms"
-              className="inline-flex shrink-0 rounded-2xl border border-white/15 px-5 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
-            >
-              Browse all algorithms
-            </Link>
-          </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-4">
-            {recentMethods.map((method) => (
-              <div
-                key={method.name}
-                className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 transition hover:border-teal-300/20 hover:bg-white/[0.05]"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-teal-300">
-                      Recently added
-                    </p>
-                    <h3 className="mt-3 text-xl font-semibold text-white">
-                      {method.name}
-                    </h3>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
-                    {method.publicationDate}
-                  </span>
-                </div>
-
-                <div className="mt-6">
-                  <span className="inline-flex rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
-                    {method.category}
-                  </span>
-                </div>
               </div>
             ))}
           </div>

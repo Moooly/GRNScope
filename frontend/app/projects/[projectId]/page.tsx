@@ -72,18 +72,9 @@ export default function ProjectDetailPage() {
     [completedTasks]
   );
 
-  useEffect(() => {
-    if (completedAlgorithmIds.length === 0) {
-      setSelectedAlgorithmIds([]);
-      return;
-    }
-
-    setSelectedAlgorithmIds((prev) => {
-      const filtered = prev.filter((id) => completedAlgorithmIds.includes(id));
-      if (filtered.length > 0) return filtered;
-      return completedAlgorithmIds;
-    });
-  }, [completedAlgorithmIds]);
+useEffect(() => {
+  setSelectedAlgorithmIds(completedAlgorithmIds);
+}, [completedAlgorithmIds]);
 
   const activeAlgorithmIds = useMemo(() => {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));

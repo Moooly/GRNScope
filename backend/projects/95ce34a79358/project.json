@@ -1,0 +1,21 @@
+{
+  "project_id": "95ce34a79358",
+  "project_name": "ssss",
+  "project_description": "",
+  "created_at": 1775876888.841228,
+  "created_at_display": "2026-04-10 20:08",
+  "top_variable_genes": "19",
+  "include_all_tfs": "true",
+  "normalize_enabled": "true",
+  "log_transform_enabled": "true",
+  "selected_algorithms": [
+    "grnboost2",
+    "pidc",
+    "ppcor",
+    "pearson"
+  ],
+  "ensemble_enabled": "true",
+  "expression_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/95ce34a79358/expression__ExpressionData.csv",
+  "pseudotime_path": null,
+  "latest_job_id": "b18ae381f9d2"
+}

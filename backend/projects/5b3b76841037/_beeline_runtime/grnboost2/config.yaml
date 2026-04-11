@@ -1,0 +1,16 @@
+input_settings:
+  input_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/5b3b76841037/_beeline_runtime/grnboost2/inputs"
+  datasets:
+    - dataset_id: "5b3b76841037"
+      should_run: [True]
+      runs:
+        - run_id: "run-1"
+          exprData: "ExpressionData.csv"
+  algorithms:
+    - algorithm_id: "GRNBOOST2"
+      image: "grnbeeline/arboreto:base"
+      should_run: [True]
+      params:
+        {}
+output_settings:
+  output_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/5b3b76841037/_beeline_runtime/grnboost2/outputs"
