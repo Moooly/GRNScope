@@ -171,7 +171,7 @@ async def download_algorithm_result_file(project_id: str, algorithm_id: str):
 
         download_filename = f"{algorithm_id}-raw-ranked-edges.csv"
 
-        csv_text = file_path.read_text(encoding="utf-8", newline="")
+        csv_text = file_path.read_text(encoding="utf-8")
         input_buffer = StringIO(csv_text)
 
         sample = csv_text[:4096]
