@@ -124,21 +124,24 @@ export default function CreateProjectModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-6 py-10 backdrop-blur-sm ${
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm ${
         isCreateClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
       }`}
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-6xl rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-cyan-950/20 lg:p-8 ${
+        className={`w-full max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
           isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div ref={contentScrollRef} className="max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between gap-6 border-b border-white/10 pb-5">
+        <div className="flex items-start justify-between gap-6 border-b border-[#213f54]/20 pb-5">
           <div>
-            <h2 className="mt-3 text-3xl font-semibold text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#1b75a6]">
+              Workspace setup
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
               Create New Project
             </h2>
           </div>
@@ -146,37 +149,37 @@ export default function CreateProjectModal({
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
+            className={`rounded-full px-3 py-1 text-xs font-bold ${
               createStep === "upload"
-                ? "bg-teal-300/10 text-teal-200"
-                : "bg-white/[0.04] text-slate-400"
+                ? "border border-[#1b75a6]/20 bg-[#f2f9fc] text-[#1b75a6]"
+                : "border border-slate-200 bg-slate-50 text-slate-500"
             }`}
           >
             1. Upload
           </span>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
+            className={`rounded-full px-3 py-1 text-xs font-bold ${
               createStep === "preprocessing"
-                ? "bg-teal-300/10 text-teal-200"
-                : "bg-white/[0.04] text-slate-400"
+                ? "border border-[#1b75a6]/20 bg-[#f2f9fc] text-[#1b75a6]"
+                : "border border-slate-200 bg-slate-50 text-slate-500"
             }`}
           >
             2. Data preprocessing
           </span>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
+            className={`rounded-full px-3 py-1 text-xs font-bold ${
               createStep === "algorithms"
-                ? "bg-teal-300/10 text-teal-200"
-                : "bg-white/[0.04] text-slate-400"
+                ? "border border-[#1b75a6]/20 bg-[#f2f9fc] text-[#1b75a6]"
+                : "border border-slate-200 bg-slate-50 text-slate-500"
             }`}
           >
             3. Algorithms
           </span>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
+            className={`rounded-full px-3 py-1 text-xs font-bold ${
               createStep === "review"
-                ? "bg-teal-300/10 text-teal-200"
-                : "bg-white/[0.04] text-slate-400"
+                ? "border border-[#1b75a6]/20 bg-[#f2f9fc] text-[#1b75a6]"
+                : "border border-slate-200 bg-slate-50 text-slate-500"
             }`}
           >
             4. Review
@@ -204,24 +207,24 @@ export default function CreateProjectModal({
           {createStep === "preprocessing" && (
             <div className="space-y-6">
               <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-                <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="text-xl font-semibold text-white">
+                      <h3 className="text-xl font-bold text-slate-950">
                         Gene filtering by variability
                       </h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
                         Retain the top most-variable genes for downstream
                         inference.
                       </p>
                     </div>
-                    <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+                    <span className="rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-3 py-1 text-xs font-bold text-[#178a62]">
                       Required
                     </span>
                   </div>
 
                   <div className="mt-6">
-                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                    <label className="mb-2 block text-sm font-bold text-slate-700">
                       Top variable genes
                     </label>
                     <input
@@ -250,9 +253,9 @@ export default function CreateProjectModal({
 
                         setTopVariableGenes(nextValue);
                       }}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 [appearance:textfield] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
-                    <p className="mt-3 text-xs leading-5 text-slate-400">
+                    <p className="mt-3 text-xs leading-5 text-slate-500">
                       {geneCount !== null
                         ? `This dataset contains ${geneCount.toLocaleString()} genes, so the value cannot be larger than ${geneCount.toLocaleString()}.`
                         : "The maximum value will match the number of genes detected in the uploaded dataset after validation."}
@@ -261,13 +264,13 @@ export default function CreateProjectModal({
                 </div>
 
                 <div className="space-y-6">
-                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-xl font-semibold text-white">
+                        <h3 className="text-xl font-bold text-slate-950">
                           Transcription factor inclusion override
                         </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
                           Retain all known transcription factors even if they
                           fall outside the top-N variability cutoff.
                         </p>
@@ -277,22 +280,22 @@ export default function CreateProjectModal({
                         onClick={() => setIncludeAllTFs(!includeAllTFs)}
                         className={`shrink-0 self-start appearance-none border-0 inline-flex h-7 w-14 items-center rounded-full px-1 transition ${
                           includeAllTFs
-                            ? "cursor-pointer justify-end bg-teal-400"
-                            : "cursor-pointer justify-start bg-white/20"
+                            ? "cursor-pointer justify-end bg-[#1b75a6]"
+                            : "cursor-pointer justify-start bg-slate-300"
                         }`}
                       >
-                        <span className="h-5 w-5 rounded-full bg-slate-950" />
+                        <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-xl font-semibold text-white">
+                        <h3 className="text-xl font-bold text-slate-950">
                           Normalization
                         </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
                           Apply library-size normalization to correct for
                           sequencing-depth variation across cells.
                         </p>
@@ -302,22 +305,22 @@ export default function CreateProjectModal({
                         onClick={() => setNormalizeEnabled(!normalizeEnabled)}
                         className={`shrink-0 self-start appearance-none border-0 inline-flex h-7 w-14 items-center rounded-full px-1 transition ${
                           normalizeEnabled
-                            ? "cursor-pointer justify-end bg-teal-400"
-                            : "cursor-pointer justify-start bg-white/20"
+                            ? "cursor-pointer justify-end bg-[#1b75a6]"
+                            : "cursor-pointer justify-start bg-slate-300"
                         }`}
                       >
-                        <span className="h-5 w-5 rounded-full bg-slate-950" />
+                        <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-xl font-semibold text-white">
+                        <h3 className="text-xl font-bold text-slate-950">
                           Log-transformation
                         </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
                           Apply a log₂(x + 1) transformation after normalization.
                         </p>
                       </div>
@@ -328,11 +331,11 @@ export default function CreateProjectModal({
                         }
                         className={`shrink-0 self-start appearance-none border-0 inline-flex h-7 w-14 items-center rounded-full px-1 transition ${
                           logTransformEnabled
-                            ? "cursor-pointer justify-end bg-teal-400"
-                            : "cursor-pointer justify-start bg-white/20"
+                            ? "cursor-pointer justify-end bg-[#1b75a6]"
+                            : "cursor-pointer justify-start bg-slate-300"
                         }`}
                       >
-                        <span className="h-5 w-5 rounded-full bg-slate-950" />
+                        <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
                       </button>
                     </div>
                   </div>
@@ -342,11 +345,11 @@ export default function CreateProjectModal({
           )}
 
           {createStep === "preprocessing" && (
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-              <h3 className="text-xl font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-6">
+              <h3 className="text-xl font-bold text-slate-950">
                 Preprocessing summary
               </h3>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
+              <p className="mt-3 text-sm leading-6 text-slate-600">
                 {geneCount !== null && cellCount !== null
                   ? `Your ${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells matrix will be filtered to ${topVariableGenes || "0"} genes.`
                   : `Your uploaded matrix will be filtered to ${topVariableGenes || "0"} genes.`}
@@ -376,16 +379,15 @@ export default function CreateProjectModal({
               pseudotimeFileName={pseudotimeFileName}
               datasetSummary={datasetSummary}
               selectedAlgorithms={selectedAlgorithms}
-              estimatedTotalRuntime={estimatedTotalRuntime}
             />
           )}
 
           {errors.length > 0 && (
-            <div className="rounded-[2rem] border border-rose-300/20 bg-rose-300/10 p-5">
-              <p className="text-sm font-medium text-rose-200">
+            <div className="rounded-[1.5rem] border border-rose-200 bg-rose-50 p-5">
+              <p className="text-sm font-bold text-rose-700">
                 Please fix the following issues:
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-slate-200">
+              <ul className="mt-3 space-y-2 text-sm text-rose-700">
                 {errors.map((error, index) => (
                   <li key={index}>• {error}</li>
                 ))}
@@ -393,7 +395,7 @@ export default function CreateProjectModal({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 pt-6">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#213f54]/20 pt-6">
             <button
               type="button"
               onClick={
@@ -405,7 +407,7 @@ export default function CreateProjectModal({
                       ? onBackToPreprocessing
                       : onBackToAlgorithms
               }
-              className="cursor-pointer rounded-2xl border border-white/15 px-5 py-3 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+              className="cursor-pointer rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
             >
               {createStep === "upload" ? "Cancel" : "Back"}
             </button>
@@ -415,7 +417,7 @@ export default function CreateProjectModal({
                 type="button"
                 onClick={onUploadNext}
                 disabled={isUploadingTempDataset}
-                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="cursor-pointer rounded-full bg-[#1b75a6] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isUploadingTempDataset ? "Uploading..." : "Next"}
               </button>
@@ -425,7 +427,7 @@ export default function CreateProjectModal({
               <button
                 type="button"
                 onClick={onPreprocessingNext}
-                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                className="cursor-pointer rounded-full bg-[#1b75a6] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
               >
                 Next
               </button>
@@ -435,7 +437,7 @@ export default function CreateProjectModal({
               <button
                 type="button"
                 onClick={onAlgorithmsNext}
-                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                className="cursor-pointer rounded-full bg-[#1b75a6] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
               >
                 Next
               </button>
@@ -446,7 +448,7 @@ export default function CreateProjectModal({
                 type="button"
                 onClick={onCreateProject}
                 disabled={isSubmitting}
-                className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="cursor-pointer rounded-full bg-[#1b75a6] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? "Creating..." : "Create project"}
               </button>

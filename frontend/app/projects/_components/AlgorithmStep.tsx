@@ -29,31 +29,39 @@ export default function AlgorithmStep({
   onSelectAll,
 }: AlgorithmStepProps) {
   return (
-    <div className="space-y-8">
-      <section className="space-y-8">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-semibold text-white">
-              Methods that do not require pseudotime
-            </h2>
+    <div className="space-y-6">
+      <section className="space-y-6">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
+                Core methods
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                Methods that do not require pseudotime
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                These algorithms can run directly on the expression matrix without a pseudotime file.
+              </p>
+            </div>
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={onRecommended}
-                className="cursor-pointer rounded-xl bg-teal-400 px-3 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                className="cursor-pointer rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
               >
                 Recommended preset
               </button>
               <button
                 type="button"
                 onClick={onSelectAll}
-                className="cursor-pointer rounded-xl bg-teal-400 px-3 py-2 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
+                className="cursor-pointer rounded-full bg-[#1b75a6] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
               >
                 Select all compatible
               </button>
             </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {algorithms
               .filter((algorithm) => !algorithm.requiresPseudotime)
               .map((algorithm) => (
@@ -68,18 +76,32 @@ export default function AlgorithmStep({
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-2xl font-semibold text-white">
-              Methods that require pseudotime
-            </h2>
-            <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-200">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
+                Pseudotime-based methods
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                Methods that require pseudotime
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                These algorithms require ordered cells or a pseudotime file to run.
+              </p>
+            </div>
+            <span
+              className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${
+                datasetSummary.hasPseudotime
+                  ? "border-[#20b779]/20 bg-[#e8f7f1] text-[#178a62]"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+              }`}
+            >
               {datasetSummary.hasPseudotime
                 ? "Available"
-                : "Unavailable methods, pseudotime file is required"}
+                : "Pseudotime file required"}
             </span>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {algorithms
               .filter((algorithm) => algorithm.requiresPseudotime)
               .map((algorithm) => {
@@ -97,34 +119,6 @@ export default function AlgorithmStep({
           </div>
         </div>
       </section>
-
-      <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-semibold text-white">Ensemble analysis</h2>
-          <button
-            type="button"
-            onClick={() => setEnsembleEnabled((current) => !current)}
-            disabled={selectedIds.length < 2}
-            className={`relative h-7 w-14 rounded-full transition ${
-              selectedIds.length < 2
-                ? "cursor-not-allowed bg-white/10"
-                : ensembleEnabled
-                  ? "cursor-pointer bg-teal-400"
-                  : "cursor-pointer bg-white/20"
-            }`}
-          >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition ${
-                ensembleEnabled ? "left-8" : "left-1"
-              }`}
-            />
-          </button>
-        </div>
-
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          Enable consensus analysis to compute an aggregated network alongside each selected algorithm output. It&apos;s available when two or more algorithms are selected.
-        </p>
-      </div>
     </div>
   );
 }

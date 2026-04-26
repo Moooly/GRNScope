@@ -28,106 +28,103 @@ export default function UploadStep({
   clearPseudotimeFile,
 }: UploadStepProps) {
   return (
-    <>
-      <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.02] px-4 py-3">
+    <div className="space-y-6">
+      <div className="rounded-[1.5rem] border border-[#1b75a6]/15 bg-[#f2f9fc] px-5 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-white">Sample files</h3>
-              <span className="text-sm text-slate-400">
-                Download example files to test the workflow quickly.
-              </span>
-            </div>
+          <div>
+            <h3 className="text-sm font-bold text-[#1b75a6]">Sample files</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Download example CSV files to test the workflow quickly.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2 lg:shrink-0">
             <a
               href="/samples/sample_expression_matrix.csv"
               download
-              className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              className="inline-flex items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white px-4 py-2 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
             >
               Expression CSV
             </a>
             <a
               href="/samples/sample_pseudotime.csv"
               download
-              className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              className="inline-flex items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white px-4 py-2 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
             >
               Pseudotime CSV
             </a>
           </div>
         </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Project name</h3>
-            </div>
-            <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+            <h3 className="text-lg font-bold text-slate-950">Project name</h3>
+            <span className="rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-3 py-1 text-xs font-bold text-[#178a62]">
               Required
             </span>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-5">
             <input
               id="projectName"
               type="text"
               value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
+              onChange={(event) => setProjectName(event.target.value)}
               placeholder="Enter project name"
-              className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
             />
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Description</h3>
-            </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+            <h3 className="text-lg font-bold text-slate-950">Description</h3>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
               Optional
             </span>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-5">
             <input
               id="projectDescription"
               type="text"
               value={projectDescription}
-              onChange={(e) => setProjectDescription(e.target.value)}
+              onChange={(event) => setProjectDescription(event.target.value)}
               placeholder="Add a short description"
-              className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal-300/40"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
             />
           </div>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
+      <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-xl font-semibold text-white">
+              <h3 className="text-lg font-bold text-slate-950">
                 Expression matrix upload
               </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                Upload a CSV file where rows are genes, columns are cells, the first row contains cell identifiers, the first column contains gene names, the interior values are numeric expression counts, and the maximum file size is 500 MB.
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Upload a CSV file where rows are genes and columns are cells.
+                The first row should contain cell identifiers, and the first
+                column should contain gene names.
               </p>
             </div>
-            <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200">
+            <span className="shrink-0 rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-3 py-1 text-xs font-bold text-[#178a62]">
               Required
             </span>
           </div>
 
-          <div className="mt-6">
-            <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 px-6 py-10 text-center transition hover:border-teal-300/30 hover:bg-slate-950/80">
+          <div className="mt-5">
+            <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]">
               <input
                 type="file"
                 accept=".csv"
                 className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
                   setExpressionFile(file);
                   setExpressionFileName(file?.name ?? "");
                 }}
@@ -135,72 +132,77 @@ export default function UploadStep({
               {expressionFileName && (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
                     clearExpressionFile();
                   }}
-                  className="absolute right-4 top-4 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white transition hover:border-white/30 hover:bg-white/5"
+                  className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
                 >
                   Remove
                 </button>
               )}
-              <span className="text-base font-medium text-white">
+              <span className="text-base font-bold text-slate-950">
                 {expressionFileName || "Choose expression matrix CSV"}
+              </span>
+              <span className="mt-2 text-sm text-slate-500">
+                Maximum file size: 500 MB
               </span>
             </label>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-xl font-semibold text-white">
-                  Pseudotime upload
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Single-column CSV with one floating-point value per cell in the same order as the expression matrix columns.
-                </p>
-              </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
-                Optional
-              </span>
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-950">
+                Pseudotime upload
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Optional single-column CSV with one floating-point value per cell
+                in the same order as the expression matrix columns.
+              </p>
             </div>
+            <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+              Optional
+            </span>
+          </div>
 
-            <div className="mt-6">
-              <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 px-5 py-8 text-center transition hover:border-teal-300/30 hover:bg-slate-950/80">
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    setPseudotimeFile(file);
-                    setPseudotimeFileName(file?.name ?? "");
+          <div className="mt-5">
+            <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50/80 px-5 py-10 text-center transition hover:border-[#1b75a6]/35 hover:bg-[#f7fbff]">
+              <input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setPseudotimeFile(file);
+                  setPseudotimeFileName(file?.name ?? "");
+                }}
+              />
+              {pseudotimeFileName && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    clearPseudotimeFile();
                   }}
-                />
-                {pseudotimeFileName && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      clearPseudotimeFile();
-                    }}
-                    className="absolute right-4 top-4 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white transition hover:border-white/30 hover:bg-white/5"
-                  >
-                    Remove
-                  </button>
-                )}
-                <span className="text-sm font-medium text-white">
-                  {pseudotimeFileName || "Choose pseudotime CSV"}
-                </span>
-              </label>
-            </div>
+                  className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                >
+                  Remove
+                </button>
+              )}
+              <span className="text-sm font-bold text-slate-950">
+                {pseudotimeFileName || "Choose pseudotime CSV"}
+              </span>
+              <span className="mt-2 text-sm text-slate-500">
+                Required only by pseudotime-based algorithms
+              </span>
+            </label>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

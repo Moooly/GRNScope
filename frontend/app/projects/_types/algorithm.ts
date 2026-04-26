@@ -5,8 +5,6 @@ export type Algorithm = {
   category: string;
   year: string;
   journal: string;
-  runtime: string;
-  runtimeMinutes: number;
   directed: boolean;
   signed: boolean;
   requiresPseudotime: boolean;

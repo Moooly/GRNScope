@@ -217,11 +217,7 @@ export default function ProjectsPage() {
       return "No algorithms selected";
     }
 
-    const longestRuntime = Math.max(
-      ...selectedAlgorithms.map((algorithm) => algorithm.runtimeMinutes)
-    );
-
-    return `~ ${longestRuntime} minutes`;
+    return `${selectedAlgorithms.length} selected algorithm${selectedAlgorithms.length === 1 ? "" : "s"}`;
   }, [selectedAlgorithms]);
 
   const openCreateModal = () => {
