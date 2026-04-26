@@ -24,10 +24,8 @@ type AlgorithmEntry = {
   publication: string;
   year: string;
   journal: string;
-  runtime: string;
   dockerVersion: string;
   paperUrl: string;
-  repoUrl: string;
   strengths: string[];
   limitations: string[];
   recommendedUseCases: string[];
@@ -38,7 +36,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "pidc",
     name: "PIDC",
-    tagline: "Information-theoretic method that infers gene relationships using multivariate mutual-information ideas.",
+    tagline: "Information-theory method for undirected GRN inference.",
     category: "Mutual information",
     requiresPseudotime: false,
     directed: false,
@@ -46,10 +44,8 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Chan et al.",
     year: "2017",
     journal: "Cell Systems",
-    runtime: "Fast in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1016/j.cels.2017.08.014",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Does not require pseudotime.",
       "Was one of the methods of choice highlighted by BEELINE.",
@@ -66,7 +62,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "genie3",
     name: "GENIE3",
-    tagline: "Tree-based GRN inference method that predicts regulators for each target gene.",
+    tagline: "Tree-based method for predicting regulators of target genes.",
     category: "Random forest",
     requiresPseudotime: false,
     directed: true,
@@ -74,10 +70,8 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Huynh-Thu et al.",
     year: "2010",
     journal: "PLoS One",
-    runtime: "Slower than GRNBoost2 in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1371/journal.pone.0012776",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Does not require pseudotime.",
       "Was one of the methods of choice highlighted by BEELINE.",
@@ -85,7 +79,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
     ],
     limitations: [
       "Does not provide signed edges.",
-      "Was slower than GRNBoost2 in the BEELINE runtime comparison."
+      "Can be computationally heavier than GRNBoost2 on large gene sets."
     ],
     recommendedUseCases: [],
     detail:
@@ -94,7 +88,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "grnboost2",
     name: "GRNBoost2",
-    tagline: "Gradient-boosting based GRN inference method designed as a faster tree-based alternative.",
+    tagline: "Fast tree-based alternative to GENIE3.",
     category: "Random forest",
     requiresPseudotime: false,
     directed: true,
@@ -102,10 +96,8 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Moerman et al.",
     year: "2018",
     journal: "Bioinformatics",
-    runtime: "Faster than GENIE3 in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1093/bioinformatics/bty916",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Does not require pseudotime.",
       "Was one of the methods of choice highlighted by BEELINE.",
@@ -122,7 +114,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "ppcor",
     name: "PPCOR",
-    tagline: "Partial-correlation method that estimates direct linear associations between genes.",
+    tagline: "Partial-correlation method for signed gene associations.",
     category: "Correlation",
     requiresPseudotime: false,
     directed: false,
@@ -130,10 +122,8 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Kim",
     year: "2015",
     journal: "Communications for Statistical Applications and Methods",
-    runtime: "Fast in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.5351/CSAM.2015.22.6.665",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Does not require pseudotime.",
       "Provides signed edges.",
@@ -150,7 +140,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "scode",
     name: "SCODE",
-    tagline: "Ordinary-differential-equation based method for ordered cells that produces directed signed edges.",
+    tagline: "ODE-based method for ordered single-cell data.",
     category: "ODE + regression",
     requiresPseudotime: true,
     directed: true,
@@ -158,17 +148,16 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Matsumoto et al.",
     year: "2017",
     journal: "Bioinformatics",
-    runtime: "Moderate in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1093/bioinformatics/btx194",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges.",
       "Produces signed edges."
     ],
     limitations: [
       "Requires time-ordered or pseudotime-ordered cells.",
-      "Was not one of the methods of choice highlighted by BEELINE."
+      "Requires ODE-related parameter settings.",
+      "Was not among BEELINE's most consistently recommended methods."
     ],
     recommendedUseCases: [],
     detail:
@@ -177,7 +166,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "sincerities",
     name: "SINCERITIES",
-    tagline: "Regression-based method for ordered cells that outputs directed signed edges.",
+    tagline: "Regression method for time-ordered expression data.",
     category: "Regression",
     requiresPseudotime: true,
     directed: true,
@@ -185,10 +174,8 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Papili Gao et al.",
     year: "2018",
     journal: "Bioinformatics",
-    runtime: "Fast to moderate in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1093/bioinformatics/btx575",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges.",
       "Produces signed edges.",
@@ -205,7 +192,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "scribe",
     name: "SCRIBE",
-    tagline: "Directed-information based method for ordered cells that infers directed regulatory links.",
+    tagline: "Information-theory method for directed regulatory links.",
     category: "Mutual information",
     requiresPseudotime: true,
     directed: true,
@@ -213,17 +200,15 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Qiu et al.",
     year: "2018",
     journal: "bioRxiv preprint",
-    runtime: "Slow in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1101/426981",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges."
     ],
     limitations: [
       "Requires time-ordered or pseudotime-ordered cells.",
-      "Slow in the BEELINE runtime comparison.",
-      "Was not one of the methods of choice highlighted by BEELINE."
+      "May be sensitive to pseudotime quality.",
+      "Does not provide signed edges."
     ],
     recommendedUseCases: [],
     detail:
@@ -232,7 +217,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "singe",
     name: "SINGE",
-    tagline: "Granger-causality based method for ordered cells that predicts directed relationships.",
+    tagline: "Granger-causality method for ordered single-cell data.",
     category: "Granger causality",
     requiresPseudotime: true,
     directed: true,
@@ -240,17 +225,15 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Deshpande et al.",
     year: "2019",
     journal: "bioRxiv preprint",
-    runtime: "Very slow in the BEELINE runtime comparison.",
     dockerVersion: "0.4.1",
     paperUrl: "https://doi.org/10.1101/534834",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges."
     ],
     limitations: [
       "Requires time-ordered or pseudotime-ordered cells.",
-      "Very slow in the BEELINE runtime comparison.",
-      "Was not one of the methods of choice highlighted by BEELINE."
+      "May be sensitive to pseudotime quality.",
+      "Does not provide signed edges."
     ],
     recommendedUseCases: [],
     detail:
@@ -259,7 +242,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "leap",
     name: "LEAP",
-    tagline: "Lag-based correlation method that uses ordered cells to suggest directed relationships.",
+    tagline: "Lagged-correlation method using pseudotime ordering.",
     category: "Correlation",
     requiresPseudotime: true,
     directed: true,
@@ -267,17 +250,16 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Specht and Li",
     year: "2017",
     journal: "Bioinformatics",
-    runtime: "Fast in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1093/bioinformatics/btw729",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges.",
       "Fast in the BEELINE runtime comparison."
     ],
     limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "Was not one of the methods of choice highlighted by BEELINE."
+      "Requires pseudotime-ordered cells.",
+      "Uses lag-based correlation, so results depend on ordering quality.",
+      "Does not provide signed edges."
     ],
     recommendedUseCases: [],
     detail:
@@ -286,7 +268,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "grisli",
     name: "GRISLI",
-    tagline: "ODE and regression based method for ordered cells that outputs directed edges.",
+    tagline: "ODE-regression method for ordered single-cell data.",
     category: "ODE + regression",
     requiresPseudotime: true,
     directed: true,
@@ -294,16 +276,15 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Aubin-Frankowski and Vert",
     year: "2018",
     journal: "bioRxiv preprint",
-    runtime: "Moderate to slow in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1101/464479",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges."
     ],
     limitations: [
       "Requires time-ordered or pseudotime-ordered cells.",
-      "Was not one of the methods of choice highlighted by BEELINE."
+      "Requires regression-related parameter settings.",
+      "Does not provide signed edges."
     ],
     recommendedUseCases: [],
     detail:
@@ -312,7 +293,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "grnvbem",
     name: "GRNVBEM",
-    tagline: "Variational Bayesian regression method for ordered cells that outputs directed signed edges.",
+    tagline: "Variational Bayesian method for directed signed GRNs.",
     category: "Regression",
     requiresPseudotime: true,
     directed: true,
@@ -320,18 +301,16 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Sanchez-Castillo et al.",
     year: "2018",
     journal: "Bioinformatics",
-    runtime: "Slow in the BEELINE runtime comparison.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1093/bioinformatics/btx524",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges.",
       "Produces signed edges."
     ],
     limitations: [
       "Requires time-ordered or pseudotime-ordered cells.",
-      "Slow in the BEELINE runtime comparison.",
-      "Was not one of the methods of choice highlighted by BEELINE."
+      "Can be computationally expensive for larger gene sets.",
+      "Was not among BEELINE's most consistently recommended methods."
     ],
     recommendedUseCases: [],
     detail:
@@ -340,7 +319,7 @@ const ALGORITHMS: AlgorithmEntry[] = [
   {
     id: "scns",
     name: "SCNS",
-    tagline: "Boolean-network reconstruction method for ordered cells that produces directed signed edges.",
+    tagline: "Boolean-model method for time-course single-cell data.",
     category: "Boolean model",
     requiresPseudotime: true,
     directed: true,
@@ -348,10 +327,8 @@ const ALGORITHMS: AlgorithmEntry[] = [
     publication: "Woodhouse et al.",
     year: "2018",
     journal: "BMC Systems Biology",
-    runtime: "Long runtime; BEELINE did not report a standard runtime value in the main runtime figure.",
     dockerVersion: "base",
     paperUrl: "https://doi.org/10.1186/s12918-018-0581-1",
-    repoUrl: "https://github.com/murali-group/BEELINE",
     strengths: [
       "Produces directed edges.",
       "Produces signed edges."
@@ -379,12 +356,12 @@ const CATEGORY_OPTIONS: MethodologyCategory[] = [
 
 function badgeClass(active: boolean) {
   return active
-    ? "border-teal-300/30 bg-teal-300/10 text-teal-100"
-    : "border-white/10 bg-white/[0.04] text-slate-300";
+    ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
+    : "border-slate-200 bg-white text-slate-600";
 }
 
 function cardBadgeClass() {
-  return "border-white/10 bg-white/[0.04] text-slate-200";
+  return "border-slate-200 bg-white text-slate-600";
 }
 
 export default function AlgorithmsPage() {
@@ -474,29 +451,36 @@ export default function AlgorithmsPage() {
   }, [isMethodologyMenuOpen, isPropertiesMenuOpen]);
 
   return (
-    <main className="min-h-screen bg-[#030b24] text-white">
-      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.10),_transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0))]">
-        <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8 lg:py-12">
+    <main className="min-h-screen bg-[#f7fbff] text-slate-900">
+      <section className="relative overflow-hidden bg-[#f4f6f8]">
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/90 to-transparent" />
+        <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-cyan-100/60 blur-3xl" />
+        <div className="absolute -right-24 top-12 h-72 w-72 rounded-full bg-teal-100/60 blur-3xl" />
+        <div className="relative mx-auto max-w-[1180px] px-6 py-16 lg:px-10 lg:py-20">
           <div className="flex flex-col gap-6">
-            <div className="max-w-none">
-              <p className="text-xs font-medium uppercase tracking-[0.28em] text-teal-200/75 sm:text-sm">
+            <div className="max-w-4xl">
+              <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
                 Algorithms directory
               </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-[3.15rem] lg:leading-[1.16] lg:whitespace-nowrap">
+              <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[4.15rem] lg:leading-[1.02]">
                 Explore algorithms in GRNScope
               </h1>
+              <p className="mt-6 max-w-3xl text-[1.05rem] leading-8 text-slate-700">
+                Browse the gene regulatory network inference methods available in the platform.
+                Filter by methodology, pseudotime requirements, directionality, and signed output.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-8 lg:px-8 lg:py-9">
+      <section className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10 lg:py-12">
 
         <div className="space-y-4">
-          <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-4 border-b border-[#213f54]/35 pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-white">All algorithms</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-2xl font-bold text-slate-950">All algorithms</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 {filteredAlgorithms.length} algorithm{filteredAlgorithms.length === 1 ? "" : "s"} match the current filters.
               </p>
             </div>
@@ -509,10 +493,10 @@ export default function AlgorithmsPage() {
                   setIsMethodologyMenuOpen((current) => !current);
                   setIsPropertiesMenuOpen(false);
                 }}
-                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
                   isMethodologyMenuOpen || selectedCategories.length > 0
-                    ? "border-teal-300/30 bg-teal-300/10 text-teal-100"
-                    : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]"
+                    ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                 }`}
               >
                 <span>Methodology</span>
@@ -532,10 +516,10 @@ export default function AlgorithmsPage() {
                   setIsPropertiesMenuOpen((current) => !current);
                   setIsMethodologyMenuOpen(false);
                 }}
-                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
                   isPropertiesMenuOpen || requiresPseudotimeOnly || directedOnly || signedOnly
-                    ? "border-teal-300/30 bg-teal-300/10 text-teal-100"
-                    : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]"
+                    ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                 }`}
               >
                 <span>Properties</span>
@@ -551,19 +535,19 @@ export default function AlgorithmsPage() {
               {isMethodologyMenuOpen ? (
                 <div
                   ref={methodologyMenuRef}
-                  className="absolute right-0 top-full z-20 mt-3 w-[320px] rounded-[1.5rem] border border-white/10 bg-[#08122f] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+                  className="absolute right-0 top-full z-20 mt-3 w-[320px] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">Methodology</p>
+                    <p className="text-sm font-bold text-slate-950">Methodology</p>
                     <button
                       type="button"
                       onClick={() => setSelectedCategories([])}
-                      className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 transition hover:text-white"
+                      className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition hover:text-[#1b75a6]"
                     >
                       Select all
                     </button>
                   </div>
-                  <div className="mt-4 space-y-3 text-sm text-slate-200">
+                  <div className="mt-4 space-y-3 text-sm text-slate-700">
                     {CATEGORY_OPTIONS.map((option) => {
                       const isChecked = selectedCategories.length === 0
                         ? true
@@ -606,10 +590,10 @@ export default function AlgorithmsPage() {
               {isPropertiesMenuOpen ? (
                 <div
                   ref={propertiesMenuRef}
-                  className="absolute right-0 top-full z-20 mt-3 w-[320px] rounded-[1.5rem] border border-white/10 bg-[#08122f] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+                  className="absolute right-0 top-full z-20 mt-3 w-[320px] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">Properties</p>
+                    <p className="text-sm font-bold text-slate-950">Properties</p>
                     <button
                       type="button"
                       onClick={() => {
@@ -617,12 +601,12 @@ export default function AlgorithmsPage() {
                         setDirectedOnly(false);
                         setSignedOnly(false);
                       }}
-                      className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 transition hover:text-white"
+                      className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition hover:text-[#1b75a6]"
                     >
                       Reset
                     </button>
                   </div>
-                  <div className="mt-4 space-y-3 text-sm text-slate-200">
+                  <div className="mt-4 space-y-3 text-sm text-slate-700">
                     <label className={`flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition ${badgeClass(requiresPseudotimeOnly)}`}>
                       <span>Requires pseudotime</span>
                       <input
@@ -656,7 +640,7 @@ export default function AlgorithmsPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-5 xl:grid-cols-3">
             {filteredAlgorithms.map((algorithm) => {
               return (
                 <button
@@ -666,42 +650,47 @@ export default function AlgorithmsPage() {
                     setClosingAlgorithmId(null);
                     setSelectedAlgorithmId(algorithm.id);
                   }}
-                  className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-teal-300/30 hover:bg-white/[0.06] hover:shadow-[0_0_0_1px_rgba(94,234,212,0.08),0_18px_48px_rgba(2,8,23,0.32)]"
+                  className="group flex min-h-[12.5rem] flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#1b75a6]/25 hover:shadow-xl hover:shadow-slate-200/70"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">{algorithm.name}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{algorithm.tagline}</p>
+                  <div className="flex flex-1 flex-col">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="text-2xl font-bold tracking-tight text-slate-950">
+                          {algorithm.name}
+                        </h3>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+                          {algorithm.tagline}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        {algorithm.year}
+                      </span>
                     </div>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
-                      {algorithm.year}
-                    </span>
-                  </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-200">
-                      {algorithm.category}
-                    </span>
-                    <span className={`rounded-full border px-3 py-1 text-xs ${cardBadgeClass()}`}>
-                      {algorithm.requiresPseudotime ? "Needs pseudotime" : "No pseudotime"}
-                    </span>
-                    <span className={`rounded-full border px-3 py-1 text-xs ${cardBadgeClass()}`}>
-                      {algorithm.directed ? "Directed" : "Undirected"}
-                    </span>
-                    <span className={`rounded-full border px-3 py-1 text-xs ${cardBadgeClass()}`}>
-                      {algorithm.signed ? "Signed" : "Unsigned"}
-                    </span>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Publication</p>
-                      <p className="mt-2 font-medium text-white">{algorithm.publication}</p>
-                      <p className="mt-1 text-slate-400">{algorithm.journal}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Estimated runtime</p>
-                      <p className="mt-2 font-medium text-white">{algorithm.runtime}</p>
+                    <div className="mt-auto pt-5">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                          <div>
+                            <p className="text-[0.66rem] font-bold uppercase tracking-[0.18em] text-slate-400">
+                              Methodology
+                            </p>
+                            <p className="mt-1 text-sm font-bold text-[#1b75a6]">
+                              {algorithm.category}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
+                          {algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}
+                        </span>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
+                          {algorithm.directed ? "Directed" : "Undirected"}
+                        </span>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
+                          {algorithm.signed ? "Signed" : "Unsigned"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -715,11 +704,11 @@ export default function AlgorithmsPage() {
 
       {selectedAlgorithm ? (
         <div
-          className={`${closingAlgorithmId ? "animate-modal-overlay-out" : "animate-modal-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-[#020817]/80 px-6 py-8 backdrop-blur-sm`}
+          className={`${closingAlgorithmId ? "animate-modal-overlay-out" : "animate-modal-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-6 py-8 backdrop-blur-sm`}
           onClick={closeAlgorithmModal}
         >
           <div
-            className={`${closingAlgorithmId ? "animate-modal-panel-out" : "animate-modal-panel"} max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-white/10 bg-[#07122c] p-6 shadow-[0_32px_120px_rgba(0,0,0,0.45)] lg:p-8`}
+            className={`${closingAlgorithmId ? "animate-modal-panel-out" : "animate-modal-panel"} max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 lg:p-8`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -727,25 +716,30 @@ export default function AlgorithmsPage() {
                 <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
                   Algorithm details
                 </p>
-                <h2 className="mt-3 text-3xl font-semibold text-white">{selectedAlgorithm.name}</h2>
+                <h2 className="mt-3 text-3xl font-bold text-slate-950">{selectedAlgorithm.name}</h2>
               </div>
               <div className="flex items-center gap-3">
-                <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.14em] text-teal-100">
+                <span className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#1b75a6]">
                   {selectedAlgorithm.category}
                 </span>
               </div>
             </div>
 
-            <p className="mt-6 text-sm leading-7 text-slate-300">{selectedAlgorithm.detail}</p>
+            <p className="mt-6 text-sm leading-7 text-slate-600">{selectedAlgorithm.detail}</p>
 
-            <div className="mt-6 grid gap-3 text-sm text-slate-200 md:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Docker version</p>
-                <p className="mt-2 font-medium text-white">{selectedAlgorithm.dockerVersion}</p>
+            <div className="mt-6 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Publication</p>
+                <p className="mt-2 font-semibold text-slate-950">{selectedAlgorithm.publication}</p>
+                <p className="mt-1 text-slate-500">{selectedAlgorithm.journal}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Docker version</p>
+                <p className="mt-2 font-semibold text-slate-950">{selectedAlgorithm.dockerVersion}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Properties</p>
-                <p className="mt-2 text-slate-300">
+                <p className="mt-2 text-slate-600">
                   {selectedAlgorithm.requiresPseudotime ? "Requires pseudotime" : "No pseudotime required"} · {selectedAlgorithm.directed ? "Directed" : "Undirected"} · {selectedAlgorithm.signed ? "Signed" : "Unsigned"}
                 </p>
               </div>
@@ -754,9 +748,9 @@ export default function AlgorithmsPage() {
             <div className="mt-8 space-y-6">
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Strengths</h3>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
                   {selectedAlgorithm.strengths.map((item) => (
-                    <li key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <li key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       {item}
                     </li>
                   ))}
@@ -765,25 +759,15 @@ export default function AlgorithmsPage() {
 
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Limitations</h3>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
                   {selectedAlgorithm.limitations.map((item) => (
-                    <li key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <li key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       {item}
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Recommended use cases</h3>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
-                  {selectedAlgorithm.recommendedUseCases.map((item) => (
-                    <li key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
@@ -791,17 +775,9 @@ export default function AlgorithmsPage() {
                 href={selectedAlgorithm.paperUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/[0.08]"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
               >
                 Open paper
-              </a>
-              <a
-                href={selectedAlgorithm.repoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-2xl border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-medium text-teal-50 transition hover:bg-teal-300/15"
-              >
-                Open source repo
               </a>
             </div>
           </div>
