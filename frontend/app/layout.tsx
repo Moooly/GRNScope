@@ -47,7 +47,7 @@ export default function RootLayout({
 
   const navItemClass = (isActive: boolean) =>
     [
-      "group inline-flex h-10 items-center gap-2.5 rounded-full px-3.5 text-[15px] font-semibold leading-none transition-all duration-200",
+      "group inline-flex h-10 min-w-[128px] items-center justify-center gap-2.5 rounded-full px-3.5 text-[15px] font-semibold leading-none transition-all duration-200",
       "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#26c487]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#213f54]",
       isActive
         ? "bg-[#20b779]/12 text-[#24c684] shadow-sm shadow-slate-950/10 ring-1 ring-[#20b779]/20"
@@ -61,26 +61,110 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <header className="sticky top-0 z-50 border-b border-[#1a3448] bg-[#213f54] shadow-[0_2px_10px_rgba(15,23,42,0.18)]">
-          <div className="mx-auto flex h-[76px] w-full max-w-[1440px] items-center px-8 xl:px-14">
+          <div className="mx-auto flex h-[78px] w-full max-w-[1440px] items-center px-8 xl:px-14">
             <Link
               href="/"
               onClick={() => setActiveHeaderItem("home")}
-              className="flex shrink-0 items-center gap-4"
+              className="flex shrink-0 items-center gap-5"
               aria-label="Go to GRNScope home page"
             >
-              <div className="relative flex h-[50px] w-[50px] items-center justify-center rounded-full border border-[#b08372] bg-[#213f54] shadow-inner shadow-slate-950/30 ring-2 ring-[#b08372]/50">
-                <div className="absolute inset-[6px] rounded-full border border-slate-300/30" />
-                <div className="absolute h-[30px] w-[30px] rounded-full border border-slate-400/30" />
-                <span className="relative text-[19px] font-bold leading-none text-[#d8dde1]">
-                  G
-                </span>
+              <div className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full bg-transparent">
+                <svg
+                  viewBox="0 0 64 64"
+                  className="relative h-[52px] w-[52px]"
+                  role="img"
+                  aria-label="GRNScope gene regulatory network logo"
+                >
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="28.5"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.3"
+                    opacity="0.9"
+                  />
+
+                  <path
+                    d="M32 13 L32 51"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M14 23 L32 13 L50 23"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 23 L14 41 L32 51 L50 41 L50 23"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 41 L32 31 L50 41"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.85"
+                  />
+                  <path
+                    d="M14 23 L32 31 L50 23"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.85"
+                  />
+
+                  <rect
+                    x="23.2"
+                    y="23.2"
+                    width="17.6"
+                    height="17.6"
+                    rx="1.6"
+                    fill="#5fc8bd"
+                    transform="rotate(45 32 32)"
+                  />
+                  <path
+                    d="M32 21 L32 43"
+                    stroke="#eafffb"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    opacity="0.9"
+                  />
+                  <path
+                    d="M22 32 L42 32"
+                    stroke="#eafffb"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    opacity="0.9"
+                  />
+
+                  <circle cx="32" cy="13" r="4.9" fill="#ffffff" />
+                  <circle cx="14" cy="23" r="4.9" fill="#ffffff" />
+                  <circle cx="50" cy="23" r="4.9" fill="#ffffff" />
+                  <circle cx="14" cy="41" r="4.9" fill="#ffffff" />
+                  <circle cx="50" cy="41" r="4.9" fill="#ffffff" />
+                  <circle cx="32" cy="51" r="4.9" fill="#ffffff" />
+                </svg>
               </div>
-              <p className="text-[27px] font-medium tracking-[-0.045em] text-[#d8dde1]">
+              <p className="text-[32px] font-semibold leading-none tracking-[-0.055em] text-white">
                 GRNScope
               </p>
             </Link>
 
-            <nav className="ml-auto flex items-center gap-2.5 xl:gap-4" aria-label="Primary navigation">
+            <nav className="ml-auto flex items-center gap-4" aria-label="Primary navigation">
               <Link
                 href="/"
                 onClick={() => setActiveHeaderItem("home")}
@@ -115,23 +199,6 @@ export default function RootLayout({
                 <span>Algorithms</span>
               </Link>
 
-              <button
-                type="button"
-                onClick={() => setActiveHeaderItem("analysis")}
-                className={navItemClass(isActive("analysis"))}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className={navIconClass}
-                  aria-hidden="true"
-                >
-                  <path d="M4.5 3.75A1.75 1.75 0 0 0 2.75 5.5v13A1.75 1.75 0 0 0 4.5 20.25h15a1.75 1.75 0 0 0 1.75-1.75v-13a1.75 1.75 0 0 0-1.75-1.75h-15Zm0 1.5h15a.25.25 0 0 1 .25.25v13a.25.25 0 0 1-.25.25h-15a.25.25 0 0 1-.25-.25v-13a.25.25 0 0 1 .25-.25Zm2.25 10.5h2.5v-5h-2.5v5Zm4 0h2.5v-8h-2.5v8Zm4 0h2.5v-3h-2.5v3Z" />
-                </svg>
-                <span>Analysis</span>
-              </button>
-
               <Link
                 href={workspaceHref}
                 onClick={() => setActiveHeaderItem("workspace")}
@@ -148,57 +215,6 @@ export default function RootLayout({
                 </svg>
                 <span>Workspace</span>
               </Link>
-
-              <button
-                type="button"
-                onClick={() => setActiveHeaderItem("download")}
-                className={navItemClass(isActive("download"))}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className={navIconClass}
-                  aria-hidden="true"
-                >
-                  <path d="M12 3.75a.75.75 0 0 1 .75.75v8.69l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 1 1 1.06-1.06l2.47 2.47V4.5a.75.75 0 0 1 .75-.75ZM5.25 15a.75.75 0 0 1 .75.75v2.5h12v-2.5a.75.75 0 0 1 1.5 0V19A.75.75 0 0 1 18.75 19.75H5.25A.75.75 0 0 1 4.5 19v-3.25A.75.75 0 0 1 5.25 15Z" />
-                </svg>
-                <span>Download</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveHeaderItem("tutorial")}
-                className={navItemClass(isActive("tutorial"))}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className={navIconClass}
-                  aria-hidden="true"
-                >
-                  <path d="M6 3.75A1.75 1.75 0 0 0 4.25 5.5v13A1.75 1.75 0 0 0 6 20.25h12a.75.75 0 0 0 0-1.5H6a.25.25 0 0 1-.25-.25V5.5A.25.25 0 0 1 6 5.25h9.25v4A1.75 1.75 0 0 0 17 11h3V5.5a1.75 1.75 0 0 0-1.75-1.75H6Zm10.75 1.56 2.44 2.44H17a.25.25 0 0 1-.25-.25V5.31ZM8 13.25a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5H8Zm0 3a.75.75 0 0 0 0 1.5h6a.75.75 0 0 0 0-1.5H8Z" />
-                </svg>
-                <span>Tutorial</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveHeaderItem("contact")}
-                className={navItemClass(isActive("contact"))}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className={navIconClass}
-                  aria-hidden="true"
-                >
-                  <path d="M12 2.75a9.25 9.25 0 1 0 0 18.5 9.25 9.25 0 0 0 0-18.5Zm0 4.25a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 12.75a7.72 7.72 0 0 1-5.77-2.59A6.74 6.74 0 0 1 12 14.25a6.74 6.74 0 0 1 5.77 2.91A7.72 7.72 0 0 1 12 19.75Z" />
-                </svg>
-                <span>Contact us</span>
-              </button>
             </nav>
           </div>
         </header>
