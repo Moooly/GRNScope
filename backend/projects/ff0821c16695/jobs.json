@@ -1,0 +1,60 @@
+[
+  {
+    "job_id": "20427fe1beab",
+    "project_id": "ff0821c16695",
+    "overall_status": "Failed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/ff0821c16695/_beeline_runtime/GENIE3/outputs/ff0821c16695/run-1/GENIE3/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/ff0821c16695/_beeline_runtime/GRNBOOST2/outputs/ff0821c16695/run-1/GRNBOOST2/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PIDC",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/ff0821c16695/_beeline_runtime/PIDC/outputs/ff0821c16695/run-1/PIDC/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/ff0821c16695/_beeline_runtime/PPCOR/outputs/ff0821c16695/run-1/PPCOR/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PEARSON",
+        "status": "Completed",
+        "elapsed_seconds": 2,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/ff0821c16695/results/PEARSON.json",
+        "completed_at": "2026-04-15 19:14:48",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      }
+    ]
+  }
+]
