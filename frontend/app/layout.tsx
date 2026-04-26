@@ -159,7 +159,7 @@ export default function RootLayout({
                   <circle cx="32" cy="51" r="4.9" fill="#ffffff" />
                 </svg>
               </div>
-              <p className="text-[32px] font-semibold leading-none tracking-[-0.055em] text-white">
+              <p className="text-[32px] font-medium leading-none tracking-[-0.055em] text-white">
                 GRNScope
               </p>
             </Link>

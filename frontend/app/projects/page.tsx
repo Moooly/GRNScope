@@ -572,106 +572,121 @@ export default function ProjectsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <h2 className="text-2xl font-semibold text-white">My Projects</h2>
+    <main className="min-h-screen bg-[#f7fbff] text-slate-900">
+      <section className="relative overflow-hidden bg-[#f4f6f8]">
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/90 to-transparent" />
+        <div className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-cyan-100/60 blur-3xl" />
+        <div className="absolute -right-24 top-16 h-72 w-72 rounded-full bg-teal-100/60 blur-3xl" />
+
+        <div className="relative mx-auto max-w-[1180px] px-6 py-16 lg:px-10 lg:py-20">
+          <div className="flex flex-col gap-6 border-b border-[#213f54]/35 pb-8 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
+                Workspace
+              </p>
+              <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[4.15rem] lg:leading-[1.02]">
+                My Projects
+              </h1>
+              <p className="mt-5 max-w-2xl text-[1.05rem] leading-8 text-slate-700">
+                Create projects, upload expression matrices, run GRN inference algorithms,
+                and return to completed analysis results from one workspace.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex w-fit cursor-pointer items-center justify-center rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#1b75a6]/20 transition hover:bg-[#155f87]"
+            >
+              Create New Project
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="cursor-pointer rounded-2xl bg-teal-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-teal-300"
-          >
-            Create New Project
-          </button>
+          <CreateProjectModal
+            isCreateVisible={isCreateVisible}
+            isCreateClosing={isCreateClosing}
+            createStep={createStep}
+            projectName={projectName}
+            projectDescription={projectDescription}
+            expressionFileName={expressionFileName}
+            pseudotimeFileName={pseudotimeFileName}
+            geneCount={geneCount}
+            cellCount={cellCount}
+            isUploadingTempDataset={isUploadingTempDataset}
+            topVariableGenes={topVariableGenes}
+            includeAllTFs={includeAllTFs}
+            normalizeEnabled={normalizeEnabled}
+            logTransformEnabled={logTransformEnabled}
+            selectedIds={selectedIds}
+            compatibleAlgorithms={compatibleAlgorithms}
+            selectedAlgorithms={selectedAlgorithms}
+            estimatedTotalRuntime={estimatedTotalRuntime}
+            ensembleEnabled={ensembleEnabled}
+            datasetSummary={datasetSummary}
+            errors={errors}
+            isSubmitting={isSubmitting}
+            algorithms={algorithms}
+            onClose={closeCreateModal}
+            onBackToUpload={() => setCreateStep("upload")}
+            onBackToPreprocessing={() => setCreateStep("preprocessing")}
+            onBackToAlgorithms={() => setCreateStep("algorithms")}
+            onUploadNext={handleUploadStepNext}
+            onPreprocessingNext={handlePreprocessingStepNext}
+            onAlgorithmsNext={handleAlgorithmsStepNext}
+            onCreateProject={handleCreateProject}
+            onRecommended={handleRecommended}
+            onSelectAll={handleSelectAll}
+            onToggleAlgorithm={toggleAlgorithm}
+            setProjectName={setProjectName}
+            setProjectDescription={setProjectDescription}
+            setExpressionFile={setExpressionFile}
+            setExpressionFileName={setExpressionFileName}
+            setPseudotimeFile={setPseudotimeFile}
+            setPseudotimeFileName={setPseudotimeFileName}
+            setTopVariableGenes={setTopVariableGenes}
+            setIncludeAllTFs={setIncludeAllTFs}
+            setNormalizeEnabled={setNormalizeEnabled}
+            setLogTransformEnabled={setLogTransformEnabled}
+            clearExpressionFile={clearExpressionFile}
+            clearPseudotimeFile={clearPseudotimeFile}
+            setEnsembleEnabled={setEnsembleEnabled}
+          />
+
+          <DeleteProjectModal
+            project={projectPendingDelete}
+            isDeleting={isDeletingProject}
+            isClosing={isDeleteModalClosing}
+            onCancel={handleCancelDeleteProject}
+            onConfirm={handleConfirmDeleteProject}
+          />
+          {projectHistory.length > 0 ? (
+            <div className="mt-8 grid gap-5">
+              {projectHistory.map((project) => (
+                <div
+                  key={project.id}
+                  className="origin-top overflow-hidden"
+                  style={{
+                    opacity: deletingProjectId === project.id ? 0 : 1,
+                    transform:
+                      deletingProjectId === project.id
+                        ? "translateY(12px) scale(0.95)"
+                        : "translateY(0px) scale(1)",
+                    transition: "opacity 280ms ease-out, transform 280ms ease-out",
+                    pointerEvents:
+                      deletingProjectId === project.id ? "none" : "auto",
+                  }}
+                >
+                  <ProjectCard
+                    project={project}
+                    onDelete={handleDeleteProject}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyProjectHistory />
+          )}
         </div>
-
-        <CreateProjectModal
-          isCreateVisible={isCreateVisible}
-          isCreateClosing={isCreateClosing}
-          createStep={createStep}
-          projectName={projectName}
-          projectDescription={projectDescription}
-          expressionFileName={expressionFileName}
-          pseudotimeFileName={pseudotimeFileName}
-          geneCount={geneCount}
-          cellCount={cellCount}
-          isUploadingTempDataset={isUploadingTempDataset}
-          topVariableGenes={topVariableGenes}
-          includeAllTFs={includeAllTFs}
-          normalizeEnabled={normalizeEnabled}
-          logTransformEnabled={logTransformEnabled}
-          selectedIds={selectedIds}
-          compatibleAlgorithms={compatibleAlgorithms}
-          selectedAlgorithms={selectedAlgorithms}
-          estimatedTotalRuntime={estimatedTotalRuntime}
-          ensembleEnabled={ensembleEnabled}
-          datasetSummary={datasetSummary}
-          errors={errors}
-          isSubmitting={isSubmitting}
-          algorithms={algorithms}
-          onClose={closeCreateModal}
-          onBackToUpload={() => setCreateStep("upload")}
-          onBackToPreprocessing={() => setCreateStep("preprocessing")}
-          onBackToAlgorithms={() => setCreateStep("algorithms")}
-          onUploadNext={handleUploadStepNext}
-          onPreprocessingNext={handlePreprocessingStepNext}
-          onAlgorithmsNext={handleAlgorithmsStepNext}
-          onCreateProject={handleCreateProject}
-          onRecommended={handleRecommended}
-          onSelectAll={handleSelectAll}
-          onToggleAlgorithm={toggleAlgorithm}
-          setProjectName={setProjectName}
-          setProjectDescription={setProjectDescription}
-          setExpressionFile={setExpressionFile}
-          setExpressionFileName={setExpressionFileName}
-          setPseudotimeFile={setPseudotimeFile}
-          setPseudotimeFileName={setPseudotimeFileName}
-          setTopVariableGenes={setTopVariableGenes}
-          setIncludeAllTFs={setIncludeAllTFs}
-          setNormalizeEnabled={setNormalizeEnabled}
-          setLogTransformEnabled={setLogTransformEnabled}
-          clearExpressionFile={clearExpressionFile}
-          clearPseudotimeFile={clearPseudotimeFile}
-          setEnsembleEnabled={setEnsembleEnabled}
-        />
-
-        <DeleteProjectModal
-          project={projectPendingDelete}
-          isDeleting={isDeletingProject}
-          isClosing={isDeleteModalClosing}
-          onCancel={handleCancelDeleteProject}
-          onConfirm={handleConfirmDeleteProject}
-        />
-        {projectHistory.length > 0 ? (
-          <div className="mt-8 grid gap-6">
-            {projectHistory.map((project) => (
-              <div
-                key={project.id}
-                className="origin-top overflow-hidden"
-                style={{
-                  opacity: deletingProjectId === project.id ? 0 : 1,
-                  transform:
-                    deletingProjectId === project.id
-                      ? "translateY(12px) scale(0.95)"
-                      : "translateY(0px) scale(1)",
-                  transition: "opacity 280ms ease-out, transform 280ms ease-out",
-                  pointerEvents:
-                    deletingProjectId === project.id ? "none" : "auto",
-                }}
-              >
-                <ProjectCard
-                  project={project}
-                  onDelete={handleDeleteProject}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyProjectHistory />
-        )}
       </section>
     </main>
   );
