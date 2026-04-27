@@ -252,14 +252,6 @@ export default function NetworkVisualizationSection({
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                  Current filter view
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  This edge is included in the current network because it passed the confidence filter and is supported by {selectedEdge.count} selected algorithm{selectedEdge.count === 1 ? "" : "s"}.
-                </p>
-              </div>
             </>
           ) : selectedNode ? (
             <>
