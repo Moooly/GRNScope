@@ -57,11 +57,16 @@ export type AlgorithmStoredResult = {
 
 export type AlgorithmCatalogItem = {
   id: string;
-  category?: string;
+  name: string;
+  description: string;
+  category: string;
+  year: string;
+  journal: string;
+  directed: boolean;
+  signed: boolean;
+  requiresPseudotime: boolean;
   publicationYear?: string | number;
   publishedYear?: string | number;
-  year?: string | number;
-  journal?: string;
 };
 
 export type AggregatedEdge = {

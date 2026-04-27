@@ -29,21 +29,20 @@ type UpSetSetSummary = {
 };
 
 const UPSET_METHOD_COLORS = [
-  "#22c55e",
-  "#3b82f6",
+  "#1b75a6",
+  "#5fc8bd",
+  "#8b5cf6",
   "#f59e0b",
   "#ef4444",
-  "#a855f7",
   "#14b8a6",
   "#f97316",
   "#ec4899",
   "#84cc16",
   "#06b6d4",
   "#eab308",
-  "#8b5cf6",
+  "#6366f1",
   "#10b981",
   "#f43f5e",
-  "#6366f1",
   "#65a30d",
 ];
 
@@ -53,7 +52,7 @@ function getMethodColor(index: number) {
   }
 
   const hue = (index * 137.508) % 360;
-  return `hsl(${hue} 72% 58%)`;
+  return `hsl(${hue} 72% 45%)`;
 }
 
 function getMethodColorById(methodIds: string[], methodId: string) {
@@ -82,23 +81,23 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
     const ab = countForExact(a, b);
 
     return (
-      <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+      <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
         <div className="flex justify-center overflow-x-auto">
           <svg viewBox="0 0 640 360" className="mx-auto h-auto w-full max-w-[42rem]">
-            <circle cx="250" cy="180" r="110" fill="rgba(45,212,191,0.22)" stroke="rgba(45,212,191,0.55)" strokeWidth="3" />
-            <circle cx="390" cy="180" r="110" fill="rgba(96,165,250,0.22)" stroke="rgba(96,165,250,0.55)" strokeWidth="3" />
+            <circle cx="250" cy="180" r="110" fill="rgba(95,200,189,0.22)" stroke="rgba(95,200,189,0.72)" strokeWidth="3" />
+            <circle cx="390" cy="180" r="110" fill="rgba(27,117,166,0.18)" stroke="rgba(27,117,166,0.65)" strokeWidth="3" />
 
-            <text x="210" y="62" textAnchor="middle" className="fill-white text-[16px] font-semibold">{a}</text>
-            <text x="430" y="62" textAnchor="middle" className="fill-white text-[16px] font-semibold">{b}</text>
+            <text x="210" y="62" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{a}</text>
+            <text x="430" y="62" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{b}</text>
 
             {aOnly > 0 && (
-              <text x="205" y="188" textAnchor="middle" className="fill-cyan-100 text-[26px] font-semibold">{aOnly.toLocaleString()}</text>
+              <text x="205" y="188" textAnchor="middle" className="fill-[#1b75a6] text-[26px] font-bold">{aOnly.toLocaleString()}</text>
             )}
             {ab > 0 && (
-              <text x="320" y="188" textAnchor="middle" className="fill-white text-[26px] font-semibold">{ab.toLocaleString()}</text>
+              <text x="320" y="188" textAnchor="middle" className="fill-slate-950 text-[26px] font-bold">{ab.toLocaleString()}</text>
             )}
             {bOnly > 0 && (
-              <text x="435" y="188" textAnchor="middle" className="fill-sky-100 text-[26px] font-semibold">{bOnly.toLocaleString()}</text>
+              <text x="435" y="188" textAnchor="middle" className="fill-[#1b75a6] text-[26px] font-bold">{bOnly.toLocaleString()}</text>
             )}
           </svg>
         </div>
@@ -117,37 +116,37 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
     const abc = countForExact(a, b, c);
 
     return (
-      <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+      <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
         <div className="flex justify-center overflow-x-auto">
           <svg viewBox="0 0 700 470" className="mx-auto h-auto w-full max-w-[44rem]">
-            <circle cx="290" cy="185" r="122" fill="rgba(45,212,191,0.22)" stroke="rgba(45,212,191,0.55)" strokeWidth="3" />
-            <circle cx="410" cy="185" r="122" fill="rgba(96,165,250,0.22)" stroke="rgba(96,165,250,0.55)" strokeWidth="3" />
-            <circle cx="350" cy="290" r="122" fill="rgba(168,85,247,0.18)" stroke="rgba(168,85,247,0.5)" strokeWidth="3" />
+            <circle cx="290" cy="185" r="122" fill="rgba(95,200,189,0.22)" stroke="rgba(95,200,189,0.72)" strokeWidth="3" />
+            <circle cx="410" cy="185" r="122" fill="rgba(27,117,166,0.18)" stroke="rgba(27,117,166,0.65)" strokeWidth="3" />
+            <circle cx="350" cy="290" r="122" fill="rgba(139,92,246,0.14)" stroke="rgba(139,92,246,0.55)" strokeWidth="3" />
 
-            <text x="235" y="52" textAnchor="middle" className="fill-white text-[16px] font-semibold">{a}</text>
-            <text x="465" y="52" textAnchor="middle" className="fill-white text-[16px] font-semibold">{b}</text>
-            <text x="350" y="446" textAnchor="middle" className="fill-white text-[16px] font-semibold">{c}</text>
+            <text x="235" y="52" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{a}</text>
+            <text x="465" y="52" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{b}</text>
+            <text x="350" y="446" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{c}</text>
 
             {aOnly > 0 && (
-              <text x="238" y="172" textAnchor="middle" className="fill-cyan-100 text-[24px] font-semibold">{aOnly.toLocaleString()}</text>
+              <text x="238" y="172" textAnchor="middle" className="fill-[#1b75a6] text-[24px] font-bold">{aOnly.toLocaleString()}</text>
             )}
             {bOnly > 0 && (
-              <text x="462" y="172" textAnchor="middle" className="fill-sky-100 text-[24px] font-semibold">{bOnly.toLocaleString()}</text>
+              <text x="462" y="172" textAnchor="middle" className="fill-[#1b75a6] text-[24px] font-bold">{bOnly.toLocaleString()}</text>
             )}
             {cOnly > 0 && (
-              <text x="350" y="346" textAnchor="middle" className="fill-violet-100 text-[24px] font-semibold">{cOnly.toLocaleString()}</text>
+              <text x="350" y="346" textAnchor="middle" className="fill-violet-700 text-[24px] font-bold">{cOnly.toLocaleString()}</text>
             )}
             {ab > 0 && (
-              <text x="350" y="146" textAnchor="middle" className="fill-white text-[22px] font-semibold">{ab.toLocaleString()}</text>
+              <text x="350" y="146" textAnchor="middle" className="fill-slate-950 text-[22px] font-bold">{ab.toLocaleString()}</text>
             )}
             {ac > 0 && (
-              <text x="286" y="266" textAnchor="middle" className="fill-white text-[22px] font-semibold">{ac.toLocaleString()}</text>
+              <text x="286" y="266" textAnchor="middle" className="fill-slate-950 text-[22px] font-bold">{ac.toLocaleString()}</text>
             )}
             {bc > 0 && (
-              <text x="414" y="266" textAnchor="middle" className="fill-white text-[22px] font-semibold">{bc.toLocaleString()}</text>
+              <text x="414" y="266" textAnchor="middle" className="fill-slate-950 text-[22px] font-bold">{bc.toLocaleString()}</text>
             )}
             {abc > 0 && (
-              <text x="350" y="230" textAnchor="middle" className="fill-white text-[24px] font-bold">{abc.toLocaleString()}</text>
+              <text x="350" y="230" textAnchor="middle" className="fill-slate-950 text-[24px] font-bold">{abc.toLocaleString()}</text>
             )}
           </svg>
         </div>
@@ -156,7 +155,7 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
   }
 
   return (
-    <div className="mt-5 rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-slate-400">
+    <div className="mt-5 rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50/80 p-5 text-sm text-slate-600">
       Venn diagram visualization is available for two or three algorithms.
     </div>
   );
@@ -195,14 +194,15 @@ function UpSetSummary({
   const matrixWidth = Math.max(rows.length * columnWidth, 420);
 
   const rowIndexToY = (rowIndex: number, rowHeightValue: number) => rowIndex * rowHeightValue + rowHeightValue / 2;
+
   return (
     <div className="mt-5">
       <div className="w-full pb-2">
         <div className="mx-auto" style={{ width: `100%` }}>
           <div className="grid items-end gap-6" style={{ gridTemplateColumns: `${setPanelWidth}px minmax(0, 1fr)` }}>
-            <div className="self-end rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-5">
+            <div className="self-end rounded-[1.25rem] border border-slate-200 bg-slate-50/80 px-5 py-5">
               <div className="mb-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
                   Set size
                 </p>
               </div>
@@ -214,16 +214,16 @@ function UpSetSummary({
                   return (
                     <div
                       key={`legend-row-${item.algorithmId}`}
-                      className={`grid items-center gap-4 pr-2 ${rowIndex % 2 === 1 ? "bg-white/[0.035]" : "bg-transparent"}`}
+                      className={`grid items-center gap-4 pr-2 ${rowIndex % 2 === 1 ? "bg-white" : "bg-transparent"}`}
                       style={{
                         gridTemplateColumns: "72px minmax(0, 1fr) 128px",
                         height: `${rowHeight}px`,
                       }}
                     >
-                      <div className="text-right text-sm font-semibold tabular-nums text-white">
+                      <div className="text-right text-sm font-bold tabular-nums text-slate-950">
                         {item.count.toLocaleString()}
                       </div>
-                      <div className="h-4 overflow-hidden rounded-full bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                      <div className="h-4 overflow-hidden rounded-full bg-slate-200 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.04)]">
                         <div
                           className="h-full rounded-full"
                           style={{
@@ -233,7 +233,7 @@ function UpSetSummary({
                           }}
                         />
                       </div>
-                      <div className="text-sm font-medium text-white whitespace-nowrap text-left">
+                      <div className="text-left text-sm font-bold whitespace-nowrap text-slate-700">
                         {item.algorithmId}
                       </div>
                     </div>
@@ -243,13 +243,13 @@ function UpSetSummary({
             </div>
 
             <div className="overflow-x-auto pb-1">
-              <div className="min-w-fit rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-5">
+              <div className="min-w-fit rounded-[1.25rem] border border-slate-200 bg-slate-50/80 px-5 py-5">
                 <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
                     Intersection size
                   </p>
                   <div
-                    className="mt-4 grid items-end border-b border-white/10"
+                    className="mt-4 grid items-end border-b border-slate-200"
                     style={{
                       gridTemplateColumns: `repeat(${rows.length}, ${columnWidth}px)`,
                       height: `${chartHeight - 56}px`,
@@ -265,14 +265,14 @@ function UpSetSummary({
                           key={`bar-${row.key}`}
                           className="flex h-full flex-col items-center justify-end gap-2"
                         >
-                          <span className="text-sm font-semibold text-white">
+                          <span className="text-sm font-bold text-slate-950">
                             {row.count.toLocaleString()}
                           </span>
                           <div
-                            className="w-11 rounded-t-[0.8rem] bg-gradient-to-t from-teal-400 to-cyan-300"
+                            className="w-11 rounded-t-[0.8rem] bg-gradient-to-t from-[#1b75a6] to-[#5fc8bd]"
                             style={{
                               height: `${Math.max(barHeight, 8)}px`,
-                              boxShadow: "0 0 0 1px rgba(125,211,252,0.14) inset",
+                              boxShadow: "0 0 0 1px rgba(27,117,166,0.14) inset",
                             }}
                           />
                         </div>
@@ -281,9 +281,9 @@ function UpSetSummary({
                   </div>
                 </div>
 
-           <div className="mt-6 pt-6">
+                <div className="mt-6 pt-6">
                   <div className="mb-4">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
                       Membership
                     </p>
                   </div>
@@ -309,7 +309,7 @@ function UpSetSummary({
                             top: `${top}px`,
                             width: "4px",
                             height: `${bottom - top}px`,
-                            background: "rgba(226,232,240,0.6)",
+                            background: "rgba(100,116,139,0.45)",
                           }}
                         />
                       );
@@ -321,7 +321,7 @@ function UpSetSummary({
                       return (
                         <div
                           key={`shared-row-${item.algorithmId}`}
-                          className={`grid items-center ${rowIndex % 2 === 1 ? "bg-white/[0.035]" : "bg-transparent"}`}
+                          className={`grid items-center ${rowIndex % 2 === 1 ? "bg-white" : "bg-transparent"}`}
                           style={{
                             gridTemplateColumns: `repeat(${rows.length}, ${columnWidth}px)`,
                             height: `${rowHeight}px`,
@@ -335,12 +335,12 @@ function UpSetSummary({
                                 key={`cell-${item.algorithmId}-${row.key}`}
                                 className="relative z-10 flex h-full items-center justify-center"
                               >
-                                <div className="absolute left-1/2 top-1/2 h-[2px] w-10 -translate-x-1/2 -translate-y-1/2 bg-white/[0.08]" />
+                                <div className="absolute left-1/2 top-1/2 h-[2px] w-10 -translate-x-1/2 -translate-y-1/2 bg-slate-200" />
                                 <div
                                   className="relative h-9 w-9 rounded-full border"
                                   style={{
-                                    background: included ? color : "rgba(148,163,184,0.16)",
-                                    borderColor: included ? color : "rgba(148,163,184,0.10)",
+                                    background: included ? color : "rgba(148,163,184,0.18)",
+                                    borderColor: included ? color : "rgba(148,163,184,0.28)",
                                     boxShadow: included ? `0 0 0 1px ${color}33 inset` : "none",
                                   }}
                                 />
@@ -369,71 +369,69 @@ export default function ResultsSummarySection({
   maxOverlapCount,
 }: ResultsSummarySectionProps) {
   return (
-    <>
-      <div className="w-full">
-        <div className="hidden rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h4 className="text-base font-semibold text-white">Per-Algorithm Edge Count</h4>
-              <p className="mt-1 text-sm text-slate-400">
-                Number of unique edges retained for each method within the current Top-N cutoff.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            {perAlgorithmEdgeCounts.length > 0 ? (
-              perAlgorithmEdgeCounts.map((item) => (
-                <div key={item.algorithmId} className="space-y-2">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-medium text-white">{item.algorithmId}</span>
-                    <span className="text-slate-400">{item.count.toLocaleString()}</span>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-white/[0.06]">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-teal-400 to-cyan-300"
-                      style={{ width: `${(item.count / maxAlgorithmEdgeCount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-slate-400">
-                No completed algorithms available yet.
-              </div>
-            )}
+    <div className="w-full">
+      <div className="hidden rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h4 className="text-base font-bold text-slate-950">Per-Algorithm Edge Count</h4>
+            <p className="mt-1 text-sm text-slate-600">
+              Number of unique edges retained for each method within the current Top-N cutoff.
+            </p>
           </div>
         </div>
 
-        <div className="w-full rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h4 className="text-base font-semibold text-white">Method Overlap Visualization</h4>
-              <p className="mt-1 text-sm text-slate-400">
-                {completedAlgorithmIds.length >= 4
-                  ? "UpSet plot showing intersection sizes, set sizes, and membership across methods. Scroll horizontally to view all overlap groups."
-                  : "Venn diagram showing exclusive overlap regions among the selected methods."}
-              </p>
-            </div>
-          </div>
-
-          {overlapEntries.length > 0 ? (
-            completedAlgorithmIds.length >= 4 ? (
-              <UpSetSummary
-                overlapEntries={overlapEntries}
-                completedAlgorithmIds={completedAlgorithmIds}
-                maxOverlapCount={maxOverlapCount}
-              />
-            ) : (
-              <VennSummary overlapEntries={overlapEntries} />
-            )
+        <div className="mt-5 space-y-4">
+          {perAlgorithmEdgeCounts.length > 0 ? (
+            perAlgorithmEdgeCounts.map((item) => (
+              <div key={item.algorithmId} className="space-y-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-bold text-slate-950">{item.algorithmId}</span>
+                  <span className="text-slate-500">{item.count.toLocaleString()}</span>
+                </div>
+                <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#1b75a6] to-[#5fc8bd]"
+                    style={{ width: `${(item.count / maxAlgorithmEdgeCount) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))
           ) : (
-            <div className="mt-5 rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-slate-400">
-              Select at least two completed algorithms to view overlap statistics.
+            <div className="rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50/80 p-5 text-sm text-slate-600">
+              No completed algorithms available yet.
             </div>
           )}
         </div>
       </div>
-    </>
+
+      <div className="w-full rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h4 className="text-base font-bold text-slate-950">Method Overlap Visualization</h4>
+            <p className="mt-1 text-sm text-slate-600">
+              {completedAlgorithmIds.length >= 4
+                ? "UpSet plot showing intersection sizes, set sizes, and membership across methods. Scroll horizontally to view all overlap groups."
+                : "Venn diagram showing exclusive overlap regions among the selected methods."}
+            </p>
+          </div>
+        </div>
+
+        {overlapEntries.length > 0 ? (
+          completedAlgorithmIds.length >= 4 ? (
+            <UpSetSummary
+              overlapEntries={overlapEntries}
+              completedAlgorithmIds={completedAlgorithmIds}
+              maxOverlapCount={maxOverlapCount}
+            />
+          ) : (
+            <VennSummary overlapEntries={overlapEntries} />
+          )
+        ) : (
+          <div className="mt-5 rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50/80 p-5 text-sm text-slate-600">
+            Select at least two completed algorithms to view overlap statistics.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

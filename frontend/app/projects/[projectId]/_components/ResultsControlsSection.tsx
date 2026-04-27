@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type ResultsControlsSectionProps = {
@@ -7,10 +8,14 @@ type ResultsControlsSectionProps = {
   topN: number;
   maxAvailableTopN: number;
   onChangeTopN: (value: number) => void;
+  confidenceThreshold: number;
+  onChangeConfidenceThreshold: (value: number) => void;
   consensusThreshold: number;
   maxConsensusThreshold: number;
   onChangeConsensusThreshold: (value: number) => void;
   isConsensusView: boolean;
+  compact?: boolean;
+  projectId?: string;
 };
 
 export default function ResultsControlsSection({
@@ -20,10 +25,14 @@ export default function ResultsControlsSection({
   topN,
   maxAvailableTopN,
   onChangeTopN,
+  confidenceThreshold = 0.8,
+  onChangeConfidenceThreshold = () => {},
   consensusThreshold,
   maxConsensusThreshold,
   onChangeConsensusThreshold,
   isConsensusView,
+  compact = false,
+  projectId,
 }: ResultsControlsSectionProps) {
   const [isAlgorithmMenuOpen, setIsAlgorithmMenuOpen] = useState(false);
   const algorithmMenuRef = useRef<HTMLDivElement | null>(null);
@@ -36,6 +45,11 @@ export default function ResultsControlsSection({
   }, [completedAlgorithmIds.length, selectedAlgorithmIds]);
 
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
+  const safeConfidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.8;
+
+  const helpHref = projectId
+    ? `/projects/${projectId}/results-controls-help`
+    : "/projects/results-controls-help";
 
   const toggleAlgorithm = (algorithmId: string) => {
     const isSelected = selectedAlgorithmIds.includes(algorithmId);
@@ -64,27 +78,58 @@ export default function ResultsControlsSection({
   }, [isAlgorithmMenuOpen]);
 
   return (
-    <div className="flex flex-wrap items-stretch gap-3 rounded-[1.5rem] border border-white/10 bg-slate-950/90 p-3 shadow-[0_18px_50px_rgba(2,6,23,0.45)] backdrop-blur-md">
-      <div
-        ref={algorithmMenuRef}
-        className="relative rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3"
+    <div
+      className={`border border-slate-200 bg-white text-slate-900 ${
+        compact ? "rounded-[1.25rem] p-2" : "rounded-[1.5rem] p-3"
+      }`}
+    >
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+          Results settings
+        </p>
+        <Link
+          href={helpHref}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+          aria-label="Open results controls guide"
+          title="Open results controls guide"
+        >
+          ?
+        </Link>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        <div
+          ref={algorithmMenuRef}
+        className={`relative min-w-0 rounded-[1rem] border border-slate-200 bg-slate-50/80 ${
+          compact ? "px-3 py-2" : "px-4 py-3"
+        }`}
       >
-        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Algorithms</p>
+        {!compact && (
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Algorithms</p>
+        )}
         <button
           type="button"
           onClick={() => setIsAlgorithmMenuOpen((prev) => !prev)}
-          className="mt-2 flex w-[260px] items-center justify-between rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none"
+          className={`flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none transition hover:border-[#1b75a6]/30 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 ${
+            compact ? "py-2" : "mt-2 py-2"
+          }`}
         >
           <span className="truncate">{algorithmButtonLabel}</span>
-          <span className="text-slate-400">▾</span>
+          <span className="text-slate-500">▾</span>
         </button>
-        <p className="mt-2 max-w-[260px] text-xs leading-5 text-slate-500">
-          Select algorithms to control the overlap view, network visualization, and edge table.
-        </p>
+        {!compact && (
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Select algorithms to control the overlap view, network visualization, and edge table.
+          </p>
+        )}
 
         {isAlgorithmMenuOpen && (
-          <div className="absolute left-4 top-[76px] z-30 w-[260px] rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
-            <div className="mb-2 px-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+          <div
+            className={`absolute z-30 rounded-xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/15 ${
+              compact ? "left-3 right-3 top-[52px]" : "left-4 right-4 top-[76px]"
+            }`}
+          >
+            <div className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
               Select one or more algorithms
             </div>
             <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
@@ -93,13 +138,13 @@ export default function ResultsControlsSection({
                 return (
                   <label
                     key={algorithmId}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-white hover:bg-white/[0.04]"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                   >
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleAlgorithm(algorithmId)}
-                      className="h-4 w-4 accent-teal-400"
+                      className="h-4 w-4 accent-[#1b75a6]"
                     />
                     <span>{algorithmId}</span>
                   </label>
@@ -110,30 +155,39 @@ export default function ResultsControlsSection({
         )}
       </div>
 
-      <div className="min-w-[260px] flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-        <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-slate-500">
-          <span>Top-N edges per algorithm</span>
-          <span>
-            {Math.min(topN, maxAvailableTopN).toLocaleString()} / {maxAvailableTopN.toLocaleString()}
-          </span>
+
+
+      <div
+        className={`min-w-0 rounded-[1rem] border border-slate-200 bg-slate-50/80 ${
+          compact ? "px-3 py-2" : "px-4 py-3"
+        }`}
+      >
+        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
+          <span>Confidence filter</span>
+          <span>{Math.round(safeConfidenceThreshold * 100)}%</span>
         </div>
         <input
-          key={`${selectedAlgorithmIds.join(",")}-${maxAvailableTopN}`}
           type="range"
-          min={1}
-          max={maxAvailableTopN}
-          step={1}
-          value={Math.min(topN, maxAvailableTopN)}
-          onChange={(e) => onChangeTopN(Number(e.target.value))}
-          className="mt-3 w-full accent-teal-400"
+          min={0}
+          max={100}
+          step={5}
+          value={Math.round(safeConfidenceThreshold * 100)}
+          onChange={(e) => onChangeConfidenceThreshold(Number(e.target.value) / 100)}
+          className={`${compact ? "mt-2" : "mt-3"} w-full accent-[#1b75a6]`}
         />
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          Truncate each algorithm&apos;s output to top N edges to exclude low-confidence predictions. Maximum available for this view: {maxAvailableTopN.toLocaleString()}.
-        </p>
+        {!compact && (
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Keep only edges whose normalized algorithm score is at least this threshold.
+          </p>
+        )}
       </div>
 
-      <div className="min-w-[260px] flex-1 rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-4 py-3">
-        <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-slate-500">
+      <div
+        className={`min-w-0 rounded-[1rem] border border-slate-200 bg-slate-50/80 ${
+          compact ? "px-3 py-2" : "px-4 py-3"
+        }`}
+      >
+        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
           <span>Consensus threshold</span>
           <span>{consensusThreshold}</span>
         </div>
@@ -144,11 +198,14 @@ export default function ResultsControlsSection({
           value={Math.min(consensusThreshold, effectiveMaxConsensusThreshold)}
           onChange={(e) => onChangeConsensusThreshold(Number(e.target.value))}
           disabled={!isConsensusView}
-          className="mt-3 w-full accent-teal-400 disabled:opacity-40"
+          className={`${compact ? "mt-2" : "mt-3"} w-full accent-[#1b75a6] disabled:opacity-40`}
         />
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          An edge is included only if the number of algorithms supporting it meets or exceeds the threshold.
-        </p>
+        {!compact && (
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            An edge is included only if the number of algorithms supporting it meets or exceeds the threshold.
+          </p>
+        )}
+      </div>
       </div>
     </div>
   );

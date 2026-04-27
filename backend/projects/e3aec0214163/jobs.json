@@ -1,0 +1,50 @@
+[
+  {
+    "job_id": "7621f5100432",
+    "project_id": "e3aec0214163",
+    "overall_status": "Completed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "PIDC",
+        "status": "Completed",
+        "elapsed_seconds": 18,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/e3aec0214163/results/PIDC.json",
+        "completed_at": "2026-04-26 19:36:07",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Completed",
+        "elapsed_seconds": 46,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/e3aec0214163/results/GENIE3.json",
+        "completed_at": "2026-04-26 19:36:35",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "status": "Completed",
+        "elapsed_seconds": 26,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/e3aec0214163/results/GRNBOOST2.json",
+        "completed_at": "2026-04-26 19:36:15",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Completed",
+        "elapsed_seconds": 3,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/e3aec0214163/results/PPCOR.json",
+        "completed_at": "2026-04-26 19:35:52",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      }
+    ]
+  }
+]

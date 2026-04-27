@@ -54,12 +54,12 @@ export function buildCircularPositions(nodes: NetworkNode[]) {
   const positions: PositionMap = {};
   const radius =
     nodes.length <= 8
-      ? 300
+      ? 145
       : nodes.length <= 12
-        ? 360
+        ? 185
         : nodes.length <= 18
-          ? 440
-          : Math.min(620, 420 + (nodes.length - 18) * 14);
+          ? 245
+          : Math.min(390, 260 + (nodes.length - 18) * 8);
   const count = sorted.length;
 
   sorted.forEach((node, index) => {
@@ -136,8 +136,8 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
     }
   }
 
-  const baseRadius = nodes.length <= 12 ? 220 : 250;
-  const radiusStep = nodes.length <= 18 ? 170 : 190;
+  const baseRadius = nodes.length <= 12 ? 120 : 150;
+  const radiusStep = nodes.length <= 18 ? 95 : 115;
   let offset = 0;
 
   ringSizes.forEach((ringSize, ringIndex) => {
@@ -202,9 +202,9 @@ export function buildHierarchicalPositions(nodes: NetworkNode[]) {
   });
 
   const positions: PositionMap = {};
-  const rowGap = 210;
-  const topColumnGap = 210;
-  const bottomColumnGap = 178;
+  const rowGap = 150;
+  const topColumnGap = 165;
+  const bottomColumnGap = 135;
   const totalHeight = (levels.length - 1) * rowGap;
 
   levels.forEach((level, levelIndex) => {
@@ -244,8 +244,8 @@ export function getLayoutConfig(
     return {
       name: "preset",
       animate: false,
-      fit: false,
-      padding: 120,
+      fit: true,
+      padding: 56,
       positions: hierarchicalPositions ?? {},
     } as const;
   }
@@ -254,8 +254,8 @@ export function getLayoutConfig(
     return {
       name: "preset",
       animate: false,
-      fit: false,
-      padding: 128,
+      fit: true,
+      padding: 56,
       positions: concentricPositions ?? {},
     } as const;
   }
@@ -264,30 +264,35 @@ export function getLayoutConfig(
     return {
       name: "preset",
       animate: false,
-      fit: false,
-      padding: 132,
+      fit: true,
+      padding: 56,
       positions: circularPositions ?? {},
     } as const;
   }
 
-  const densityFactor = Math.max(
-    1,
-    Math.min(2.2, graphCounts.edgeCount / Math.max(graphCounts.nodeCount, 1) / 2)
-  );
+  const isSparseGraph = graphCounts.edgeCount <= graphCounts.nodeCount * 1.5;
+  const edgesPerNode = graphCounts.edgeCount / Math.max(graphCounts.nodeCount, 1);
+  const densityFactor = isSparseGraph
+    ? 0.82
+    : Math.max(0.68, Math.min(1.2, edgesPerNode / 2));
+  const componentSpacing = isSparseGraph ? 4 : 32;
 
   return {
     name: "cose-bilkent",
     animate: false,
     randomize: false,
-    fit: false,
-    padding: 74,
-    nodeRepulsion: 26000 * densityFactor,
-    idealEdgeLength: 185 * densityFactor,
-    edgeElasticity: 0.06,
+    fit: true,
+    padding: isSparseGraph ? 34 : 48,
+    nodeRepulsion: isSparseGraph ? 7200 : 7200 * densityFactor,
+    idealEdgeLength: isSparseGraph ? 88 : 82 * densityFactor,
+    edgeElasticity: isSparseGraph ? 0.3 : 0.22,
     nestingFactor: 1,
-    gravity: 0.14,
-    gravityRangeCompound: 1.25,
-    numIter: 2600,
+    gravity: isSparseGraph ? 1.05 : 0.86,
+    gravityRangeCompound: isSparseGraph ? 3.2 : 2.4,
+    componentSpacing,
+    tilingPaddingVertical: isSparseGraph ? 2 : 18,
+    tilingPaddingHorizontal: isSparseGraph ? 2 : 18,
+    numIter: isSparseGraph ? 2200 : 1800,
     tile: true,
   } as const;
 }

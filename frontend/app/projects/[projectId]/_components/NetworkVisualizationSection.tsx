@@ -81,32 +81,32 @@ export default function NetworkVisualizationSection({
   };
 
   return (
-    <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
+    <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
       <div>
-        <h3 className="text-lg font-semibold text-white">Network Visualization</h3>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+        <h3 className="text-lg font-bold text-slate-950">Network Visualization</h3>
+        <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
             TF nodes = teal diamonds
           </span>
-          <span className="rounded-full border border-slate-400/20 bg-slate-400/10 px-3 py-1 text-slate-200">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
             Target genes = slate circles
           </span>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
             Node size ∝ degree
           </span>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
             Edge width ∝ score
           </span>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
             Edge color ∝ support count
           </span>
         </div>
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
-        <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#f3f4f6]">
+        <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-[#f3f4f6] shadow-sm">
           <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-between gap-3">
-            <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-300/70 bg-white/85 p-1 shadow-sm backdrop-blur">
+            <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur">
               {layoutOptions.map(({ value, label }) => {
                 const isActive = networkLayout === value;
 
@@ -117,8 +117,8 @@ export default function NetworkVisualizationSection({
                     onClick={() => setNetworkLayout(value)}
                     className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
                       isActive
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-200/70 hover:text-slate-900"
+                        ? "bg-[#1b75a6] text-white shadow-sm"
+                        : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                     }`}
                   >
                     {label}
@@ -126,7 +126,7 @@ export default function NetworkVisualizationSection({
                 );
               })}
             </div>
-            <div className="pointer-events-auto relative -top-px inline-flex items-center gap-2 rounded-2xl border border-slate-300/70 bg-white/85 p-1 shadow-sm backdrop-blur">
+            <div className="pointer-events-auto relative -top-px inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur">
               <button
                 type="button"
                 onClick={() => {
@@ -135,7 +135,7 @@ export default function NetworkVisualizationSection({
                 }}
                 aria-label="Download current network"
                 title="Download current network"
-                className="rounded-xl px-4 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-200/70 hover:text-slate-900"
+                className="rounded-xl px-4 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
               >
                 Download
               </button>
@@ -167,9 +167,9 @@ export default function NetworkVisualizationSection({
           />
         </div>
 
-        <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-5">
+        <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
           <div className="flex items-center justify-between gap-3">
-            <h4 className="text-base font-semibold text-white">Node Inspection</h4>
+            <h4 className="text-base font-bold text-slate-950">Node Inspection</h4>
             {selectedNode && (
               <button
                 type="button"
@@ -177,7 +177,7 @@ export default function NetworkVisualizationSection({
                   setSelectedGene(null);
                   setSelectedEdgeKey(null);
                 }}
-                className="rounded-2xl border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:border-white/20 hover:bg-white/[0.04]"
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
               >
                 Clear
               </button>
@@ -186,32 +186,32 @@ export default function NetworkVisualizationSection({
 
           {selectedNode ? (
             <>
-              <div className="mt-4 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-lg font-semibold text-white">{selectedNode.id}</p>
-                <p className="mt-2 text-sm text-slate-400">
+              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                <p className="text-lg font-bold text-slate-950">{selectedNode.id}</p>
+                <p className="mt-2 text-sm text-slate-600">
                   {selectedNode.isTF ? "Transcription factor" : "Target gene"}
                 </p>
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700">
                   In-degree: {selectedNode.inDegree}
                 </div>
-                <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700">
                   Out-degree: {selectedNode.outDegree}
                 </div>
               </div>
 
               <div className="mt-4 space-y-4">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
                     Top regulators
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {selectedNode.topRegulators.slice(0, 8).map((gene) => (
                       <span
                         key={gene}
-                        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300"
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600"
                       >
                         {gene}
                       </span>
@@ -223,14 +223,14 @@ export default function NetworkVisualizationSection({
                 </div>
 
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
                     Top target genes
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {selectedNode.topTargets.slice(0, 8).map((gene) => (
                       <span
                         key={gene}
-                        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300"
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600"
                       >
                         {gene}
                       </span>
@@ -242,16 +242,16 @@ export default function NetworkVisualizationSection({
                 </div>
               </div>
 
-              <div className="mt-6 border-t border-white/10 pt-5">
+              <div className="mt-6 border-t border-slate-200 pt-5">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   {isolatedGene ? (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/25 bg-teal-400/10 px-3 py-1.5 text-xs font-medium text-teal-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                      <span className="h-2 w-2 rounded-full bg-teal-300 shadow-[0_0_0_4px_rgba(45,212,191,0.14)]" />
-                      Isolating sub-network for <span className="font-semibold text-white">{isolatedGene}</span>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-3 py-1.5 text-xs font-bold text-[#178a62]">
+                      <span className="h-2 w-2 rounded-full bg-[#20b779] shadow-[0_0_0_4px_rgba(32,183,121,0.14)]" />
+                      Isolating sub-network for <span className="font-bold text-[#178a62]">{isolatedGene}</span>
                     </div>
                   ) : (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-300">
-                      <span className="h-2 w-2 rounded-full bg-slate-500" />
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
+                      <span className="h-2 w-2 rounded-full bg-slate-400" />
                       Full network view
                     </div>
                   )}
@@ -266,8 +266,8 @@ export default function NetworkVisualizationSection({
                     }}
                     className={`inline-flex flex-1 whitespace-nowrap items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                       isolatedGene === selectedNode.id
-                        ? "border border-teal-300/35 bg-teal-400/14 text-teal-50 shadow-[0_12px_28px_rgba(13,148,136,0.18),inset_0_1px_0_rgba(255,255,255,0.08)]"
-                        : "border border-white/10 bg-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-teal-300/35 hover:bg-teal-300/10 hover:text-teal-50"
+                        ? "border border-[#20b779]/20 bg-[#e8f7f1] text-[#178a62]"
+                        : "border border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                     }`}
                   >
                     {isolatedGene === selectedNode.id ? "Currently Isolating" : "Isolate Sub-network"}
@@ -281,8 +281,8 @@ export default function NetworkVisualizationSection({
                     disabled={!isolatedGene}
                     className={`inline-flex flex-1 items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                       isolatedGene
-                        ? "border border-slate-300/18 bg-slate-900/55 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-white/20 hover:bg-slate-800/70"
-                        : "cursor-not-allowed border border-white/8 bg-white/[0.03] text-slate-500"
+                        ? "border border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                        : "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
                     }`}
                   >
                     Reset View
@@ -291,7 +291,7 @@ export default function NetworkVisualizationSection({
               </div>
             </>
           ) : (
-            <div className="mt-4 rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm leading-6 text-slate-400">
+            <div className="mt-4 rounded-[1.25rem] border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
               Click a node in the network to inspect the gene name, transcription-factor status, in-degree, out-degree, top regulators, and top target genes.
             </div>
           )}
@@ -301,22 +301,22 @@ export default function NetworkVisualizationSection({
         isExportConfirmOpen &&
         createPortal(
           <div
-            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm ${
+            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm ${
               isExportConfirmClosing
                 ? "animate-modal-overlay-out"
                 : "animate-modal-overlay"
             }`}
           >
             <div
-              className={`w-full max-w-md rounded-[1.5rem] border border-white/10 bg-slate-950/95 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.45)] ${
+              className={`w-full max-w-md rounded-[1.5rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
                 isExportConfirmClosing
                   ? "animate-modal-panel-out"
                   : "animate-modal-panel"
               }`}
             >
               <div>
-                <h5 className="text-lg font-semibold text-white">Export current network?</h5>
-                <p className="mt-2 text-sm leading-6 text-slate-300">
+                <h5 className="text-lg font-bold text-slate-950">Export current network?</h5>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
                   Download exactly what is currently shown on the canvas, including the current zoom level, node positions, and any isolated sub-network. Choose PNG or SVG below.
                 </p>
               </div>
@@ -325,7 +325,7 @@ export default function NetworkVisualizationSection({
                 <button
                   type="button"
                   onClick={closeExportConfirm}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                 >
                   Cancel
                 </button>
@@ -335,7 +335,7 @@ export default function NetworkVisualizationSection({
                     onExportNetwork("svg");
                     closeExportConfirm();
                   }}
-                  className="rounded-2xl border border-sky-300/25 bg-sky-400/12 px-4 py-2.5 text-sm font-semibold text-sky-50 transition hover:border-sky-300/40 hover:bg-sky-400/18"
+                  className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2.5 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
                 >
                   Download SVG
                 </button>
@@ -345,7 +345,7 @@ export default function NetworkVisualizationSection({
                     onExportNetwork("png");
                     closeExportConfirm();
                   }}
-                  className="rounded-2xl border border-teal-300/25 bg-teal-400/12 px-4 py-2.5 text-sm font-semibold text-teal-50 transition hover:border-teal-300/40 hover:bg-teal-400/18"
+                  className="rounded-full bg-[#1b75a6] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
                 >
                   Download PNG
                 </button>

@@ -56,6 +56,154 @@ export default function NetworkGraph({
     };
   };
 
+  const fitGraphToVisibleCanvas = (cy: Core, animate = true) => {
+    const visibleElements = cy.elements().filter((element) => !element.removed());
+
+    if (visibleElements.empty()) {
+      return;
+    }
+
+    cy.resize();
+
+    if (animate) {
+      cy.stop(true, false);
+      cy.animate(
+        {
+          fit: {
+            eles: visibleElements,
+            padding: 56,
+          },
+        },
+        {
+          duration: 280,
+          easing: "ease-out-cubic",
+        }
+      );
+      return;
+    }
+
+    cy.fit(visibleElements, 56);
+    cy.center(visibleElements);
+  };
+
+  const getConnectedNodeGroups = (cy: Core) => {
+    const adjacency = new Map<string, Set<string>>();
+
+    cy.nodes().forEach((node) => {
+      adjacency.set(node.id(), new Set());
+    });
+
+    cy.edges().forEach((edge) => {
+      const source = String(edge.data("source") ?? "");
+      const target = String(edge.data("target") ?? "");
+
+      if (!adjacency.has(source) || !adjacency.has(target)) {
+        return;
+      }
+
+      adjacency.get(source)!.add(target);
+      adjacency.get(target)!.add(source);
+    });
+
+    const visited = new Set<string>();
+    const groups: string[][] = [];
+
+    adjacency.forEach((_, startId) => {
+      if (visited.has(startId)) {
+        return;
+      }
+
+      const group: string[] = [];
+      const stack = [startId];
+      visited.add(startId);
+
+      while (stack.length > 0) {
+        const currentId = stack.pop()!;
+        group.push(currentId);
+
+        adjacency.get(currentId)?.forEach((nextId) => {
+          if (!visited.has(nextId)) {
+            visited.add(nextId);
+            stack.push(nextId);
+          }
+        });
+      }
+
+      groups.push(group);
+    });
+
+    return groups.sort((a, b) => b.length - a.length);
+  };
+
+  const packDisconnectedComponents = (cy: Core) => {
+    const groups = getConnectedNodeGroups(cy);
+
+    if (groups.length <= 1) {
+      return;
+    }
+
+    const gap = 92;
+    const maxRowWidth = 560;
+    let cursorX = 0;
+    let cursorY = 0;
+    let rowHeight = 0;
+
+    const placements = groups.map((group) => {
+      const collection = group.reduce(
+        (acc, id) => acc.union(cy.getElementById(id)),
+        cy.collection()
+      );
+      const box = collection.boundingBox();
+      const width = Math.max(110, box.w);
+      const height = Math.max(110, box.h);
+
+      if (cursorX > 0 && cursorX + width > maxRowWidth) {
+        cursorX = 0;
+        cursorY += rowHeight + gap;
+        rowHeight = 0;
+      }
+
+      const placement = {
+        group,
+        box,
+        x: cursorX,
+        y: cursorY,
+        width,
+        height,
+      };
+
+      cursorX += width + gap;
+      rowHeight = Math.max(rowHeight, height);
+
+      return placement;
+    });
+
+    const packedWidth = Math.max(
+      ...placements.map((placement) => placement.x + placement.width),
+      0
+    );
+    const packedHeight = Math.max(
+      ...placements.map((placement) => placement.y + placement.height),
+      0
+    );
+
+    placements.forEach((placement) => {
+      const targetLeft = placement.x - packedWidth / 2;
+      const targetTop = placement.y - packedHeight / 2;
+      const dx = targetLeft - placement.box.x1;
+      const dy = targetTop - placement.box.y1;
+
+      placement.group.forEach((id) => {
+        const node = cy.getElementById(id);
+        const current = node.position();
+        node.position({
+          x: current.x + dx,
+          y: current.y + dy,
+        });
+      });
+    });
+  };
+
   const [edgeTooltip, setEdgeTooltip] = useState<EdgeTooltipState | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
 
@@ -264,7 +412,8 @@ export default function NetworkGraph({
 
           const initialLayout = graph.layout({
             ...getLayoutOptions(layout, layoutCacheSignature, true),
-            fit: false,
+            fit: true,
+            padding: 56,
           } as any);
 
           activeLayoutRef.current = initialLayout;
@@ -279,8 +428,8 @@ export default function NetworkGraph({
             }
 
             activeLayoutRef.current = null;
-            graph.resize();
-            graph.fit(graph.elements(), 40);
+            packDisconnectedComponents(graph);
+            fitGraphToVisibleCanvas(graph, false);
 
             const initialPositions: PositionMap = {};
             graph.nodes().forEach((node) => {
@@ -364,8 +513,9 @@ export default function NetworkGraph({
     const cachedViewportForLayout =
       layoutViewportCacheRef.current[layoutCacheKey];
 
-    const cachedPositionsForSignature =
-      cachedPositionsForLayout ?? preservedPositions;
+    const cachedPositionsForSignature = signatureChanged
+      ? preservedPositions
+      : cachedPositionsForLayout ?? preservedPositions;
 
     const nextNodeIds = nodes.map((node) => node.id);
     const hasCompleteSavedPositions =
@@ -373,7 +523,7 @@ export default function NetworkGraph({
       nextNodeIds.every((id) => Boolean(cachedPositionsForSignature[id]));
 
     const canRestoreExactLayout =
-      hasCompleteSavedPositions && Boolean(cachedPositionsForLayout);
+      !signatureChanged && hasCompleteSavedPositions && Boolean(cachedPositionsForLayout);
 
     const elementsWithPositions = elements.map((element) => {
       const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
@@ -414,8 +564,11 @@ export default function NetworkGraph({
         }
 
         activeLayoutRef.current = null;
+        packDisconnectedComponents(cy);
 
-        if (layoutChanged && cachedViewportForLayout) {
+        if (signatureChanged) {
+          window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
+        } else if (layoutChanged && cachedViewportForLayout) {
           cy.zoom(cachedViewportForLayout.zoom);
           cy.pan(cachedViewportForLayout.pan);
         } else {
@@ -451,14 +604,17 @@ export default function NetworkGraph({
       }
     });
 
-    if (layoutChanged && cachedViewportForLayout) {
+    cy.endBatch();
+
+    if (signatureChanged) {
+      window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
+    } else if (layoutChanged && cachedViewportForLayout) {
       cy.zoom(cachedViewportForLayout.zoom);
       cy.pan(cachedViewportForLayout.pan);
     } else {
       cy.zoom(existingViewport.zoom);
       cy.pan(existingViewport.pan);
     }
-    cy.endBatch();
 
     cy.nodes().forEach((node) => {
       node.unlock();

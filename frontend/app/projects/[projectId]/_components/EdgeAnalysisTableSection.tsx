@@ -65,128 +65,153 @@ export default function EdgeAnalysisTableSection({
   void setIsColumnMenuOpen;
   void visibleAlgorithmColumns;
   void setVisibleAlgorithmColumns;
-  return (
-    <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <h3 className="text-lg font-semibold text-white">Edge Analysis Table</h3>
 
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+  const sortColumns: Array<[
+    "rank" | "source" | "target" | "count" | "score",
+    string,
+    string
+  ]> = [
+    ["rank", selectedView === "consensus" ? "Consensus Rank" : "Rank", "Order"],
+    ["source", "Source Gene", "Regulator"],
+    ["target", "Target Gene", "Target"],
+    ["count", "Consensus Count", "Support"],
+    [
+      "score",
+      selectedView === "consensus" ? "Consensus Score" : "Raw Score",
+      selectedView === "consensus" ? "Avg. normalized" : "Original output",
+    ],
+  ];
+
+  return (
+    <div className="mt-6 rounded-[1.75rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <h3 className="text-xl font-bold tracking-tight text-slate-950">
+          Edge Analysis Table
+        </h3>
+
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center lg:w-auto lg:justify-end">
           <input
             value={tableSearch}
             onChange={(e) => setTableSearch(e.target.value)}
             placeholder="Search gene name"
             aria-label="Search gene name"
-            className="w-full min-w-0 rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 sm:min-w-[260px] lg:w-[320px]"
+            className="w-full min-w-0 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:min-w-[260px] lg:w-[320px]"
           />
 
           <button
             type="button"
             onClick={onExportEdgeList}
-            className="w-full rounded-2xl border border-teal-300/20 bg-teal-400/10 px-4 py-2 text-sm font-medium text-teal-50 transition hover:border-teal-300/35 hover:bg-teal-400/16 sm:w-auto"
+            className="w-full whitespace-nowrap rounded-full bg-[#1b75a6] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] sm:w-auto"
           >
             Export CSV
           </button>
         </div>
       </div>
 
-      <div className="mt-5 overflow-x-auto rounded-[1.5rem] border border-white/10">
-        <table className="min-w-full divide-y divide-white/10 text-sm">
-          <thead className="bg-slate-900/90 text-left text-slate-300">
-            <tr>
-              {[
-                ["rank", selectedView === "consensus" ? "Consensus Rank" : "Rank"],
-                ["source", "Source Gene"],
-                ["target", "Target Gene"],
-                ["count", "Consensus Count"],
-                ["score", selectedView === "consensus" ? "Consensus Score" : "Score"],
-              ].map(([key, label]) => (
-                <th key={key} className="px-4 py-3 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTablePage(1);
-                      if (tableSortKey === key) {
-                        setTableSortDirection((current) =>
-                          current === "asc" ? "desc" : "asc"
-                        );
-                      } else {
-                        setTableSortKey(
-                          key as "rank" | "source" | "target" | "score" | "count"
-                        );
-                        setTableSortDirection("asc");
-                      }
-                    }}
-                    className="inline-flex items-center gap-2 text-left text-slate-300 transition hover:text-white"
-                  >
-                    <span>{label}</span>
-                    {tableSortKey === key && (
-                      <span>{tableSortDirection === "asc" ? "↑" : "↓"}</span>
-                    )}
-                  </button>
-                </th>
-              ))}
-
-              {completedAlgorithmIds.map((algorithmId) => (
-                <th key={algorithmId} className="px-4 py-3 font-medium">
-                  {algorithmId}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-white/10 bg-slate-950/60">
-            {displayedTableRows.length > 0 ? (
-              displayedTableRows.map((edge) => {
-                const isSelected = selectedEdgeKey === edge.key;
-                return (
-                  <tr
-                    key={edge.key}
-                    onClick={() => {
-                      setSelectedEdgeKey(edge.key);
-                      setSelectedGene(edge.source);
-                    }}
-                    className={`cursor-pointer transition hover:bg-white/[0.04] ${
-                      isSelected ? "bg-teal-300/10" : ""
-                    }`}
-                    title={`${edge.source} → ${edge.target} · score ${edge.score.toFixed(3)} · ${edge.supportingAlgorithms.join(", ")}`}
-                  >
-                    <td className="px-4 py-3 text-slate-300">{edge.rank}</td>
-                    <td className="px-4 py-3 text-white">{edge.source}</td>
-                    <td className="px-4 py-3 text-white">{edge.target}</td>
-                    <td className="px-4 py-3 text-slate-300">{edge.count}</td>
-                    <td className="px-4 py-3 text-slate-300">{edge.score.toFixed(3)}</td>
-
-                    {completedAlgorithmIds.map((algorithmId) => (
-                      <td key={algorithmId} className="px-4 py-3">
-                        {edge.perAlgorithmScores[algorithmId] !== undefined ? (
-                          <span className="text-slate-300">
-                            {edge.perAlgorithmScores[algorithmId].toFixed(3)}
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-white/[0.03] px-2 py-1 text-xs text-slate-500">
-                            -
-                          </span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })
-            ) : (
+      <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-slate-600">
               <tr>
-                <td
-                  className="px-4 py-6 text-center text-slate-500"
-                  colSpan={5 + completedAlgorithmIds.length}
-                >
-                  No matching edges.
-                </td>
+                {sortColumns.map(([key, label, sublabel]) => (
+                  <th key={key} className="px-4 py-3 align-top font-medium">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTablePage(1);
+                        if (tableSortKey === key) {
+                          setTableSortDirection((current) =>
+                            current === "asc" ? "desc" : "asc"
+                          );
+                        } else {
+                          setTableSortKey(key);
+                          setTableSortDirection("asc");
+                        }
+                      }}
+                      className="group inline-flex items-start gap-2 text-left transition hover:text-[#1b75a6]"
+                    >
+                      <span>
+                        <span className="block font-bold text-slate-800 group-hover:text-[#1b75a6]">
+                          {label}
+                        </span>
+                        <span className="mt-1 block text-xs font-medium text-slate-400">
+                          {sublabel}
+                        </span>
+                      </span>
+                      {tableSortKey === key && (
+                        <span className="mt-0.5 text-[#1b75a6]">
+                          {tableSortDirection === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                ))}
+
+                {completedAlgorithmIds.map((algorithmId) => (
+                  <th key={algorithmId} className="px-4 py-3 align-top font-medium">
+                    <span className="block font-bold text-slate-800">{algorithmId}</span>
+                    <span className="mt-1 block text-xs font-medium text-slate-400">
+                      Normalized Score
+                    </span>
+                  </th>
+                ))}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {displayedTableRows.length > 0 ? (
+                displayedTableRows.map((edge) => {
+                  const isSelected = selectedEdgeKey === edge.key;
+                  return (
+                    <tr
+                      key={edge.key}
+                      onClick={() => {
+                        setSelectedEdgeKey(edge.key);
+                        setSelectedGene(edge.source);
+                      }}
+                      className={`cursor-pointer transition hover:bg-[#f2f9fc] ${
+                        isSelected ? "bg-[#e8f5fb]" : ""
+                      }`}
+                      title={`${edge.source} → ${edge.target} · raw score ${edge.score.toFixed(3)} · ${edge.supportingAlgorithms.join(", ")}`}
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-600">{edge.rank}</td>
+                      <td className="px-4 py-3 font-bold text-slate-950">{edge.source}</td>
+                      <td className="px-4 py-3 font-bold text-slate-950">{edge.target}</td>
+                      <td className="px-4 py-3 text-slate-600">{edge.count}</td>
+                      <td className="px-4 py-3 text-slate-600">{edge.score.toFixed(3)}</td>
+
+                      {completedAlgorithmIds.map((algorithmId) => (
+                        <td key={algorithmId} className="px-4 py-3">
+                          {edge.perAlgorithmScores[algorithmId] !== undefined ? (
+                            <span className="inline-flex rounded-full border border-[#1b75a6]/15 bg-[#f2f9fc] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6]">
+                              {edge.perAlgorithmScores[algorithmId].toFixed(3)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-400">
+                              -
+                            </span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td
+                    className="px-4 py-8 text-center text-slate-500"
+                    colSpan={5 + completedAlgorithmIds.length}
+                  >
+                    No matching edges.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
         <p>
           Page {tablePage.toLocaleString()} of {totalTablePages.toLocaleString()} · {sortedTableRows.length.toLocaleString()} matching rows
         </p>
@@ -196,7 +221,7 @@ export default function EdgeAnalysisTableSection({
             type="button"
             onClick={() => setTablePage(1)}
             disabled={tablePage === 1}
-            className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-40"
           >
             First
           </button>
@@ -204,7 +229,7 @@ export default function EdgeAnalysisTableSection({
             type="button"
             onClick={() => setTablePage((current) => Math.max(1, current - 1))}
             disabled={tablePage === 1}
-            className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Previous
           </button>
@@ -212,7 +237,7 @@ export default function EdgeAnalysisTableSection({
             type="button"
             onClick={() => setTablePage((current) => Math.min(totalTablePages, current + 1))}
             disabled={tablePage === totalTablePages}
-            className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
           </button>
@@ -220,7 +245,7 @@ export default function EdgeAnalysisTableSection({
             type="button"
             onClick={() => setTablePage(totalTablePages)}
             disabled={tablePage === totalTablePages}
-            className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Last
           </button>

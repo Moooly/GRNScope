@@ -503,6 +503,16 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
     if not parsed_edges:
         raise ValueError("rankedEdges.csv did not contain any valid edges.")
 
+    scores = [edge["score"] for edge in parsed_edges]
+    min_score = min(scores)
+    max_score = max(scores)
+    score_range = max_score - min_score
+
+    for edge in parsed_edges:
+        edge["normalized_score"] = (
+            1.0 if score_range == 0 else (edge["score"] - min_score) / score_range
+        )
+
     return parsed_edges, {
         "edge_count": len(parsed_edges),
         "node_count": len(node_names),

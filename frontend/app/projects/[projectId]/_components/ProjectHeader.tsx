@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 type ProjectHeaderProps = {
   projectName: string;
   projectDescription: string;
@@ -11,26 +9,19 @@ export default function ProjectHeader({
   projectDescription,
   overallStatus,
 }: ProjectHeaderProps) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <Link
-          href="/projects"
-          className="inline-flex rounded-2xl border border-white/15 px-4 py-2 text-sm text-white transition hover:border-white/30 hover:bg-white/5"
-        >
-          Back to projects
-        </Link>
-        <h1 className="mt-5 text-3xl font-semibold text-white">{projectName}</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          {projectDescription}
-        </p>
-      </div>
+  void overallStatus;
 
-      {overallStatus && (
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200">
-          {overallStatus}
-        </span>
-      )}
-    </div>
+  return (
+    <header className="border-b border-[#213f54]/35 pb-8">
+      <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
+        Project detail
+      </p>
+      <h1 className="text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[4.15rem] lg:leading-[1.02]">
+        {projectName}
+      </h1>
+      <p className="mt-5 max-w-3xl text-[1.05rem] leading-8 text-slate-700">
+        {projectDescription}
+      </p>
+    </header>
   );
 }

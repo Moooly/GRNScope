@@ -1,0 +1,16 @@
+input_settings:
+  input_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/e3aec0214163/_beeline_runtime/PPCOR/inputs"
+  datasets:
+    - dataset_id: "e3aec0214163"
+      should_run: [True]
+      runs:
+        - run_id: "run-1"
+          exprData: "ExpressionData.csv"
+  algorithms:
+    - algorithm_id: "PPCOR"
+      image: "grnbeeline/ppcor:base"
+      should_run: [True]
+      params:
+        pVal: [0.05]
+output_settings:
+  output_dir: "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/e3aec0214163/_beeline_runtime/PPCOR/outputs"
