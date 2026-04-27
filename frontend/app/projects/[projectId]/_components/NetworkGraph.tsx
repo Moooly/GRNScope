@@ -142,8 +142,8 @@ export default function NetworkGraph({
       return;
     }
 
-    const gap = 92;
-    const maxRowWidth = 560;
+    const gap = 38;
+    const maxRowWidth = 460;
     let cursorX = 0;
     let cursorY = 0;
     let rowHeight = 0;
@@ -154,8 +154,8 @@ export default function NetworkGraph({
         cy.collection()
       );
       const box = collection.boundingBox();
-      const width = Math.max(110, box.w);
-      const height = Math.max(110, box.h);
+      const width = Math.max(92, box.w);
+      const height = Math.max(92, box.h);
 
       if (cursorX > 0 && cursorX + width > maxRowWidth) {
         cursorX = 0;
@@ -334,15 +334,12 @@ export default function NetworkGraph({
       cy = graph;
 
       graph.on("tap", "node", (event) => {
-      const nodeId = event.target.id();
-      onSelectGeneRef.current(nodeId);
-      onSelectEdgeRef.current(null);
-    });
+        const nodeId = event.target.id();
+        onSelectGeneRef.current(nodeId);
+      });
       graph.on("tap", "edge", (event) => {
         const edgeId = event.target.id();
-        const sourceId = event.target.data("source") as string | undefined;
         onSelectEdgeRef.current(edgeId);
-        onSelectGeneRef.current(sourceId ?? null);
       });
 
       graph.on("mouseover", "edge", (event) => {

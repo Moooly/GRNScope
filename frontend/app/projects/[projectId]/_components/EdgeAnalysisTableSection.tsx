@@ -68,18 +68,13 @@ export default function EdgeAnalysisTableSection({
 
   const sortColumns: Array<[
     "rank" | "source" | "target" | "count" | "score",
-    string,
     string
   ]> = [
-    ["rank", selectedView === "consensus" ? "Consensus Rank" : "Rank", "Order"],
-    ["source", "Source Gene", "Regulator"],
-    ["target", "Target Gene", "Target"],
-    ["count", "Consensus Count", "Support"],
-    [
-      "score",
-      selectedView === "consensus" ? "Consensus Score" : "Raw Score",
-      selectedView === "consensus" ? "Avg. normalized" : "Original output",
-    ],
+    ["rank", selectedView === "consensus" ? "Consensus Rank" : "Rank"],
+    ["source", "Source Gene"],
+    ["target", "Target Gene"],
+    ["count", "Consensus Count"],
+    ["score", selectedView === "consensus" ? "Consensus Score" : "Raw Score"],
   ];
 
   return (
@@ -113,7 +108,7 @@ export default function EdgeAnalysisTableSection({
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-slate-600">
               <tr>
-                {sortColumns.map(([key, label, sublabel]) => (
+                {sortColumns.map(([key, label]) => (
                   <th key={key} className="px-4 py-3 align-top font-medium">
                     <button
                       type="button"
@@ -130,13 +125,8 @@ export default function EdgeAnalysisTableSection({
                       }}
                       className="group inline-flex items-start gap-2 text-left transition hover:text-[#1b75a6]"
                     >
-                      <span>
-                        <span className="block font-bold text-slate-800 group-hover:text-[#1b75a6]">
-                          {label}
-                        </span>
-                        <span className="mt-1 block text-xs font-medium text-slate-400">
-                          {sublabel}
-                        </span>
+                      <span className="block font-bold text-slate-800 group-hover:text-[#1b75a6]">
+                        {label}
                       </span>
                       {tableSortKey === key && (
                         <span className="mt-0.5 text-[#1b75a6]">
@@ -150,9 +140,6 @@ export default function EdgeAnalysisTableSection({
                 {completedAlgorithmIds.map((algorithmId) => (
                   <th key={algorithmId} className="px-4 py-3 align-top font-medium">
                     <span className="block font-bold text-slate-800">{algorithmId}</span>
-                    <span className="mt-1 block text-xs font-medium text-slate-400">
-                      Normalized Score
-                    </span>
                   </th>
                 ))}
               </tr>

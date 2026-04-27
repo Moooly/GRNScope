@@ -44,7 +44,7 @@ export function buildCircularPositions(nodes: NetworkNode[]) {
   const sorted = sortNodesByPriority(
     nodes,
     (node) =>
-      (node.isTF ? 100 : 0) +
+      (node.isTF ? 10 : 0) +
       node.outDegree * 3 +
       node.degree * 1.1 -
       node.inDegree * 0.25,
@@ -76,7 +76,7 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
   const sorted = sortNodesByPriority(
     nodes,
     (node) =>
-      (node.isTF ? 100 : 0) +
+      (node.isTF ? 12 : 0) +
       node.outDegree * 3 +
       node.degree * 1.25 -
       node.inDegree * 0.35,
@@ -160,16 +160,19 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
   return positions;
 }
 
+// This is a regulator-priority hierarchy, not a strict graph-theory layered layout.
+// Nodes with stronger outgoing regulation are placed closer to the top.
+// A full edge-aware hierarchy would need the edge list as an input.
 export function buildHierarchicalPositions(nodes: NetworkNode[]) {
   if (nodes.length === 0) return {} as PositionMap;
 
   const sorted = sortNodesByPriority(
     nodes,
     (node) =>
-      node.outDegree * 2.4 +
-      node.degree * 0.35 -
-      node.inDegree * 0.45 +
-      (node.isTF ? 2 : 0),
+      node.outDegree * 2.8 +
+      node.degree * 0.3 -
+      node.inDegree * 0.6 +
+      (node.isTF ? 3 : 0),
     (a, b) => {
       if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
       if (b.degree !== a.degree) return b.degree - a.degree;
@@ -275,23 +278,23 @@ export function getLayoutConfig(
   const densityFactor = isSparseGraph
     ? 0.82
     : Math.max(0.68, Math.min(1.2, edgesPerNode / 2));
-  const componentSpacing = isSparseGraph ? 4 : 32;
+  const componentSpacing = isSparseGraph ? 0 : 28;
 
   return {
     name: "cose-bilkent",
     animate: false,
     randomize: false,
     fit: true,
-    padding: isSparseGraph ? 34 : 48,
-    nodeRepulsion: isSparseGraph ? 7200 : 7200 * densityFactor,
-    idealEdgeLength: isSparseGraph ? 88 : 82 * densityFactor,
-    edgeElasticity: isSparseGraph ? 0.3 : 0.22,
+    padding: isSparseGraph ? 28 : 44,
+    nodeRepulsion: isSparseGraph ? 6600 : 7200 * densityFactor,
+    idealEdgeLength: isSparseGraph ? 76 : 82 * densityFactor,
+    edgeElasticity: isSparseGraph ? 0.32 : 0.22,
     nestingFactor: 1,
     gravity: isSparseGraph ? 1.05 : 0.86,
     gravityRangeCompound: isSparseGraph ? 3.2 : 2.4,
     componentSpacing,
-    tilingPaddingVertical: isSparseGraph ? 2 : 18,
-    tilingPaddingHorizontal: isSparseGraph ? 2 : 18,
+    tilingPaddingVertical: isSparseGraph ? 0 : 16,
+    tilingPaddingHorizontal: isSparseGraph ? 0 : 16,
     numIter: isSparseGraph ? 2200 : 1800,
     tile: true,
   } as const;

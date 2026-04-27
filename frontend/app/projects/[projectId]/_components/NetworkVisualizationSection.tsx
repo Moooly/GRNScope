@@ -72,6 +72,9 @@ export default function NetworkVisualizationSection({
     return () => setIsMounted(false);
   }, []);
 
+  const selectedEdge =
+    filteredNetworkEdges.find((edge) => edge.key === selectedEdgeKey) ?? null;
+
   const closeExportConfirm = () => {
     setIsExportConfirmClosing(true);
     window.setTimeout(() => {
@@ -161,16 +164,24 @@ export default function NetworkVisualizationSection({
             selectedGene={selectedGene}
             selectedEdgeKey={selectedEdgeKey}
             layout={networkLayout}
-            onSelectGene={setSelectedGene}
-            onSelectEdge={setSelectedEdgeKey}
+            onSelectGene={(gene) => {
+              setSelectedGene(gene);
+              setSelectedEdgeKey(null);
+            }}
+            onSelectEdge={(edgeKey) => {
+              setSelectedEdgeKey(edgeKey);
+              setSelectedGene(null);
+            }}
             onGraphReady={onGraphReady}
           />
         </div>
 
         <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
           <div className="flex items-center justify-between gap-3">
-            <h4 className="text-base font-bold text-slate-950">Node Inspection</h4>
-            {selectedNode && (
+            <h4 className="text-base font-bold text-slate-950">
+              {selectedEdge ? "Edge Inspection" : "Node Inspection"}
+            </h4>
+            {(selectedNode || selectedEdge) && (
               <button
                 type="button"
                 onClick={() => {
@@ -184,7 +195,73 @@ export default function NetworkVisualizationSection({
             )}
           </div>
 
-          {selectedNode ? (
+          {selectedEdge ? (
+            <>
+              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
+                  Selected edge
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-lg font-bold text-slate-950">
+                  <span>{selectedEdge.source}</span>
+                  <span className="text-[#1b75a6]">→</span>
+                  <span>{selectedEdge.target}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Consensus score
+                  </p>
+                  <p className="mt-2 text-lg font-bold text-slate-950">
+                    {selectedEdge.score.toFixed(3)}
+                  </p>
+                </div>
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Rank
+                  </p>
+                  <p className="mt-2 text-lg font-bold text-slate-950">
+                    {selectedEdge.rank}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
+                  Supporting algorithms
+                </p>
+                <div className="mt-3 space-y-2">
+                  {selectedEdge.supportingAlgorithms.map((algorithmId) => {
+                    const algorithmScore = selectedEdge.perAlgorithmScores[algorithmId];
+
+                    return (
+                      <div
+                        key={algorithmId}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <span className="text-sm font-bold text-slate-700">
+                          {algorithmId}
+                        </span>
+                        <span className="rounded-full border border-[#1b75a6]/15 bg-[#f2f9fc] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6]">
+                          {algorithmScore !== undefined ? algorithmScore.toFixed(3) : "-"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
+                  Current filter view
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  This edge is included in the current network because it passed the confidence filter and is supported by {selectedEdge.count} selected algorithm{selectedEdge.count === 1 ? "" : "s"}.
+                </p>
+              </div>
+            </>
+          ) : selectedNode ? (
             <>
               <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
                 <p className="text-lg font-bold text-slate-950">{selectedNode.id}</p>
@@ -292,7 +369,7 @@ export default function NetworkVisualizationSection({
             </>
           ) : (
             <div className="mt-4 rounded-[1.25rem] border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
-              Click a node in the network to inspect the gene name, transcription-factor status, in-degree, out-degree, top regulators, and top target genes.
+              Click a node to inspect gene details, or click an edge to inspect its source gene, target gene, supporting algorithms, and normalized scores.
             </div>
           )}
         </div>
