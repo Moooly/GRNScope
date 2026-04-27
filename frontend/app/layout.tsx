@@ -68,10 +68,10 @@ export default function RootLayout({
               className="flex shrink-0 items-center gap-4"
               aria-label="Go to GRNScope home page"
             >
-              <div className="relative flex h-[46px] w-[46px] items-center justify-center bg-transparent">
+              <div className="relative flex h-[62px] w-[62px] items-center justify-center bg-transparent">
                 <svg
                   viewBox="0 0 64 64"
-                  className="relative h-[42px] w-[42px]"
+                  className="relative h-[58px] w-[58px]"
                   role="img"
                   aria-label="GRNScope gene regulatory network logo"
                 >

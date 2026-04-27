@@ -46,9 +46,11 @@ export default function NetworkGraph({
   const layoutViewportCacheRef = useRef<
     Record<string, { zoom: number; pan: { x: number; y: number } }>
   >({});
+
   const onSelectGeneRef = useRef(onSelectGene);
   const onSelectEdgeRef = useRef(onSelectEdge);
   const onGraphReadyRef = useRef(onGraphReady);
+
   const cacheViewportForKey = (cacheKey: string, cy: Core) => {
     layoutViewportCacheRef.current[cacheKey] = {
       zoom: cy.zoom(),
@@ -153,6 +155,7 @@ export default function NetworkGraph({
         (acc, id) => acc.union(cy.getElementById(id)),
         cy.collection()
       );
+
       const box = collection.boundingBox();
       const width = Math.max(92, box.w);
       const height = Math.max(92, box.h);
@@ -334,12 +337,14 @@ export default function NetworkGraph({
         userPanningEnabled: true,
         textureOnViewport: true,
       });
+
       cy = graph;
 
       graph.on("tap", "node", (event) => {
         const nodeId = event.target.id();
         onSelectGeneRef.current(nodeId);
       });
+
       graph.on("tap", "edge", (event) => {
         const edgeId = event.target.id();
         onSelectEdgeRef.current(edgeId);
@@ -428,7 +433,11 @@ export default function NetworkGraph({
             }
 
             activeLayoutRef.current = null;
-            packDisconnectedComponents(graph);
+
+            if (layout === "force") {
+              packDisconnectedComponents(graph);
+            }
+
             fitGraphToVisibleCanvas(graph, false);
 
             const initialPositions: PositionMap = {};
@@ -478,16 +487,15 @@ export default function NetworkGraph({
     };
   }, []);
 
-  // Keep the Cytoscape canvas in sync with the container size. Without this,
-  // resizing the window or toggling the inspector panel leaves the canvas at
-  // its old internal size, so panning/zooming feels off.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
 
     let pendingFrame: number | null = null;
+
     const observer = new ResizeObserver(() => {
       if (pendingFrame !== null) return;
+
       pendingFrame = window.requestAnimationFrame(() => {
         pendingFrame = null;
         const cy = cyRef.current;
@@ -497,8 +505,10 @@ export default function NetworkGraph({
     });
 
     observer.observe(container);
+
     return () => {
       observer.disconnect();
+
       if (pendingFrame !== null) {
         window.cancelAnimationFrame(pendingFrame);
       }
@@ -552,6 +562,9 @@ export default function NetworkGraph({
     const canRestoreExactLayout =
       !signatureChanged && hasCompleteSavedPositions && Boolean(cachedPositionsForLayout);
 
+    const shouldRerunLayout =
+      layoutChanged || signatureChanged || !hasCompleteSavedPositions;
+
     const elementsWithPositions = elements.map((element) => {
       const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
 
@@ -560,6 +573,7 @@ export default function NetworkGraph({
       }
 
       const saved = cachedPositionsForSignature[elementId];
+
       if (!saved) {
         return element;
       }
@@ -576,35 +590,33 @@ export default function NetworkGraph({
     cy.style(getNetworkGraphStylesheet() as any);
     cy.resize();
 
-    if ((layoutChanged && !canRestoreExactLayout) || !hasCompleteSavedPositions) {
-      // For force layouts: keep existing node positions whenever possible. We
-      // pre-place any *new* nodes (not in the cache) near the centroid of the
-      // saved positions so cose-bilkent has something better than (0,0) to
-      // work with. Then run with randomize=false so previously-laid-out nodes
-      // only drift slightly.
+    if (shouldRerunLayout) {
       if (layout === "force") {
         const cachedPositions = cachedPositionsForSignature;
         const cachedKeys = Object.keys(cachedPositions);
+
         if (cachedKeys.length > 0) {
           let cx = 0;
           let cy2 = 0;
+
           for (const key of cachedKeys) {
             cx += cachedPositions[key].x;
             cy2 += cachedPositions[key].y;
           }
+
           cx /= cachedKeys.length;
           cy2 /= cachedKeys.length;
 
           cy.nodes().forEach((node) => {
             const id = node.id();
+
             if (!cachedPositions[id]) {
-              // Spread new nodes in a small ring around the centroid so they
-              // don't all overlap each other before the layout runs.
               const seed = id
                 .split("")
                 .reduce((acc, ch) => (acc * 33 + ch.charCodeAt(0)) >>> 0, 17);
               const angle = (seed % 360) * (Math.PI / 180);
               const radius = 60;
+
               node.position({
                 x: cx + Math.cos(angle) * radius,
                 y: cy2 + Math.sin(angle) * radius,
@@ -616,11 +628,10 @@ export default function NetworkGraph({
 
       cy.endBatch();
 
-      // Only randomize when we have no positions at all to fall back on.
       const hasAnyPriorPositions =
         Object.keys(lastNodePositionsRef.current).length > 0;
 
-      if (layoutChanged && layout === "force") {
+      if (layoutChanged || signatureChanged) {
         delete layoutPositionCacheRef.current[layoutCacheKey];
         delete layoutViewportCacheRef.current[layoutCacheKey];
       }
@@ -630,7 +641,7 @@ export default function NetworkGraph({
           layout,
           layoutCacheSignature,
           !hasAnyPriorPositions,
-          layoutChanged && layout === "force"
+          layout === "force" && (layoutChanged || signatureChanged)
         ) as any
       );
 
@@ -642,11 +653,14 @@ export default function NetworkGraph({
         }
 
         activeLayoutRef.current = null;
-        packDisconnectedComponents(cy);
 
-        if (signatureChanged) {
+        if (layout === "force") {
+          packDisconnectedComponents(cy);
+        }
+
+        if (signatureChanged || layoutChanged) {
           window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
-        } else if (layoutChanged && cachedViewportForLayout) {
+        } else if (cachedViewportForLayout) {
           cy.zoom(cachedViewportForLayout.zoom);
           cy.pan(cachedViewportForLayout.pan);
         } else {
@@ -674,19 +688,21 @@ export default function NetworkGraph({
       return;
     }
 
-    cy.nodes().forEach((node) => {
-      const saved = cachedPositionsForSignature[node.id()];
-      if (saved) {
-        node.position(saved);
-        node.lock();
-      }
-    });
+    if (canRestoreExactLayout) {
+      cy.nodes().forEach((node) => {
+        const saved = cachedPositionsForSignature[node.id()];
+        if (saved) {
+          node.position(saved);
+          node.lock();
+        }
+      });
+    }
 
     cy.endBatch();
 
-    if (signatureChanged) {
+    if (signatureChanged || layoutChanged) {
       window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
-    } else if (layoutChanged && cachedViewportForLayout) {
+    } else if (cachedViewportForLayout) {
       cy.zoom(cachedViewportForLayout.zoom);
       cy.pan(cachedViewportForLayout.pan);
     } else {

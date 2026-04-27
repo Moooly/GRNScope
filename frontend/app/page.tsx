@@ -48,7 +48,7 @@ export default function HomePage() {
               <div className="mt-6 space-y-4">
                 {[
                   ["01", "Upload matrix", "Rows are genes, columns are cells."],
-                  ["02", "Run algorithms", "GENIE3, GRNBoost2, PIDC, Pearson, PPCOR."],
+                  ["02", "Run algorithms", "Choose from GENIE3, GRNBoost2, PIDC, PPCOR, and more."],
                   ["03", "Explore results", "Network view, edge table, consensus filters."],
                 ].map(([number, title, text]) => (
                   <div
