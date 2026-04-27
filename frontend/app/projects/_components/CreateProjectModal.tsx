@@ -124,18 +124,18 @@ export default function CreateProjectModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm ${
+      className={`fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 pb-10 pt-28 backdrop-blur-sm sm:px-6 lg:pb-14 lg:pt-32 ${
         isCreateClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
       }`}
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
+        className={`mb-10 w-full max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:mb-14 lg:p-8 ${
           isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div ref={contentScrollRef} className="max-h-[90vh] overflow-y-auto">
+        <div ref={contentScrollRef}>
         <div className="flex items-start justify-between gap-6 border-b border-[#213f54]/20 pb-5">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#1b75a6]">

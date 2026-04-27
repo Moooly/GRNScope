@@ -722,13 +722,6 @@ export default function AlgorithmsPage() {
                 <span className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#1b75a6]">
                   {selectedAlgorithm.category}
                 </span>
-                <button
-                  type="button"
-                  onClick={closeAlgorithmModal}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                >
-                  Close
-                </button>
               </div>
             </div>
 

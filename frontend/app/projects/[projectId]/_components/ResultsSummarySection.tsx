@@ -81,23 +81,29 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
     const ab = countForExact(a, b);
 
     return (
-      <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+      <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.12),_transparent_26%),linear-gradient(180deg,_#f8fbff_0%,_#f1f6fb_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
         <div className="flex justify-center overflow-x-auto">
           <svg viewBox="0 0 640 360" className="mx-auto h-auto w-full max-w-[42rem]">
-            <circle cx="250" cy="180" r="110" fill="rgba(95,200,189,0.22)" stroke="rgba(95,200,189,0.72)" strokeWidth="3" />
-            <circle cx="390" cy="180" r="110" fill="rgba(27,117,166,0.18)" stroke="rgba(27,117,166,0.65)" strokeWidth="3" />
+            <defs>
+              <filter id="venn-soft-shadow-2" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="14" stdDeviation="14" floodColor="#0f172a" floodOpacity="0.10" />
+              </filter>
+            </defs>
 
-            <text x="210" y="62" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{a}</text>
-            <text x="430" y="62" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{b}</text>
+            <circle cx="250" cy="180" r="112" fill="rgba(45,212,191,0.18)" stroke="rgba(20,184,166,0.48)" strokeWidth="3" />
+            <circle cx="390" cy="180" r="112" fill="rgba(59,130,246,0.14)" stroke="rgba(14,116,144,0.44)" strokeWidth="3" />
+
+            <text x="210" y="62" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold tracking-tight">{a}</text>
+            <text x="430" y="62" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold tracking-tight">{b}</text>
 
             {aOnly > 0 && (
-              <text x="205" y="188" textAnchor="middle" className="fill-[#1b75a6] text-[26px] font-bold">{aOnly.toLocaleString()}</text>
+              <text x="205" y="189" textAnchor="middle" className="fill-[#0f5e8c] text-[28px] font-bold drop-shadow-sm">{aOnly.toLocaleString()}</text>
             )}
             {ab > 0 && (
-              <text x="320" y="188" textAnchor="middle" className="fill-slate-950 text-[26px] font-bold">{ab.toLocaleString()}</text>
+              <text x="320" y="190" textAnchor="middle" className="fill-slate-950 text-[30px] font-bold drop-shadow-sm">{ab.toLocaleString()}</text>
             )}
             {bOnly > 0 && (
-              <text x="435" y="188" textAnchor="middle" className="fill-[#1b75a6] text-[26px] font-bold">{bOnly.toLocaleString()}</text>
+              <text x="435" y="189" textAnchor="middle" className="fill-[#0f5e8c] text-[28px] font-bold drop-shadow-sm">{bOnly.toLocaleString()}</text>
             )}
           </svg>
         </div>
@@ -116,37 +122,43 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
     const abc = countForExact(a, b, c);
 
     return (
-      <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+      <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.12),_transparent_26%),linear-gradient(180deg,_#f8fbff_0%,_#f1f6fb_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
         <div className="flex justify-center overflow-x-auto">
           <svg viewBox="0 0 700 470" className="mx-auto h-auto w-full max-w-[44rem]">
-            <circle cx="290" cy="185" r="122" fill="rgba(95,200,189,0.22)" stroke="rgba(95,200,189,0.72)" strokeWidth="3" />
-            <circle cx="410" cy="185" r="122" fill="rgba(27,117,166,0.18)" stroke="rgba(27,117,166,0.65)" strokeWidth="3" />
-            <circle cx="350" cy="290" r="122" fill="rgba(139,92,246,0.14)" stroke="rgba(139,92,246,0.55)" strokeWidth="3" />
+            <defs>
+              <filter id="venn-soft-shadow-3" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="14" stdDeviation="14" floodColor="#0f172a" floodOpacity="0.10" />
+              </filter>
+            </defs>
 
-            <text x="235" y="52" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{a}</text>
-            <text x="465" y="52" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{b}</text>
-            <text x="350" y="446" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold">{c}</text>
+            <circle cx="290" cy="185" r="122" fill="rgba(45,212,191,0.18)" stroke="rgba(20,184,166,0.48)" strokeWidth="3" />
+            <circle cx="410" cy="185" r="122" fill="rgba(59,130,246,0.14)" stroke="rgba(14,116,144,0.44)" strokeWidth="3" />
+            <circle cx="350" cy="290" r="122" fill="rgba(139,92,246,0.12)" stroke="rgba(124,58,237,0.40)" strokeWidth="3" />
+
+            <text x="235" y="52" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold tracking-tight">{a}</text>
+            <text x="465" y="52" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold tracking-tight">{b}</text>
+            <text x="350" y="446" textAnchor="middle" className="fill-slate-950 text-[16px] font-bold tracking-tight">{c}</text>
 
             {aOnly > 0 && (
-              <text x="238" y="172" textAnchor="middle" className="fill-[#1b75a6] text-[24px] font-bold">{aOnly.toLocaleString()}</text>
+              <text x="238" y="173" textAnchor="middle" className="fill-[#0f5e8c] text-[27px] font-bold drop-shadow-sm">{aOnly.toLocaleString()}</text>
             )}
             {bOnly > 0 && (
-              <text x="462" y="172" textAnchor="middle" className="fill-[#1b75a6] text-[24px] font-bold">{bOnly.toLocaleString()}</text>
+              <text x="462" y="173" textAnchor="middle" className="fill-[#0f5e8c] text-[27px] font-bold drop-shadow-sm">{bOnly.toLocaleString()}</text>
             )}
             {cOnly > 0 && (
-              <text x="350" y="346" textAnchor="middle" className="fill-violet-700 text-[24px] font-bold">{cOnly.toLocaleString()}</text>
+              <text x="350" y="355" textAnchor="middle" className="fill-violet-700 text-[27px] font-bold drop-shadow-sm">{cOnly.toLocaleString()}</text>
             )}
             {ab > 0 && (
-              <text x="350" y="146" textAnchor="middle" className="fill-slate-950 text-[22px] font-bold">{ab.toLocaleString()}</text>
+              <text x="350" y="154" textAnchor="middle" className="fill-slate-950 text-[24px] font-bold drop-shadow-sm">{ab.toLocaleString()}</text>
             )}
             {ac > 0 && (
-              <text x="286" y="266" textAnchor="middle" className="fill-slate-950 text-[22px] font-bold">{ac.toLocaleString()}</text>
+              <text x="286" y="274" textAnchor="middle" className="fill-slate-950 text-[24px] font-bold drop-shadow-sm">{ac.toLocaleString()}</text>
             )}
             {bc > 0 && (
-              <text x="414" y="266" textAnchor="middle" className="fill-slate-950 text-[22px] font-bold">{bc.toLocaleString()}</text>
+              <text x="414" y="274" textAnchor="middle" className="fill-slate-950 text-[24px] font-bold drop-shadow-sm">{bc.toLocaleString()}</text>
             )}
             {abc > 0 && (
-              <text x="350" y="230" textAnchor="middle" className="fill-slate-950 text-[24px] font-bold">{abc.toLocaleString()}</text>
+              <text x="350" y="236" textAnchor="middle" className="fill-slate-950 text-[28px] font-bold drop-shadow-sm">{abc.toLocaleString()}</text>
             )}
           </svg>
         </div>

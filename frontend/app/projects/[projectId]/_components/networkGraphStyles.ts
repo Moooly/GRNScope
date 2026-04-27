@@ -45,7 +45,7 @@ export function getNetworkGraphStylesheet() {
     {
       selector: "edge",
       style: {
-        width: 2.1,
+        width: 3.0,
         "line-color": "mapData(visualScore, 0, 1, #cbd5e1, #0f5e8c)",
         opacity: "mapData(visualScore, 0, 1, 0.38, 0.82)",
         "curve-style": "bezier",

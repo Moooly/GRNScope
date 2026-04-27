@@ -38,6 +38,11 @@ export default function RootLayout({
       return;
     }
 
+    if (pathname === "/projects/sample") {
+      setActiveHeaderItem("sample");
+      return;
+    }
+
     if (pathname.startsWith("/projects") || pathname.startsWith("/login")) {
       setActiveHeaderItem("workspace");
     }
@@ -189,6 +194,23 @@ export default function RootLayout({
                   <path d="M12 3C7.03 3 3 4.343 3 6v12c0 1.657 4.03 3 9 3s9-1.343 9-3V6c0-1.657-4.03-3-9-3Zm0 2c3.866 0 7 .895 7 2s-3.134 2-7 2-7-.895-7-2 3.134-2 7-2Zm7 5.1V14c0 1.105-3.134 2-7 2s-7-.895-7-2v-3.9C6.61 11.256 9.146 12 12 12s5.39-.744 7-1.9Zm0 6V18c0 1.105-3.134 2-7 2s-7-.895-7-2v-1.9C6.61 17.256 9.146 18 12 18s5.39-.744 7-1.9Z" />
                 </svg>
                 <span>Algorithms</span>
+              </Link>
+
+              <Link
+                href="/projects/sample"
+                onClick={() => setActiveHeaderItem("sample")}
+                className={navItemClass(isActive("sample"))}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className={navIconClass}
+                  aria-hidden="true"
+                >
+                  <path d="M4.75 4A1.75 1.75 0 0 0 3 5.75v12.5C3 19.216 3.784 20 4.75 20h14.5A1.75 1.75 0 0 0 21 18.25V5.75A1.75 1.75 0 0 0 19.25 4H4.75Zm1.5 3.5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm0 3.75h11.5a.75.75 0 0 1 0 1.5H6.25a.75.75 0 0 1 0-1.5Zm0 3.75h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Z" />
+                </svg>
+                <span>Demo Project</span>
               </Link>
 
               <Link

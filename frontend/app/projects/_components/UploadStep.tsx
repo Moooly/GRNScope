@@ -29,34 +29,6 @@ export default function UploadStep({
 }: UploadStepProps) {
   return (
     <div className="space-y-6">
-      <div className="rounded-[1.5rem] border border-[#1b75a6]/15 bg-[#f2f9fc] px-5 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-[#1b75a6]">Sample files</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Download example CSV files to test the workflow quickly.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 lg:shrink-0">
-            <a
-              href="/samples/sample_expression_matrix.csv"
-              download
-              className="inline-flex items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white px-4 py-2 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-            >
-              Expression CSV
-            </a>
-            <a
-              href="/samples/sample_pseudotime.csv"
-              download
-              className="inline-flex items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white px-4 py-2 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-            >
-              Pseudotime CSV
-            </a>
-          </div>
-        </div>
-      </div>
-
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">

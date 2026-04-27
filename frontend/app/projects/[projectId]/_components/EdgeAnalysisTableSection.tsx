@@ -170,13 +170,11 @@ export default function EdgeAnalysisTableSection({
                       {completedAlgorithmIds.map((algorithmId) => (
                         <td key={algorithmId} className="px-4 py-3">
                           {edge.perAlgorithmScores[algorithmId] !== undefined ? (
-                            <span className="inline-flex rounded-full border border-[#1b75a6]/15 bg-[#f2f9fc] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6]">
+                            <span className="tabular-nums text-slate-600">
                               {edge.perAlgorithmScores[algorithmId].toFixed(3)}
                             </span>
                           ) : (
-                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-400">
-                              -
-                            </span>
+                            <span className="text-slate-400">-</span>
                           )}
                         </td>
                       ))}
