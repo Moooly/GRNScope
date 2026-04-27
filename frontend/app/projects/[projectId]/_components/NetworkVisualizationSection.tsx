@@ -95,12 +95,6 @@ export default function NetworkVisualizationSection({
             Target genes = slate circles
           </span>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-            Node size ∝ degree
-          </span>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-            Edge width ∝ score
-          </span>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
             Edge color ∝ support count
           </span>
         </div>

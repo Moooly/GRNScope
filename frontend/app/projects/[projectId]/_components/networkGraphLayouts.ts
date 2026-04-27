@@ -283,7 +283,7 @@ export function getLayoutConfig(
   return {
     name: "cose-bilkent",
     animate: false,
-    randomize: false,
+    randomize: true,
     fit: true,
     padding: isSparseGraph ? 28 : 44,
     nodeRepulsion: isSparseGraph ? 6600 : 7200 * densityFactor,
@@ -305,6 +305,26 @@ export function buildGraphElements(
   edges: NetworkEdge[]
 ) {
   const maxSupportCount = Math.max(...edges.map((edge) => edge.count), 1);
+  const edgeScores = edges
+    .map((edge) => Number(edge.score))
+    .filter((score) => Number.isFinite(score));
+  const minEdgeScore = edgeScores.length > 0 ? Math.min(...edgeScores) : 0;
+  const maxEdgeScore = edgeScores.length > 0 ? Math.max(...edgeScores) : 1;
+  const edgeScoreRange = maxEdgeScore - minEdgeScore;
+
+  const getVisualScore = (score: number) => {
+    const numericScore = Number(score);
+
+    if (!Number.isFinite(numericScore)) {
+      return 0;
+    }
+
+    if (edgeScoreRange === 0) {
+      return 1;
+    }
+
+    return Math.max(0, Math.min(1, (numericScore - minEdgeScore) / edgeScoreRange));
+  };
 
   const elements = [
     ...nodes.map((node) => ({
@@ -323,6 +343,7 @@ export function buildGraphElements(
         source: edge.source,
         target: edge.target,
         score: edge.score,
+        visualScore: getVisualScore(edge.score),
         count: edge.count,
         rank: edge.rank,
         supportRatio: maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
@@ -344,6 +365,7 @@ export function buildGraphElements(
       source: edge.source,
       target: edge.target,
       score: edge.score,
+      visualScore: getVisualScore(edge.score),
       count: edge.count,
       rank: edge.rank,
     })),
