@@ -704,11 +704,11 @@ export default function AlgorithmsPage() {
 
       {selectedAlgorithm ? (
         <div
-          className={`${closingAlgorithmId ? "animate-modal-overlay-out" : "animate-modal-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-6 py-8 backdrop-blur-sm`}
+          className={`${closingAlgorithmId ? "animate-modal-overlay-out" : "animate-modal-overlay"} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 pb-8 pt-28 backdrop-blur-sm sm:px-6 lg:pb-12 lg:pt-32`}
           onClick={closeAlgorithmModal}
         >
           <div
-            className={`${closingAlgorithmId ? "animate-modal-panel-out" : "animate-modal-panel"} max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 lg:p-8`}
+            className={`${closingAlgorithmId ? "animate-modal-panel-out" : "animate-modal-panel"} mb-8 w-full max-w-3xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 lg:mb-12 lg:p-8`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -718,10 +718,17 @@ export default function AlgorithmsPage() {
                 </p>
                 <h2 className="mt-3 text-3xl font-bold text-slate-950">{selectedAlgorithm.name}</h2>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3">
                 <span className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#1b75a6]">
                   {selectedAlgorithm.category}
                 </span>
+                <button
+                  type="button"
+                  onClick={closeAlgorithmModal}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                >
+                  Close
+                </button>
               </div>
             </div>
 

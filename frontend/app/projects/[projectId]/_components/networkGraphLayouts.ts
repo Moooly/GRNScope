@@ -1,4 +1,3 @@
-import type cytoscape from "cytoscape";
 import type {
   GraphCounts,
   NetworkEdge,
@@ -7,6 +6,10 @@ import type {
   PositionMap,
 } from "./networkGraphTypes";
 
+// ----------------------------------------------------------------------------
+// Shared helpers
+// ----------------------------------------------------------------------------
+
 function polarPosition(angle: number, radius: number) {
   return {
     x: Math.cos(angle) * radius,
@@ -14,145 +17,193 @@ function polarPosition(angle: number, radius: number) {
   };
 }
 
-function sortNodesByPriority(
+type DirectedAdjacency = {
+  // node id -> set of regulator ids (incoming edges)
+  inMap: Map<string, Set<string>>;
+  // node id -> set of target ids (outgoing edges)
+  outMap: Map<string, Set<string>>;
+  // node id -> set of all neighbors (undirected)
+  undirected: Map<string, Set<string>>;
+};
+
+function buildAdjacency(
   nodes: NetworkNode[],
-  getPriority: (node: NetworkNode) => number,
-  tieBreaker?: (a: NetworkNode, b: NetworkNode) => number
-) {
-  return [...nodes].sort((a, b) => {
-    const priorityDiff = getPriority(b) - getPriority(a);
-    if (priorityDiff !== 0) return priorityDiff;
+  edges: NetworkEdge[]
+): DirectedAdjacency {
+  const inMap = new Map<string, Set<string>>();
+  const outMap = new Map<string, Set<string>>();
+  const undirected = new Map<string, Set<string>>();
 
-    if (tieBreaker) {
-      const tieBreakDiff = tieBreaker(a, b);
-      if (tieBreakDiff !== 0) return tieBreakDiff;
-    }
+  for (const node of nodes) {
+    inMap.set(node.id, new Set());
+    outMap.set(node.id, new Set());
+    undirected.set(node.id, new Set());
+  }
 
-    return a.id.localeCompare(b.id);
-  });
+  for (const edge of edges) {
+    if (!inMap.has(edge.target) || !outMap.has(edge.source)) continue;
+    if (edge.source === edge.target) continue;
+    outMap.get(edge.source)!.add(edge.target);
+    inMap.get(edge.target)!.add(edge.source);
+    undirected.get(edge.source)!.add(edge.target);
+    undirected.get(edge.target)!.add(edge.source);
+  }
+
+  return { inMap, outMap, undirected };
 }
 
-function compareByDegreeThenOutDegree(a: NetworkNode, b: NetworkNode) {
-  if (b.degree !== a.degree) return b.degree - a.degree;
-  if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
-  return 0;
-}
+// ----------------------------------------------------------------------------
+// Circular layout (edge-aware: barycenter ordering reduces edge crossings)
+// ----------------------------------------------------------------------------
 
-export function buildCircularPositions(nodes: NetworkNode[]) {
+export function buildCircularPositions(
+  nodes: NetworkNode[],
+  edges: NetworkEdge[] = []
+): PositionMap {
   if (nodes.length === 0) return {} as PositionMap;
 
-  const sorted = sortNodesByPriority(
-    nodes,
-    (node) =>
-      (node.isTF ? 10 : 0) +
-      node.outDegree * 3 +
-      node.degree * 1.1 -
-      node.inDegree * 0.25,
-    compareByDegreeThenOutDegree
-  );
+  const { undirected } = buildAdjacency(nodes, edges);
+
+  // Initial ordering: TFs first, then by degree desc, then alpha for stability
+  let order: string[] = [...nodes]
+    .sort((a, b) => {
+      if (a.isTF !== b.isTF) return a.isTF ? -1 : 1;
+      if (b.degree !== a.degree) return b.degree - a.degree;
+      return a.id.localeCompare(b.id);
+    })
+    .map((node) => node.id);
+
+  // Iterative barycenter passes. Each node moves toward the average angular
+  // position of its neighbors. Three passes is enough to settle small/medium
+  // graphs without over-clustering.
+  if (edges.length > 0) {
+    for (let pass = 0; pass < 3; pass++) {
+      const indexById = new Map<string, number>();
+      order.forEach((id, idx) => indexById.set(id, idx));
+
+      const scored = order.map((id) => {
+        const neighbors = undirected.get(id);
+        if (!neighbors || neighbors.size === 0) {
+          return { id, score: indexById.get(id) ?? 0 };
+        }
+        let sum = 0;
+        let count = 0;
+        for (const neighborId of neighbors) {
+          const idx = indexById.get(neighborId);
+          if (idx === undefined) continue;
+          sum += idx;
+          count += 1;
+        }
+        return { id, score: count === 0 ? indexById.get(id) ?? 0 : sum / count };
+      });
+
+      scored.sort((a, b) => {
+        if (a.score !== b.score) return a.score - b.score;
+        return a.id.localeCompare(b.id);
+      });
+      order = scored.map((item) => item.id);
+    }
+  }
+
+  // Radius scales with node count so nodes stay roughly the same arc apart
+  // regardless of graph size. Each node reserves ~62 px of perimeter
+  // (matching the styled node diameter) plus a small gap.
+  const minPerimeter = nodes.length * 78;
+  const radius = Math.max(160, minPerimeter / (2 * Math.PI));
 
   const positions: PositionMap = {};
-  const radius =
-    nodes.length <= 8
-      ? 145
-      : nodes.length <= 12
-        ? 185
-        : nodes.length <= 18
-          ? 245
-          : Math.min(390, 260 + (nodes.length - 18) * 8);
-  const count = sorted.length;
-
-  sorted.forEach((node, index) => {
-    const angle = -Math.PI / 2 + (index / count) * Math.PI * 2;
-    positions[node.id] = polarPosition(angle, radius);
+  order.forEach((id, idx) => {
+    const angle = -Math.PI / 2 + (idx / order.length) * Math.PI * 2;
+    positions[id] = polarPosition(angle, radius);
   });
 
   return positions;
 }
 
-export function buildConcentricPositions(nodes: NetworkNode[]) {
+// ----------------------------------------------------------------------------
+// Concentric layout (edge-aware: hub at center, ring(s) by degree)
+// ----------------------------------------------------------------------------
+
+export function buildConcentricPositions(
+  nodes: NetworkNode[],
+  edges: NetworkEdge[] = []
+): PositionMap {
   if (nodes.length === 0) return {} as PositionMap;
 
-  const sorted = sortNodesByPriority(
-    nodes,
-    (node) =>
-      (node.isTF ? 12 : 0) +
-      node.outDegree * 3 +
-      node.degree * 1.25 -
-      node.inDegree * 0.35,
-    compareByDegreeThenOutDegree
-  );
+  // Sort by priority: TF status (boost), out-degree (regulators are hubs),
+  // total degree, with id tiebreak for stable layouts.
+  const sorted = [...nodes].sort((a, b) => {
+    const priorityA =
+      (a.isTF ? 1000 : 0) + a.outDegree * 3 + a.degree;
+    const priorityB =
+      (b.isTF ? 1000 : 0) + b.outDegree * 3 + b.degree;
+    if (priorityA !== priorityB) return priorityB - priorityA;
+    if (b.degree !== a.degree) return b.degree - a.degree;
+    return a.id.localeCompare(b.id);
+  });
 
   const positions: PositionMap = {};
+  if (sorted.length === 0) return positions;
 
-  const centerCount = nodes.length <= 10 ? 1 : 2;
-  const centerNodes = sorted.slice(0, centerCount);
-  const remainingNodes = sorted.slice(centerCount);
+  // Single hub at center — the highest-priority node.
+  const [hub, ...rest] = sorted;
+  positions[hub.id] = { x: 0, y: 0 };
 
-  if (centerNodes.length === 1) {
-    positions[centerNodes[0].id] = { x: 0, y: 0 };
-  } else {
-    const centerRadius = 84;
-    centerNodes.forEach((node, index) => {
-      const angle =
-        -Math.PI / 2 + (index / centerNodes.length) * Math.PI * 2;
-      positions[node.id] = polarPosition(angle, centerRadius);
-    });
-  }
+  if (rest.length === 0) return positions;
 
-  if (remainingNodes.length === 0) {
-    return positions;
-  }
+  // Determine ring count based on remaining count. Each ring holds about
+  // (2π·radius / nodeSpacing) nodes, with radius growing per ring.
+  const nodeSpacing = 78;
+  const baseRadius = 140;
+  const radiusStep = 110;
 
-  let ringSizes: number[] = [];
-
-  if (remainingNodes.length <= 8) {
-    ringSizes = [remainingNodes.length];
-  } else if (remainingNodes.length <= 18) {
-    const firstRing = Math.ceil(remainingNodes.length / 2);
-    const secondRing = remainingNodes.length - firstRing;
-    ringSizes = secondRing > 0 ? [firstRing, secondRing] : [firstRing];
-  } else if (remainingNodes.length <= 30) {
-    const firstRing = Math.max(7, Math.round(remainingNodes.length * 0.34));
-    const secondRing = Math.max(7, Math.round(remainingNodes.length * 0.33));
-    const thirdRing = Math.max(
-      0,
-      remainingNodes.length - firstRing - secondRing
-    );
-    ringSizes =
-      thirdRing > 0
-        ? [firstRing, secondRing, thirdRing]
-        : [firstRing, secondRing];
-  } else {
-    ringSizes = [];
-    let remaining = remainingNodes.length;
-    let currentRingCapacity = 8;
-
-    while (remaining > 0) {
-      const take = Math.min(currentRingCapacity, remaining);
-      ringSizes.push(take);
-      remaining -= take;
-      currentRingCapacity += 6;
-    }
-  }
-
-  const baseRadius = nodes.length <= 12 ? 120 : 150;
-  const radiusStep = nodes.length <= 18 ? 95 : 115;
-  let offset = 0;
-
-  ringSizes.forEach((ringSize, ringIndex) => {
-    const ringNodes = remainingNodes.slice(offset, offset + ringSize);
-    offset += ringSize;
-
+  const ringCapacityFor = (ringIndex: number) => {
     const radius = baseRadius + ringIndex * radiusStep;
-    const rotationOffset =
-      -Math.PI / 2 +
-      (ringIndex % 2 === 0 ? 0 : Math.PI / Math.max(ringSize, 2));
+    return Math.max(6, Math.floor((2 * Math.PI * radius) / nodeSpacing));
+  };
 
-    ringNodes.forEach((node, nodeIndex) => {
+  const rings: NetworkNode[][] = [];
+  let remaining = rest;
+  let ringIndex = 0;
+  while (remaining.length > 0) {
+    const capacity = ringCapacityFor(ringIndex);
+    rings.push(remaining.slice(0, capacity));
+    remaining = remaining.slice(capacity);
+    ringIndex += 1;
+  }
+
+  // If we have edges, order each ring by barycenter relative to inner-ring
+  // angular positions. This pulls connected nodes close together so radial
+  // edges look cleaner.
+  const { undirected } = buildAdjacency(nodes, edges);
+  const angleByNode = new Map<string, number>();
+  angleByNode.set(hub.id, 0);
+
+  rings.forEach((ringNodes, idx) => {
+    const radius = baseRadius + idx * radiusStep;
+
+    // Order based on barycenter of already-placed neighbors
+    const ordered =
+      edges.length === 0
+        ? ringNodes
+        : [...ringNodes].sort((a, b) => {
+            const baryA = computeAngularBarycenter(a.id, undirected, angleByNode);
+            const baryB = computeAngularBarycenter(b.id, undirected, angleByNode);
+            if (baryA === null && baryB === null) return 0;
+            if (baryA === null) return 1;
+            if (baryB === null) return -1;
+            return baryA - baryB;
+          });
+
+    // Stagger every other ring by half a slot so neighboring rings don't align.
+    const rotationOffset =
+      -Math.PI / 2 + (idx % 2 === 0 ? 0 : Math.PI / Math.max(ordered.length, 2));
+
+    ordered.forEach((node, nodeIndex) => {
       const angle =
         rotationOffset +
-        ((nodeIndex + (ringIndex % 2 === 0 ? 0 : 0.5)) / ringSize) * Math.PI * 2;
+        (nodeIndex / Math.max(ordered.length, 1)) * Math.PI * 2;
+      angleByNode.set(node.id, angle);
       positions[node.id] = polarPosition(angle, radius);
     });
   });
@@ -160,81 +211,202 @@ export function buildConcentricPositions(nodes: NetworkNode[]) {
   return positions;
 }
 
-// This is a regulator-priority hierarchy, not a strict graph-theory layered layout.
-// Nodes with stronger outgoing regulation are placed closer to the top.
-// A full edge-aware hierarchy would need the edge list as an input.
-export function buildHierarchicalPositions(nodes: NetworkNode[]) {
+function computeAngularBarycenter(
+  nodeId: string,
+  undirected: Map<string, Set<string>>,
+  angleByNode: Map<string, number>
+): number | null {
+  const neighbors = undirected.get(nodeId);
+  if (!neighbors || neighbors.size === 0) return null;
+
+  let sumX = 0;
+  let sumY = 0;
+  let count = 0;
+  for (const neighborId of neighbors) {
+    const angle = angleByNode.get(neighborId);
+    if (angle === undefined) continue;
+    sumX += Math.cos(angle);
+    sumY += Math.sin(angle);
+    count += 1;
+  }
+  if (count === 0) return null;
+
+  return Math.atan2(sumY / count, sumX / count);
+}
+
+// ----------------------------------------------------------------------------
+// Hierarchical layout (edge-aware topological layering)
+// ----------------------------------------------------------------------------
+
+export function buildHierarchicalPositions(
+  nodes: NetworkNode[],
+  edges: NetworkEdge[] = []
+): PositionMap {
   if (nodes.length === 0) return {} as PositionMap;
 
-  const sorted = sortNodesByPriority(
-    nodes,
-    (node) =>
-      node.outDegree * 2.8 +
-      node.degree * 0.3 -
-      node.inDegree * 0.6 +
-      (node.isTF ? 3 : 0),
-    (a, b) => {
-      if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
-      if (b.degree !== a.degree) return b.degree - a.degree;
-      return 0;
+  const { inMap, outMap } = buildAdjacency(nodes, edges);
+
+  // Longest-path layering: a node's level is 1 + max(level of its regulators).
+  // Nodes that are part of a cycle break it by treating already-visiting
+  // ancestors as level 0 (Sugiyama-style cycle handling without full SCC
+  // condensation).
+  const level = new Map<string, number>();
+  const visiting = new Set<string>();
+
+  const computeLevel = (id: string): number => {
+    if (level.has(id)) return level.get(id)!;
+    if (visiting.has(id)) return 0; // cycle break
+
+    visiting.add(id);
+    const regulators = inMap.get(id);
+    let maxRegLevel = -1;
+    if (regulators) {
+      for (const regId of regulators) {
+        maxRegLevel = Math.max(maxRegLevel, computeLevel(regId));
+      }
     }
-  );
+    visiting.delete(id);
+    const lvl = maxRegLevel + 1;
+    level.set(id, lvl);
+    return lvl;
+  };
 
-  const levelSizes: number[] = [];
-  let remaining = sorted.length;
-  let currentLevelSize = 1;
-
-  while (remaining > 0) {
-    if (remaining <= currentLevelSize + 1 && levelSizes.length > 0) {
-      levelSizes[levelSizes.length - 1] += remaining;
-      remaining = 0;
-      break;
-    }
-
-    const take = Math.min(currentLevelSize, remaining);
-    levelSizes.push(take);
-    remaining -= take;
-    currentLevelSize += 2;
+  for (const node of nodes) {
+    if (!level.has(node.id)) computeLevel(node.id);
   }
 
-  const levels: NetworkNode[][] = [];
-  let offset = 0;
-  levelSizes.forEach((size) => {
-    levels.push(sorted.slice(offset, offset + size));
-    offset += size;
-  });
+  // Group nodes by level
+  const levelMap = new Map<number, NetworkNode[]>();
+  let maxLevel = 0;
+  for (const node of nodes) {
+    const lvl = level.get(node.id) ?? 0;
+    maxLevel = Math.max(maxLevel, lvl);
+    if (!levelMap.has(lvl)) levelMap.set(lvl, []);
+    levelMap.get(lvl)!.push(node);
+  }
 
+  const sortedLevels: NetworkNode[][] = [];
+  for (let i = 0; i <= maxLevel; i++) {
+    sortedLevels.push(levelMap.get(i) ?? []);
+  }
+
+  // Within each level, order by barycenter of already-placed parents to
+  // minimize crossing of inter-level edges. Top level is ordered by
+  // out-degree desc as a starting baseline.
+  const xPositionById = new Map<string, number>();
   const positions: PositionMap = {};
-  const rowGap = 150;
-  const topColumnGap = 165;
-  const bottomColumnGap = 135;
-  const totalHeight = (levels.length - 1) * rowGap;
 
-  levels.forEach((level, levelIndex) => {
-    const orderedLevel = [...level].sort((a, b) => {
-      const diff = compareByDegreeThenOutDegree(a, b);
-      if (diff !== 0) return diff;
-      return a.id.localeCompare(b.id);
-    });
+  const rowGap = 160;
+  const minColumnGap = 130;
+  const totalHeight = maxLevel * rowGap;
 
-    const widthRatio = levels.length <= 1 ? 1 : levelIndex / (levels.length - 1);
-    const columnGap =
-      topColumnGap - (topColumnGap - bottomColumnGap) * widthRatio;
-    const rowWidth = Math.max(0, (orderedLevel.length - 1) * columnGap);
+  sortedLevels.forEach((levelNodes, lvl) => {
+    let ordered: NetworkNode[];
+    if (lvl === 0 || edges.length === 0) {
+      ordered = [...levelNodes].sort((a, b) => {
+        if (a.isTF !== b.isTF) return a.isTF ? -1 : 1;
+        if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
+        if (b.degree !== a.degree) return b.degree - a.degree;
+        return a.id.localeCompare(b.id);
+      });
+    } else {
+      // Barycenter on parent x-positions
+      ordered = [...levelNodes].sort((a, b) => {
+        const baryA = computeBarycenter(a.id, inMap, xPositionById);
+        const baryB = computeBarycenter(b.id, inMap, xPositionById);
+        if (baryA === null && baryB === null) {
+          if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
+          return a.id.localeCompare(b.id);
+        }
+        if (baryA === null) return 1;
+        if (baryB === null) return -1;
+        if (baryA !== baryB) return baryA - baryB;
+        return a.id.localeCompare(b.id);
+      });
+    }
+
+    const columnGap = minColumnGap;
+    const rowWidth = Math.max(0, (ordered.length - 1) * columnGap);
     const startX = -rowWidth / 2;
-    const y = levelIndex * rowGap - totalHeight / 2;
-    const staggerOffset = levelIndex % 2 === 0 ? 0 : columnGap * 0.35;
+    const y = lvl * rowGap - totalHeight / 2;
 
-    orderedLevel.forEach((node, nodeIndex) => {
-      positions[node.id] = {
-        x: startX + nodeIndex * columnGap + staggerOffset,
-        y,
-      };
+    ordered.forEach((node, idx) => {
+      const x = startX + idx * columnGap;
+      positions[node.id] = { x, y };
+      xPositionById.set(node.id, x);
     });
   });
+
+  // A second downward pass pulls children toward their parents' centers.
+  // This is a cheap alternative to dot/Sugiyama post-layout straightening.
+  for (let lvl = 1; lvl <= maxLevel; lvl++) {
+    const levelNodes = sortedLevels[lvl];
+    if (!levelNodes || levelNodes.length === 0) continue;
+
+    const sortedByBary = [...levelNodes].sort((a, b) => {
+      const baryA = computeBarycenter(a.id, inMap, xPositionById);
+      const baryB = computeBarycenter(b.id, inMap, xPositionById);
+      if (baryA === null && baryB === null) return 0;
+      if (baryA === null) return 1;
+      if (baryB === null) return -1;
+      return baryA - baryB;
+    });
+
+    const columnGap = minColumnGap;
+    const rowWidth = Math.max(0, (sortedByBary.length - 1) * columnGap);
+    const startX = -rowWidth / 2;
+    const y = lvl * rowGap - totalHeight / 2;
+
+    sortedByBary.forEach((node, idx) => {
+      const x = startX + idx * columnGap;
+      positions[node.id] = { x, y };
+      xPositionById.set(node.id, x);
+    });
+  }
+
+  // Disconnected isolates that ended up alone at level 0 get tucked to the
+  // side so they don't visually "lead" the hierarchy. We move any level-0
+  // node with no out-edges and no in-edges to a special bottom row.
+  const isolatedNodes = nodes.filter(
+    (node) =>
+      (outMap.get(node.id)?.size ?? 0) === 0 &&
+      (inMap.get(node.id)?.size ?? 0) === 0
+  );
+  if (isolatedNodes.length > 0) {
+    const isolatedRowY = totalHeight / 2 + rowGap;
+    const columnGap = minColumnGap;
+    const rowWidth = Math.max(0, (isolatedNodes.length - 1) * columnGap);
+    const startX = -rowWidth / 2;
+    isolatedNodes.forEach((node, idx) => {
+      positions[node.id] = { x: startX + idx * columnGap, y: isolatedRowY };
+    });
+  }
 
   return positions;
 }
+
+function computeBarycenter(
+  nodeId: string,
+  parents: Map<string, Set<string>>,
+  xPositionById: Map<string, number>
+): number | null {
+  const parentSet = parents.get(nodeId);
+  if (!parentSet || parentSet.size === 0) return null;
+  let sum = 0;
+  let count = 0;
+  for (const parentId of parentSet) {
+    const x = xPositionById.get(parentId);
+    if (x === undefined) continue;
+    sum += x;
+    count += 1;
+  }
+  if (count === 0) return null;
+  return sum / count;
+}
+
+// ----------------------------------------------------------------------------
+// Force-directed layout config (cose-bilkent, edge-aware via the layout itself)
+// ----------------------------------------------------------------------------
 
 export function getLayoutConfig(
   layout: NetworkLayoutMode,
@@ -273,32 +445,41 @@ export function getLayoutConfig(
     } as const;
   }
 
-  const isSparseGraph = graphCounts.edgeCount <= graphCounts.nodeCount * 1.5;
-  const edgesPerNode = graphCounts.edgeCount / Math.max(graphCounts.nodeCount, 1);
+  // Force-directed (cose-bilkent). Tune parameters based on graph size.
+  const isSparseGraph =
+    graphCounts.edgeCount <= graphCounts.nodeCount * 1.5;
+  const edgesPerNode =
+    graphCounts.edgeCount / Math.max(graphCounts.nodeCount, 1);
   const densityFactor = isSparseGraph
     ? 0.82
     : Math.max(0.68, Math.min(1.2, edgesPerNode / 2));
-  const componentSpacing = isSparseGraph ? 0 : 28;
+  const componentSpacing = isSparseGraph ? 20 : 40;
 
   return {
     name: "cose-bilkent",
     animate: false,
-    randomize: true,
+    // randomize is decided by the caller based on whether positions exist; the
+    // base config defaults to false so existing positions are kept.
+    randomize: false,
     fit: true,
     padding: isSparseGraph ? 28 : 44,
     nodeRepulsion: isSparseGraph ? 6600 : 7200 * densityFactor,
-    idealEdgeLength: isSparseGraph ? 76 : 82 * densityFactor,
+    idealEdgeLength: isSparseGraph ? 88 : 96 * densityFactor,
     edgeElasticity: isSparseGraph ? 0.32 : 0.22,
     nestingFactor: 1,
     gravity: isSparseGraph ? 1.05 : 0.86,
     gravityRangeCompound: isSparseGraph ? 3.2 : 2.4,
     componentSpacing,
-    tilingPaddingVertical: isSparseGraph ? 0 : 16,
-    tilingPaddingHorizontal: isSparseGraph ? 0 : 16,
+    tilingPaddingVertical: isSparseGraph ? 12 : 18,
+    tilingPaddingHorizontal: isSparseGraph ? 12 : 18,
     numIter: isSparseGraph ? 2200 : 1800,
     tile: true,
   } as const;
 }
+
+// ----------------------------------------------------------------------------
+// Element building & change-detection signature
+// ----------------------------------------------------------------------------
 
 export function buildGraphElements(
   nodes: NetworkNode[],
@@ -314,16 +495,12 @@ export function buildGraphElements(
 
   const getVisualScore = (score: number) => {
     const numericScore = Number(score);
-
-    if (!Number.isFinite(numericScore)) {
-      return 0;
-    }
-
-    if (edgeScoreRange === 0) {
-      return 1;
-    }
-
-    return Math.max(0, Math.min(1, (numericScore - minEdgeScore) / edgeScoreRange));
+    if (!Number.isFinite(numericScore)) return 0;
+    if (edgeScoreRange === 0) return 1;
+    return Math.max(
+      0,
+      Math.min(1, (numericScore - minEdgeScore) / edgeScoreRange)
+    );
   };
 
   const elements = [
@@ -346,30 +523,26 @@ export function buildGraphElements(
         visualScore: getVisualScore(edge.score),
         count: edge.count,
         rank: edge.rank,
-        supportRatio: maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
+        supportRatio:
+          maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
         supportingAlgorithms: edge.supportingAlgorithms,
       },
     })),
   ];
 
-  const elementsSignature = JSON.stringify({
-    nodes: nodes.map((node) => ({
-      id: node.id,
-      inDegree: node.inDegree,
-      outDegree: node.outDegree,
-      degree: node.degree,
-      isTF: node.isTF,
-    })),
-    edges: edges.map((edge) => ({
-      key: edge.key,
-      source: edge.source,
-      target: edge.target,
-      score: edge.score,
-      visualScore: getVisualScore(edge.score),
-      count: edge.count,
-      rank: edge.rank,
-    })),
-  });
+  // Cheap structural signature: just the node and edge identities. Style /
+  // score-driven re-renders are handled by separate signals on the cytoscape
+  // instance, not by rebuilding all elements.
+  const elementsSignature =
+    nodes
+      .map((node) => `${node.id}/${node.isTF ? 1 : 0}`)
+      .sort()
+      .join(",") +
+    "|" +
+    edges
+      .map((edge) => edge.key)
+      .sort()
+      .join(",");
 
   return { elements, elementsSignature };
 }

@@ -25,7 +25,9 @@ import { boolText, clamp } from "./_lib/utils";
 import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-const POLL_INTERVAL_MS = 1000;
+// Spec §7.6: refresh job status every five seconds while any task is in a
+// non-terminal state.
+const POLL_INTERVAL_MS = 5000;
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
@@ -36,8 +38,6 @@ export default function ProjectDetailPage() {
   const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
-  const [topN, setTopN] = useState(1);
-  const [hasTouchedTopN, setHasTouchedTopN] = useState(false);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
@@ -75,8 +75,34 @@ export default function ProjectDetailPage() {
     [completedTasks]
   );
 
+  // When new algorithms finish, merge them into the user's current selection
+  // instead of wiping it. The first time any algorithm completes, default to
+  // having everything selected. After that, each newly-completed algorithm is
+  // added to whatever the user currently has selected.
+  const previousCompletedIdsRef = useRef<string[]>([]);
   useEffect(() => {
-    setSelectedAlgorithmIds(completedAlgorithmIds);
+    const previous = previousCompletedIdsRef.current;
+    const newlyCompleted = completedAlgorithmIds.filter(
+      (id) => !previous.includes(id)
+    );
+
+    setSelectedAlgorithmIds((current) => {
+      // First completion: select all
+      if (previous.length === 0) {
+        return completedAlgorithmIds;
+      }
+      if (newlyCompleted.length === 0) {
+        // Drop any selections for algorithms that are no longer completed
+        return current.filter((id) => completedAlgorithmIds.includes(id));
+      }
+      const merged = [...current];
+      for (const id of newlyCompleted) {
+        if (!merged.includes(id)) merged.push(id);
+      }
+      return merged.filter((id) => completedAlgorithmIds.includes(id));
+    });
+
+    previousCompletedIdsRef.current = completedAlgorithmIds;
   }, [completedAlgorithmIds]);
 
   const activeAlgorithmIds = useMemo(() => {
@@ -109,11 +135,20 @@ export default function ProjectDetailPage() {
         uniqueEdges.push(edge);
       });
 
-      const edges = uniqueEdges.slice(0, topN);
-
-      next[algorithmId] = edges
+      next[algorithmId] = uniqueEdges
         .map((edge, index) => {
-          const normalizedScore = clamp(Number(edge.normalized_score ?? 1), 0, 1);
+          // Fail closed: if the backend didn't provide a normalized score, treat
+          // it as the lowest possible confidence rather than the highest. That
+          // way an unscored edge is filtered out by the confidence slider unless
+          // the user lowers the threshold to 0 explicitly.
+          const rawNormalized = edge.normalized_score;
+          const hasNormalized =
+            rawNormalized !== undefined &&
+            rawNormalized !== null &&
+            Number.isFinite(Number(rawNormalized));
+          const normalizedScore = hasNormalized
+            ? clamp(Number(rawNormalized), 0, 1)
+            : 0;
 
           return {
             key: `${algorithmId}-${edge.source}-${edge.target}-${index}`,
@@ -132,7 +167,7 @@ export default function ProjectDetailPage() {
     });
 
     return next;
-  }, [algorithmResults, completedAlgorithmIds, confidenceThreshold, topN]);
+  }, [algorithmResults, completedAlgorithmIds, confidenceThreshold]);
 
   const consensusRows = useMemo(() => {
     const bucket = new Map<string, AggregatedEdge>();
@@ -429,22 +464,6 @@ export default function ProjectDetailPage() {
     return sortedTableRows.slice(start, start + TABLE_PAGE_SIZE);
   }, [sortedTableRows, tablePage]);
 
-  const maxAvailableTopN = useMemo(() => {
-    if (activeAlgorithmIds.length >= 2) {
-      const counts = activeAlgorithmIds.map(
-        (algorithmId) => algorithmResults[algorithmId]?.top_edges?.length ?? 0
-      );
-
-      return Math.max(...counts, 1);
-    }
-
-    if (activeAlgorithmIds.length === 1) {
-      return Math.max(algorithmResults[activeAlgorithmIds[0]]?.top_edges?.length ?? 0, 1);
-    }
-
-    return 1;
-  }, [activeAlgorithmIds, algorithmResults]);
-
   const openDownloadModal = (label: string, href: string, filename: string) => {
     setIsDownloadModalClosing(false);
     setPendingDownload({ label, href, filename });
@@ -646,11 +665,6 @@ export default function ProjectDetailPage() {
   }, [isColumnMenuOpen]);
 
   useEffect(() => {
-    const defaultTopN = Math.max(1, Math.floor(maxAvailableTopN / 2));
-    setTopN((current) => (hasTouchedTopN ? clamp(current, 1, maxAvailableTopN) : defaultTopN));
-  }, [hasTouchedTopN, maxAvailableTopN]);
-
-  useEffect(() => {
     if (!selectedGene) return;
 
     if (!networkNodes.some((node) => node.id === selectedGene)) {
@@ -667,7 +681,6 @@ export default function ProjectDetailPage() {
     selectedAlgorithmIds,
     confidenceThreshold,
     consensusThreshold,
-    topN,
     isolatedGene,
     geneSearch,
   ]);
@@ -1063,7 +1076,6 @@ export default function ProjectDetailPage() {
 
                   const query = new URLSearchParams({
                     selected_view: selectedView,
-                    top_n: String(topN),
                     confidence_threshold: String(confidenceThreshold),
                     consensus_threshold: String(consensusThreshold),
                     selected_algorithms: activeAlgorithmIds.join(","),
@@ -1193,12 +1205,6 @@ export default function ProjectDetailPage() {
                     setSelectedGene(null);
                     setSelectedEdgeKey(null);
                     setIsolatedGene(null);
-                  }}
-                  topN={topN}
-                  maxAvailableTopN={maxAvailableTopN}
-                  onChangeTopN={(value) => {
-                    setHasTouchedTopN(true);
-                    setTopN(value);
                   }}
                   confidenceThreshold={confidenceThreshold}
                   onChangeConfidenceThreshold={setConfidenceThreshold}

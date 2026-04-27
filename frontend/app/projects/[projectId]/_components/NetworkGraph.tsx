@@ -245,18 +245,18 @@ export default function NetworkGraph({
   );
 
   const hierarchicalPositions = useMemo(
-    () => buildHierarchicalPositions(nodes),
-    [nodes]
+    () => buildHierarchicalPositions(nodes, edges),
+    [nodes, edges]
   );
 
   const concentricPositions = useMemo(
-    () => buildConcentricPositions(nodes),
-    [nodes]
+    () => buildConcentricPositions(nodes, edges),
+    [nodes, edges]
   );
 
   const circularPositions = useMemo(
-    () => buildCircularPositions(nodes),
-    [nodes]
+    () => buildCircularPositions(nodes, edges),
+    [nodes, edges]
   );
 
   const getLayoutCacheKey = (layoutMode: NetworkLayoutMode, signature: string) =>
@@ -265,7 +265,8 @@ export default function NetworkGraph({
   const getLayoutOptions = (
     layoutMode: NetworkLayoutMode,
     signature: string,
-    allowRandomizeOnFirstForceRun = false
+    allowRandomizeOnFirstForceRun = false,
+    forceFreshLayout = false
   ) => {
     const baseConfig = getLayoutConfig(
       layoutMode,
@@ -285,7 +286,9 @@ export default function NetworkGraph({
 
     return {
       ...baseConfig,
-      randomize: allowRandomizeOnFirstForceRun && !hasCachedForcePositions,
+      randomize:
+        forceFreshLayout ||
+        (allowRandomizeOnFirstForceRun && !hasCachedForcePositions),
     };
   };
 
@@ -475,6 +478,33 @@ export default function NetworkGraph({
     };
   }, []);
 
+  // Keep the Cytoscape canvas in sync with the container size. Without this,
+  // resizing the window or toggling the inspector panel leaves the canvas at
+  // its old internal size, so panning/zooming feels off.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    let pendingFrame: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (pendingFrame !== null) return;
+      pendingFrame = window.requestAnimationFrame(() => {
+        pendingFrame = null;
+        const cy = cyRef.current;
+        if (!cy || cy.destroyed()) return;
+        cy.resize();
+      });
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (pendingFrame !== null) {
+        window.cancelAnimationFrame(pendingFrame);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
@@ -547,10 +577,61 @@ export default function NetworkGraph({
     cy.resize();
 
     if ((layoutChanged && !canRestoreExactLayout) || !hasCompleteSavedPositions) {
+      // For force layouts: keep existing node positions whenever possible. We
+      // pre-place any *new* nodes (not in the cache) near the centroid of the
+      // saved positions so cose-bilkent has something better than (0,0) to
+      // work with. Then run with randomize=false so previously-laid-out nodes
+      // only drift slightly.
+      if (layout === "force") {
+        const cachedPositions = cachedPositionsForSignature;
+        const cachedKeys = Object.keys(cachedPositions);
+        if (cachedKeys.length > 0) {
+          let cx = 0;
+          let cy2 = 0;
+          for (const key of cachedKeys) {
+            cx += cachedPositions[key].x;
+            cy2 += cachedPositions[key].y;
+          }
+          cx /= cachedKeys.length;
+          cy2 /= cachedKeys.length;
+
+          cy.nodes().forEach((node) => {
+            const id = node.id();
+            if (!cachedPositions[id]) {
+              // Spread new nodes in a small ring around the centroid so they
+              // don't all overlap each other before the layout runs.
+              const seed = id
+                .split("")
+                .reduce((acc, ch) => (acc * 33 + ch.charCodeAt(0)) >>> 0, 17);
+              const angle = (seed % 360) * (Math.PI / 180);
+              const radius = 60;
+              node.position({
+                x: cx + Math.cos(angle) * radius,
+                y: cy2 + Math.sin(angle) * radius,
+              });
+            }
+          });
+        }
+      }
+
       cy.endBatch();
 
+      // Only randomize when we have no positions at all to fall back on.
+      const hasAnyPriorPositions =
+        Object.keys(lastNodePositionsRef.current).length > 0;
+
+      if (layoutChanged && layout === "force") {
+        delete layoutPositionCacheRef.current[layoutCacheKey];
+        delete layoutViewportCacheRef.current[layoutCacheKey];
+      }
+
       const rerunLayout = cy.layout(
-        getLayoutOptions(layout, layoutCacheSignature, true) as any
+        getLayoutOptions(
+          layout,
+          layoutCacheSignature,
+          !hasAnyPriorPositions,
+          layoutChanged && layout === "force"
+        ) as any
       );
 
       activeLayoutRef.current = rerunLayout;

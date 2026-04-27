@@ -141,7 +141,7 @@ export default function ProjectsPage() {
           activeProjectIds.map(async (projectId) => {
             try {
               const response = await fetch(
-                `${API_BASE}//projects/${projectId}`
+                `${API_BASE}/projects/${projectId}`
               );
 
               if (!response.ok) {

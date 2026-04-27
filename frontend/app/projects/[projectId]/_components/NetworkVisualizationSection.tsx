@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import NetworkGraph from "./NetworkGraph";
 
@@ -72,6 +72,35 @@ export default function NetworkVisualizationSection({
     return () => setIsMounted(false);
   }, []);
 
+  // Memoize the projections passed into NetworkGraph so identity stays stable
+  // across renders that don't actually change the graph. NetworkGraph compares
+  // these by reference to decide whether to rebuild the Cytoscape instance.
+  const graphNodes = useMemo(
+    () =>
+      networkNodes.map((node) => ({
+        id: node.id,
+        inDegree: node.inDegree,
+        outDegree: node.outDegree,
+        degree: node.degree,
+        isTF: node.isTF,
+      })),
+    [networkNodes]
+  );
+
+  const graphEdges = useMemo(
+    () =>
+      filteredNetworkEdges.map((edge) => ({
+        key: edge.key,
+        source: edge.source,
+        target: edge.target,
+        score: edge.score,
+        count: edge.count,
+        rank: edge.rank,
+        supportingAlgorithms: edge.supportingAlgorithms,
+      })),
+    [filteredNetworkEdges]
+  );
+
   const selectedEdge =
     filteredNetworkEdges.find((edge) => edge.key === selectedEdgeKey) ?? null;
 
@@ -139,22 +168,8 @@ export default function NetworkVisualizationSection({
             </div>
           </div>
           <NetworkGraph
-            nodes={networkNodes.map((node) => ({
-              id: node.id,
-              inDegree: node.inDegree,
-              outDegree: node.outDegree,
-              degree: node.degree,
-              isTF: node.isTF,
-            }))}
-            edges={filteredNetworkEdges.slice(0, 220).map((edge) => ({
-              key: edge.key,
-              source: edge.source,
-              target: edge.target,
-              score: edge.score,
-              count: edge.count,
-              rank: edge.rank,
-              supportingAlgorithms: edge.supportingAlgorithms,
-            }))}
+            nodes={graphNodes}
+            edges={graphEdges}
             selectedGene={selectedGene}
             selectedEdgeKey={selectedEdgeKey}
             layout={networkLayout}

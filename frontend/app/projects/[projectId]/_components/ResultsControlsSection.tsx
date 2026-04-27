@@ -5,9 +5,6 @@ type ResultsControlsSectionProps = {
   completedAlgorithmIds: string[];
   selectedAlgorithmIds: string[];
   onChangeSelectedAlgorithmIds: (value: string[]) => void;
-  topN: number;
-  maxAvailableTopN: number;
-  onChangeTopN: (value: number) => void;
   confidenceThreshold: number;
   onChangeConfidenceThreshold: (value: number) => void;
   consensusThreshold: number;
@@ -22,10 +19,7 @@ export default function ResultsControlsSection({
   completedAlgorithmIds,
   selectedAlgorithmIds,
   onChangeSelectedAlgorithmIds,
-  topN,
-  maxAvailableTopN,
-  onChangeTopN,
-  confidenceThreshold = 0.8,
+  confidenceThreshold = 0.3,
   onChangeConfidenceThreshold = () => {},
   consensusThreshold,
   maxConsensusThreshold,

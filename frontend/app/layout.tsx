@@ -61,29 +61,21 @@ export default function RootLayout({
     <html lang="en">
       <body style={{ "--grnscope-header-height": "78px" } as React.CSSProperties}>
         <header className="sticky top-0 z-[60] border-b border-[#1a3448] bg-[#213f54] shadow-[0_2px_10px_rgba(15,23,42,0.18)]">
-          <div className="mx-auto flex h-[78px] w-full max-w-[1440px] items-center px-8 xl:px-14">
+          <div className="mx-auto flex h-[78px] w-full max-w-[1440px] items-center px-9 xl:px-16">
             <Link
               href="/"
               onClick={() => setActiveHeaderItem("home")}
-              className="flex shrink-0 items-center gap-5"
+              className="flex shrink-0 items-center gap-4"
               aria-label="Go to GRNScope home page"
             >
-              <div className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full bg-transparent">
+              <div className="relative flex h-[46px] w-[46px] items-center justify-center bg-transparent">
                 <svg
                   viewBox="0 0 64 64"
-                  className="relative h-[52px] w-[52px]"
+                  className="relative h-[42px] w-[42px]"
                   role="img"
                   aria-label="GRNScope gene regulatory network logo"
                 >
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="28.5"
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth="2.3"
-                    opacity="0.9"
-                  />
+
 
                   <path
                     d="M32 13 L32 51"
@@ -159,7 +151,7 @@ export default function RootLayout({
                   <circle cx="32" cy="51" r="4.9" fill="#ffffff" />
                 </svg>
               </div>
-              <p className="text-[32px] font-medium leading-none tracking-[-0.055em] text-white">
+              <p className="text-[30px] font-medium leading-none tracking-[-0.045em] text-white">
                 GRNScope
               </p>
             </Link>
