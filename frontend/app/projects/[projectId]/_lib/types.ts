@@ -52,6 +52,7 @@ export type AlgorithmStoredResult = {
     source: string;
     target: string;
     score: number;
+    normalized_score?: number;
   }>;
 };
 
