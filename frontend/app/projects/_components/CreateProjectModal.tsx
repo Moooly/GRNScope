@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { Algorithm } from "../_types/algorithm";
+import type { ProjectAlgorithm } from "../page";
 import AlgorithmStep from "./AlgorithmStep";
 import ReviewStep from "./ReviewStep";
 import UploadStep from "./UploadStep";
@@ -28,14 +28,16 @@ interface CreateProjectModalProps {
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
   selectedIds: string[];
-  compatibleAlgorithms: Algorithm[];
-  selectedAlgorithms: Algorithm[];
+  compatibleAlgorithms: ProjectAlgorithm[];
+  selectedAlgorithms: ProjectAlgorithm[];
   estimatedTotalRuntime: string;
   ensembleEnabled: boolean;
   datasetSummary: DatasetSummary;
   errors: string[];
   isSubmitting: boolean;
-  algorithms: Algorithm[];
+  algorithms: ProjectAlgorithm[];
+  isLoadingAlgorithms: boolean;
+  algorithmLoadError: string | null;
   onClose: () => void;
   onBackToUpload: () => void;
   onBackToPreprocessing: () => void;
@@ -86,6 +88,8 @@ export default function CreateProjectModal({
   errors,
   isSubmitting,
   algorithms,
+  isLoadingAlgorithms,
+  algorithmLoadError,
   onClose,
   onBackToUpload,
   onBackToPreprocessing,
@@ -364,6 +368,8 @@ export default function CreateProjectModal({
               compatibleAlgorithms={compatibleAlgorithms}
               datasetSummary={datasetSummary}
               ensembleEnabled={ensembleEnabled}
+              isLoadingAlgorithms={isLoadingAlgorithms}
+              algorithmLoadError={algorithmLoadError}
               setEnsembleEnabled={setEnsembleEnabled}
               onToggleAlgorithm={onToggleAlgorithm}
               onRecommended={onRecommended}

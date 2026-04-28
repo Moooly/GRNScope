@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import downloads, jobs, projects, results, uploads
+from .api import algorithm, downloads, jobs, projects, results, uploads
 
 app = FastAPI()
 
@@ -15,6 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(algorithm.router)
 app.include_router(downloads.router)
 app.include_router(jobs.router)
 app.include_router(projects.router)

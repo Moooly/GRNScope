@@ -9,7 +9,7 @@ import ResultsSummarySection from "./_components/ResultsSummarySection";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
 import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
-import { algorithms } from "../_data/algorithms";
+
 import {
   type AggregatedEdge,
   type AlgorithmCatalogItem,
@@ -25,6 +25,63 @@ import { boolText, clamp } from "./_lib/utils";
 import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+const API_ROOT = API_BASE.replace(/\/api\/?$/, "");
+
+type BackendAlgorithmEntry = {
+  id: string;
+  name: string;
+  description: string;
+  long_description: string;
+  category: string;
+  year: string;
+  journal: string;
+  publication_title: string;
+  publication_url: string;
+  source_url: string | null;
+  docker_image: string;
+  runner: string;
+  directed: boolean;
+  signed: boolean;
+  requires_pseudotime: boolean;
+  supports_expression_matrix: boolean;
+  active: boolean;
+  recommended: boolean;
+  estimated_runtime: string;
+  strengths: string[];
+  limitations: string[];
+  recommended_use_cases: string[];
+  parameters: {
+    name: string;
+    label?: string;
+    description?: string;
+    default?: unknown;
+    required?: boolean;
+    value_type?: string;
+    options?: unknown[];
+  }[];
+};
+
+function getDockerVersion(dockerImage: string) {
+  const parts = dockerImage.split(":");
+  return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
+}
+
+function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): AlgorithmCatalogItem {
+  return {
+    id: algorithm.id,
+    name: algorithm.name,
+    description: algorithm.description,
+    category: algorithm.category,
+    requiresPseudotime: algorithm.requires_pseudotime,
+    directed: algorithm.directed,
+    signed: algorithm.signed,
+    publication: algorithm.publication_title,
+    year: algorithm.year,
+    journal: algorithm.journal,
+    dockerVersion: getDockerVersion(algorithm.docker_image),
+    paperUrl: algorithm.publication_url,
+  };
+}
 // Spec §7.6: refresh job status every five seconds while any task is in a
 // non-terminal state.
 const POLL_INTERVAL_MS = 5000;
@@ -37,6 +94,7 @@ export default function ProjectDetailPage() {
   const [metadata, setMetadata] = useState<MetadataManifest | null>(null);
   const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
+  const [algorithmCatalog, setAlgorithmCatalog] = useState<AlgorithmCatalogItem[]>([]);
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
@@ -110,9 +168,47 @@ export default function ProjectDetailPage() {
   }, [completedAlgorithmIds, selectedAlgorithmIds]);
 
   const algorithmMetaMap = useMemo(
-    () => new Map((algorithms as AlgorithmCatalogItem[]).map((item) => [item.id, item])),
-    []
+    () => new Map(algorithmCatalog.map((item) => [item.id, item])),
+    [algorithmCatalog]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAlgorithmCatalog = async () => {
+      try {
+        const response = await fetch(`${API_ROOT}/algorithms`, {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as BackendAlgorithmEntry[];
+
+        if (!cancelled) {
+          setAlgorithmCatalog(
+            data
+              .filter((algorithm) => algorithm.active)
+              .map(mapBackendAlgorithm)
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setAlgorithmCatalog([]);
+        }
+      }
+    };
+
+    loadAlgorithmCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const hasActiveTasks = useMemo(() => {
     return allJobTasks.some(

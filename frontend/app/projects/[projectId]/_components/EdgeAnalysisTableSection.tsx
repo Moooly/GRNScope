@@ -96,7 +96,7 @@ export default function EdgeAnalysisTableSection({
           <button
             type="button"
             onClick={onExportEdgeList}
-            className="w-full whitespace-nowrap rounded-full bg-[#1b75a6] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] sm:w-auto"
+            className="w-full whitespace-nowrap rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] sm:w-auto"
           >
             Export CSV
           </button>

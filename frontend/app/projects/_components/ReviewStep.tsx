@@ -1,4 +1,4 @@
-import { Algorithm } from "../_types/algorithm";
+import type { ProjectAlgorithm } from "../page";
 import AlgorithmCard from "./AlgorithmCard";
 
 interface DatasetSummary {
@@ -12,7 +12,7 @@ interface ReviewStepProps {
   expressionFileName: string;
   pseudotimeFileName: string;
   datasetSummary: DatasetSummary;
-  selectedAlgorithms: Algorithm[];
+  selectedAlgorithms: ProjectAlgorithm[];
 }
 
 export default function ReviewStep({

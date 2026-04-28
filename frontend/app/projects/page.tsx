@@ -4,16 +4,105 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import CreateProjectModal from "./_components/CreateProjectModal";
 import ProjectCard from "./_components/ProjectCard";
-import { algorithms, recommendedIds } from "./_data/algorithms";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
 import EmptyProjectHistory from "./_components/EmptyProjectHistory";
+
+type BackendAlgorithmEntry = {
+  id: string;
+  name: string;
+  description: string;
+  long_description: string;
+  category: string;
+  year: string;
+  journal: string;
+  publication_title: string;
+  publication_url: string;
+  source_url: string | null;
+  docker_image: string;
+  runner: string;
+  directed: boolean;
+  signed: boolean;
+  requires_pseudotime: boolean;
+  supports_expression_matrix: boolean;
+  active: boolean;
+  recommended: boolean;
+  estimated_runtime: string;
+  strengths: string[];
+  limitations: string[];
+  recommended_use_cases: string[];
+  parameters: {
+    name: string;
+    label?: string;
+    description?: string;
+    default?: unknown;
+    required?: boolean;
+    value_type?: string;
+    options?: unknown[];
+  }[];
+};
+
+export type ProjectAlgorithm = {
+  id: string;
+  name: string;
+  tagline: string;
+  category: string;
+  requiresPseudotime: boolean;
+  directed: boolean;
+  signed: boolean;
+  publication: string;
+  year: string;
+  journal: string;
+  dockerVersion: string;
+  paperUrl: string;
+  sourceUrl: string | null;
+  strengths: string[];
+  limitations: string[];
+  recommendedUseCases: string[];
+  detail: string;
+  recommended: boolean;
+  runner: string;
+};
+
+function getApiRoot(apiBase: string) {
+  return apiBase.replace(/\/api\/?$/, "");
+}
+
+function getDockerVersion(dockerImage: string) {
+  const parts = dockerImage.split(":");
+  return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
+}
+
+function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): ProjectAlgorithm {
+  return {
+    id: algorithm.id,
+    name: algorithm.name,
+    tagline: algorithm.description,
+    category: algorithm.category,
+    requiresPseudotime: algorithm.requires_pseudotime,
+    directed: algorithm.directed,
+    signed: algorithm.signed,
+    publication: algorithm.publication_title,
+    year: algorithm.year,
+    journal: algorithm.journal,
+    dockerVersion: getDockerVersion(algorithm.docker_image),
+    paperUrl: algorithm.publication_url,
+    sourceUrl: algorithm.source_url,
+    strengths: algorithm.strengths,
+    limitations: algorithm.limitations,
+    recommendedUseCases: algorithm.recommended_use_cases,
+    detail: algorithm.long_description,
+    recommended: algorithm.recommended,
+    runner: algorithm.runner,
+  };
+}
 
 type CreateStep = "upload" | "preprocessing" | "algorithms" | "review";
 
 export default function ProjectsPage() {
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+  const API_ROOT = getApiRoot(API_BASE);
 
   const router = useRouter();
 
@@ -42,6 +131,9 @@ export default function ProjectsPage() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [ensembleEnabled, setEnsembleEnabled] = useState(true);
+  const [algorithms, setAlgorithms] = useState<ProjectAlgorithm[]>([]);
+  const [isLoadingAlgorithms, setIsLoadingAlgorithms] = useState(true);
+  const [algorithmLoadError, setAlgorithmLoadError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,6 +157,56 @@ export default function ProjectsPage() {
       `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
     ],
   };
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadAlgorithms = async () => {
+      try {
+        setIsLoadingAlgorithms(true);
+        setAlgorithmLoadError(null);
+
+        const response = await fetch(`${API_ROOT}/algorithms`, {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load algorithms: ${response.status}`);
+        }
+
+        const data = (await response.json()) as BackendAlgorithmEntry[];
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAlgorithms(
+          data
+            .filter((algorithm) => algorithm.active)
+            .map(mapBackendAlgorithm)
+        );
+      } catch (error) {
+        if (!isCancelled) {
+          setAlgorithmLoadError(
+            error instanceof Error ? error.message : "Failed to load algorithms."
+          );
+          setAlgorithms([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingAlgorithms(false);
+        }
+      }
+    };
+
+    loadAlgorithms();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [API_ROOT]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -204,12 +346,12 @@ export default function ProjectsPage() {
         (algorithm) =>
           !algorithm.requiresPseudotime || datasetSummary.hasPseudotime
       ),
-    [datasetSummary.hasPseudotime]
+    [algorithms, datasetSummary.hasPseudotime]
   );
 
   const selectedAlgorithms = useMemo(
     () => algorithms.filter((algorithm) => selectedIds.includes(algorithm.id)),
-    [selectedIds]
+    [algorithms, selectedIds]
   );
 
   const estimatedTotalRuntime = useMemo(() => {
@@ -232,6 +374,7 @@ export default function ProjectsPage() {
     setCellCount(null);
     setIsUploadingTempDataset(false);
     setSelectedIds([]);
+    setAlgorithmLoadError(null);
     setEnsembleEnabled(true);
     setProjectName("");
     setProjectDescription("");
@@ -397,9 +540,9 @@ export default function ProjectsPage() {
   };
 
   const handleRecommended = () => {
-    const compatibleRecommended = recommendedIds.filter((id) =>
-      compatibleAlgorithms.some((algorithm) => algorithm.id === id)
-    );
+    const compatibleRecommended = compatibleAlgorithms
+      .filter((algorithm) => algorithm.recommended)
+      .map((algorithm) => algorithm.id);
     setSelectedIds(compatibleRecommended);
     setEnsembleEnabled(compatibleRecommended.length >= 2);
   };
@@ -411,6 +554,16 @@ export default function ProjectsPage() {
   };
 
   const handleAlgorithmsStepNext = () => {
+    if (isLoadingAlgorithms) {
+      setErrors(["Algorithms are still loading. Please wait a moment and try again."]);
+      return;
+    }
+
+    if (algorithmLoadError) {
+      setErrors([`Could not load algorithms from backend: ${algorithmLoadError}`]);
+      return;
+    }
+
     if (selectedAlgorithms.length === 0) {
       setErrors(["Select at least one algorithm to continue."]);
       return;
@@ -622,6 +775,8 @@ export default function ProjectsPage() {
             errors={errors}
             isSubmitting={isSubmitting}
             algorithms={algorithms}
+            isLoadingAlgorithms={isLoadingAlgorithms}
+            algorithmLoadError={algorithmLoadError}
             onClose={closeCreateModal}
             onBackToUpload={() => setCreateStep("upload")}
             onBackToPreprocessing={() => setCreateStep("preprocessing")}

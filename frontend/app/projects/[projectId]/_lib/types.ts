@@ -61,13 +61,14 @@ export type AlgorithmCatalogItem = {
   name: string;
   description: string;
   category: string;
-  year: string;
-  journal: string;
+  requiresPseudotime: boolean;
   directed: boolean;
   signed: boolean;
-  requiresPseudotime: boolean;
-  publicationYear?: string | number;
-  publishedYear?: string | number;
+  publication?: string;
+  year?: string;
+  journal?: string;
+  dockerVersion?: string;
+  paperUrl?: string;
 };
 
 export type AggregatedEdge = {

@@ -11,12 +11,8 @@ import time
 from math import fsum, log2
 from pathlib import Path
 
-from ..config import (
-    ALGORITHM_DEFAULT_PARAMS,
-    ALGORITHM_IMAGE_MAP,
-    BEELINE_ROOT_CANDIDATES,
-    PROJECTS_ROOT,
-)
+from ..algorithm_registry import get_algorithm_by_id
+from ..config import BEELINE_ROOT_CANDIDATES, PROJECTS_ROOT
 from ..repositories.project_repository import read_project_manifest
 
 
@@ -36,11 +32,28 @@ def yaml_scalar(value: str) -> str:
     return json.dumps(str(value))
 
 def resolve_algorithm_image(algorithm_id: str) -> str:
-    normalized_algorithm_id = algorithm_id.upper()
-    image_name = ALGORITHM_IMAGE_MAP.get(normalized_algorithm_id)
-    if not image_name:
-        raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}")
-    return image_name
+    try:
+        return str(get_algorithm_by_id(algorithm_id)["docker_image"])
+    except KeyError as exc:
+        raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}") from exc
+
+
+def resolve_algorithm_default_params(algorithm_id: str) -> dict:
+    try:
+        algorithm_info = get_algorithm_by_id(algorithm_id)
+    except KeyError as exc:
+        raise ValueError(f"Unsupported BEELINE algorithm: {algorithm_id}") from exc
+
+    default_params: dict = {}
+    for parameter in algorithm_info.get("parameters", []):
+        parameter_name = parameter.get("name")
+        if not parameter_name:
+            continue
+        if "default" not in parameter or parameter.get("default") is None:
+            continue
+        default_params[str(parameter_name)] = [parameter.get("default")]
+
+    return default_params
 
 
 def parse_bool(value: object) -> bool:
@@ -373,7 +386,7 @@ def build_beeline_config(
     if include_pseudotime:
         run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
 
-    params = ALGORITHM_DEFAULT_PARAMS.get(normalized_algorithm_id, {})
+    params = resolve_algorithm_default_params(normalized_algorithm_id)
 
     config_lines = [
         "input_settings:",

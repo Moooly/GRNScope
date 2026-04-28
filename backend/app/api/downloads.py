@@ -10,7 +10,8 @@ from io import StringIO
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
-from ..config import ALGORITHM_IMAGE_MAP, PROJECTS_ROOT
+from ..algorithm_registry import get_algorithm_by_id
+from ..config import PROJECTS_ROOT
 
 router = APIRouter()
 
@@ -337,7 +338,10 @@ async def download_analysis_metadata_file(
             )
 
             if not docker_image and algorithm_name:
-                docker_image = ALGORITHM_IMAGE_MAP.get(str(algorithm_name).upper())
+                try:
+                    docker_image = get_algorithm_by_id(str(algorithm_name))["docker_image"]
+                except KeyError:
+                    docker_image = None
 
             docker_version = None
             if isinstance(docker_image, str) and docker_image:

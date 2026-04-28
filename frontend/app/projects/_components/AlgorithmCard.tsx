@@ -1,7 +1,7 @@
-import { Algorithm } from "../_types/algorithm";
+import type { ProjectAlgorithm } from "../page";
 
 interface AlgorithmCardProps {
-  algorithm: Algorithm;
+  algorithm: ProjectAlgorithm;
   checked: boolean;
   disabled: boolean;
   onToggle: () => void;
@@ -48,7 +48,7 @@ export default function AlgorithmCard({
               </h3>
             </div>
             <p className="mt-2 line-clamp-2 min-h-[3rem] text-sm leading-6 text-slate-600">
-              {algorithm.description}
+              {algorithm.tagline}
             </p>
           </div>
 

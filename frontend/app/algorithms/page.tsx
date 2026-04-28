@@ -11,7 +11,43 @@ type MethodologyCategory =
   | "ODE + regression"
   | "Regression"
   | "Granger causality"
-  | "Boolean model";
+  | "Graphical model"
+  | "Tree-based dynamical system"
+  | "Graph learning";
+
+type BackendAlgorithmEntry = {
+  id: string;
+  name: string;
+  description: string;
+  long_description: string;
+  category: MethodologyCategory;
+  year: string;
+  journal: string;
+  publication_title: string;
+  publication_url: string;
+  source_url: string | null;
+  docker_image: string;
+  runner: string;
+  directed: boolean;
+  signed: boolean;
+  requires_pseudotime: boolean;
+  supports_expression_matrix: boolean;
+  active: boolean;
+  recommended: boolean;
+  estimated_runtime: string;
+  strengths: string[];
+  limitations: string[];
+  recommended_use_cases: string[];
+  parameters: {
+    name: string;
+    label?: string;
+    description?: string;
+    default?: unknown;
+    required?: boolean;
+    value_type?: string;
+    options?: unknown[];
+  }[];
+};
 
 type AlgorithmEntry = {
   id: string;
@@ -26,323 +62,47 @@ type AlgorithmEntry = {
   journal: string;
   dockerVersion: string;
   paperUrl: string;
+  sourceUrl: string | null;
   strengths: string[];
   limitations: string[];
   recommendedUseCases: string[];
   detail: string;
+  recommended: boolean;
+  runner: string;
 };
 
-const ALGORITHMS: AlgorithmEntry[] = [
-  {
-    id: "pidc",
-    name: "PIDC",
-    tagline: "Information-theory method for undirected GRN inference.",
-    category: "Mutual information",
-    requiresPseudotime: false,
-    directed: false,
-    signed: false,
-    publication: "Chan et al.",
-    year: "2017",
-    journal: "Cell Systems",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1016/j.cels.2017.08.014",
-    strengths: [
-      "Does not require pseudotime.",
-      "Was one of the methods of choice highlighted by BEELINE.",
-      "Showed good stability across repeated runs in the BEELINE analysis."
-    ],
-    limitations: [
-      "Produces an undirected network.",
-      "Does not provide signed edges."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a mutual-information method."
-  },
-  {
-    id: "genie3",
-    name: "GENIE3",
-    tagline: "Tree-based method for predicting regulators of target genes.",
-    category: "Random forest",
-    requiresPseudotime: false,
-    directed: true,
-    signed: false,
-    publication: "Huynh-Thu et al.",
-    year: "2010",
-    journal: "PLoS One",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1371/journal.pone.0012776",
-    strengths: [
-      "Does not require pseudotime.",
-      "Was one of the methods of choice highlighted by BEELINE.",
-      "Showed good stability across repeated runs in the BEELINE analysis."
-    ],
-    limitations: [
-      "Does not provide signed edges.",
-      "Can be computationally heavier than GRNBoost2 on large gene sets."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a random-forest method."
-  },
-  {
-    id: "grnboost2",
-    name: "GRNBoost2",
-    tagline: "Fast tree-based alternative to GENIE3.",
-    category: "Random forest",
-    requiresPseudotime: false,
-    directed: true,
-    signed: false,
-    publication: "Moerman et al.",
-    year: "2018",
-    journal: "Bioinformatics",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1093/bioinformatics/bty916",
-    strengths: [
-      "Does not require pseudotime.",
-      "Was one of the methods of choice highlighted by BEELINE.",
-      "Was less sensitive to dropouts than several other methods in the BEELINE analysis."
-    ],
-    limitations: [
-      "Does not provide signed edges.",
-      "BEELINE reported lower run-to-run stability than GENIE3 and PIDC."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a random-forest method."
-  },
-  {
-    id: "ppcor",
-    name: "PPCOR",
-    tagline: "Partial-correlation method for signed gene associations.",
-    category: "Correlation",
-    requiresPseudotime: false,
-    directed: false,
-    signed: true,
-    publication: "Kim",
-    year: "2015",
-    journal: "Communications for Statistical Applications and Methods",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.5351/CSAM.2015.22.6.665",
-    strengths: [
-      "Does not require pseudotime.",
-      "Provides signed edges.",
-      "Fast in the BEELINE runtime comparison."
-    ],
-    limitations: [
-      "Produces an undirected network.",
-      "Was not one of the methods of choice highlighted by BEELINE."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a correlation-based method."
-  },
-  {
-    id: "scode",
-    name: "SCODE",
-    tagline: "ODE-based method for ordered single-cell data.",
-    category: "ODE + regression",
-    requiresPseudotime: true,
-    directed: true,
-    signed: true,
-    publication: "Matsumoto et al.",
-    year: "2017",
-    journal: "Bioinformatics",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1093/bioinformatics/btx194",
-    strengths: [
-      "Produces directed edges.",
-      "Produces signed edges."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "Requires ODE-related parameter settings.",
-      "Was not among BEELINE's most consistently recommended methods."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as an ODE-based method."
-  },
-  {
-    id: "sincerities",
-    name: "SINCERITIES",
-    tagline: "Regression method for time-ordered expression data.",
-    category: "Regression",
-    requiresPseudotime: true,
-    directed: true,
-    signed: true,
-    publication: "Papili Gao et al.",
-    year: "2018",
-    journal: "Bioinformatics",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1093/bioinformatics/btx575",
-    strengths: [
-      "Produces directed edges.",
-      "Produces signed edges.",
-      "Showed stability across runs and dropouts in the BEELINE analysis."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "BEELINE noted sensitivity to pseudotime quality."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a regression-based method."
-  },
-  {
-    id: "scribe",
-    name: "SCRIBE",
-    tagline: "Information-theory method for directed regulatory links.",
-    category: "Mutual information",
-    requiresPseudotime: true,
-    directed: true,
-    signed: false,
-    publication: "Qiu et al.",
-    year: "2018",
-    journal: "bioRxiv preprint",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1101/426981",
-    strengths: [
-      "Produces directed edges."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "May be sensitive to pseudotime quality.",
-      "Does not provide signed edges."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a directed-information based method."
-  },
-  {
-    id: "singe",
-    name: "SINGE",
-    tagline: "Granger-causality method for ordered single-cell data.",
-    category: "Granger causality",
-    requiresPseudotime: true,
-    directed: true,
-    signed: false,
-    publication: "Deshpande et al.",
-    year: "2019",
-    journal: "bioRxiv preprint",
-    dockerVersion: "0.4.1",
-    paperUrl: "https://doi.org/10.1101/534834",
-    strengths: [
-      "Produces directed edges."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "May be sensitive to pseudotime quality.",
-      "Does not provide signed edges."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a Granger-causality based method."
-  },
-  {
-    id: "leap",
-    name: "LEAP",
-    tagline: "Lagged-correlation method using pseudotime ordering.",
-    category: "Correlation",
-    requiresPseudotime: true,
-    directed: true,
-    signed: false,
-    publication: "Specht and Li",
-    year: "2017",
-    journal: "Bioinformatics",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1093/bioinformatics/btw729",
-    strengths: [
-      "Produces directed edges.",
-      "Fast in the BEELINE runtime comparison."
-    ],
-    limitations: [
-      "Requires pseudotime-ordered cells.",
-      "Uses lag-based correlation, so results depend on ordering quality.",
-      "Does not provide signed edges."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a lag-based correlation method."
-  },
-  {
-    id: "grisli",
-    name: "GRISLI",
-    tagline: "ODE-regression method for ordered single-cell data.",
-    category: "ODE + regression",
-    requiresPseudotime: true,
-    directed: true,
-    signed: false,
-    publication: "Aubin-Frankowski and Vert",
-    year: "2018",
-    journal: "bioRxiv preprint",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1101/464479",
-    strengths: [
-      "Produces directed edges."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "Requires regression-related parameter settings.",
-      "Does not provide signed edges."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as an ODE and regression based method."
-  },
-  {
-    id: "grnvbem",
-    name: "GRNVBEM",
-    tagline: "Variational Bayesian method for directed signed GRNs.",
-    category: "Regression",
-    requiresPseudotime: true,
-    directed: true,
-    signed: true,
-    publication: "Sanchez-Castillo et al.",
-    year: "2018",
-    journal: "Bioinformatics",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1093/bioinformatics/btx524",
-    strengths: [
-      "Produces directed edges.",
-      "Produces signed edges."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "Can be computationally expensive for larger gene sets.",
-      "Was not among BEELINE's most consistently recommended methods."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a regression-based method."
-  },
-  {
-    id: "scns",
-    name: "SCNS",
-    tagline: "Boolean-model method for time-course single-cell data.",
-    category: "Boolean model",
-    requiresPseudotime: true,
-    directed: true,
-    signed: true,
-    publication: "Woodhouse et al.",
-    year: "2018",
-    journal: "BMC Systems Biology",
-    dockerVersion: "base",
-    paperUrl: "https://doi.org/10.1186/s12918-018-0581-1",
-    strengths: [
-      "Produces directed edges.",
-      "Produces signed edges."
-    ],
-    limitations: [
-      "Requires time-ordered or pseudotime-ordered cells.",
-      "Long runtime limited its role in the BEELINE comparison.",
-      "Was not one of the methods of choice highlighted by BEELINE."
-    ],
-    recommendedUseCases: [],
-    detail:
-      "Included in the BEELINE benchmark as a Boolean-network reconstruction method."
-  }
-];
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+
+function getDockerVersion(dockerImage: string) {
+  const parts = dockerImage.split(":");
+  return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
+}
+
+function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): AlgorithmEntry {
+  return {
+    id: algorithm.id,
+    name: algorithm.name,
+    tagline: algorithm.description,
+    category: algorithm.category,
+    requiresPseudotime: algorithm.requires_pseudotime,
+    directed: algorithm.directed,
+    signed: algorithm.signed,
+    publication: algorithm.publication_title,
+    year: algorithm.year,
+    journal: algorithm.journal,
+    dockerVersion: getDockerVersion(algorithm.docker_image),
+    paperUrl: algorithm.publication_url,
+    sourceUrl: algorithm.source_url,
+    strengths: algorithm.strengths,
+    limitations: algorithm.limitations,
+    recommendedUseCases: algorithm.recommended_use_cases,
+    detail: algorithm.long_description,
+    recommended: algorithm.recommended,
+    runner: algorithm.runner,
+  };
+}
+
 
 const CATEGORY_OPTIONS: MethodologyCategory[] = [
   "Random forest",
@@ -351,7 +111,9 @@ const CATEGORY_OPTIONS: MethodologyCategory[] = [
   "ODE + regression",
   "Regression",
   "Granger causality",
-  "Boolean model"
+  "Graphical model",
+  "Tree-based dynamical system",
+  "Graph learning"
 ];
 
 function badgeClass(active: boolean) {
@@ -365,6 +127,9 @@ function cardBadgeClass() {
 }
 
 export default function AlgorithmsPage() {
+  const [algorithms, setAlgorithms] = useState<AlgorithmEntry[]>([]);
+  const [isLoadingAlgorithms, setIsLoadingAlgorithms] = useState(true);
+  const [algorithmLoadError, setAlgorithmLoadError] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<MethodologyCategory[]>([]);
   const [requiresPseudotimeOnly, setRequiresPseudotimeOnly] = useState(false);
   const [directedOnly, setDirectedOnly] = useState(false);
@@ -378,8 +143,55 @@ export default function AlgorithmsPage() {
   const methodologyButtonRef = useRef<HTMLButtonElement | null>(null);
   const propertiesButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAlgorithms() {
+      setIsLoadingAlgorithms(true);
+      setAlgorithmLoadError(null);
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/algorithms`, {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load algorithms: ${response.status}`);
+        }
+
+        const data = (await response.json()) as BackendAlgorithmEntry[];
+        const activeAlgorithms = data
+          .filter((algorithm) => algorithm.active)
+          .map(mapBackendAlgorithm);
+
+        if (isMounted) {
+          setAlgorithms(activeAlgorithms);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setAlgorithmLoadError(
+            error instanceof Error ? error.message : "Failed to load algorithms."
+          );
+          setAlgorithms([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingAlgorithms(false);
+        }
+      }
+    }
+
+    loadAlgorithms();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const filteredAlgorithms = useMemo(() => {
-    return ALGORITHMS.filter((algorithm) => {
+    return algorithms.filter((algorithm) => {
       if (
         selectedCategories.length > 0 &&
         !selectedCategories.includes(algorithm.category)
@@ -397,13 +209,13 @@ export default function AlgorithmsPage() {
       }
       return true;
     });
-  }, [directedOnly, requiresPseudotimeOnly, selectedCategories, signedOnly]);
+  }, [algorithms, directedOnly, requiresPseudotimeOnly, selectedCategories, signedOnly]);
 
   const activeAlgorithmId = closingAlgorithmId ?? selectedAlgorithmId;
 
   const selectedAlgorithm =
     activeAlgorithmId.length > 0
-      ? ALGORITHMS.find((algorithm) => algorithm.id === activeAlgorithmId) ?? null
+      ? algorithms.find((algorithm) => algorithm.id === activeAlgorithmId) ?? null
       : null;
 
   const closeAlgorithmModal = () => {
@@ -480,9 +292,11 @@ export default function AlgorithmsPage() {
           <div className="flex flex-col gap-4 border-b border-[#213f54]/35 pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold text-slate-950">All algorithms</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                {filteredAlgorithms.length} algorithm{filteredAlgorithms.length === 1 ? "" : "s"} match the current filters.
-              </p>
+              {!isLoadingAlgorithms ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  {`${filteredAlgorithms.length} algorithm${filteredAlgorithms.length === 1 ? "" : "s"} match the current filters.`}
+                </p>
+              ) : null}
             </div>
 
             <div className="relative flex shrink-0 items-center gap-3 self-start sm:self-auto">
@@ -641,7 +455,24 @@ export default function AlgorithmsPage() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-3">
-            {filteredAlgorithms.map((algorithm) => {
+            {algorithmLoadError ? (
+              <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+                {algorithmLoadError}. The backend algorithm endpoint is expected at {API_BASE_URL}/algorithms.
+              </div>
+            ) : null}
+            {isLoadingAlgorithms
+              ? Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="relative min-h-[12.5rem] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/70 before:to-transparent"
+                  >
+                    <div className="h-6 w-32 rounded-full bg-slate-200" />
+                    <div className="mt-4 h-4 w-full rounded-full bg-slate-100" />
+                    <div className="mt-2 h-4 w-3/4 rounded-full bg-slate-100" />
+                    <div className="mt-10 h-16 rounded-2xl bg-slate-100" />
+                  </div>
+                ))
+              : filteredAlgorithms.map((algorithm) => {
               return (
                 <button
                   key={algorithm.id}
@@ -696,6 +527,11 @@ export default function AlgorithmsPage() {
                 </button>
               );
             })}
+            {!isLoadingAlgorithms && !algorithmLoadError && filteredAlgorithms.length === 0 ? (
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm xl:col-span-3">
+                No algorithms match the current filters.
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -730,7 +566,7 @@ export default function AlgorithmsPage() {
             <div className="mt-6 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Publication</p>
-                <p className="mt-2 font-semibold text-slate-950">{selectedAlgorithm.publication}</p>
+                <p className="mt-2 font-semibold text-slate-950">{selectedAlgorithm.year}</p>
                 <p className="mt-1 text-slate-500">{selectedAlgorithm.journal}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -779,6 +615,16 @@ export default function AlgorithmsPage() {
               >
                 Open paper
               </a>
+              {selectedAlgorithm.sourceUrl ? (
+                <a
+                  href={selectedAlgorithm.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                >
+                  Open source
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

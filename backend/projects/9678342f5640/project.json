@@ -1,0 +1,21 @@
+{
+  "project_id": "9678342f5640",
+  "project_name": "yayyayaa",
+  "project_description": "",
+  "created_at": 1777325445.511743,
+  "created_at_display": "2026-04-27 14:30",
+  "top_variable_genes": "19",
+  "include_all_tfs": "true",
+  "normalize_enabled": "true",
+  "log_transform_enabled": "true",
+  "selected_algorithms": [
+    "PIDC",
+    "GENIE3",
+    "GRNBOOST2",
+    "PPCOR"
+  ],
+  "ensemble_enabled": "true",
+  "expression_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/9678342f5640/expression__ExpressionData.csv",
+  "pseudotime_path": null,
+  "latest_job_id": "856eb8eeeec1"
+}

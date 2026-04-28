@@ -1,0 +1,130 @@
+[
+  {
+    "job_id": "e470831348c4",
+    "project_id": "048e97097ddd",
+    "overall_status": "Failed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "PIDC",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/PIDC/outputs/048e97097ddd/run-1/PIDC/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/GENIE3/outputs/048e97097ddd/run-1/GENIE3/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/GRNBOOST2/outputs/048e97097ddd/run-1/GRNBOOST2/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/PPCOR/outputs/048e97097ddd/run-1/PPCOR/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "SCODE",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/SCODE/outputs/048e97097ddd/run-1/SCODE/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "SINCERITIES",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/SINCERITIES/outputs/048e97097ddd/run-1/SINCERITIES/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "SCRIBE",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/SCRIBE/outputs/048e97097ddd/run-1/SCRIBE/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "SINGE",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/SINGE/outputs/048e97097ddd/run-1/SINGE/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "LEAP",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/LEAP/outputs/048e97097ddd/run-1/LEAP/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRISLI",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/GRISLI/outputs/048e97097ddd/run-1/GRISLI/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRNVBEM",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/048e97097ddd/_beeline_runtime/GRNVBEM/outputs/048e97097ddd/run-1/GRNVBEM/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "SCNS",
+        "status": "Failed",
+        "elapsed_seconds": 2,
+        "error_message": "ValueError: Unknown algorithm 'SCNS'. Available: ['GENIE3', 'GRNBOOST2', 'GRISLI', 'GRNVBEM', 'JUMP3', 'LEAP', 'PEARSON', 'PIDC', 'PPCOR', 'SCODE', 'SCRIBE', 'SCSGL', 'SINCERITIES', 'SINGE']",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      }
+    ]
+  }
+]
