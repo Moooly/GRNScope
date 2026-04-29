@@ -15,6 +15,8 @@ import ConfirmDownloadModal from "./_components/ConfirmDownloadModal";
 import DatasetHelpModal from "./_components/DatasetHelpModal";
 import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
 import ResultsGuideModal from "./_components/ResultsGuideModal";
+import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
+import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSection";
 
 import {
   type AggregatedEdge,
@@ -1077,229 +1079,28 @@ useEffect(() => {
           />
 
 
-          <div className="group mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold text-slate-950">Algorithms used</h2>
-                  <button
-                    type="button"
-                    onClick={() => setIsAlgorithmHelpOpen(true)}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-                    aria-label="Open algorithms guide"
-                    title="Open algorithms guide"
-                  >
-                    ?
-                  </button>
-                </div>
-              </div>
-            </div>
+          <AlgorithmCardsSection
+            tasks={latestJob?.tasks ?? []}
+            algorithmMetaMap={algorithmMetaMap}
+            projectId={projectId}
+            apiBase={API_BASE}
+            onOpenHelp={() => setIsAlgorithmHelpOpen(true)}
+            onOpenDownload={openDownloadModal}
+            onOpenAlgorithmError={setActiveAlgorithmErrorTask}
+          />
 
-            <div className="relative mt-5 overflow-hidden">
-              <div className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="flex min-w-max gap-3 pr-32">
-                  {(latestJob?.tasks ?? []).map((task) => {
-                    const meta = algorithmMetaMap.get(task.algorithm_id);
-                    const progressPercent = Math.max(
-                      0,
-                      Math.min(100, Number(task.progress_percent ?? 0))
-                    );
-                    const progressLabel =
-                      typeof task.progress_label === "string" && task.progress_label.trim().length > 0
-                        ? task.progress_label
-                        : task.status;
-
-                    return (
-                      <div
-                        key={task.algorithm_id}
-                        className="flex w-[20rem] shrink-0 flex-col rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-xl font-bold tracking-tight text-slate-950">
-                              {meta?.name ?? task.algorithm_id}
-                            </p>
-                            <p className="mt-1 truncate text-sm font-medium text-slate-500">
-                              {meta?.category ?? "Algorithm"}
-                            </p>
-                          </div>
-
-                          {task.status === "Completed" ? (
-                            <span className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-2 text-sm font-bold text-[#178a62]">
-                              ✓
-                            </span>
-                          ) : task.status === "Failed" ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setActiveAlgorithmErrorTask({
-                                  algorithmId: task.algorithm_id,
-                                  errorMessage:
-                                    task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
-                                    "This algorithm failed. The server did not return a detailed message.",
-                                })
-                              }
-                              className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-2 text-sm font-bold text-rose-600 transition hover:border-rose-300 hover:bg-rose-100"
-                              aria-label={`View error for ${task.algorithm_id}`}
-                              title="View error"
-                            >
-                              !
-                            </button>
-                          ) : task.status === "Running" ? (
-                            <span
-                              className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center"
-                              aria-label={`${progressPercent}% complete for ${task.algorithm_id}`}
-                              title={`${progressPercent}% • ${progressLabel}`}
-                              style={{
-                                background: `conic-gradient(#1b75a6 ${progressPercent * 3.6}deg, rgba(27,117,166,0.14) 0deg)`,
-                                borderRadius: "9999px",
-                              }}
-                            >
-                              <span className="absolute inset-[2px] rounded-full bg-white" />
-                              <span className="relative text-[9px] font-bold text-[#1b75a6]">
-                                {progressPercent}%
-                              </span>
-                            </span>
-                          ) : task.status === "Queued" ? (
-                            <span
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-amber-200 bg-amber-50"
-                              aria-label={`Queued ${task.algorithm_id}`}
-                              title="Queued"
-                            >
-                              <span className="h-2 w-2 rounded-full bg-amber-500" />
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-5 grid grid-cols-3 gap-1.5 text-center text-[11px] font-medium text-slate-600">
-                          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-1.5">
-                            {meta?.requiresPseudotime ? "Pseudotime" : "No pseudotime"}
-                          </span>
-                          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-1.5">
-                            {meta?.directed ? "Directed" : "Undirected"}
-                          </span>
-                          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-1.5">
-                            {meta?.signed ? "Signed" : "Unsigned"}
-                          </span>
-                        </div>
-
-                        {(task.status === "Running" || task.status === "Queued") && (
-                          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-                            {progressLabel}
-                          </p>
-                        )}
-
-                        {task.status === "Completed" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!projectId) return;
-                              openDownloadModal(
-                                `${task.algorithm_id} raw result`,
-                                `${API_BASE}/projects/${projectId}/download/result/${task.algorithm_id}`,
-                                `${task.algorithm_id}-raw-ranked-edges.csv`
-                              );
-                            }}
-                            className="mt-5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                          >
-                            Download result
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {(latestJob?.tasks.length ?? 0) > 4 && (
-                <div className="pointer-events-none absolute inset-y-0 right-0 hidden group-hover:flex items-center">
-                  <div className="flex h-full w-16 items-center justify-center bg-gradient-to-l from-white via-white/80 to-transparent text-5xl text-slate-400">
-                    ›
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold text-slate-950">Dataset and preprocessing</h2>
-                  <button
-                    type="button"
-                    onClick={() => setIsDatasetHelpOpen(true)}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-                    aria-label="Open dataset and preprocessing guide"
-                    title="Open dataset and preprocessing guide"
-                  >
-                    ?
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!projectId) return;
-                  setIsFileDownloadMenuOpen(true);
-                }}
-                className={`rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] ${
-                  projectId ? "" : "pointer-events-none opacity-60"
-                }`}
-              >
-                Download files
-              </button>
-            </div>
-
-            <div className="mt-6">
-              <div className="grid gap-3 xl:grid-cols-5">
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
-                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Matrix size
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-slate-800">
-                    {expressionMatrixLabel}
-                  </p>
-                </div>
-
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
-                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Gene filtering
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-slate-800">
-                    {topVariableGenesLabel}
-                  </p>
-                </div>
-
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
-                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    TF override
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-slate-800">
-                    {tfOverrideLabel}
-                  </p>
-                </div>
-
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
-                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Normalization
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-slate-800">
-                    {normalizationLabel}
-                  </p>
-                </div>
-
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
-                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    log₂(x + 1)
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-slate-800">
-                    {logTransformLabel}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <DatasetPreprocessingSection
+            expressionMatrixLabel={expressionMatrixLabel}
+            topVariableGenesLabel={topVariableGenesLabel}
+            tfOverrideLabel={tfOverrideLabel}
+            normalizationLabel={normalizationLabel}
+            logTransformLabel={logTransformLabel}
+            onOpenHelp={() => setIsDatasetHelpOpen(true)}
+            onOpenDownloadMenu={() => {
+              if (!projectId) return;
+              setIsFileDownloadMenuOpen(true);
+            }}
+          />
 
           <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
             <div className="flex flex-col gap-6">
