@@ -9,6 +9,12 @@ import ResultsSummarySection from "./_components/ResultsSummarySection";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
 import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
+import AlgorithmErrorModal from "./_components/AlgorithmErrorModal";
+import AlgorithmHelpModal from "./_components/AlgorithmHelpModal";
+import ConfirmDownloadModal from "./_components/ConfirmDownloadModal";
+import DatasetHelpModal from "./_components/DatasetHelpModal";
+import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
+import ResultsGuideModal from "./_components/ResultsGuideModal";
 
 import {
   type AggregatedEdge,
@@ -624,18 +630,6 @@ export default function ProjectDetailPage() {
   };
 
 
-  const confirmDownload = () => {
-    if (!pendingDownload) return;
-
-    const link = document.createElement("a");
-    link.href = pendingDownload.href;
-    link.download = pendingDownload.filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    closeDownloadModal();
-  };
 
   const handleExportNetwork = useCallback(
     (format: "png" | "svg") => {
@@ -1412,390 +1406,41 @@ useEffect(() => {
             </div>
           </div>
 
-          {isAlgorithmHelpOpen && (
-            <div
-              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
-              onClick={() => setIsAlgorithmHelpOpen(false)}
-            >
-              <div
-                className="max-h-[70vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                      Algorithms guide
-                    </p>
-                    <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                      What do these algorithm properties mean?
-                    </h3>
-                    <p className="mt-2 text-xs leading-5 text-slate-600">
-                      Each card summarizes one algorithm result and the main properties that affect how the method should be understood.
-                    </p>
-                  </div>
-                </div>
+          <AlgorithmHelpModal
+            open={isAlgorithmHelpOpen}
+            onClose={() => setIsAlgorithmHelpOpen(false)}
+          />
+          <ResultsGuideModal
+            open={isResultsGuideOpen}
+            onClose={() => setIsResultsGuideOpen(false)}
+          />
+          <DatasetHelpModal
+            open={isDatasetHelpOpen}
+            onClose={() => setIsDatasetHelpOpen(false)}
+          />
+          <FileDownloadMenuModal
+            open={isFileDownloadMenuOpen}
+            projectId={projectId}
+            apiBase={API_BASE}
+            expressionFilename={metadata?.expression_filename || project?.expression_filename}
+            pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
+            hasPseudotime={metadata?.has_pseudotime}
+            activeAlgorithmIds={activeAlgorithmIds}
+            confidenceThreshold={confidenceThreshold}
+            consensusThreshold={consensusThreshold}
+            onClose={() => setIsFileDownloadMenuOpen(false)}
+            onOpenDownload={openDownloadModal}
+          />
+          <ConfirmDownloadModal
+            pendingDownload={pendingDownload}
+            isClosing={isDownloadModalClosing}
+            onClose={closeDownloadModal}
+          />
 
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Method description</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      The short text under the algorithm name describes the method family, such as random forest, regression, correlation, or information-theory based inference.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Pseudotime property</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Pseudotime means the algorithm uses cell ordering information. No pseudotime means the method only uses the expression matrix without cell-order information.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Directed or undirected</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Directed means the algorithm predicts a source gene and target gene direction. Undirected means the result mainly shows association without a clear regulatory direction.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Signed or unsigned</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Signed methods can indicate whether a relationship is activating or repressing. Unsigned methods only report the strength of the predicted relationship.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Status and download</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      A check mark means the algorithm completed successfully. The download button exports the raw ranked edge result for that method.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.25rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-4">
-                  <p className="text-xs leading-5 text-slate-700">
-                    These properties help compare algorithms without showing long descriptions directly on each card.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          {isResultsGuideOpen && (
-            <div
-              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
-              onClick={() => setIsResultsGuideOpen(false)}
-            >
-              <div
-                className="max-h-[calc(100vh-5rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                    Results settings guide
-                  </p>
-                  <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                    What do these controls mean?
-                  </h3>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-base font-bold text-slate-950">Algorithm selector</h4>
-                    <p className="mt-1 text-sm leading-5 text-slate-600">
-                      Choose which completed algorithms are included in the current result view. Selecting one algorithm shows that method's edges. Selecting two or more algorithms creates a consensus view based on the selected methods.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-base font-bold text-slate-950">Confidence filter</h4>
-                    <p className="mt-1 text-sm leading-5 text-slate-600">
-                      Controls the minimum normalized score required for an edge to appear. A higher value keeps only stronger predictions. A lower value shows more edges, including weaker predictions.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-base font-bold text-slate-950">Consensus threshold</h4>
-                    <p className="mt-1 text-sm leading-5 text-slate-600">
-                      Used when two or more algorithms are selected. It controls how many selected algorithms must support the same edge before that edge appears in the consensus network and table.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-[1.25rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-4">
-                  <p className="text-sm leading-5 text-slate-700">
-                    These controls update the overlap visualization, network view, and edge analysis table together.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          {isDatasetHelpOpen && (
-            <div
-              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
-              onClick={() => setIsDatasetHelpOpen(false)}
-            >
-              <div
-                className="max-h-[70vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                      Dataset and preprocessing guide
-                    </p>
-                    <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                      What do these settings mean?
-                    </h3>
-                    <p className="mt-2 text-xs leading-5 text-slate-600">
-                      These values summarize the input matrix and preprocessing steps used before running the GRN inference algorithms.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Matrix size</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Shows the shape of the expression matrix. In this project, rows are genes and columns are cells.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Gene filtering</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Controls how many highly variable genes are retained before inference. Keeping all genes means no top-variable-gene reduction was applied.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">TF override</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Keeps known transcription factors in the dataset even if they would otherwise be removed during filtering.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">Normalization</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Adjusts library-size differences across cells so expression values are more comparable.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                    <h4 className="text-sm font-bold text-slate-950">log₂(x + 1) transformation</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Compresses large expression values and reduces scale effects before algorithms are run.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.25rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-4">
-                  <p className="text-xs leading-5 text-slate-700">
-                    These settings describe the data preparation steps used before the algorithm results are generated.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          {isFileDownloadMenuOpen && (
-            <div
-              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
-              onClick={() => setIsFileDownloadMenuOpen(false)}
-            >
-              <div
-                className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                      Project downloads
-                    </p>
-                    <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
-                      Choose a file to download
-                    </h3>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      Download the input files or the current analysis metadata.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-6 grid gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!projectId) return;
-                      setIsFileDownloadMenuOpen(false);
-                      openDownloadModal(
-                        "Expression matrix",
-                        `${API_BASE}/projects/${projectId}/download/expression`,
-                        metadata?.expression_filename || project?.expression_filename || "ExpressionData.csv"
-                      );
-                    }}
-                    className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
-                  >
-                    <p className="text-sm font-bold text-slate-950">Expression matrix</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {metadata?.expression_filename || project?.expression_filename || "ExpressionData.csv"}
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!projectId || !metadata?.has_pseudotime) return;
-                      setIsFileDownloadMenuOpen(false);
-                      openDownloadModal(
-                        "Pseudotime file",
-                        `${API_BASE}/projects/${projectId}/download/pseudotime`,
-                        metadata?.pseudotime_filename || project?.pseudotime_filename || "PseudoTime.csv"
-                      );
-                    }}
-                    className={`rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] ${
-                      metadata?.has_pseudotime ? "" : "pointer-events-none opacity-50"
-                    }`}
-                  >
-                    <p className="text-sm font-bold text-slate-950">Pseudotime file</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {metadata?.pseudotime_filename || project?.pseudotime_filename || "Not provided"}
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!projectId) return;
-
-                      const selectedView =
-                        activeAlgorithmIds.length >= 2
-                          ? "consensus"
-                          : activeAlgorithmIds[0] ?? "consensus";
-
-                      const query = new URLSearchParams({
-                        selected_view: selectedView,
-                        confidence_threshold: String(confidenceThreshold),
-                        consensus_threshold: String(consensusThreshold),
-                        selected_algorithms: activeAlgorithmIds.join(","),
-                      });
-
-                      setIsFileDownloadMenuOpen(false);
-                      openDownloadModal(
-                        "Analysis metadata",
-                        `${API_BASE}/projects/${projectId}/download/metadata?${query.toString()}`,
-                        `${projectId ?? "project"}-analysis-metadata.json`
-                      );
-                    }}
-                    className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
-                  >
-                    <p className="text-sm font-bold text-slate-950">Analysis metadata</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      JSON summary of dataset, preprocessing, algorithms, and current export settings.
-                    </p>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          {pendingDownload && (
-            <div
-              className={`fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm ${
-                isDownloadModalClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
-              }`}
-            >
-              <div
-                className={`w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
-                  isDownloadModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
-                }`}
-              >
-                <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                  Download file
-                </p>
-                <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
-                  Download {pendingDownload.label}?
-                </h3>
-                <p className="mt-4 text-sm leading-6 text-slate-600">
-                  {isReadOnlyProject
-                    ? "This will download a file from the read-only demo project."
-                    : "This will download the saved file from the project record in the backend."}
-                </p>
-                <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-                  <p className="break-words text-sm font-bold text-slate-950">{pendingDownload.filename}</p>
-                </div>
-                <div className="mt-6 flex justify-end gap-3 border-t border-[#213f54]/15 pt-5">
-                  <button
-                    type="button"
-                    onClick={closeDownloadModal}
-                    className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={confirmDownload}
-                    className="rounded-full bg-[#1b75a6] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
-                  >
-                    Download
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeAlgorithmErrorTask && (
-            <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/80 px-6 py-10 backdrop-blur-md">
-              <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-slate-950/40">
-                <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-5">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium uppercase tracking-[0.22em] text-rose-200/80">
-                      Algorithm error
-                    </p>
-                    <h3 className="mt-3 break-words text-2xl font-semibold text-white">
-                      {activeAlgorithmErrorTask.algorithmId}
-                    </h3>
-                    <p className="mt-2 text-sm text-slate-400">
-                      This algorithm did not finish successfully. Review the message below for details.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveAlgorithmErrorTask(null)}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 text-lg text-slate-300 transition hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
-                    aria-label="Close error dialog"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div className="mt-6 rounded-[1.5rem] border border-rose-300/15 bg-rose-300/[0.08] p-5">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-rose-300/20 bg-rose-300/10 px-2 text-sm font-semibold text-rose-200">
-                      !
-                    </span>
-                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-rose-100/80">
-                      Error message
-                    </p>
-                  </div>
-
-                  <div className="mt-4 max-h-[40vh] overflow-y-auto rounded-[1.25rem] border border-white/10 bg-slate-950/50 p-4">
-                    <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-100">
-                      {activeAlgorithmErrorTask.errorMessage}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setActiveAlgorithmErrorTask(null)}
-                    className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/[0.07]"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlgorithmErrorModal
+            task={activeAlgorithmErrorTask}
+            onClose={() => setActiveAlgorithmErrorTask(null)}
+          />
         </div>
       </section>
     </main>

@@ -144,6 +144,11 @@ export default function ProjectsPage() {
   const [isDeletingProject, setIsDeletingProject] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
+  const visibleProjectHistory = useMemo(
+    () => projectHistory.filter((project) => project.id !== "demo"),
+    [projectHistory]
+  );
+
   const datasetSummary = {
     dimensions:
       geneCount !== null && cellCount !== null
@@ -247,7 +252,7 @@ export default function ProjectsPage() {
 
   const activeProjectIds = useMemo(
     () =>
-      projectHistory
+      visibleProjectHistory
         .filter((project) => {
           const latestJob = project.latestJob;
           if (!latestJob) {
@@ -266,7 +271,7 @@ export default function ProjectsPage() {
           );
         })
         .map((project) => project.id),
-    [projectHistory]
+    [visibleProjectHistory]
   );
 
 
@@ -810,9 +815,9 @@ export default function ProjectsPage() {
             onCancel={handleCancelDeleteProject}
             onConfirm={handleConfirmDeleteProject}
           />
-          {projectHistory.length > 0 ? (
+          {visibleProjectHistory.length > 0 ? (
             <div className="mt-8 grid gap-5">
-              {projectHistory.map((project) => (
+              {visibleProjectHistory.map((project) => (
                 <div
                   key={project.id}
                   className="origin-top overflow-hidden"
