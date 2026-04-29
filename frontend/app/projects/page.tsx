@@ -392,13 +392,10 @@ export default function ProjectsPage() {
   };
 
   const closeCreateModal = () => {
-    setIsCreateClosing(true);
-    window.setTimeout(() => {
-      setIsCreateVisible(false);
-      setIsCreateClosing(false);
-      setCreateStep("upload");
-      setErrors([]);
-    }, 280);
+    setIsCreateVisible(false);
+    setIsCreateClosing(false);
+    setCreateStep("upload");
+    setErrors([]);
   };
 
   const clearExpressionFile = () => {

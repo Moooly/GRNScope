@@ -66,7 +66,7 @@ interface CreateProjectModalProps {
 
 export default function CreateProjectModal({
   isCreateVisible,
-  isCreateClosing,
+  // isCreateClosing, // Removed from destructure
   createStep,
   projectName,
   projectDescription,
@@ -128,15 +128,11 @@ export default function CreateProjectModal({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 pb-10 pt-28 backdrop-blur-sm sm:px-6 lg:pb-14 lg:pt-32 ${
-        isCreateClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
-      }`}
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm animate-modal-overlay sm:px-6 lg:py-14"
       onClick={onClose}
     >
       <div
-        className={`mb-10 w-full max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:mb-14 lg:p-8 ${
-          isCreateClosing ? "animate-modal-panel-out" : "animate-modal-panel"
-        }`}
+        className="max-h-[calc(100vh-5rem)] w-full max-w-6xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel lg:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div ref={contentScrollRef}>
