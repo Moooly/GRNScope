@@ -43,13 +43,10 @@ export default function AlgorithmCard({
                   ✓
                 </span>
               )}
-              <h3 className="truncate text-xl font-bold tracking-tight text-slate-950">
+              <h3 className="truncate text-2xl font-bold tracking-tight text-slate-950">
                 {algorithm.name}
               </h3>
             </div>
-            <p className="mt-2 line-clamp-2 min-h-[3rem] text-sm leading-6 text-slate-600">
-              {algorithm.tagline}
-            </p>
           </div>
 
           <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -58,26 +55,24 @@ export default function AlgorithmCard({
         </div>
 
         <div className="mt-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5">
-            <p className="text-[0.64rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-              Methodology
-            </p>
-            <p className="mt-1 text-sm font-bold leading-5 text-[#1b75a6]">
+          <div className="rounded-[1.1rem] border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="truncate text-sm font-bold text-slate-800">
               {algorithm.category}
             </p>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
-              {algorithm.requiresPseudotime ? "Pseudotime" : "No Pseudotime"}
+          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium leading-none text-slate-600">
+              {algorithm.requiresPseudotime ? "Pseudotime" : "No pseudotime"}
             </span>
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium leading-none text-slate-600">
               {algorithm.directed ? "Directed" : "Undirected"}
             </span>
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium leading-none text-slate-600">
               {algorithm.signed ? "Signed" : "Unsigned"}
             </span>
           </div>
+
         </div>
       </div>
     </button>

@@ -750,7 +750,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "SCSGL",
         "name": "scSGL",
-        "description": "Kernelized signed graph-learning method for single-cell GRN inference.",
+        "description": "Kernelized signed graph-learning method that requires a ground-truth network file.",
         "long_description": (
             "scSGL learns signed gene regulatory networks from single-cell expression "
             "data using graph signal processing. Its kernelized version is designed "
@@ -777,8 +777,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Kernelized version accounts for non-linear co-expression and frequent zero values.",
         ],
         "limitations": [
+            "Requires a ground-truth network file named GroundTruthNetwork.csv.",
             "Edges are not directed in this registry.",
-            "Not one of the 12 algorithms evaluated in the original BEELINE paper.",
             "Requires positive-density, negative-density, and association-measure parameters.",
             "May require careful parameter tuning for different datasets.",
         ],
