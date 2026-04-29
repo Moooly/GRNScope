@@ -17,93 +17,35 @@ import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
 import ResultsGuideModal from "./_components/ResultsGuideModal";
 import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
 import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSection";
+import ResultsHubSection from "./_components/ResultsHubSection";
+import useProjectDetailData from "./_hooks/useProjectDetailData";
 
 import {
   type AggregatedEdge,
-  type AlgorithmCatalogItem,
-  type AlgorithmStoredResult,
-  type BenchmarkMetrics,
   type MetadataManifest,
   type NodeInfo,
   type OverlapEntry,
-  type ProjectJob,
   type ProjectManifest,
 } from "./_lib/types";
 import { boolText, clamp } from "./_lib/utils";
-import { computeBenchmarkMetrics, parseGroundTruthCsv } from "./_lib/benchmark";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-const API_ROOT = API_BASE.replace(/\/api\/?$/, "");
 
-type BackendAlgorithmEntry = {
-  id: string;
-  name: string;
-  description: string;
-  long_description: string;
-  category: string;
-  year: string;
-  journal: string;
-  publication_title: string;
-  publication_url: string;
-  source_url: string | null;
-  docker_image: string;
-  runner: string;
-  directed: boolean;
-  signed: boolean;
-  requires_pseudotime: boolean;
-  supports_expression_matrix: boolean;
-  active: boolean;
-  recommended: boolean;
-  estimated_runtime: string;
-  strengths: string[];
-  limitations: string[];
-  recommended_use_cases: string[];
-  parameters: {
-    name: string;
-    label?: string;
-    description?: string;
-    default?: unknown;
-    required?: boolean;
-    value_type?: string;
-    options?: unknown[];
-  }[];
-};
-
-function getDockerVersion(dockerImage: string) {
-  const parts = dockerImage.split(":");
-  return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
-}
-
-function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): AlgorithmCatalogItem {
-  return {
-    id: algorithm.id,
-    name: algorithm.name,
-    description: algorithm.description,
-    category: algorithm.category,
-    requiresPseudotime: algorithm.requires_pseudotime,
-    directed: algorithm.directed,
-    signed: algorithm.signed,
-    publication: algorithm.publication_title,
-    year: algorithm.year,
-    journal: algorithm.journal,
-    dockerVersion: getDockerVersion(algorithm.docker_image),
-    paperUrl: algorithm.publication_url,
-  };
-}
-// Spec §7.6: refresh job status every five seconds while any task is in a
-// non-terminal state.
-const POLL_INTERVAL_MS = 5000;
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
   const routeProjectId = Array.isArray(params?.projectId) ? params.projectId[0] : params?.projectId;
   const projectId = routeProjectId === "sample" ? "demo" : routeProjectId;
+  const isDemoRoute = projectId === "demo" || routeProjectId === "sample";
 
-  const [project, setProject] = useState<ProjectManifest | null>(null);
-  const [metadata, setMetadata] = useState<MetadataManifest | null>(null);
-  const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
-  const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
-  const [algorithmCatalog, setAlgorithmCatalog] = useState<AlgorithmCatalogItem[]>([]);
+  const {
+    project,
+    metadata,
+    latestJob,
+    algorithmResults,
+    algorithmCatalog,
+    error,
+  } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
@@ -119,16 +61,12 @@ export default function ProjectDetailPage() {
   const [tablePage, setTablePage] = useState(1);
   const [tableSortKey, setTableSortKey] = useState<"rank" | "source" | "target" | "score" | "count">("rank");
   const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
-  const [error, setError] = useState("");
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
   const [isAlgorithmHelpOpen, setIsAlgorithmHelpOpen] = useState(false);
   const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
-  const [groundTruthEdges, setGroundTruthEdges] = useState<Set<string>>(new Set());
-  const [groundTruthFilename, setGroundTruthFilename] = useState<string>("");
-  const [groundTruthError, setGroundTruthError] = useState("");
   const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
 
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
@@ -137,8 +75,7 @@ export default function ProjectDetailPage() {
 
   const demoProjectFlag = project as (ProjectManifest & { is_demo?: boolean; read_only?: boolean }) | null;
   const demoMetadataFlag = metadata as (MetadataManifest & { is_demo?: boolean; read_only?: boolean }) | null;
-  const isDemoProject = projectId === "demo" || routeProjectId === "sample" || demoProjectFlag?.is_demo === true || demoMetadataFlag?.is_demo === true;
-  const isReadOnlyProject = isDemoProject || demoProjectFlag?.read_only === true || demoMetadataFlag?.read_only === true;
+  const isDemoProject = isDemoRoute || demoProjectFlag?.is_demo === true || demoMetadataFlag?.is_demo === true;
 
   const expressionMatrixLabel =
     metadata?.gene_count && metadata?.cell_count
@@ -227,49 +164,7 @@ export default function ProjectDetailPage() {
     [algorithmCatalog]
   );
 
-  useEffect(() => {
-    let cancelled = false;
 
-    const loadAlgorithmCatalog = async () => {
-      try {
-        const response = await fetch(`${API_ROOT}/algorithms`, {
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as BackendAlgorithmEntry[];
-
-        if (!cancelled) {
-          setAlgorithmCatalog(
-            data
-              .filter((algorithm) => algorithm.active)
-              .map(mapBackendAlgorithm)
-          );
-        }
-      } catch {
-        if (!cancelled) {
-          setAlgorithmCatalog([]);
-        }
-      }
-    };
-
-    loadAlgorithmCatalog();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const hasActiveTasks = useMemo(() => {
-    return allJobTasks.some(
-      (task) => task.status === "Queued" || task.status === "Running"
-    );
-  }, [allJobTasks]);
 
   const algorithmEdgeRows = useMemo(() => {
     const next: Record<string, AggregatedEdge[]> = {};
@@ -518,39 +413,6 @@ export default function ProjectDetailPage() {
     return Math.max(...overlapEntries.map((entry) => entry.count), 1);
   }, [overlapEntries]);
 
-  const benchmarkMetrics = useMemo<BenchmarkMetrics[]>(() => {
-    if (groundTruthEdges.size === 0) return [];
-
-    const universe = new Set<string>();
-
-    completedAlgorithmIds.forEach((algorithmId) => {
-      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
-        universe.add(`${edge.source}|||${edge.target}`);
-      });
-    });
-
-    consensusRows.forEach((edge) => {
-      universe.add(`${edge.source}|||${edge.target}`);
-    });
-
-    groundTruthEdges.forEach((edgeKey) => universe.add(edgeKey));
-
-    const baselineUniverseSize = universe.size;
-
-    const methodRows: BenchmarkMetrics[] = completedAlgorithmIds.map((algorithmId) =>
-      computeBenchmarkMetrics(
-        algorithmId,
-        algorithmEdgeRows[algorithmId] ?? [],
-        groundTruthEdges,
-        baselineUniverseSize
-      )
-    );
-
-    return [
-      computeBenchmarkMetrics("Consensus", consensusRows, groundTruthEdges, baselineUniverseSize),
-      ...methodRows,
-    ];
-  }, [algorithmEdgeRows, completedAlgorithmIds, consensusRows, groundTruthEdges]);
 
   const resultsAvailabilityNotice = useMemo(() => {
     if (completedAlgorithmIds.length === 0) {
@@ -833,214 +695,7 @@ useEffect(() => {
     setTablePage((current) => Math.min(current, totalTablePages));
   }, [totalTablePages]);
 
-  const handleGroundTruthUpload = async (file: File | null) => {
-    if (!file) return;
 
-    try {
-      const text = await file.text();
-      const parsedEdges = parseGroundTruthCsv(text);
-
-      if (parsedEdges.size === 0) {
-        setGroundTruthError("Ground-truth file could not be parsed. Use a CSV with Source and Target columns.");
-        setGroundTruthEdges(new Set());
-        setGroundTruthFilename("");
-        return;
-      }
-
-      setGroundTruthEdges(parsedEdges);
-      setGroundTruthFilename(file.name);
-      setGroundTruthError("");
-    } catch {
-      setGroundTruthError("Ground-truth file could not be read.");
-      setGroundTruthEdges(new Set());
-      setGroundTruthFilename("");
-    }
-  };
-
-  useEffect(() => {
-    if (!projectId) return;
-
-    let cancelled = false;
-
-    const load = async () => {
-      setError("");
-
-      try {
-        const projectResponse = await fetch(`${API_BASE}/projects/${projectId}`);
-
-        if (!projectResponse.ok) {
-          if (!cancelled) {
-            setProject(null);
-            setLatestJob(null);
-
-            if (isDemoProject) {
-              setError(
-                "Demo project data could not be loaded from the backend. Please make sure the backend is running and /api/projects/demo is available."
-              );
-            }
-          }
-          return;
-        }
-
-        const projectData = await projectResponse.json();
-        if (cancelled) return;
-
-        setProject((projectData.project ?? null) as ProjectManifest | null);
-        setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
-      } catch {
-        if (!cancelled) {
-          setProject(null);
-          setLatestJob(null);
-        }
-      }
-
-      try {
-        const metadataResponse = await fetch(`${API_BASE}/projects/${projectId}/metadata`);
-
-        if (!cancelled && metadataResponse.ok) {
-          const metadataData = await metadataResponse.json();
-          setMetadata((metadataData.metadata ?? null) as MetadataManifest | null);
-        }
-      } catch {
-        if (!cancelled) setMetadata(null);
-      }
-
-      try {
-        const resultsResponse = await fetch(`${API_BASE}/projects/${projectId}/results`);
-
-        if (!resultsResponse.ok || cancelled) return;
-
-        const resultsData = await resultsResponse.json();
-        const resultRows = Array.isArray(resultsData.results) ? resultsData.results : [];
-        const completedRows = resultRows.filter(
-          (item: { algorithm_id?: string; status?: string }) =>
-            item.algorithm_id && item.status === "Completed"
-        );
-
-        const payloads = await Promise.all(
-          completedRows.map(async (item: { algorithm_id: string }) => {
-            try {
-              const response = await fetch(
-                `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
-              );
-
-              if (!response.ok) return null;
-
-              const data = await response.json();
-              return data.result as AlgorithmStoredResult;
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        if (!cancelled) {
-          const next: Record<string, AlgorithmStoredResult> = {};
-
-          payloads.forEach((result, index) => {
-            const fallbackAlgorithmId = completedRows[index]?.algorithm_id;
-            const algorithmId = result?.algorithm_id || fallbackAlgorithmId;
-            if (result && algorithmId) {
-              next[algorithmId] = {
-                ...result,
-                algorithm_id: algorithmId,
-              };
-            }
-          });
-
-          setAlgorithmResults(next);
-        }
-      } catch {
-        if (!cancelled) setAlgorithmResults({});
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
-
-  useEffect(() => {
-    if (!projectId) return;
-
-    let cancelled = false;
-
-    const poll = async () => {
-      try {
-        const [projectResponse, resultsResponse] = await Promise.all([
-          fetch(`${API_BASE}/projects/${projectId}`),
-          fetch(`${API_BASE}/projects/${projectId}/results`).catch(() => null),
-        ]);
-
-        if (projectResponse.ok) {
-          const projectData = await projectResponse.json();
-
-          if (!cancelled) {
-            setProject((projectData.project ?? null) as ProjectManifest | null);
-            setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
-          }
-        }
-
-        if (!resultsResponse || !resultsResponse.ok || cancelled) return;
-
-        const resultsData = await resultsResponse.json();
-        const resultRows = Array.isArray(resultsData.results) ? resultsData.results : [];
-        const completedRows = resultRows.filter(
-          (item: { algorithm_id?: string; status?: string }) =>
-            item.algorithm_id && item.status === "Completed"
-        );
-
-        const payloads = await Promise.all(
-          completedRows.map(async (item: { algorithm_id: string }) => {
-            try {
-              const response = await fetch(
-                `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
-              );
-
-              if (!response.ok) return null;
-
-              const data = await response.json();
-              return data.result as AlgorithmStoredResult;
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        if (!cancelled) {
-          const next: Record<string, AlgorithmStoredResult> = {};
-
-          payloads.forEach((result, index) => {
-            const fallbackAlgorithmId = completedRows[index]?.algorithm_id;
-            const algorithmId = result?.algorithm_id || fallbackAlgorithmId;
-            if (result && algorithmId) {
-              next[algorithmId] = {
-                ...result,
-                algorithm_id: algorithmId,
-              };
-            }
-          });
-
-          setAlgorithmResults(next);
-        }
-      } catch {
-        return;
-      }
-    };
-
-    const interval = window.setInterval(() => {
-      if (hasActiveTasks && projectId !== "demo") {
-        poll();
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [projectId, hasActiveTasks]);
 
   if (error) {
     return (
@@ -1102,17 +757,9 @@ useEffect(() => {
             }}
           />
 
-          <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
-            <div className="flex flex-col gap-6">
-              <div>
-                <h2 className="text-xl font-bold text-slate-950">Results hub</h2>
-              </div>
-
-              <div
-                className="sticky z-[55]"
-                style={{ top: "var(--grnscope-header-height, 78px)" }}
-              >
-                <ResultsControlsSection
+          <ResultsHubSection
+            controls={
+              <ResultsControlsSection
                   compact
                   projectId={projectId}
                   completedAlgorithmIds={completedAlgorithmIds}
@@ -1134,9 +781,8 @@ useEffect(() => {
                   isConsensusView={activeAlgorithmIds.length >= 2}
                   onOpenGuide={() => setIsResultsGuideOpen(true)}
                 />
-              </div>
-
-              <div className="min-w-0 space-y-6">
+            }
+          >
                 {activeAlgorithmIds.length >= 2 && (
                   <div className="w-full">
                     <ResultsSummarySection
@@ -1203,9 +849,7 @@ useEffect(() => {
                     />
                   </>
                 )}
-              </div>
-            </div>
-          </div>
+          </ResultsHubSection>
 
           <AlgorithmHelpModal
             open={isAlgorithmHelpOpen}
