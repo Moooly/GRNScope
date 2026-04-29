@@ -1,0 +1,118 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+================================================
+= Running AR1MA1-VBEM method for GRN inference =
+================================================
+
+
+( use [Ctrl]+[C] to abort the execution )
+
+
+ # Choosing dataset...
+
+file =
+
+    '/usr/working_dir/ExpressionData0.csv'
+
+Elapsed time is 0.453247 seconds.
+
+
+ - DMRT1
+  VBEM converges after 747 iteractions
+ - FGF9
+  VBEM converges after 589 iteractions
+ - RSPO1
+  VBEM converges after 3704 iteractions
+ - DHH
+  VBEM converges after 615 iteractions
+ - CTNNB1
+  VBEM converges after 3952 iteractions
+ - PGD2
+  VBEM converges after 468 iteractions
+ - WT1mKTS
+  VBEM converges after 3775 iteractions
+ - SRY
+  VBEM converges after 934 iteractions
+ - DKK1
+  VBEM converges after 585 iteractions
+ - WNT4
+  VBEM converges after 4019 iteractions
+ - CBX2
+  VBEM converges after 1432 iteractions
+ - AMH
+  VBEM converges after 692 iteractions
+ - NR0B1
+  VBEM converges after 3553 iteractions
+ - NR5A1
+  VBEM converges after 2013 iteractions
+ - WT1pKTS
+  VBEM converges after 2720 iteractions
+ - FOXL2
+  VBEM converges after 3720 iteractions
+ - UGR
+  VBEM converges after 819 iteractions
+ - SOX9
+  VBEM converges after 513 iteractions
+ - GATA4
+  VBEM converges after 4122 iteractions
+Elapsed time is 44.201777 seconds.
+
+
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+================================================
+= Running AR1MA1-VBEM method for GRN inference =
+================================================
+
+
+( use [Ctrl]+[C] to abort the execution )
+
+
+ # Choosing dataset...
+
+file =
+
+    '/usr/working_dir/ExpressionData1.csv'
+
+Elapsed time is 0.425385 seconds.
+
+
+ - DMRT1
+  VBEM converges after 3606 iteractions
+ - FGF9
+  VBEM converges after 2489 iteractions
+ - RSPO1
+  VBEM converges after 4578 iteractions
+ - DHH
+  VBEM converges after 2350 iteractions
+ - CTNNB1
+  VBEM converges after 791 iteractions
+ - PGD2
+  VBEM converges after 2600 iteractions
+ - WT1mKTS
+  VBEM converges after 3899 iteractions
+ - SRY
+  VBEM converges after 2794 iteractions
+ - DKK1
+  VBEM converges after 3902 iteractions
+ - WNT4
+  VBEM converges after 3179 iteractions
+ - CBX2
+  VBEM converges after 4800 iteractions
+ - AMH
+  VBEM converges after 2632 iteractions
+ - NR0B1
+  VBEM converges after 3663 iteractions
+ - NR5A1
+  VBEM converges after 4059 iteractions
+ - WT1pKTS
+  VBEM converges after 4572 iteractions
+ - FOXL2
+  VBEM converges after 562 iteractions
+ - UGR
+  VBEM converges after 1851 iteractions
+ - SOX9
+  VBEM converges after 2128 iteractions
+ - GATA4
+  VBEM converges after 3510 iteractions
+Elapsed time is 57.566622 seconds.
+
+

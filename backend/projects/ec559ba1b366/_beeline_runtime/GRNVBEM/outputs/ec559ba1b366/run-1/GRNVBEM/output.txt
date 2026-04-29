@@ -1,0 +1,103 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+================================================
+= Running AR1MA1-VBEM method for GRN inference =
+================================================
+
+
+( use [Ctrl]+[C] to abort the execution )
+
+
+ # Choosing dataset...
+
+file =
+
+    '/usr/working_dir/ExpressionData0.csv'
+
+Elapsed time is 2.349742 seconds.
+
+
+ - DMRT1
+  VBEM converges after 13723 iteractions
+ - FGF9
+  VBEM converges after 37933 iteractions
+ - RSPO1
+  VBEM converges after 43506 iteractions
+ - DHH
+  VBEM converges after 14379 iteractions
+ - CTNNB1
+  VBEM converges after 42096 iteractions
+ - PGD2
+  VBEM converges after 4449 iteractions
+ - WT1mKTS
+  VBEM converges after 93174 iteractions
+ - SRY
+  VBEM converges after 16318 iteractions
+ - DKK1
+  VBEM converges after 17992 iteractions
+ - WNT4
+  VBEM converges after 16369 iteractions
+ - CBX2
+  VBEM converges after 10162 iteractions
+ - AMH
+  VBEM converges after 26718 iteractions
+ - NR0B1
+  VBEM converges after 8212 iteractions
+ - NR5A1
+  VBEM converges after 10028 iteractions
+ - WT1pKTS
+  VBEM converges after 74127 iteractions
+ - FOXL2
+  VBEM converges after 14411 iteractions
+ - UGR
+  VBEM converges after 2061 iteractions
+ - SOX9
+  VBEM converges after 7087 iteractions
+ - GATA4
+  VBEM converges after 93427 iteractions
+Elapsed time is 953.688360 seconds.
+
+
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+================================================
+= Running AR1MA1-VBEM method for GRN inference =
+================================================
+
+
+( use [Ctrl]+[C] to abort the execution )
+
+
+ # Choosing dataset...
+
+file =
+
+    '/usr/working_dir/ExpressionData1.csv'
+
+Elapsed time is 0.490651 seconds.
+
+
+ - DMRT1
+  VBEM converges after 48061 iteractions
+ - FGF9
+  VBEM converges after 47508 iteractions
+ - RSPO1
+  VBEM converges after 967 iteractions
+ - DHH
+  VBEM converges after 3822 iteractions
+ - CTNNB1
+  VBEM converges after 26234 iteractions
+ - PGD2
+  VBEM converges after 46216 iteractions
+ - WT1mKTS
+  VBEM converges after 70689 iteractions
+ - SRY
+  VBEM converges after 4161 iteractions
+ - DKK1
+  VBEM converges after 13856 iteractions
+ - WNT4
+  VBEM converges after 5995 iteractions
+ - CBX2
+  VBEM converges after 1085 iteractions
+ - AMH
+  VBEM converges after 3849 iteractions
+ - NR0B1
+time="2026-04-28T10:47:23-07:00" level=error msg="error waiting for container: unexpected EOF"

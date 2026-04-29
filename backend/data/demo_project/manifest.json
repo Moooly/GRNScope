@@ -1,0 +1,54 @@
+{
+  "project_id": "demo",
+  "name": "Demo Project",
+  "description": "This demo uses all GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary. The original demo input files are also available for download on the project detail page for testing.",
+  "is_demo": true,
+  "read_only": true,
+  "dataset": {
+    "name": "BEELINE GSD example",
+    "expression_file": "ExpressionData.csv",
+    "pseudotime_file": "PseudoTime.csv",
+    "ground_truth_file": null,
+    "gene_count": 19,
+    "cell_count": 2000,
+    "dimensions": {
+      "rows": 19,
+      "columns": 2000,
+      "rows_label": "genes",
+      "columns_label": "cells"
+    },
+    "has_pseudotime": true,
+    "has_ground_truth": false
+  },
+  "inputs": [
+    {
+      "name": "ExpressionData.csv",
+      "path": "inputs/ExpressionData.csv",
+      "description": "Demo expression matrix with genes as rows and cells as columns."
+    },
+    {
+      "name": "PseudoTime.csv",
+      "path": "inputs/PseudoTime.csv",
+      "description": "Demo pseudotime file used by pseudotime-based algorithms."
+    }
+  ],
+  "algorithms": [
+    "GENIE3",
+    "GRISLI",
+    "GRNBOOST2",
+    "GRNVBEM",
+    "LEAP",
+    "PEARSON",
+    "PIDC",
+    "PPCOR",
+    "SCODE",
+    "SCRIBE",
+    "SCSGL",
+    "SINCERITIES",
+    "SINGE"
+  ],
+  "result_layout": {
+    "base_dir": "results",
+    "ranked_edges_filename": "rankedEdges.csv"
+  }
+}

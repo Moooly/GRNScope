@@ -1,15 +1,134 @@
 from __future__ import annotations
 
+import csv
+
 from fastapi import APIRouter, HTTPException
 
 from ..config import PROJECTS_ROOT
 from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
+from ..services.demo_service import (
+    get_demo_algorithm_ids,
+    get_demo_project_root,
+    get_demo_ranked_edges_path,
+    is_demo_project,
+)
+
 
 router = APIRouter()
 
+def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
+    ranked_edges_path = get_demo_ranked_edges_path(algorithm_id)
+
+    with ranked_edges_path.open("r", encoding="utf-8", newline="") as csv_file:
+        sample = csv_file.read(4096)
+        csv_file.seek(0)
+
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+        except csv.Error:
+            dialect = csv.excel_tab if "\t" in sample and sample.count("\t") >= sample.count(",") else csv.excel
+
+        reader = csv.DictReader(csv_file, dialect=dialect)
+        fieldnames = reader.fieldnames or []
+
+        source_field = next(
+            (
+                field
+                for field in fieldnames
+                if field.lower().strip() in {"gene1", "source", "source gene", "source_gene"}
+            ),
+            fieldnames[0] if len(fieldnames) >= 1 else None,
+        )
+        target_field = next(
+            (
+                field
+                for field in fieldnames
+                if field.lower().strip() in {"gene2", "target", "target gene", "target_gene"}
+            ),
+            fieldnames[1] if len(fieldnames) >= 2 else None,
+        )
+        weight_field = next(
+            (
+                field
+                for field in fieldnames
+                if field.lower().strip() in {"edgeweight", "edge weight", "weight", "score", "confidence"}
+            ),
+            fieldnames[2] if len(fieldnames) >= 3 else None,
+        )
+
+        if not source_field or not target_field:
+            raise ValueError(f"Demo ranked edges CSV has invalid columns: {fieldnames}")
+
+        edges = []
+        for rank, row in enumerate(reader, start=1):
+            source = str(row.get(source_field, "")).strip()
+            target = str(row.get(target_field, "")).strip()
+
+            if not source or not target:
+                continue
+
+            raw_weight = row.get(weight_field, "") if weight_field else ""
+            try:
+                weight = float(raw_weight)
+            except (TypeError, ValueError):
+                weight = 0.0
+
+            edges.append(
+                {
+                    "rank": rank,
+                    "source": source,
+                    "target": target,
+                    "weight": weight,
+                    "score": weight,
+                    "edge_weight": weight,
+                    "algorithm_id": algorithm_id.upper(),
+                }
+            )
+
+    return {
+        "algorithm_id": algorithm_id.upper(),
+        "edge_count": len(edges),
+        "edges": edges,
+        "top_edges": edges,
+        "ranked_edges": edges,
+        "source_file": str(ranked_edges_path),
+    }
+
 @router.get("/api/projects/{project_id}/results")
 async def get_project_results(project_id: str):
+    if is_demo_project(project_id):
+        results = []
+        for algorithm_id in get_demo_algorithm_ids():
+            try:
+                ranked_edges_path = get_demo_ranked_edges_path(algorithm_id)
+                status = "Completed"
+                result_path = str(ranked_edges_path)
+            except FileNotFoundError:
+                status = "Failed"
+                result_path = None
+
+            results.append(
+                {
+                    "algorithm_id": algorithm_id,
+                    "status": status,
+                    "result_path": result_path,
+                    "completed_at": "demo",
+                    "elapsed_seconds": 0,
+                    "progress_percent": 100 if status == "Completed" else 0,
+                    "progress_label": status,
+                }
+            )
+
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "job_id": "demo",
+            "results": results,
+            "is_demo": True,
+            "read_only": True,
+        }
+
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
@@ -52,6 +171,22 @@ async def get_project_results(project_id: str):
 
 @router.get("/api/projects/{project_id}/results/{algorithm_id}")
 async def get_algorithm_result(project_id: str, algorithm_id: str):
+    if is_demo_project(project_id):
+        try:
+            result = read_demo_algorithm_result_from_csv(algorithm_id)
+            return {
+                "ok": True,
+                "project_id": project_id,
+                "algorithm_id": algorithm_id,
+                "result": result,
+                "is_demo": True,
+                "read_only": True,
+            }
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():

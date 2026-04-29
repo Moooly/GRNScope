@@ -24,14 +24,41 @@ export type ProjectManifest = {
   expression_filename?: string | null;
   pseudotime_path?: string | null;
   pseudotime_filename?: string | null;
+  selected_algorithms?: string[];
+  ensemble_enabled?: boolean | string;
+  latest_job_id?: string | null;
+  created_at?: string | null;
+  created_at_display?: string | null;
+  is_demo?: boolean;
+  read_only?: boolean;
 };
 
 export type MetadataManifest = {
+  project_id?: string;
+  project_name?: string;
+  project_description?: string;
   expression_filename?: string | null;
   pseudotime_filename?: string | null;
   gene_count?: number | null;
   cell_count?: number | null;
+  gene_names?: string[];
+  cell_names?: string[];
+  known_tf_gene_names?: string[];
   has_pseudotime?: boolean | null;
+  has_ground_truth?: boolean | null;
+  selected_algorithms?: string[];
+  ensemble_enabled?: boolean | string;
+  is_demo?: boolean;
+  read_only?: boolean;
+  input_files?: Array<{
+    name: string;
+    path: string;
+    description?: string;
+  }>;
+  job?: {
+    job_id?: string;
+    overall_status?: string;
+  };
   preprocessing?: {
     top_variable_genes?: string;
     include_all_tfs?: boolean | string;
@@ -42,18 +69,28 @@ export type MetadataManifest = {
 
 export type AlgorithmStoredResult = {
   algorithm_id: string;
-  generated_at: string;
-  elapsed_seconds: number;
+  generated_at?: string;
+  elapsed_seconds?: number;
   network_summary?: {
     edge_count?: number;
     node_count?: number;
   };
-  top_edges?: Array<{
-    source: string;
-    target: string;
-    score: number;
-    normalized_score?: number;
-  }>;
+  edge_count?: number;
+  edges?: AlgorithmResultEdge[];
+  ranked_edges?: AlgorithmResultEdge[];
+  top_edges?: AlgorithmResultEdge[];
+  source_file?: string;
+};
+
+export type AlgorithmResultEdge = {
+  rank?: number;
+  source: string;
+  target: string;
+  score: number;
+  normalized_score?: number;
+  weight?: number;
+  edge_weight?: number;
+  algorithm_id?: string;
 };
 
 export type AlgorithmCatalogItem = {

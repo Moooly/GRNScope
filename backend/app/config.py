@@ -10,6 +10,10 @@ APP_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_ROOT.parent
 PROJECTS_ROOT = PROJECT_ROOT / "projects"
 TEMP_UPLOAD_ROOT = APP_ROOT / "temp_uploads"
+DEMO_PROJECT_ROOT = PROJECT_ROOT / "data" / "demo_project"
+DEMO_PROJECT_MANIFEST = DEMO_PROJECT_ROOT / "manifest.json"
+DEMO_PROJECT_INPUTS_ROOT = DEMO_PROJECT_ROOT / "inputs"
+DEMO_PROJECT_RESULTS_ROOT = DEMO_PROJECT_ROOT / "results"
 
 BEELINE_ROOT_CANDIDATES = [
     Path(os.environ.get("BEELINE_ROOT", "")).expanduser() if os.environ.get("BEELINE_ROOT") else None,

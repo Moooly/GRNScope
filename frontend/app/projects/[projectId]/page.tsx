@@ -88,7 +88,8 @@ const POLL_INTERVAL_MS = 5000;
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
-  const projectId = Array.isArray(params?.projectId) ? params.projectId[0] : params?.projectId;
+  const routeProjectId = Array.isArray(params?.projectId) ? params.projectId[0] : params?.projectId;
+  const projectId = routeProjectId === "sample" ? "demo" : routeProjectId;
 
   const [project, setProject] = useState<ProjectManifest | null>(null);
   const [metadata, setMetadata] = useState<MetadataManifest | null>(null);
@@ -113,6 +114,8 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState("");
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
+  const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
+  const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [groundTruthEdges, setGroundTruthEdges] = useState<Set<string>>(new Set());
   const [groundTruthFilename, setGroundTruthFilename] = useState<string>("");
   const [groundTruthError, setGroundTruthError] = useState("");
@@ -120,6 +123,32 @@ export default function ProjectDetailPage() {
 
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
   const networkGraphRef = useRef<Core | null>(null);
+  const hasAppliedDemoDefaultsRef = useRef(false);
+
+  const demoProjectFlag = project as (ProjectManifest & { is_demo?: boolean; read_only?: boolean }) | null;
+  const demoMetadataFlag = metadata as (MetadataManifest & { is_demo?: boolean; read_only?: boolean }) | null;
+  const isDemoProject = projectId === "demo" || routeProjectId === "sample" || demoProjectFlag?.is_demo === true || demoMetadataFlag?.is_demo === true;
+  const isReadOnlyProject = isDemoProject || demoProjectFlag?.read_only === true || demoMetadataFlag?.read_only === true;
+
+  const expressionMatrixLabel =
+    metadata?.gene_count && metadata?.cell_count
+      ? `${metadata.gene_count.toLocaleString()} genes × ${metadata.cell_count.toLocaleString()} cells`
+      : isDemoProject
+        ? "19 genes × 2,000 cells"
+        : "Pending";
+  const topVariableGenesLabel = isDemoProject
+    ? "All 19 genes retained"
+    : metadata?.preprocessing?.top_variable_genes || "-";
+  const tfOverrideLabel = isDemoProject
+    ? "Enabled"
+    : boolText(metadata?.preprocessing?.include_all_tfs);
+  const normalizationLabel = isDemoProject
+    ? "Enabled"
+    : boolText(metadata?.preprocessing?.normalize_enabled);
+  const logTransformLabel = isDemoProject
+    ? "Enabled"
+    : boolText(metadata?.preprocessing?.log_transform_enabled);
+
 
   const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
 
@@ -133,12 +162,18 @@ export default function ProjectDetailPage() {
     [completedTasks]
   );
 
+
   // When new algorithms finish, merge them into the user's current selection
-  // instead of wiping it. The first time any algorithm completes, default to
-  // having everything selected. After that, each newly-completed algorithm is
-  // added to whatever the user currently has selected.
+  // instead of wiping it. The demo project is read-only and already completed,
+  // so always select all completed demo algorithms by default.
   const previousCompletedIdsRef = useRef<string[]>([]);
   useEffect(() => {
+    if (projectId === "demo" || routeProjectId === "sample") {
+      setSelectedAlgorithmIds(completedAlgorithmIds);
+      previousCompletedIdsRef.current = completedAlgorithmIds;
+      return;
+    }
+
     const previous = previousCompletedIdsRef.current;
     const newlyCompleted = completedAlgorithmIds.filter(
       (id) => !previous.includes(id)
@@ -166,6 +201,16 @@ export default function ProjectDetailPage() {
   const activeAlgorithmIds = useMemo(() => {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
   }, [completedAlgorithmIds, selectedAlgorithmIds]);
+
+  useEffect(() => {
+    if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
+    if (activeAlgorithmIds.length < 7) return;
+
+    setConfidenceThreshold(0.85);
+    setConsensusThreshold(7);
+    setHasTouchedConsensusThreshold(true);
+    hasAppliedDemoDefaultsRef.current = true;
+  }, [isDemoProject, activeAlgorithmIds.length]);
 
   const algorithmMetaMap = useMemo(
     () => new Map(algorithmCatalog.map((item) => [item.id, item])),
@@ -233,24 +278,24 @@ export default function ProjectDetailPage() {
 
       next[algorithmId] = uniqueEdges
         .map((edge, index) => {
-          // Fail closed: if the backend didn't provide a normalized score, treat
-          // it as the lowest possible confidence rather than the highest. That
-          // way an unscored edge is filtered out by the confidence slider unless
-          // the user lowers the threshold to 0 explicitly.
           const rawNormalized = edge.normalized_score;
           const hasNormalized =
             rawNormalized !== undefined &&
             rawNormalized !== null &&
             Number.isFinite(Number(rawNormalized));
+          const rawScore = Number(edge.score ?? edge.weight ?? edge.edge_weight ?? 0);
+          const hasRawScore = Number.isFinite(rawScore);
           const normalizedScore = hasNormalized
             ? clamp(Number(rawNormalized), 0, 1)
-            : 0;
+            : hasRawScore
+              ? clamp(Math.abs(rawScore), 0, 1)
+              : 0;
 
           return {
             key: `${algorithmId}-${edge.source}-${edge.target}-${index}`,
             source: edge.source,
             target: edge.target,
-            score: edge.score,
+            score: hasRawScore ? rawScore : 0,
             count: 1,
             rank: index + 1,
             supportingAlgorithms: [algorithmId],
@@ -576,6 +621,7 @@ export default function ProjectDetailPage() {
     }, 280);
   };
 
+
   const confirmDownload = () => {
     if (!pendingDownload) return;
 
@@ -727,20 +773,24 @@ export default function ProjectDetailPage() {
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   }, [activeAlgorithmIds, projectId, sortedTableRows, tableSearch]);
 
-  useEffect(() => {
-    setVisibleAlgorithmColumns(activeAlgorithmIds);
+useEffect(() => {
+  setVisibleAlgorithmColumns(activeAlgorithmIds);
 
-    const maxConsensusValue = Math.max(activeAlgorithmIds.length, 1);
-    const defaultConsensusValue = Math.max(1, Math.floor(maxConsensusValue / 2));
+  const maxConsensusValue = Math.max(activeAlgorithmIds.length, 1);
+  const defaultConsensusValue = Math.max(1, Math.floor(maxConsensusValue / 2));
 
-    setConsensusThreshold((current) => {
-      if (!hasTouchedConsensusThreshold) {
-        return defaultConsensusValue;
-      }
-
+  setConsensusThreshold((current) => {
+    if (isDemoProject && hasAppliedDemoDefaultsRef.current) {
       return clamp(current, 1, maxConsensusValue);
-    });
-  }, [activeAlgorithmIds, hasTouchedConsensusThreshold]);
+    }
+
+    if (!hasTouchedConsensusThreshold) {
+      return defaultConsensusValue;
+    }
+
+    return clamp(current, 1, maxConsensusValue);
+  });
+}, [activeAlgorithmIds, hasTouchedConsensusThreshold, isDemoProject]);
 
   useEffect(() => {
     if (!isColumnMenuOpen) return;
@@ -824,6 +874,12 @@ export default function ProjectDetailPage() {
           if (!cancelled) {
             setProject(null);
             setLatestJob(null);
+
+            if (isDemoProject) {
+              setError(
+                "Demo project data could not be loaded from the backend. Please make sure the backend is running and /api/projects/demo is available."
+              );
+            }
           }
           return;
         }
@@ -883,8 +939,15 @@ export default function ProjectDetailPage() {
         if (!cancelled) {
           const next: Record<string, AlgorithmStoredResult> = {};
 
-          payloads.forEach((result) => {
-            if (result?.algorithm_id) next[result.algorithm_id] = result;
+          payloads.forEach((result, index) => {
+            const fallbackAlgorithmId = completedRows[index]?.algorithm_id;
+            const algorithmId = result?.algorithm_id || fallbackAlgorithmId;
+            if (result && algorithmId) {
+              next[algorithmId] = {
+                ...result,
+                algorithm_id: algorithmId,
+              };
+            }
           });
 
           setAlgorithmResults(next);
@@ -951,8 +1014,15 @@ export default function ProjectDetailPage() {
         if (!cancelled) {
           const next: Record<string, AlgorithmStoredResult> = {};
 
-          payloads.forEach((result) => {
-            if (result?.algorithm_id) next[result.algorithm_id] = result;
+          payloads.forEach((result, index) => {
+            const fallbackAlgorithmId = completedRows[index]?.algorithm_id;
+            const algorithmId = result?.algorithm_id || fallbackAlgorithmId;
+            if (result && algorithmId) {
+              next[algorithmId] = {
+                ...result,
+                algorithm_id: algorithmId,
+              };
+            }
           });
 
           setAlgorithmResults(next);
@@ -963,7 +1033,7 @@ export default function ProjectDetailPage() {
     };
 
     const interval = window.setInterval(() => {
-      if (hasActiveTasks) {
+      if (hasActiveTasks && projectId !== "demo") {
         poll();
       }
     }, POLL_INTERVAL_MS);
@@ -1001,17 +1071,20 @@ export default function ProjectDetailPage() {
 
         <div className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10">
           <ProjectHeader
-            projectName={project?.project_name?.trim() || "Untitled project"}
-            projectDescription={project?.project_description?.trim() || "No description"}
+            projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
+            projectDescription={
+              project?.project_description?.trim() ||
+              (isDemoProject
+                ? "Explore a precomputed example gene regulatory network built from BEELINE-compatible sample data."
+                : "No description")
+            }
           />
+
 
           <div className="group mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-950">Algorithms used</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Scroll horizontally to view all selected algorithms. The status marker in the top-right corner updates for each algorithm independently.
-                </p>
               </div>
             </div>
 
@@ -1158,123 +1231,82 @@ export default function ProjectDetailPage() {
           </div>
 
           <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-bold text-slate-950">Dataset and preprocessing</h2>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-slate-950">Dataset and preprocessing</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsDatasetHelpOpen(true)}
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                    aria-label="Open dataset and preprocessing guide"
+                    title="Open dataset and preprocessing guide"
+                  >
+                    ?
+                  </button>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   if (!projectId) return;
-
-                  const selectedView =
-                    activeAlgorithmIds.length >= 2
-                      ? "consensus"
-                      : activeAlgorithmIds[0] ?? "consensus";
-
-                  const query = new URLSearchParams({
-                    selected_view: selectedView,
-                    confidence_threshold: String(confidenceThreshold),
-                    consensus_threshold: String(consensusThreshold),
-                    selected_algorithms: activeAlgorithmIds.join(","),
-                  });
-
-                  openDownloadModal(
-                    "Analysis metadata",
-                    `${API_BASE}/projects/${projectId}/download/metadata?${query.toString()}`,
-                    `${projectId ?? "project"}-analysis-metadata.json`
-                  );
+                  setIsFileDownloadMenuOpen(true);
                 }}
                 className={`rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] ${
                   projectId ? "" : "pointer-events-none opacity-60"
                 }`}
               >
-                Export metadata
+                Download files
               </button>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  Expression matrix
-                </p>
-                <p className="mt-3 text-base font-bold text-slate-950">
-                  {metadata?.gene_count && metadata?.cell_count
-                    ? `${metadata.gene_count.toLocaleString()} genes × ${metadata.cell_count.toLocaleString()} cells`
-                    : "Pending"}
-                </p>
+            <div className="mt-6 overflow-x-auto pb-1">
+              <div className="flex min-w-max gap-3">
+                <div className="w-[18rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Matrix size
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-slate-950">
+                    {expressionMatrixLabel}
+                  </p>
+                </div>
+
+                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Gene filtering
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-[#1b75a6]">
+                    {topVariableGenesLabel}
+                  </p>
+                </div>
+
+                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    TF override
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-[#178a62]">
+                    {tfOverrideLabel}
+                  </p>
+                </div>
+
+                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Normalization
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-[#178a62]">
+                    {normalizationLabel}
+                  </p>
+                </div>
+
+                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                  <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    log₂(x + 1)
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-[#178a62]">
+                    {logTransformLabel}
+                  </p>
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!projectId || !metadata?.has_pseudotime) return;
-
-                  openDownloadModal(
-                    "Pseudotime file",
-                    `${API_BASE}/projects/${projectId}/download/pseudotime`,
-                    metadata?.pseudotime_filename || project?.pseudotime_filename || "pseudotime.csv"
-                  );
-                }}
-                className={`group relative overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5 text-left transition hover:border-[#1b75a6]/25 hover:bg-white ${
-                  projectId && metadata?.has_pseudotime
-                    ? "cursor-pointer"
-                    : "pointer-events-none opacity-60"
-                }`}
-              >
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  Pseudotime file
-                </p>
-                <p className="mt-3 line-clamp-2 text-base font-bold text-slate-950">
-                  {metadata?.pseudotime_filename || project?.pseudotime_filename || "Not provided"}
-                </p>
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/85 opacity-0 transition-opacity group-hover:opacity-100">
-                  <span className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2 text-sm font-bold text-[#1b75a6]">
-                    Download pseudotime
-                  </span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!projectId) return;
-
-                  openDownloadModal(
-                    "Dataset file",
-                    `${API_BASE}/projects/${projectId}/download/expression`,
-                    metadata?.expression_filename || project?.expression_filename || "dataset.csv"
-                  );
-                }}
-                className={`group relative overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5 text-left transition hover:border-[#1b75a6]/25 hover:bg-white ${
-                  projectId ? "cursor-pointer" : "pointer-events-none opacity-60"
-                }`}
-              >
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  Dataset file
-                </p>
-                <p className="mt-3 line-clamp-2 text-base font-bold text-slate-950">
-                  {metadata?.expression_filename || project?.expression_filename || "Not available"}
-                </p>
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/85 opacity-0 transition-opacity group-hover:opacity-100">
-                  <span className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2 text-sm font-bold text-[#1b75a6]">
-                    Download dataset
-                  </span>
-                </div>
-              </button>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-4">
-              <span className="inline-flex rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-5 py-3 text-sm font-bold text-[#1b75a6]">
-                Top variable genes retained: {metadata?.preprocessing?.top_variable_genes || "-"}
-              </span>
-              <span className="inline-flex rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-5 py-3 text-sm font-bold text-[#1b75a6]">
-                Transcription factor override: {boolText(metadata?.preprocessing?.include_all_tfs).toLowerCase()}
-              </span>
-              <span className="inline-flex rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-5 py-3 text-sm font-bold text-[#1b75a6]">
-                Library-size normalization: {boolText(metadata?.preprocessing?.normalize_enabled).toLowerCase()}
-              </span>
-              <span className="inline-flex rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-5 py-3 text-sm font-bold text-[#1b75a6]">
-                log₂(x + 1) transformation: {boolText(metadata?.preprocessing?.log_transform_enabled).toLowerCase()}
-              </span>
             </div>
           </div>
 
@@ -1282,9 +1314,6 @@ export default function ProjectDetailPage() {
             <div className="flex flex-col gap-6">
               <div>
                 <h2 className="text-xl font-bold text-slate-950">Results hub</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Use the compact toolbar below to update the overlap plot, network visualization, and edge table together.
-                </p>
               </div>
 
               <div
@@ -1385,6 +1414,175 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
+          {isDatasetHelpOpen && (
+            <div
+              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
+              onClick={() => setIsDatasetHelpOpen(false)}
+            >
+              <div
+                className="max-h-[calc(100vh-5rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
+                      Dataset and preprocessing guide
+                    </p>
+                    <h3 className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
+                      What do these settings mean?
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      These values summarize the input matrix and the preprocessing steps applied before running the GRN inference algorithms.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+                    <h4 className="text-base font-bold text-slate-950">Matrix size</h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Shows the shape of the expression matrix. In this project, rows are genes and columns are cells.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+                    <h4 className="text-base font-bold text-slate-950">Gene filtering</h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Controls how many highly variable genes are retained before inference. Keeping all genes means no top-variable-gene reduction was applied.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+                    <h4 className="text-base font-bold text-slate-950">TF override</h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Keeps known transcription factors in the dataset even if they would otherwise be removed during filtering.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+                    <h4 className="text-base font-bold text-slate-950">Normalization</h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Adjusts library-size differences across cells so expression values are more comparable.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+                    <h4 className="text-base font-bold text-slate-950">log₂(x + 1) transformation</h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Compresses large expression values and reduces scale effects before algorithms are run.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-[1.5rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-5">
+                  <p className="text-sm leading-6 text-slate-700">
+                    These settings describe the data preparation steps used before the algorithm results are generated.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          {isFileDownloadMenuOpen && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay">
+              <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
+                      Project downloads
+                    </p>
+                    <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
+                      Choose a file to download
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      Download the input files or the current analysis metadata.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsFileDownloadMenuOpen(false)}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                    aria-label="Close download menu"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="mt-6 grid gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!projectId) return;
+                      setIsFileDownloadMenuOpen(false);
+                      openDownloadModal(
+                        "Expression matrix",
+                        `${API_BASE}/projects/${projectId}/download/expression`,
+                        metadata?.expression_filename || project?.expression_filename || "ExpressionData.csv"
+                      );
+                    }}
+                    className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+                  >
+                    <p className="text-sm font-bold text-slate-950">Expression matrix</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {metadata?.expression_filename || project?.expression_filename || "ExpressionData.csv"}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!projectId || !metadata?.has_pseudotime) return;
+                      setIsFileDownloadMenuOpen(false);
+                      openDownloadModal(
+                        "Pseudotime file",
+                        `${API_BASE}/projects/${projectId}/download/pseudotime`,
+                        metadata?.pseudotime_filename || project?.pseudotime_filename || "PseudoTime.csv"
+                      );
+                    }}
+                    className={`rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] ${
+                      metadata?.has_pseudotime ? "" : "pointer-events-none opacity-50"
+                    }`}
+                  >
+                    <p className="text-sm font-bold text-slate-950">Pseudotime file</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {metadata?.pseudotime_filename || project?.pseudotime_filename || "Not provided"}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!projectId) return;
+
+                      const selectedView =
+                        activeAlgorithmIds.length >= 2
+                          ? "consensus"
+                          : activeAlgorithmIds[0] ?? "consensus";
+
+                      const query = new URLSearchParams({
+                        selected_view: selectedView,
+                        confidence_threshold: String(confidenceThreshold),
+                        consensus_threshold: String(consensusThreshold),
+                        selected_algorithms: activeAlgorithmIds.join(","),
+                      });
+
+                      setIsFileDownloadMenuOpen(false);
+                      openDownloadModal(
+                        "Analysis metadata",
+                        `${API_BASE}/projects/${projectId}/download/metadata?${query.toString()}`,
+                        `${projectId ?? "project"}-analysis-metadata.json`
+                      );
+                    }}
+                    className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+                  >
+                    <p className="text-sm font-bold text-slate-950">Analysis metadata</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      JSON summary of dataset, preprocessing, algorithms, and current export settings.
+                    </p>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {pendingDownload && (
             <div
               className={`fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm ${
@@ -1403,7 +1601,9 @@ export default function ProjectDetailPage() {
                   Download {pendingDownload.label}?
                 </h3>
                 <p className="mt-4 text-sm leading-6 text-slate-600">
-                  This will download the saved file from the project record in the backend.
+                  {isReadOnlyProject
+                    ? "This will download a file from the read-only demo project."
+                    : "This will download the saved file from the project record in the backend."}
                 </p>
                 <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
                   <p className="break-words text-sm font-bold text-slate-950">{pendingDownload.filename}</p>

@@ -21,6 +21,7 @@ from ..schemas import (
     CreateProjectResponse,
 )
 from ..services.job_service import launch_independent_algorithm_tasks
+from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
 
 router = APIRouter()
 
@@ -185,6 +186,41 @@ async def create_project_from_temp(
 async def list_projects():
     try:
         project_items = []
+        try:
+            demo_project = get_demo_project()
+            project_items.append(
+                {
+                    "id": demo_project["id"],
+                    "name": demo_project["name"],
+                    "description": demo_project["description"],
+                    "createdAt": "Demo",
+                    "datasetCount": demo_project.get("dataset_count", 1),
+                    "jobCount": demo_project.get("job_count", 1),
+                    "latestJob": {
+                        "job_id": "demo",
+                        "project_id": "demo",
+                        "overall_status": "Completed",
+                        "tasks": [
+                            {
+                                "algorithm_id": algorithm_id,
+                                "status": "Completed",
+                                "elapsed_seconds": 0,
+                                "error_message": None,
+                                "result_path": None,
+                                "completed_at": "demo",
+                                "progress_percent": 100,
+                                "progress_label": "Completed",
+                            }
+                            for algorithm_id in demo_project.get("algorithms", [])
+                        ],
+                    },
+                    "isDemo": True,
+                    "readOnly": True,
+                    "created_at_sort": float("inf"),
+                }
+            )
+        except Exception:
+            pass
 
         for project_dir in list_project_directories():
             try:
@@ -236,6 +272,42 @@ async def list_projects():
 
 @router.get("/api/projects/{project_id}")
 async def get_project(project_id: str):
+    if is_demo_project(project_id):
+        demo_project = get_demo_project()
+        return {
+            "ok": True,
+            "project": {
+                "project_id": demo_project["id"],
+                "project_name": demo_project["name"],
+                "project_description": demo_project["description"],
+                "created_at": "demo",
+                "created_at_display": "Demo",
+                "selected_algorithms": demo_project.get("algorithms", []),
+                "ensemble_enabled": True,
+                "latest_job_id": "demo",
+                "is_demo": True,
+                "read_only": True,
+            },
+            "latest_job": {
+                "job_id": "demo",
+                "project_id": "demo",
+                "overall_status": "Completed",
+                "ensemble_enabled": True,
+                "tasks": [
+                    {
+                        "algorithm_id": algorithm_id,
+                        "status": "Completed",
+                        "elapsed_seconds": 0,
+                        "error_message": None,
+                        "result_path": None,
+                        "completed_at": "demo",
+                        "progress_percent": 100,
+                        "progress_label": "Completed",
+                    }
+                    for algorithm_id in demo_project.get("algorithms", [])
+                ],
+            },
+        }
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
@@ -260,6 +332,42 @@ async def get_project(project_id: str):
 
 @router.get("/api/projects/{project_id}/metadata")
 async def get_project_metadata(project_id: str):
+    if is_demo_project(project_id):
+        manifest = load_demo_manifest()
+        dataset = manifest.get("dataset", {})
+        return {
+            "ok": True,
+            "project_id": "demo",
+            "metadata": {
+                "project_id": "demo",
+                "project_name": manifest.get("name", "Demo Project"),
+                "project_description": manifest.get("description", ""),
+                "expression_filename": dataset.get("expression_file", "ExpressionData.csv"),
+                "pseudotime_filename": dataset.get("pseudotime_file", "PseudoTime.csv"),
+                "gene_count": dataset.get("gene_count"),
+                "cell_count": dataset.get("cell_count"),
+                "gene_names": [],
+                "cell_names": [],
+                "known_tf_gene_names": load_known_tf_gene_names(),
+                "has_pseudotime": dataset.get("has_pseudotime", True),
+                "has_ground_truth": dataset.get("has_ground_truth", False),
+                "preprocessing": {
+                    "top_variable_genes": "All genes retained",
+                    "include_all_tfs": True,
+                    "normalize_enabled": True,
+                    "log_transform_enabled": True,
+                },
+                "selected_algorithms": manifest.get("algorithms", []),
+                "ensemble_enabled": True,
+                "is_demo": True,
+                "read_only": True,
+                "input_files": manifest.get("inputs", []),
+                "job": {
+                    "job_id": "demo",
+                    "overall_status": "Completed",
+                },
+            },
+        }
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
@@ -282,6 +390,8 @@ async def get_project_metadata(project_id: str):
     
 @router.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
+    if is_demo_project(project_id):
+        raise HTTPException(status_code=403, detail="Demo project is read-only.")
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():

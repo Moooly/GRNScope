@@ -12,12 +12,34 @@ from fastapi.responses import FileResponse, Response
 
 from ..algorithm_registry import get_algorithm_by_id
 from ..config import PROJECTS_ROOT
+from ..services.demo_service import (
+    get_demo_algorithm_ids,
+    get_demo_input_file_path,
+    get_demo_ranked_edges_path,
+    is_demo_project,
+    load_demo_manifest,
+)
 
 router = APIRouter()
 
 
 @router.get("/api/projects/{project_id}/download/expression")
 async def download_expression_file(project_id: str):
+    if is_demo_project(project_id):
+        try:
+            manifest = load_demo_manifest()
+            dataset = manifest.get("dataset", {})
+            expression_filename = dataset.get("expression_file", "ExpressionData.csv")
+            file_path = get_demo_input_file_path(expression_filename)
+            return FileResponse(
+                path=file_path,
+                filename=expression_filename,
+                media_type="text/csv",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
@@ -56,6 +78,21 @@ async def download_expression_file(project_id: str):
 
 @router.get("/api/projects/{project_id}/download/pseudotime")
 async def download_pseudotime_file(project_id: str):
+    if is_demo_project(project_id):
+        try:
+            manifest = load_demo_manifest()
+            dataset = manifest.get("dataset", {})
+            pseudotime_filename = dataset.get("pseudotime_file", "PseudoTime.csv")
+            file_path = get_demo_input_file_path(pseudotime_filename)
+            return FileResponse(
+                path=file_path,
+                filename=pseudotime_filename,
+                media_type="text/csv",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
@@ -94,6 +131,62 @@ async def download_pseudotime_file(project_id: str):
 
 @router.get("/api/projects/{project_id}/download/result/{algorithm_id}")
 async def download_algorithm_result_file(project_id: str, algorithm_id: str):
+    if is_demo_project(project_id):
+        try:
+            file_path = get_demo_ranked_edges_path(algorithm_id)
+            download_filename = f"{algorithm_id}-raw-ranked-edges.csv"
+
+            csv_text = file_path.read_text(encoding="utf-8")
+            input_buffer = StringIO(csv_text)
+
+            sample = csv_text[:4096]
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+            except csv.Error:
+                if "\t" in sample and sample.count("\t") >= sample.count(","):
+                    dialect = csv.excel_tab
+                else:
+                    dialect = csv.excel
+
+            reader = csv.reader(input_buffer, dialect=dialect)
+            rows = list(reader)
+
+            if not rows:
+                raise HTTPException(status_code=404, detail="Ranked edges CSV is empty.")
+
+            original_header = rows[0]
+            normalized_header = list(original_header)
+            if len(normalized_header) >= 1:
+                normalized_header[0] = "Source Gene"
+            if len(normalized_header) >= 2:
+                normalized_header[1] = "Target Gene"
+            data_rows = rows[1:]
+
+            output_buffer = StringIO()
+            writer = csv.writer(
+                output_buffer,
+                delimiter=",",
+                quotechar='"',
+                lineterminator="\n",
+            )
+            writer.writerow(["Rank", *normalized_header])
+
+            for rank, row in enumerate(data_rows, start=1):
+                writer.writerow([rank, *row])
+
+            return Response(
+                content=output_buffer.getvalue(),
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{download_filename}"'
+                },
+            )
+        except HTTPException:
+            raise
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
@@ -231,6 +324,75 @@ async def download_analysis_metadata_file(
     consensus_threshold: int = Query(0),
     selected_algorithms: str = Query(""),
 ):
+    if is_demo_project(project_id):
+        try:
+            manifest = load_demo_manifest()
+            dataset = manifest.get("dataset", {})
+            selected_algorithm_ids = [
+                item.strip() for item in selected_algorithms.split(",") if item.strip()
+            ]
+            algorithm_ids = selected_algorithm_ids or get_demo_algorithm_ids()
+
+            algorithms_summary = []
+            for algorithm_id in algorithm_ids:
+                try:
+                    algorithm_info = get_algorithm_by_id(str(algorithm_id))
+                    docker_image = algorithm_info.get("docker_image")
+                except KeyError:
+                    docker_image = None
+
+                docker_version = None
+                if isinstance(docker_image, str) and docker_image:
+                    docker_version = docker_image.rsplit(":", 1)[1] if ":" in docker_image else docker_image
+
+                algorithms_summary.append(
+                    {
+                        "algorithm_name": algorithm_id,
+                        "docker_version": docker_version,
+                    }
+                )
+
+            payload = {
+                "project_id": "demo",
+                "job_identifier": manifest.get("name", "Demo Project"),
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "job": {
+                    "job_id": "demo",
+                    "status": "Completed",
+                    "created_at": "demo",
+                    "completed_at": "demo",
+                },
+                "dataset": {
+                    "expression_filename": dataset.get("expression_file", "ExpressionData.csv"),
+                    "pseudotime_filename": dataset.get("pseudotime_file", "PseudoTime.csv"),
+                    "dimensions": dataset.get("dimensions"),
+                },
+                "preprocessing": {
+                    "top_variable_genes": "Demo",
+                    "include_all_tfs": True,
+                    "normalize_enabled": "Demo",
+                    "log_transform_enabled": "Demo",
+                },
+                "algorithms": algorithms_summary,
+                "current_export_settings": {
+                    "top_n": top_n,
+                    "consensus_threshold": consensus_threshold,
+                },
+                "is_demo": True,
+                "read_only": True,
+            }
+
+            download_filename = "demo-analysis-metadata.json"
+
+            return Response(
+                content=json.dumps(payload, indent=2),
+                media_type="application/json",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{download_filename}"'
+                },
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
