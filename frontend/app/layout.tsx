@@ -38,7 +38,7 @@ export default function RootLayout({
       return;
     }
 
-    if (pathname === "/projects/sample") {
+    if (pathname === "/projects/demo") {
       setActiveHeaderItem("sample");
       return;
     }
@@ -197,7 +197,7 @@ export default function RootLayout({
               </Link>
 
               <Link
-                href="/projects/sample"
+                href="/projects/demo"
                 onClick={() => setActiveHeaderItem("sample")}
                 className={navItemClass(isActive("sample"))}
               >
