@@ -32,7 +32,7 @@ export function getNetworkGraphStylesheet() {
       selector: 'node[isTF = 1]',
       style: {
         shape: "diamond",
-        "background-color": "#D55E00",
+        "background-color": "#334155",
       },
     },
     {
@@ -46,14 +46,14 @@ export function getNetworkGraphStylesheet() {
       selector: "edge",
       style: {
         width: 3.0,
-        "line-color": "mapData(visualScore, 0, 1, #cbd5e1, #0f5e8c)",
-        opacity: "mapData(visualScore, 0, 1, 0.38, 0.82)",
+        "line-color": "mapData(visualScore, 0, 1, #8aa8bd, #0f5e8c)",
+        opacity: "mapData(visualScore, 0, 1, 0.55, 0.82)",
         "curve-style": "bezier",
         "source-endpoint": "outside-to-node",
         "target-endpoint": "outside-to-node",
         "line-cap": "round",
         "target-arrow-shape": "triangle",
-        "target-arrow-color": "mapData(visualScore, 0, 1, #cbd5e1, #0f5e8c)",
+        "target-arrow-color": "mapData(visualScore, 0, 1, #8aa8bd, #0f5e8c)",
         "arrow-scale": 0.9,
         "overlay-opacity": 0,
         "z-index": 1,

@@ -23,6 +23,10 @@ export default function ReviewStep({
   datasetSummary,
   selectedAlgorithms,
 }: ReviewStepProps) {
+  const formatPreprocessingItem = (item: string) => {
+    return item.replace(/: enabled\b/gi, ": Enabled").replace(/: disabled\b/gi, ": Disabled");
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-[1.5rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
@@ -86,9 +90,9 @@ export default function ReviewStep({
             {datasetSummary.preprocessingSummary.map((item) => (
               <span
                 key={item}
-                className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2 text-sm font-bold text-[#1b75a6]"
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-950"
               >
-                {item}
+                {formatPreprocessingItem(item)}
               </span>
             ))}
           </div>

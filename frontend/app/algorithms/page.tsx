@@ -135,6 +135,7 @@ export default function AlgorithmsPage() {
   const [directedOnly, setDirectedOnly] = useState(false);
   const [signedOnly, setSignedOnly] = useState(false);
   const [selectedAlgorithmId, setSelectedAlgorithmId] = useState<string>("");
+  const [isAlgorithmGuideOpen, setIsAlgorithmGuideOpen] = useState(false);
   const [closingAlgorithmId, setClosingAlgorithmId] = useState<string | null>(null);
   const [isMethodologyMenuOpen, setIsMethodologyMenuOpen] = useState(false);
   const [isPropertiesMenuOpen, setIsPropertiesMenuOpen] = useState(false);
@@ -219,15 +220,8 @@ export default function AlgorithmsPage() {
       : null;
 
   const closeAlgorithmModal = () => {
-    if (!selectedAlgorithmId || closingAlgorithmId) {
-      return;
-    }
-
-    setClosingAlgorithmId(selectedAlgorithmId);
-    window.setTimeout(() => {
-      setSelectedAlgorithmId("");
-      setClosingAlgorithmId(null);
-    }, 480);
+    setSelectedAlgorithmId("");
+    setClosingAlgorithmId(null);
   };
 
   useEffect(() => {
@@ -291,12 +285,18 @@ export default function AlgorithmsPage() {
         <div className="space-y-4">
           <div className="flex flex-col gap-4 border-b border-[#213f54]/35 pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-950">All algorithms</h2>
-              {!isLoadingAlgorithms ? (
-                <p className="mt-1 text-sm text-slate-600">
-                  {`${filteredAlgorithms.length} algorithm${filteredAlgorithms.length === 1 ? "" : "s"} match the current filters.`}
-                </p>
-              ) : null}
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-slate-950">All algorithms</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsAlgorithmGuideOpen(true)}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                  aria-label="Open algorithms guide"
+                  title="Open algorithms guide"
+                >
+                  ?
+                </button>
+              </div>
             </div>
 
             <div className="relative flex shrink-0 items-center gap-3 self-start sm:self-auto">
@@ -481,7 +481,7 @@ export default function AlgorithmsPage() {
                     setClosingAlgorithmId(null);
                     setSelectedAlgorithmId(algorithm.id);
                   }}
-                  className="group flex min-h-[12.5rem] flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#1b75a6]/25 hover:shadow-xl hover:shadow-slate-200/70"
+                  className="group flex min-h-[11.25rem] flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#1b75a6]/25 hover:shadow-xl hover:shadow-slate-200/70"
                 >
                   <div className="flex flex-1 flex-col">
                     <div className="flex items-start justify-between gap-4">
@@ -489,29 +489,20 @@ export default function AlgorithmsPage() {
                         <h3 className="text-2xl font-bold tracking-tight text-slate-950">
                           {algorithm.name}
                         </h3>
-                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
-                          {algorithm.tagline}
-                        </p>
                       </div>
                       <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                         {algorithm.year}
                       </span>
                     </div>
 
-                    <div className="mt-auto pt-5">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <div>
-                          <div>
-                            <p className="text-[0.66rem] font-bold uppercase tracking-[0.18em] text-slate-400">
-                              Methodology
-                            </p>
-                            <p className="mt-1 text-sm font-bold text-[#1b75a6]">
-                              {algorithm.category}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-4 rounded-[1.1rem] border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="truncate text-sm font-bold text-slate-800">
+                        {algorithm.category}
+                      </p>
+                    </div>
+
+                    <div className="mt-auto pt-4">
+                      <div className="flex flex-wrap gap-2">
                         <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
                           {algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}
                         </span>
@@ -538,13 +529,68 @@ export default function AlgorithmsPage() {
       
       </section>
 
+      {isAlgorithmGuideOpen ? (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm"
+          onClick={() => setIsAlgorithmGuideOpen(false)}
+        >
+          <div
+            className="max-h-[70vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
+                Algorithms guide
+              </p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
+                What do these algorithm properties mean?
+              </h3>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                Each card summarizes one available GRN inference algorithm and the main properties that affect how the method should be understood.
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="text-sm font-bold text-slate-950">Methodology</h4>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Methodology describes the method family, such as random forest, regression, correlation, or information-theory based inference.
+                </p>
+              </div>
+
+              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="text-sm font-bold text-slate-950">Pseudotime property</h4>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Pseudotime means the algorithm uses cell ordering information. No pseudotime means the method only uses the expression matrix without cell-order information.
+                </p>
+              </div>
+
+              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="text-sm font-bold text-slate-950">Directed or undirected</h4>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Directed means the algorithm predicts a source gene and target gene direction. Undirected means the result mainly shows association without a clear regulatory direction.
+                </p>
+              </div>
+
+              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="text-sm font-bold text-slate-950">Signed or unsigned</h4>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Signed methods can indicate whether a relationship is activating or repressing. Unsigned methods only report the strength of the predicted relationship.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      ) : null}
+
       {selectedAlgorithm ? (
         <div
-          className={`${closingAlgorithmId ? "animate-modal-overlay-out" : "animate-modal-overlay"} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 pb-8 pt-28 backdrop-blur-sm sm:px-6 lg:pb-12 lg:pt-32`}
+          className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm sm:px-6 lg:py-14"
           onClick={closeAlgorithmModal}
         >
           <div
-            className={`${closingAlgorithmId ? "animate-modal-panel-out" : "animate-modal-panel"} mb-8 w-full max-w-3xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 lg:mb-12 lg:p-8`}
+            className="max-h-[calc(100vh-5rem)] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 animate-modal-panel lg:p-8"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
