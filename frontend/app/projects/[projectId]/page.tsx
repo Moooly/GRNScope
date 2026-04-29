@@ -116,6 +116,7 @@ export default function ProjectDetailPage() {
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
   const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
+  const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
   const [groundTruthEdges, setGroundTruthEdges] = useState<Set<string>>(new Set());
   const [groundTruthFilename, setGroundTruthFilename] = useState<string>("");
   const [groundTruthError, setGroundTruthError] = useState("");
@@ -1260,49 +1261,49 @@ useEffect(() => {
               </button>
             </div>
 
-            <div className="mt-6 overflow-x-auto pb-1">
-              <div className="flex min-w-max gap-3">
-                <div className="w-[18rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+            <div className="mt-6">
+              <div className="grid gap-3 xl:grid-cols-5">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
                   <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
                     Matrix size
                   </p>
-                  <p className="mt-2 text-sm font-bold text-slate-950">
+                  <p className="mt-2 text-sm font-bold text-slate-800">
                     {expressionMatrixLabel}
                   </p>
                 </div>
 
-                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
                   <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
                     Gene filtering
                   </p>
-                  <p className="mt-2 text-sm font-bold text-[#1b75a6]">
+                  <p className="mt-2 text-sm font-bold text-slate-800">
                     {topVariableGenesLabel}
                   </p>
                 </div>
 
-                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
                   <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
                     TF override
                   </p>
-                  <p className="mt-2 text-sm font-bold text-[#178a62]">
+                  <p className="mt-2 text-sm font-bold text-slate-800">
                     {tfOverrideLabel}
                   </p>
                 </div>
 
-                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
                   <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
                     Normalization
                   </p>
-                  <p className="mt-2 text-sm font-bold text-[#178a62]">
+                  <p className="mt-2 text-sm font-bold text-slate-800">
                     {normalizationLabel}
                   </p>
                 </div>
 
-                <div className="w-[15rem] shrink-0 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
+                <div className="rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4">
                   <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
                     log₂(x + 1)
                   </p>
-                  <p className="mt-2 text-sm font-bold text-[#178a62]">
+                  <p className="mt-2 text-sm font-bold text-slate-800">
                     {logTransformLabel}
                   </p>
                 </div>
@@ -1340,6 +1341,7 @@ useEffect(() => {
                     setConsensusThreshold(value);
                   }}
                   isConsensusView={activeAlgorithmIds.length >= 2}
+                  onOpenGuide={() => setIsResultsGuideOpen(true)}
                 />
               </div>
 
@@ -1414,13 +1416,62 @@ useEffect(() => {
             </div>
           </div>
 
+          {isResultsGuideOpen && (
+            <div
+              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
+              onClick={() => setIsResultsGuideOpen(false)}
+            >
+              <div
+                className="max-h-[calc(100vh-5rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
+                    Results settings guide
+                  </p>
+                  <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
+                    What do these controls mean?
+                  </h3>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-base font-bold text-slate-950">Algorithm selector</h4>
+                    <p className="mt-1 text-sm leading-5 text-slate-600">
+                      Choose which completed algorithms are included in the current result view. Selecting one algorithm shows that method's edges. Selecting two or more algorithms creates a consensus view based on the selected methods.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-base font-bold text-slate-950">Confidence filter</h4>
+                    <p className="mt-1 text-sm leading-5 text-slate-600">
+                      Controls the minimum normalized score required for an edge to appear. A higher value keeps only stronger predictions. A lower value shows more edges, including weaker predictions.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-base font-bold text-slate-950">Consensus threshold</h4>
+                    <p className="mt-1 text-sm leading-5 text-slate-600">
+                      Used when two or more algorithms are selected. It controls how many selected algorithms must support the same edge before that edge appears in the consensus network and table.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-[1.25rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-4">
+                  <p className="text-sm leading-5 text-slate-700">
+                    These controls update the overlap visualization, network view, and edge analysis table together.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {isDatasetHelpOpen && (
             <div
               className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
               onClick={() => setIsDatasetHelpOpen(false)}
             >
               <div
-                className="max-h-[calc(100vh-5rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
+                className="max-h-[70vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-4">
@@ -1428,54 +1479,54 @@ useEffect(() => {
                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
                       Dataset and preprocessing guide
                     </p>
-                    <h3 className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
+                    <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
                       What do these settings mean?
                     </h3>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      These values summarize the input matrix and the preprocessing steps applied before running the GRN inference algorithms.
+                    <p className="mt-2 text-xs leading-5 text-slate-600">
+                      These values summarize the input matrix and preprocessing steps used before running the GRN inference algorithms.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-6 space-y-4">
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-                    <h4 className="text-base font-bold text-slate-950">Matrix size</h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                <div className="mt-5 space-y-3">
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-bold text-slate-950">Matrix size</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
                       Shows the shape of the expression matrix. In this project, rows are genes and columns are cells.
                     </p>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-                    <h4 className="text-base font-bold text-slate-950">Gene filtering</h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-bold text-slate-950">Gene filtering</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
                       Controls how many highly variable genes are retained before inference. Keeping all genes means no top-variable-gene reduction was applied.
                     </p>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-                    <h4 className="text-base font-bold text-slate-950">TF override</h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-bold text-slate-950">TF override</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
                       Keeps known transcription factors in the dataset even if they would otherwise be removed during filtering.
                     </p>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-                    <h4 className="text-base font-bold text-slate-950">Normalization</h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-bold text-slate-950">Normalization</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
                       Adjusts library-size differences across cells so expression values are more comparable.
                     </p>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-                    <h4 className="text-base font-bold text-slate-950">log₂(x + 1) transformation</h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-bold text-slate-950">log₂(x + 1) transformation</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
                       Compresses large expression values and reduces scale effects before algorithms are run.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-6 rounded-[1.5rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-5">
-                  <p className="text-sm leading-6 text-slate-700">
+                <div className="mt-5 rounded-[1.25rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-4">
+                  <p className="text-xs leading-5 text-slate-700">
                     These settings describe the data preparation steps used before the algorithm results are generated.
                   </p>
                 </div>
@@ -1483,8 +1534,14 @@ useEffect(() => {
             </div>
           )}
           {isFileDownloadMenuOpen && (
-            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay">
-              <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel">
+            <div
+              className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
+              onClick={() => setIsFileDownloadMenuOpen(false)}
+            >
+              <div
+                className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
+                onClick={(event) => event.stopPropagation()}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
@@ -1497,14 +1554,6 @@ useEffect(() => {
                       Download the input files or the current analysis metadata.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsFileDownloadMenuOpen(false)}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                    aria-label="Close download menu"
-                  >
-                    ×
-                  </button>
                 </div>
 
                 <div className="mt-6 grid gap-3">
