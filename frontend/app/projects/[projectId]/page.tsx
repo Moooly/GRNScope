@@ -1091,7 +1091,7 @@ useEffect(() => {
 
             <div className="relative mt-5 overflow-hidden">
               <div className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="flex min-w-max gap-4 pr-32">
+                <div className="flex min-w-max gap-3 pr-32">
                   {(latestJob?.tasks ?? []).map((task) => {
                     const meta = algorithmMetaMap.get(task.algorithm_id);
                     const progressPercent = Math.max(
@@ -1106,22 +1106,20 @@ useEffect(() => {
                     return (
                       <div
                         key={task.algorithm_id}
-                        className="flex w-[22rem] shrink-0 flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm"
+                        className="flex w-[20rem] shrink-0 flex-col rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm"
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="flex items-center gap-3">
-                              <p className="truncate text-2xl font-bold tracking-tight text-slate-950">
-                                {meta?.name ?? task.algorithm_id}
-                              </p>
-                            </div>
-                            <p className="mt-2 line-clamp-2 min-h-[3rem] text-sm leading-6 text-slate-600">
-                              {meta?.description ?? "Selected GRN inference algorithm."}
+                            <p className="truncate text-xl font-bold tracking-tight text-slate-950">
+                              {meta?.name ?? task.algorithm_id}
+                            </p>
+                            <p className="mt-1 truncate text-sm font-medium text-slate-500">
+                              {meta?.category ?? "Algorithm"}
                             </p>
                           </div>
 
                           {task.status === "Completed" ? (
-                            <span className="inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-2 text-base font-bold text-[#178a62]">
+                            <span className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border border-[#20b779]/20 bg-[#e8f7f1] px-2 text-sm font-bold text-[#178a62]">
                               ✓
                             </span>
                           ) : task.status === "Failed" ? (
@@ -1135,7 +1133,7 @@ useEffect(() => {
                                     "This algorithm failed. The server did not return a detailed message.",
                                 })
                               }
-                              className="inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-2 text-base font-bold text-rose-600 transition hover:border-rose-300 hover:bg-rose-100"
+                              className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-2 text-sm font-bold text-rose-600 transition hover:border-rose-300 hover:bg-rose-100"
                               aria-label={`View error for ${task.algorithm_id}`}
                               title="View error"
                             >
@@ -1143,7 +1141,7 @@ useEffect(() => {
                             </button>
                           ) : task.status === "Running" ? (
                             <span
-                              className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center"
+                              className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center"
                               aria-label={`${progressPercent}% complete for ${task.algorithm_id}`}
                               title={`${progressPercent}% • ${progressLabel}`}
                               style={{
@@ -1152,52 +1150,38 @@ useEffect(() => {
                               }}
                             >
                               <span className="absolute inset-[2px] rounded-full bg-white" />
-                              <span className="relative text-[10px] font-bold text-[#1b75a6]">
+                              <span className="relative text-[9px] font-bold text-[#1b75a6]">
                                 {progressPercent}%
                               </span>
                             </span>
                           ) : task.status === "Queued" ? (
                             <span
-                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-amber-200 bg-amber-50"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-amber-200 bg-amber-50"
                               aria-label={`Queued ${task.algorithm_id}`}
                               title="Queued"
                             >
-                              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                              <span className="h-2 w-2 rounded-full bg-amber-500" />
                             </span>
                           ) : null}
                         </div>
 
-                        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5">
-                          <p className="text-[0.64rem] font-bold uppercase tracking-[0.16em] text-slate-400">
-                            Methodology
-                          </p>
-                          <p className="mt-1 text-sm font-bold leading-5 text-[#1b75a6]">
-                            {meta?.category ?? "Algorithm"}
-                          </p>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
-                            {meta?.requiresPseudotime ? "Pseudotime" : "No time"}
+                        <div className="mt-5 grid grid-cols-3 gap-1.5 text-center text-[11px] font-medium text-slate-600">
+                          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-1.5">
+                            {meta?.requiresPseudotime ? "Pseudotime" : "No pseudotime"}
                           </span>
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
+                          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-1.5">
                             {meta?.directed ? "Directed" : "Undirected"}
                           </span>
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
+                          <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-1.5">
                             {meta?.signed ? "Signed" : "Unsigned"}
                           </span>
-                          {(task.status === "Running" || task.status === "Queued") && (
-                            <span
-                              className={`rounded-full px-2.5 py-1 font-medium ${
-                                task.status === "Running"
-                                  ? "border border-sky-200 bg-sky-50 text-sky-700"
-                                  : "border border-amber-200 bg-amber-50 text-amber-700"
-                              }`}
-                            >
-                              {progressLabel}
-                            </span>
-                          )}
                         </div>
+
+                        {(task.status === "Running" || task.status === "Queued") && (
+                          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                            {progressLabel}
+                          </p>
+                        )}
 
                         {task.status === "Completed" && (
                           <button
@@ -1210,9 +1194,9 @@ useEffect(() => {
                                 `${task.algorithm_id}-raw-ranked-edges.csv`
                               );
                             }}
-                            className="mt-4 w-full rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                            className="mt-5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                           >
-                            Download raw result
+                            Download result
                           </button>
                         )}
                       </div>
