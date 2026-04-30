@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import NetworkGraph from "./NetworkGraph";
+import CircosNetworkGraph from "./CircosNetworkGraph";
 
 type NodeInfo = {
   id: string;
@@ -25,8 +26,8 @@ type AggregatedEdge = {
 
 type NetworkVisualizationSectionProps = {
   selectedView: string;
-  networkLayout: "force" | "hierarchical" | "concentric" | "circular";
-  setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular") => void;
+  networkLayout: "force" | "hierarchical" | "concentric" | "circular" | "circos";
+  setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular" | "circos") => void;
   onExportNetwork: (format: "png" | "svg") => void;
   onGraphReady?: (cy: import("cytoscape").Core | null) => void;
   networkNodes: NodeInfo[];
@@ -45,6 +46,7 @@ const layoutOptions = [
   { value: "hierarchical", label: "Hierarchical" },
   { value: "concentric", label: "Concentric" },
   { value: "circular", label: "Circular" },
+  { value: "circos", label: "Circos" },
 ] as const;
 
 export default function NetworkVisualizationSection({
@@ -117,15 +119,31 @@ export default function NetworkVisualizationSection({
       <div>
         <h3 className="text-lg font-bold text-slate-950">Network Visualization</h3>
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-            TF nodes = teal diamonds
-          </span>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-            Target genes = slate circles
-          </span>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-            Edge color ∝ support count
-          </span>
+          {networkLayout === "circos" ? (
+            <>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+                Arc length = total weighted degree
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+                Ribbon width = edge score
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+                Ribbon color = source gene
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+                TF nodes = diamonds
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+                Target genes = circles
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
+                Edge strength = normalized score
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -156,33 +174,56 @@ export default function NetworkVisualizationSection({
               <button
                 type="button"
                 onClick={() => {
+                  if (networkLayout === "circos") return;
                   setIsExportConfirmClosing(false);
                   setIsExportConfirmOpen(true);
                 }}
+                disabled={networkLayout === "circos"}
                 aria-label="Download current network"
-                title="Download current network"
-                className="rounded-xl px-4 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                title={networkLayout === "circos" ? "Download is not available for Circos view yet" : "Download current network"}
+                className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${
+                  networkLayout === "circos"
+                    ? "cursor-not-allowed text-slate-400"
+                    : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                }`}
               >
                 Download
               </button>
             </div>
           </div>
-          <NetworkGraph
-            nodes={graphNodes}
-            edges={graphEdges}
-            selectedGene={selectedGene}
-            selectedEdgeKey={selectedEdgeKey}
-            layout={networkLayout}
-            onSelectGene={(gene) => {
-              setSelectedGene(gene);
-              setSelectedEdgeKey(null);
-            }}
-            onSelectEdge={(edgeKey) => {
-              setSelectedEdgeKey(edgeKey);
-              setSelectedGene(null);
-            }}
-            onGraphReady={onGraphReady}
-          />
+          {networkLayout === "circos" ? (
+            <CircosNetworkGraph
+              nodes={networkNodes}
+              edges={filteredNetworkEdges}
+              selectedGene={selectedGene}
+              selectedEdgeKey={selectedEdgeKey}
+              onSelectGene={(gene) => {
+                setSelectedGene(gene);
+                setSelectedEdgeKey(null);
+              }}
+              onSelectEdge={(edgeKey) => {
+                setSelectedEdgeKey(edgeKey);
+                setSelectedGene(null);
+              }}
+            />
+          ) : (
+            <NetworkGraph
+              nodes={graphNodes}
+              edges={graphEdges}
+              selectedGene={selectedGene}
+              selectedEdgeKey={selectedEdgeKey}
+              layout={networkLayout}
+              onSelectGene={(gene) => {
+                setSelectedGene(gene);
+                setSelectedEdgeKey(null);
+              }}
+              onSelectEdge={(edgeKey) => {
+                setSelectedEdgeKey(edgeKey);
+                setSelectedGene(null);
+              }}
+              onGraphReady={onGraphReady}
+            />
+          )}
         </div>
 
         <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">

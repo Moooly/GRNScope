@@ -52,7 +52,7 @@ export default function ProjectDetailPage() {
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [geneSearch, setGeneSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
-  const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular">("force");
+  const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
