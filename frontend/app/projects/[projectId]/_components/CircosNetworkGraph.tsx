@@ -135,7 +135,7 @@ function getSlotRibbonPath(slot: EdgeRibbonSlot) {
   const targetStart = polarToCartesian(slot.targetStartAngle, ribbonRadius);
   const targetEnd = polarToCartesian(slot.targetEndAngle, ribbonRadius);
   const targetMidAngle = (slot.targetStartAngle + slot.targetEndAngle) / 2;
-  const targetTip = polarToCartesian(targetMidAngle, ribbonRadius + TRACK_WIDTH * 0.82);
+  const targetTip = polarToCartesian(targetMidAngle, ribbonRadius + TRACK_WIDTH * 0.35);
 
   const sourceMid = (slot.sourceStartAngle + slot.sourceEndAngle) / 2;
   const targetMid = targetMidAngle;
