@@ -14,24 +14,13 @@ type CircosNetworkGraphProps = {
 
 type PositionedGene = {
   id: string;
-  angle: number;
-  x: number;
-  y: number;
+  startAngle: number;
+  endAngle: number;
+  labelAngle: number;
   labelX: number;
   labelY: number;
   labelAnchor: "start" | "end";
   labelRotation: number;
-  arcStartAngle: number;
-  arcEndAngle: number;
-  color: string;
-};
-
-type ComponentGroup = {
-  id: string;
-  genes: string[];
-  startAngle: number;
-  endAngle: number;
-  labelAngle: number;
   color: string;
 };
 
@@ -47,11 +36,10 @@ const HEIGHT = 680;
 const CENTER_X = WIDTH / 2;
 const CENTER_Y = HEIGHT / 2 + 18;
 const RADIUS = 230;
-const LABEL_RADIUS = 280;
+const LABEL_RADIUS = 282;
 const MAX_CIRCOS_NODES = 30;
 const MAX_CIRCOS_EDGES = 80;
-const COMPONENT_GAP = Math.PI / 24;
-const GENE_GAP = Math.PI / 180;
+const GENE_SPACE = Math.PI / 60;
 const TRACK_WIDTH = 22;
 
 const RIBBON_COLORS = [
@@ -67,6 +55,14 @@ const RIBBON_COLORS = [
   "#e84b55",
   "#0f5e8c",
   "#5b55d6",
+  "#f5a623",
+  "#a12d5d",
+  "#6aa6d8",
+  "#6f63c9",
+  "#df6f90",
+  "#999999",
+  "#4db6ac",
+  "#d94b4b",
 ];
 
 function getNodeId(node: NodeInfo) {
@@ -117,9 +113,6 @@ function getRawEdgeScore(edge: AggregatedEdge) {
   return Number.isFinite(candidate) ? Math.max(0, candidate) : 0;
 }
 
-function getEdgeScore(edge: AggregatedEdge) {
-  return Math.max(0, Math.min(1, getRawEdgeScore(edge)));
-}
 
 function polarToCartesian(angle: number, radius: number) {
   return {
@@ -132,7 +125,6 @@ function getArcPath(startAngle: number, endAngle: number, radius: number) {
   const start = polarToCartesian(startAngle, radius);
   const end = polarToCartesian(endAngle, radius);
   const largeArc = Math.abs(endAngle - startAngle) > Math.PI ? 1 : 0;
-
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
 }
 
@@ -142,85 +134,32 @@ function getSlotRibbonPath(slot: EdgeRibbonSlot) {
   const sourceEnd = polarToCartesian(slot.sourceEndAngle, ribbonRadius);
   const targetStart = polarToCartesian(slot.targetStartAngle, ribbonRadius);
   const targetEnd = polarToCartesian(slot.targetEndAngle, ribbonRadius);
+  const targetMidAngle = (slot.targetStartAngle + slot.targetEndAngle) / 2;
+  const targetTip = polarToCartesian(targetMidAngle, ribbonRadius + TRACK_WIDTH * 0.82);
 
   const sourceMid = (slot.sourceStartAngle + slot.sourceEndAngle) / 2;
-  const targetMid = (slot.targetStartAngle + slot.targetEndAngle) / 2;
-  const sourceControl = polarToCartesian(sourceMid, RADIUS * 0.14);
-  const targetControl = polarToCartesian(targetMid, RADIUS * 0.14);
+  const targetMid = targetMidAngle;
+  const sourceControl = polarToCartesian(sourceMid, RADIUS * 0.16);
+  const targetControl = polarToCartesian(targetMid, RADIUS * 0.16);
   const sourceArcLarge = Math.abs(slot.sourceEndAngle - slot.sourceStartAngle) > Math.PI ? 1 : 0;
-  const targetArcLarge = Math.abs(slot.targetEndAngle - slot.targetStartAngle) > Math.PI ? 1 : 0;
 
   return [
     `M ${sourceStart.x} ${sourceStart.y}`,
     `A ${ribbonRadius} ${ribbonRadius} 0 ${sourceArcLarge} 1 ${sourceEnd.x} ${sourceEnd.y}`,
     `C ${sourceControl.x} ${sourceControl.y}, ${targetControl.x} ${targetControl.y}, ${targetEnd.x} ${targetEnd.y}`,
-    `A ${ribbonRadius} ${ribbonRadius} 0 ${targetArcLarge} 0 ${targetStart.x} ${targetStart.y}`,
+    `L ${targetTip.x} ${targetTip.y}`,
+    `L ${targetStart.x} ${targetStart.y}`,
     `C ${targetControl.x} ${targetControl.y}, ${sourceControl.x} ${sourceControl.y}, ${sourceStart.x} ${sourceStart.y}`,
     "Z",
   ].join(" ");
 }
 
-
-function buildComponents(geneIds: string[], edges: AggregatedEdge[]) {
-  const geneSet = new Set(geneIds);
-  const adjacency = new Map<string, Set<string>>();
-
-  geneIds.forEach((geneId) => adjacency.set(geneId, new Set()));
-
-  edges.forEach((edge) => {
-    const source = String(edge.source);
-    const target = String(edge.target);
-
-    if (!geneSet.has(source) || !geneSet.has(target)) return;
-
-    adjacency.get(source)?.add(target);
-    adjacency.get(target)?.add(source);
-  });
-
-  const visited = new Set<string>();
-  const components: string[][] = [];
-
-  geneIds.forEach((geneId) => {
-    if (visited.has(geneId)) return;
-
-    const stack = [geneId];
-    const component: string[] = [];
-    visited.add(geneId);
-
-    while (stack.length > 0) {
-      const current = stack.pop();
-      if (!current) continue;
-
-      component.push(current);
-      adjacency.get(current)?.forEach((next) => {
-        if (!visited.has(next)) {
-          visited.add(next);
-          stack.push(next);
-        }
-      });
-    }
-
-    components.push(component);
-  });
-
-  return components.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]));
+function getEdgeThickness(score: number, minScore: number, maxScore: number) {
+  if (maxScore === minScore) return 1;
+  return 0.5 + 1.5 * ((score - minScore) / (maxScore - minScore));
 }
 
-function sortGenesByDegree(genes: string[], edges: AggregatedEdge[]) {
-  const degree = new Map<string, number>();
-  genes.forEach((gene) => degree.set(gene, 0));
 
-  edges.forEach((edge) => {
-    const source = String(edge.source);
-    const target = String(edge.target);
-    if (degree.has(source)) degree.set(source, (degree.get(source) ?? 0) + 1);
-    if (degree.has(target)) degree.set(target, (degree.get(target) ?? 0) + 1);
-  });
-
-  return [...genes].sort(
-    (a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || a.localeCompare(b)
-  );
-}
 
 export default function CircosNetworkGraph({
   nodes,
@@ -238,163 +177,143 @@ export default function CircosNetworkGraph({
     normalizedEdgeScores,
     isSimplified,
   } = useMemo(() => {
-    const degree = new Map<string, number>();
     const nodeIds = nodes.map(getNodeId);
+    const nodeSet = new Set(nodeIds);
 
-    nodeIds.forEach((id) => degree.set(id, 0));
-
-    edges.forEach((edge) => {
-      const source = String(edge.source);
-      const target = String(edge.target);
-      degree.set(source, (degree.get(source) ?? 0) + 1);
-      degree.set(target, (degree.get(target) ?? 0) + 1);
-    });
-
-    const rankedGenes = [...nodeIds].sort(
-      (a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || a.localeCompare(b)
-    );
-    const visibleGenes = rankedGenes.slice(0, MAX_CIRCOS_NODES);
-    const visibleGeneSet = new Set(visibleGenes);
-
-    const visibleEdges = edges
-      .filter((edge) => visibleGeneSet.has(String(edge.source)) && visibleGeneSet.has(String(edge.target)))
-      .sort((a, b) => getEdgeScore(b) - getEdgeScore(a))
+    const rankedEdges = edges
+      .filter((edge) => {
+        const source = String(edge.source);
+        const target = String(edge.target);
+        return source !== target && nodeSet.has(source) && nodeSet.has(target);
+      })
+      .sort((a, b) => getRawEdgeScore(b) - getRawEdgeScore(a))
       .slice(0, MAX_CIRCOS_EDGES);
 
-    const rawScores = visibleEdges.map(getRawEdgeScore);
-    const minScore = rawScores.length > 0 ? Math.min(...rawScores) : 0;
-    const maxScore = rawScores.length > 0 ? Math.max(...rawScores) : 1;
+    const geneSet = new Set<string>();
+    rankedEdges.forEach((edge) => {
+      geneSet.add(String(edge.source));
+      geneSet.add(String(edge.target));
+    });
+
+    const sectorLoad = new Map<string, number>();
+    geneSet.forEach((geneId) => sectorLoad.set(geneId, 0));
+
+    rankedEdges.forEach((edge) => {
+      const source = String(edge.source);
+      const target = String(edge.target);
+      sectorLoad.set(source, (sectorLoad.get(source) ?? 0) + 1);
+      sectorLoad.set(target, (sectorLoad.get(target) ?? 0) + 1);
+    });
+
+    const visibleGenes = [...geneSet]
+      .sort((a, b) => (sectorLoad.get(b) ?? 0) - (sectorLoad.get(a) ?? 0) || a.localeCompare(b))
+      .slice(0, MAX_CIRCOS_NODES);
+    const visibleGeneSet = new Set(visibleGenes);
+
+    const visibleEdges = rankedEdges.filter(
+      (edge) => visibleGeneSet.has(String(edge.source)) && visibleGeneSet.has(String(edge.target))
+    );
+
+    const scores = visibleEdges.map(getRawEdgeScore);
+    const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+    const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
     const scoreRange = Math.max(maxScore - minScore, 0.000001);
     const normalizedEdgeScores = new Map<string, number>();
 
     visibleEdges.forEach((edge) => {
-      const normalizedScore = (getRawEdgeScore(edge) - minScore) / scoreRange;
-      normalizedEdgeScores.set(getEdgeKey(edge), Math.max(0, Math.min(1, normalizedScore)));
+      normalizedEdgeScores.set(getEdgeKey(edge), (getRawEdgeScore(edge) - minScore) / scoreRange);
     });
 
-    const getVisualEdgeWeight = (edge: AggregatedEdge) => {
-      const normalizedScore = normalizedEdgeScores.get(getEdgeKey(edge)) ?? 0;
-      return 0.08 + Math.pow(normalizedScore, 1.6) * 1.92;
-    };
-
-    const visibleWeightedDegree = new Map<string, number>();
-    visibleGenes.forEach((geneId) => {
-      visibleWeightedDegree.set(geneId, 0);
+    const edgeThickness = new Map<string, number>();
+    visibleEdges.forEach((edge) => {
+      edgeThickness.set(getEdgeKey(edge), getEdgeThickness(getRawEdgeScore(edge), minScore, maxScore));
     });
 
+    const sectorUnits = new Map<string, number>();
+    visibleGenes.forEach((geneId) => sectorUnits.set(geneId, 0));
     visibleEdges.forEach((edge) => {
       const source = String(edge.source);
       const target = String(edge.target);
-      const weight = getVisualEdgeWeight(edge);
-
-      visibleWeightedDegree.set(source, (visibleWeightedDegree.get(source) ?? 0) + weight);
-      visibleWeightedDegree.set(target, (visibleWeightedDegree.get(target) ?? 0) + weight);
+      const thickness = edgeThickness.get(getEdgeKey(edge)) ?? 1;
+      sectorUnits.set(source, (sectorUnits.get(source) ?? 0) + thickness);
+      sectorUnits.set(target, (sectorUnits.get(target) ?? 0) + thickness);
     });
-
-    const components = buildComponents(visibleGenes, visibleEdges).map((component) =>
-      sortGenesByDegree(component, visibleEdges)
-    );
-
-    const totalGenes = Math.max(visibleGenes.length, 1);
-    const totalComponentGap = components.length * COMPONENT_GAP;
-    const totalGeneGap = Math.max(0, totalGenes - components.length) * GENE_GAP;
-    const usableAngle = Math.max(Math.PI / 2, Math.PI * 2 - totalComponentGap - totalGeneGap);
-    const geneWeights = new Map<string, number>();
 
     visibleGenes.forEach((geneId) => {
-      geneWeights.set(geneId, Math.max(0.35, visibleWeightedDegree.get(geneId) ?? 0));
+      sectorUnits.set(geneId, Math.max(sectorUnits.get(geneId) ?? 0, 1));
     });
 
-    const totalGeneWeight = Math.max(
+    const totalSpace = visibleGenes.length * GENE_SPACE;
+    const usableAngle = Math.max(Math.PI / 2, Math.PI * 2 - totalSpace);
+    const totalUnits = Math.max(
       1,
-      visibleGenes.reduce((sum, geneId) => sum + (geneWeights.get(geneId) ?? 1), 0)
+      visibleGenes.reduce((sum, geneId) => sum + (sectorUnits.get(geneId) ?? 1), 0)
     );
-    let currentAngle = -Math.PI / 2;
 
     const positionedGenes = new Map<string, PositionedGene>();
+    let currentAngle = -Math.PI / 2;
 
-    components.forEach((component) => {
-      component.forEach((geneId) => {
-        const geneWeight = geneWeights.get(geneId) ?? 1;
-        const geneAngle = (usableAngle * geneWeight) / totalGeneWeight;
-        const arcStartAngle = currentAngle;
-        const arcEndAngle = currentAngle + geneAngle;
-        const angle = (arcStartAngle + arcEndAngle) / 2;
-        const point = polarToCartesian(angle, RADIUS);
-        const labelPoint = polarToCartesian(angle, LABEL_RADIUS);
-        const color = RIBBON_COLORS[positionedGenes.size % RIBBON_COLORS.length];
+    visibleGenes.forEach((geneId, index) => {
+      const units = sectorUnits.get(geneId) ?? 1;
+      const geneAngle = (usableAngle * units) / totalUnits;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + geneAngle;
+      const labelAngle = (startAngle + endAngle) / 2;
+      const labelPoint = polarToCartesian(labelAngle, LABEL_RADIUS);
+      const color = RIBBON_COLORS[index % RIBBON_COLORS.length];
 
-        positionedGenes.set(geneId, {
-          id: geneId,
-          angle,
-          x: point.x,
-          y: point.y,
-          labelX: labelPoint.x,
-          labelY: labelPoint.y,
-          labelAnchor: Math.cos(angle) >= 0 ? "start" : "end",
-          labelRotation: getReadableRotation(angle),
-          arcStartAngle: arcStartAngle + GENE_GAP / 2,
-          arcEndAngle: arcEndAngle - GENE_GAP / 2,
-          color,
-        });
-
-        currentAngle += geneAngle + GENE_GAP;
+      positionedGenes.set(geneId, {
+        id: geneId,
+        startAngle,
+        endAngle,
+        labelAngle,
+        labelX: labelPoint.x,
+        labelY: labelPoint.y,
+        labelAnchor: Math.cos(labelAngle) >= 0 ? "start" : "end",
+        labelRotation: getReadableRotation(labelAngle),
+        color,
       });
 
-      currentAngle += COMPONENT_GAP;
+      currentAngle += geneAngle + GENE_SPACE;
     });
+
+    const cursor = new Map<string, number>();
+    visibleGenes.forEach((geneId) => cursor.set(geneId, 0));
 
     const edgeRibbonSlots = new Map<string, EdgeRibbonSlot>();
-    const edgesByGene = new Map<string, AggregatedEdge[]>();
 
-    visibleGenes.forEach((geneId) => edgesByGene.set(geneId, []));
+    visibleEdges
+      .slice()
+      .reverse()
+      .forEach((edge) => {
+        const sourceId = String(edge.source);
+        const targetId = String(edge.target);
+        const sourceGene = positionedGenes.get(sourceId);
+        const targetGene = positionedGenes.get(targetId);
+        if (!sourceGene || !targetGene) return;
 
-    visibleEdges.forEach((edge) => {
-      edgesByGene.get(String(edge.source))?.push(edge);
-      edgesByGene.get(String(edge.target))?.push(edge);
-    });
+        const thickness = edgeThickness.get(getEdgeKey(edge)) ?? 1;
+        const sourceUnits = sectorUnits.get(sourceId) ?? 1;
+        const targetUnits = sectorUnits.get(targetId) ?? 1;
+        const sourceArcLength = sourceGene.endAngle - sourceGene.startAngle;
+        const targetArcLength = targetGene.endAngle - targetGene.startAngle;
+        const sourceCursor = cursor.get(sourceId) ?? 0;
+        const targetCursor = cursor.get(targetId) ?? 0;
+        const sourceSpan = (sourceArcLength * thickness) / sourceUnits;
+        const targetSpan = (targetArcLength * thickness) / targetUnits;
+        const sourceStartAngle = sourceGene.startAngle + (sourceArcLength * sourceCursor) / sourceUnits;
+        const targetStartAngle = targetGene.startAngle + (targetArcLength * targetCursor) / targetUnits;
 
-    visibleGenes.forEach((geneId) => {
-      const gene = positionedGenes.get(geneId);
-      const incidentEdges = edgesByGene.get(geneId) ?? [];
-      if (!gene || incidentEdges.length === 0) return;
-
-      const usableGeneArc = Math.max(0.0001, gene.arcEndAngle - gene.arcStartAngle);
-      const totalIncidentWeight = Math.max(
-        0.0001,
-        incidentEdges.reduce((sum, edge) => sum + getVisualEdgeWeight(edge), 0)
-      );
-      let cursor = gene.arcStartAngle;
-
-      incidentEdges
-        .sort((a, b) => getRawEdgeScore(b) - getRawEdgeScore(a))
-        .forEach((edge) => {
-          const edgeKey = getEdgeKey(edge);
-          const weight = getVisualEdgeWeight(edge);
-          const span = (usableGeneArc * weight) / totalIncidentWeight;
-          const startAngle = cursor;
-          const endAngle = cursor + span;
-          const existing = edgeRibbonSlots.get(edgeKey) ?? {
-            sourceStartAngle: startAngle,
-            sourceEndAngle: endAngle,
-            targetStartAngle: startAngle,
-            targetEndAngle: endAngle,
-          };
-
-          if (String(edge.source) === geneId) {
-            existing.sourceStartAngle = startAngle;
-            existing.sourceEndAngle = endAngle;
-          }
-
-          if (String(edge.target) === geneId) {
-            existing.targetStartAngle = startAngle;
-            existing.targetEndAngle = endAngle;
-          }
-
-          edgeRibbonSlots.set(edgeKey, existing);
-          cursor = endAngle;
+        edgeRibbonSlots.set(getEdgeKey(edge), {
+          sourceStartAngle,
+          sourceEndAngle: sourceStartAngle + sourceSpan,
+          targetStartAngle,
+          targetEndAngle: targetStartAngle + targetSpan,
         });
-    });
+
+        cursor.set(sourceId, sourceCursor + thickness);
+        cursor.set(targetId, targetCursor + thickness);
+      });
 
     return {
       visibleGenes,
@@ -406,7 +325,7 @@ export default function CircosNetworkGraph({
     };
   }, [edges, nodes]);
 
-  if (nodes.length === 0 || edges.length === 0) {
+  if (nodes.length === 0 || edges.length === 0 || visibleEdges.length === 0) {
     return (
       <div className="flex h-[520px] items-center justify-center rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50 text-sm font-medium text-slate-500">
         No edges are available for the current filters.
@@ -418,7 +337,7 @@ export default function CircosNetworkGraph({
     <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
       {isSimplified ? (
         <div className="mb-3 rounded-[1rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
-          Circos view is simplified for readability. Showing the top {visibleGenes.length} genes and {visibleEdges.length} strongest edges from the current filters. Outer arc length reflects total weighted degree, and ribbon width reflects edge score. Ribbon color follows the source gene.
+          Circos view is simplified for readability. Showing the top {visibleGenes.length} genes and {visibleEdges.length} strongest edges from the current filters. Outer arc length reflects total edge load, ribbon width reflects edge score, and ribbon color follows the source gene.
         </div>
       ) : null}
 
@@ -428,53 +347,45 @@ export default function CircosNetworkGraph({
         role="img"
         aria-label="Component-aware Circos network view"
       >
-        <circle
-          cx={CENTER_X}
-          cy={CENTER_Y}
-          r={RADIUS}
-          fill="none"
-          stroke="#cbd5e1"
-          strokeWidth="1"
-        />
-
         {Array.from(positionedGenes.values()).map((gene) => (
           <path
             key={`arc-${gene.id}`}
-            d={getArcPath(gene.arcStartAngle, gene.arcEndAngle, RADIUS)}
+            d={getArcPath(gene.startAngle, gene.endAngle, RADIUS)}
             fill="none"
             stroke={gene.color}
             strokeWidth={TRACK_WIDTH}
             strokeLinecap="butt"
-            opacity="0.92"
+            opacity="0.95"
+            className="cursor-pointer"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectGene?.(selectedGene === gene.id ? null : gene.id);
+            }}
           />
         ))}
 
-        {visibleEdges.map((edge) => {
+        {visibleEdges.slice().reverse().map((edge) => {
           const source = positionedGenes.get(String(edge.source));
-          const target = positionedGenes.get(String(edge.target));
-          if (!source || !target) return null;
+          if (!source) return null;
 
           const score = normalizedEdgeScores.get(getEdgeKey(edge)) ?? 0;
           const edgeKey = getEdgeKey(edge);
           const isActive = edgeKey === selectedEdgeKey;
-          const isDimmed = selectedGene && edge.source !== selectedGene && edge.target !== selectedGene;
-
-          const color = source.color;
+          const isDimmed = Boolean(
+            selectedGene && edge.source !== selectedGene && edge.target !== selectedGene
+          );
           const slot = edgeRibbonSlots.get(edgeKey);
           if (!slot) return null;
-
-          const ribbonFill = isActive ? "#0f5e8c" : color;
-          const ribbonOpacity = isDimmed ? 0.1 : isActive ? 0.82 : 0.46 + score * 0.24;
 
           return (
             <path
               key={edgeKey}
               d={getSlotRibbonPath(slot)}
-              fill={ribbonFill}
-              fillOpacity={ribbonOpacity}
-              stroke={isActive ? "#083f61" : color}
+              fill={isActive ? "#0f5e8c" : source.color}
+              fillOpacity={isDimmed ? 0.1 : isActive ? 0.86 : 0.56}
+              stroke={isActive ? "#083f61" : source.color}
               strokeWidth={isActive ? 1.6 : 0.45}
-              strokeOpacity={isDimmed ? 0.12 : isActive ? 0.88 : 0.28 + score * 0.16}
+              strokeOpacity={isDimmed ? 0.12 : isActive ? 0.9 : 0.35 + score * 0.2}
               className="cursor-pointer transition"
               onClick={(event) => {
                 event.stopPropagation();
@@ -486,29 +397,25 @@ export default function CircosNetworkGraph({
 
         {Array.from(positionedGenes.values()).map((gene) => {
           const isSelected = gene.id === selectedGene;
-          const isDimmed = selectedGene && gene.id !== selectedGene;
+          const isDimmed = Boolean(selectedGene && gene.id !== selectedGene);
 
           return (
-            <g
-              key={gene.id}
-              className="cursor-pointer"
+            <text
+              key={`label-${gene.id}`}
+              x={gene.labelX}
+              y={gene.labelY}
+              textAnchor={gene.labelAnchor}
+              dominantBaseline="middle"
+              transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
+              className="select-none fill-slate-950 text-[13px] font-bold"
+              opacity={isDimmed ? 0.35 : 1}
               onClick={(event) => {
                 event.stopPropagation();
                 onSelectGene?.(isSelected ? null : gene.id);
               }}
             >
-              <text
-                x={gene.labelX}
-                y={gene.labelY}
-                textAnchor={gene.labelAnchor}
-                dominantBaseline="middle"
-                transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
-                className="select-none fill-slate-950 text-[13px] font-bold"
-                opacity={isDimmed ? 0.35 : 1}
-              >
-                {gene.id}
-              </text>
-            </g>
+              {gene.id}
+            </text>
           );
         })}
       </svg>
