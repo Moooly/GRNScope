@@ -78,7 +78,7 @@ export default function AlgorithmCardsSection({
             return (
               <div
                 key={task.algorithm_id}
-                className="flex w-[20rem] shrink-0 flex-col rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm"
+                className="flex w-[23rem] shrink-0 flex-col rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
@@ -140,14 +140,14 @@ export default function AlgorithmCardsSection({
                   </p>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-1.5 text-center text-[11px] font-medium text-slate-600">
-                  <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium leading-none">
+                <div className="mt-4 flex flex-nowrap gap-2 text-xs">
+                  <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium leading-none text-slate-600">
                     {meta?.requiresPseudotime ? "Pseudotime" : "No pseudotime"}
                   </span>
-                  <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium leading-none">
+                  <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium leading-none text-slate-600">
                     {meta?.directed ? "Directed" : "Undirected"}
                   </span>
-                  <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium leading-none">
+                  <span className="whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium leading-none text-slate-600">
                     {meta?.signed ? "Signed" : "Unsigned"}
                   </span>
                 </div>

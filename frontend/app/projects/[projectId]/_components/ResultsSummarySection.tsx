@@ -420,11 +420,6 @@ export default function ResultsSummarySection({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h4 className="text-base font-bold text-slate-950">Method Overlap Visualization</h4>
-            <p className="mt-1 text-sm text-slate-600">
-              {completedAlgorithmIds.length >= 4
-                ? "UpSet plot showing intersection sizes, set sizes, and membership across methods. Scroll horizontally to view all overlap groups."
-                : "Venn diagram showing exclusive overlap regions among the selected methods."}
-            </p>
           </div>
         </div>
 
