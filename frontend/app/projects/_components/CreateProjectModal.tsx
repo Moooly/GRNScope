@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmStep from "./AlgorithmStep";
 import ReviewStep from "./ReviewStep";
@@ -66,7 +66,7 @@ interface CreateProjectModalProps {
 
 export default function CreateProjectModal({
   isCreateVisible,
-  // isCreateClosing, // Removed from destructure
+  isCreateClosing,
   createStep,
   projectName,
   projectDescription,
@@ -116,11 +116,43 @@ export default function CreateProjectModal({
   setEnsembleEnabled,
 }: CreateProjectModalProps) {
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOutsideClosing, setIsOutsideClosing] = useState(false);
+  const isModalClosing = isCreateClosing || isOutsideClosing;
 
   useLayoutEffect(() => {
     if (!isCreateVisible) return;
     contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [createStep, isCreateVisible]);
+
+  useEffect(() => {
+    if (isCreateVisible) {
+      setIsOutsideClosing(false);
+    }
+  }, [isCreateVisible]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleOutsideClose = () => {
+    if (isModalClosing) return;
+
+    setIsOutsideClosing(true);
+
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+    }
+
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsOutsideClosing(false);
+      onClose();
+    }, 480);
+  };
 
   if (!isCreateVisible) {
     return null;
@@ -128,11 +160,15 @@ export default function CreateProjectModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm animate-modal-overlay sm:px-6 lg:py-14"
-      onClick={onClose}
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm sm:px-6 lg:py-14 ${
+        isModalClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
+      }`}
+      onClick={handleOutsideClose}
     >
       <div
-        className="max-h-[calc(100vh-5rem)] w-full max-w-6xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel lg:p-8"
+        className={`max-h-[calc(100vh-5rem)] w-full max-w-6xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
+          isModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div ref={contentScrollRef}>

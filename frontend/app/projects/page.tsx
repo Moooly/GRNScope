@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import CreateProjectModal from "./_components/CreateProjectModal";
 import ProjectCard from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
@@ -105,6 +105,7 @@ export default function ProjectsPage() {
   const API_ROOT = getApiRoot(API_BASE);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [isCreateVisible, setIsCreateVisible] = useState(false);
   const [isCreateClosing, setIsCreateClosing] = useState(false);
@@ -390,6 +391,15 @@ export default function ProjectsPage() {
     setIsCreateClosing(false);
     setIsCreateVisible(true);
   };
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") {
+      return;
+    }
+
+    openCreateModal();
+    router.replace("/projects", { scroll: false });
+  }, [searchParams, router]);
 
   const closeCreateModal = () => {
     setIsCreateVisible(false);
