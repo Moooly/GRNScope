@@ -179,7 +179,7 @@ export default function RootLayout({
                 <span>Home</span>
               </Link>
 
-              <Link
+              {/* <Link
                 href="/algorithms"
                 onClick={() => setActiveHeaderItem("algorithms")}
                 className={navItemClass(isActive("algorithms"))}
@@ -194,7 +194,7 @@ export default function RootLayout({
                   <path d="M12 3C7.03 3 3 4.343 3 6v12c0 1.657 4.03 3 9 3s9-1.343 9-3V6c0-1.657-4.03-3-9-3Zm0 2c3.866 0 7 .895 7 2s-3.134 2-7 2-7-.895-7-2 3.134-2 7-2Zm7 5.1V14c0 1.105-3.134 2-7 2s-7-.895-7-2v-3.9C6.61 11.256 9.146 12 12 12s5.39-.744 7-1.9Zm0 6V18c0 1.105-3.134 2-7 2s-7-.895-7-2v-1.9C6.61 17.256 9.146 18 12 18s5.39-.744 7-1.9Z" />
                 </svg>
                 <span>Algorithms</span>
-              </Link>
+              </Link> */}
 
               <Link
                 href="/projects/demo"

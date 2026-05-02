@@ -12,14 +12,14 @@ export default function ProjectHeader({
   void overallStatus;
 
   return (
-    <header className="border-b border-[#213f54]/35 pb-8">
-      <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
+    <header className="border-b border-[#213f54]/35 pb-6">
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#1b75a6]">
         Project detail
       </p>
-      <h1 className="text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[4.15rem] lg:leading-[1.02]">
+      <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl lg:text-[3.4rem] lg:leading-[1.05]">
         {projectName}
       </h1>
-      <p className="mt-5 max-w-3xl text-[1.05rem] leading-8 text-slate-700">
+      <p className="mt-4 max-w-3xl text-base leading-7 text-slate-700">
         {projectDescription}
       </p>
     </header>

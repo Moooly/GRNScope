@@ -2,45 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import CreateProjectModal from "./_components/CreateProjectModal";
+import CreateProjectFlow from "./_components/CreateProjectFlow";
 import ProjectCard from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
 import EmptyProjectHistory from "./_components/EmptyProjectHistory";
-
-type BackendAlgorithmEntry = {
-  id: string;
-  name: string;
-  description: string;
-  long_description: string;
-  category: string;
-  year: string;
-  journal: string;
-  publication_title: string;
-  publication_url: string;
-  source_url: string | null;
-  docker_image: string;
-  runner: string;
-  directed: boolean;
-  signed: boolean;
-  requires_pseudotime: boolean;
-  supports_expression_matrix: boolean;
-  active: boolean;
-  recommended: boolean;
-  estimated_runtime: string;
-  strengths: string[];
-  limitations: string[];
-  recommended_use_cases: string[];
-  parameters: {
-    name: string;
-    label?: string;
-    description?: string;
-    default?: unknown;
-    required?: boolean;
-    value_type?: string;
-    options?: unknown[];
-  }[];
-};
 
 export type ProjectAlgorithm = {
   id: string;
@@ -64,155 +30,31 @@ export type ProjectAlgorithm = {
   runner: string;
 };
 
-function getApiRoot(apiBase: string) {
-  return apiBase.replace(/\/api\/?$/, "");
-}
-
-function getDockerVersion(dockerImage: string) {
-  const parts = dockerImage.split(":");
-  return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
-}
-
-function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): ProjectAlgorithm {
-  return {
-    id: algorithm.id,
-    name: algorithm.name,
-    tagline: algorithm.description,
-    category: algorithm.category,
-    requiresPseudotime: algorithm.requires_pseudotime,
-    directed: algorithm.directed,
-    signed: algorithm.signed,
-    publication: algorithm.publication_title,
-    year: algorithm.year,
-    journal: algorithm.journal,
-    dockerVersion: getDockerVersion(algorithm.docker_image),
-    paperUrl: algorithm.publication_url,
-    sourceUrl: algorithm.source_url,
-    strengths: algorithm.strengths,
-    limitations: algorithm.limitations,
-    recommendedUseCases: algorithm.recommended_use_cases,
-    detail: algorithm.long_description,
-    recommended: algorithm.recommended,
-    runner: algorithm.runner,
-  };
-}
-
-type CreateStep = "upload" | "preprocessing" | "algorithms" | "review";
-
 export default function ProjectsPage() {
-
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-  const API_ROOT = getApiRoot(API_BASE);
 
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [isCreateVisible, setIsCreateVisible] = useState(false);
-  const [isCreateClosing, setIsCreateClosing] = useState(false);
-  const [createStep, setCreateStep] = useState<CreateStep>("upload");
-
-  const [projectName, setProjectName] = useState("");
-  const [projectDescription, setProjectDescription] = useState("");
-
-  const [expressionFile, setExpressionFile] = useState<File | null>(null);
-  const [pseudotimeFile, setPseudotimeFile] = useState<File | null>(null);
-
-  const [expressionFileName, setExpressionFileName] = useState("");
-  const [pseudotimeFileName, setPseudotimeFileName] = useState("");
-
-  const [tempUploadId, setTempUploadId] = useState("");
-  const [geneCount, setGeneCount] = useState<number | null>(null);
-  const [cellCount, setCellCount] = useState<number | null>(null);
-  const [isUploadingTempDataset, setIsUploadingTempDataset] = useState(false);
-
-  const [topVariableGenes, setTopVariableGenes] = useState("2000");
-  const [includeAllTFs, setIncludeAllTFs] = useState(true);
-  const [normalizeEnabled, setNormalizeEnabled] = useState(true);
-  const [logTransformEnabled, setLogTransformEnabled] = useState(true);
-
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [ensembleEnabled, setEnsembleEnabled] = useState(true);
-  const [algorithms, setAlgorithms] = useState<ProjectAlgorithm[]>([]);
-  const [isLoadingAlgorithms, setIsLoadingAlgorithms] = useState(true);
-  const [algorithmLoadError, setAlgorithmLoadError] = useState<string | null>(null);
-
-  const [errors, setErrors] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
-  const [projectPendingDelete, setProjectPendingDelete] =
-    useState<Project | null>(null);
+  const [projectPendingDelete, setProjectPendingDelete] = useState<Project | null>(null);
   const [isDeleteModalClosing, setIsDeleteModalClosing] = useState(false);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [deleteErrors, setDeleteErrors] = useState<string[]>([]);
 
   const visibleProjectHistory = useMemo(
     () => projectHistory.filter((project) => project.id !== "demo"),
-    [projectHistory]
+    [projectHistory],
   );
 
-  const datasetSummary = {
-    dimensions:
-      geneCount !== null && cellCount !== null
-        ? `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`
-        : "Matrix size pending upload validation",
-    hasPseudotime: Boolean(pseudotimeFile),
-    preprocessingSummary: [
-      `Top variable genes retained: ${topVariableGenes || "2000"}`,
-      `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
-      `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
-      `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
-    ],
-  };
-
+  // Open the create modal automatically when arriving with ?create=1.
   useEffect(() => {
-    let isCancelled = false;
-
-    const loadAlgorithms = async () => {
-      try {
-        setIsLoadingAlgorithms(true);
-        setAlgorithmLoadError(null);
-
-        const response = await fetch(`${API_ROOT}/algorithms`, {
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load algorithms: ${response.status}`);
-        }
-
-        const data = (await response.json()) as BackendAlgorithmEntry[];
-
-        if (isCancelled) {
-          return;
-        }
-
-        setAlgorithms(
-          data
-            .filter((algorithm) => algorithm.active)
-            .map(mapBackendAlgorithm)
-        );
-      } catch (error) {
-        if (!isCancelled) {
-          setAlgorithmLoadError(
-            error instanceof Error ? error.message : "Failed to load algorithms."
-          );
-          setAlgorithms([]);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingAlgorithms(false);
-        }
-      }
-    };
-
-    loadAlgorithms();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [API_ROOT]);
+    if (searchParams.get("create") !== "1") return;
+    setIsCreateOpen(true);
+    router.replace("/projects", { scroll: false });
+  }, [searchParams, router]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -220,51 +62,38 @@ export default function ProjectsPage() {
     const loadProjectHistory = async () => {
       try {
         const response = await fetch(`${API_BASE}/projects`);
-
         if (!response.ok) {
           setProjectHistory([]);
           return;
         }
-
         const data = await response.json();
-
-        if (isCancelled) {
-          return;
-        }
-
+        if (isCancelled) return;
         if (data.ok && Array.isArray(data.projects)) {
           setProjectHistory(data.projects as Project[]);
         } else {
           setProjectHistory([]);
         }
       } catch {
-        if (!isCancelled) {
-          setProjectHistory([]);
-        }
+        if (!isCancelled) setProjectHistory([]);
       }
     };
 
     loadProjectHistory();
-
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [API_BASE]);
 
   const activeProjectIds = useMemo(
     () =>
       visibleProjectHistory
         .filter((project) => {
           const latestJob = project.latestJob;
-          if (!latestJob) {
-            return false;
-          }
-
+          if (!latestJob) return false;
           const overallStatus = latestJob.overall_status;
           const hasActiveTasks = latestJob.tasks?.some(
-            (task) => task.status === "Queued" || task.status === "Running"
+            (task) => task.status === "Queued" || task.status === "Running",
           );
-
           return (
             overallStatus === "Queued" ||
             overallStatus === "Running" ||
@@ -272,14 +101,11 @@ export default function ProjectsPage() {
           );
         })
         .map((project) => project.id),
-    [visibleProjectHistory]
+    [visibleProjectHistory],
   );
 
-
   useEffect(() => {
-    if (activeProjectIds.length === 0) {
-      return;
-    }
+    if (activeProjectIds.length === 0) return;
 
     let isCancelled = false;
 
@@ -288,14 +114,8 @@ export default function ProjectsPage() {
         const responses = await Promise.all(
           activeProjectIds.map(async (projectId) => {
             try {
-              const response = await fetch(
-                `${API_BASE}/projects/${projectId}`
-              );
-
-              if (!response.ok) {
-                return null;
-              }
-
+              const response = await fetch(`${API_BASE}/projects/${projectId}`);
+              if (!response.ok) return null;
               const data = await response.json();
               return {
                 projectId,
@@ -304,33 +124,25 @@ export default function ProjectsPage() {
             } catch {
               return null;
             }
-          })
+          }),
         );
-
-        if (isCancelled) {
-          return;
-        }
-
+        if (isCancelled) return;
         const latestJobMap = new Map(
           responses
             .filter(
               (item): item is { projectId: string; latestJob: ProjectJob | null } =>
-                item !== null
+                item !== null,
             )
-            .map((item) => [item.projectId, item.latestJob])
+            .map((item) => [item.projectId, item.latestJob]),
         );
-
         setProjectHistory((currentProjects) =>
           currentProjects.map((project) => {
-            if (!latestJobMap.has(project.id)) {
-              return project;
-            }
-
+            if (!latestJobMap.has(project.id)) return project;
             return {
               ...project,
               latestJob: latestJobMap.get(project.id) ?? null,
             };
-          })
+          }),
         );
       } catch {
         return;
@@ -339,339 +151,11 @@ export default function ProjectsPage() {
 
     updateProjectStatuses();
     const intervalId = window.setInterval(updateProjectStatuses, 5000);
-
     return () => {
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeProjectIds]);
-
-  const compatibleAlgorithms = useMemo(
-    () =>
-      algorithms.filter(
-        (algorithm) =>
-          !algorithm.requiresPseudotime || datasetSummary.hasPseudotime
-      ),
-    [algorithms, datasetSummary.hasPseudotime]
-  );
-
-  const selectedAlgorithms = useMemo(
-    () => algorithms.filter((algorithm) => selectedIds.includes(algorithm.id)),
-    [algorithms, selectedIds]
-  );
-
-  const estimatedTotalRuntime = useMemo(() => {
-    if (selectedAlgorithms.length === 0) {
-      return "No algorithms selected";
-    }
-
-    return `${selectedAlgorithms.length} selected algorithm${selectedAlgorithms.length === 1 ? "" : "s"}`;
-  }, [selectedAlgorithms]);
-
-  const openCreateModal = () => {
-    setErrors([]);
-    setCreateStep("upload");
-    setTopVariableGenes("2000");
-    setIncludeAllTFs(true);
-    setNormalizeEnabled(true);
-    setLogTransformEnabled(true);
-    setTempUploadId("");
-    setGeneCount(null);
-    setCellCount(null);
-    setIsUploadingTempDataset(false);
-    setSelectedIds([]);
-    setAlgorithmLoadError(null);
-    setEnsembleEnabled(true);
-    setProjectName("");
-    setProjectDescription("");
-    setExpressionFile(null);
-    setPseudotimeFile(null);
-    setExpressionFileName("");
-    setPseudotimeFileName("");
-    setIsCreateClosing(false);
-    setIsCreateVisible(true);
-  };
-
-  useEffect(() => {
-    if (searchParams.get("create") !== "1") {
-      return;
-    }
-
-    openCreateModal();
-    router.replace("/projects", { scroll: false });
-  }, [searchParams, router]);
-
-  const closeCreateModal = () => {
-    setIsCreateVisible(false);
-    setIsCreateClosing(false);
-    setCreateStep("upload");
-    setErrors([]);
-  };
-
-  const clearExpressionFile = () => {
-    setExpressionFile(null);
-    setExpressionFileName("");
-    setTempUploadId("");
-    setGeneCount(null);
-    setCellCount(null);
-  };
-
-  const clearPseudotimeFile = () => {
-    setPseudotimeFile(null);
-    setPseudotimeFileName("");
-    setTempUploadId("");
-  };
-
-  const validateUploadStep = () => {
-    const newErrors: string[] = [];
-    const maxFileSize = 500 * 1024 * 1024;
-
-    if (!projectName.trim()) {
-      newErrors.push("Project name is required.");
-    }
-
-    if (!expressionFile) {
-      newErrors.push("Expression matrix CSV is required.");
-    } else {
-      if (!expressionFile.name.toLowerCase().endsWith(".csv")) {
-        newErrors.push("Expression matrix must be a CSV file.");
-      }
-
-      if (expressionFile.size > maxFileSize) {
-        newErrors.push("Expression matrix file size must be 500 MB or smaller.");
-      }
-    }
-
-    if (pseudotimeFile) {
-      if (!pseudotimeFile.name.toLowerCase().endsWith(".csv")) {
-        newErrors.push("Pseudotime file must be a CSV file.");
-      }
-
-      if (pseudotimeFile.size > maxFileSize) {
-        newErrors.push("Pseudotime file size must be 500 MB or smaller.");
-      }
-    }
-
-    return newErrors;
-  };
-
-  const handleUploadStepNext = async () => {
-    const newErrors = validateUploadStep();
-
-    if (newErrors.length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    if (!expressionFile) {
-      setErrors(["Expression matrix CSV is required."]);
-      return;
-    }
-
-    try {
-      setErrors([]);
-      setIsUploadingTempDataset(true);
-
-      const formData = new FormData();
-      formData.append("expression_matrix", expressionFile);
-
-      if (pseudotimeFile) {
-        formData.append("pseudotime", pseudotimeFile);
-      }
-
-      const response = await fetch(
-        `${API_BASE}/uploads/temp-dataset`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-
-      if (!data.ok) {
-        setErrors(data.errors || ["Temporary dataset upload failed."]);
-        return;
-      }
-
-      setTempUploadId(data.temp_upload_id || "");
-      setGeneCount(data.gene_count ?? null);
-      setCellCount(data.cell_count ?? null);
-      setTopVariableGenes(
-        data.gene_count !== null && data.gene_count !== undefined
-          ? String(data.gene_count)
-          : ""
-      );
-      setCreateStep("preprocessing");
-    } catch {
-      setErrors(["Could not connect to the server for temporary upload."]);
-    } finally {
-      setIsUploadingTempDataset(false);
-    }
-  };
-
-  const handlePreprocessingStepNext = () => {
-    const newErrors: string[] = [];
-    const parsedTopGenes = Number(topVariableGenes);
-
-    if (!topVariableGenes.trim()) {
-      newErrors.push("Top variable genes is required.");
-    } else if (!Number.isInteger(parsedTopGenes) || parsedTopGenes <= 0) {
-      newErrors.push("Top variable genes must be a positive integer.");
-    } else if (geneCount !== null && parsedTopGenes > geneCount) {
-      newErrors.push("Top variable genes cannot be larger than the uploaded gene count.");
-    }
-
-    if (newErrors.length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setErrors([]);
-    setCreateStep("algorithms");
-  };
-
-  const toggleAlgorithm = (algorithmId: string, disabled: boolean) => {
-    if (disabled) return;
-
-    setSelectedIds((current) => {
-      if (current.includes(algorithmId)) {
-        const updated = current.filter((id) => id !== algorithmId);
-        if (updated.length < 2) {
-          setEnsembleEnabled(false);
-        }
-        return updated;
-      }
-
-      const updated = [...current, algorithmId];
-      if (updated.length >= 2) {
-        setEnsembleEnabled(true);
-      }
-      return updated;
-    });
-  };
-
-  const handleRecommended = () => {
-    const compatibleRecommended = compatibleAlgorithms
-      .filter((algorithm) => algorithm.recommended)
-      .map((algorithm) => algorithm.id);
-    setSelectedIds(compatibleRecommended);
-    setEnsembleEnabled(compatibleRecommended.length >= 2);
-  };
-
-  const handleSelectAll = () => {
-    const allCompatibleIds = compatibleAlgorithms.map((algorithm) => algorithm.id);
-    setSelectedIds(allCompatibleIds);
-    setEnsembleEnabled(allCompatibleIds.length >= 2);
-  };
-
-  const handleAlgorithmsStepNext = () => {
-    if (isLoadingAlgorithms) {
-      setErrors(["Algorithms are still loading. Please wait a moment and try again."]);
-      return;
-    }
-
-    if (algorithmLoadError) {
-      setErrors([`Could not load algorithms from backend: ${algorithmLoadError}`]);
-      return;
-    }
-
-    if (selectedAlgorithms.length === 0) {
-      setErrors(["Select at least one algorithm to continue."]);
-      return;
-    }
-
-    setErrors([]);
-    setCreateStep("review");
-  };
-
-  const handleCreateProject = async () => {
-    try {
-      setIsSubmitting(true);
-      setErrors([]);
-
-      const uploadErrors = validateUploadStep();
-      if (uploadErrors.length > 0) {
-        setErrors(uploadErrors);
-        setCreateStep("upload");
-        return;
-      }
-
-      if (!tempUploadId) {
-        setErrors([
-          "Temporary upload is missing. Please return to the upload step and upload the dataset again.",
-        ]);
-        setCreateStep("upload");
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append("temp_upload_id", tempUploadId);
-      formData.append("project_name", projectName);
-      formData.append("project_description", projectDescription);
-      formData.append("top_variable_genes", topVariableGenes);
-      formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
-      formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
-      formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
-      formData.append("selected_algorithms", JSON.stringify(selectedIds));
-      formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
-
-      const response = await fetch(
-        `${API_BASE}/projects/create-from-temp`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-
-      if (!data.ok) {
-        setErrors(data.errors || ["Project creation failed."]);
-        setCreateStep("upload");
-        return;
-      }
-
-      const now = new Date();
-      const createdProject: Project = {
-        id: data.project_id || `project-${now.getTime()}`,
-        name: projectName,
-        description:
-          projectDescription || "Single-cell RNA-seq dataset for GRN inference.",
-        createdAt: now
-          .toLocaleString("en-CA", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          })
-          .replace(",", ""),
-        datasetCount: 1,
-        jobCount: 1,
-        latestJob: {
-          job_id: data.job_id || "pending",
-          overall_status: "Queued",
-          ensemble_enabled: ensembleEnabled,
-          tasks: selectedIds.map((algorithmId) => ({
-            algorithm_id: algorithmId,
-            status: "Queued",
-            elapsed_seconds: 0,
-            error_message: null,
-          })),
-        },
-      };
-      setProjectHistory((currentProjects) => [createdProject, ...currentProjects]);
-
-      closeCreateModal();
-      router.push("/projects");
-    } catch {
-      setErrors(["Could not connect to the server."]);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  }, [activeProjectIds, API_BASE]);
 
   const handleDeleteProject = (project: Project) => {
     setIsDeleteModalClosing(false);
@@ -679,22 +163,16 @@ export default function ProjectsPage() {
   };
 
   const handleConfirmDeleteProject = async () => {
-    if (!projectPendingDelete) {
-      return;
-    }
+    if (!projectPendingDelete) return;
 
     try {
       setIsDeletingProject(true);
-
       const response = await fetch(
         `${API_BASE}/projects/${projectPendingDelete.id}`,
-        {
-          method: "DELETE",
-        }
+        { method: "DELETE" },
       );
-
       if (!response.ok) {
-        setErrors(["Failed to delete the project."]);
+        setDeleteErrors(["Failed to delete the project."]);
         return;
       }
 
@@ -709,27 +187,29 @@ export default function ProjectsPage() {
 
       window.setTimeout(() => {
         setProjectHistory((currentProjects) =>
-          currentProjects.filter((item) => item.id !== targetProjectId)
+          currentProjects.filter((item) => item.id !== targetProjectId),
         );
         setDeletingProjectId(null);
       }, 300);
     } catch {
-      setErrors(["Could not connect to the server."]);
+      setDeleteErrors(["Could not connect to the server."]);
     } finally {
       setIsDeletingProject(false);
     }
   };
 
   const handleCancelDeleteProject = () => {
-    if (isDeletingProject || !projectPendingDelete) {
-      return;
-    }
-
+    if (isDeletingProject || !projectPendingDelete) return;
     setIsDeleteModalClosing(true);
     window.setTimeout(() => {
       setProjectPendingDelete(null);
       setIsDeleteModalClosing(false);
     }, 280);
+  };
+
+  const handleProjectCreated = (project: Project) => {
+    setProjectHistory((currentProjects) => [project, ...currentProjects]);
+    router.push("/projects");
   };
 
   return (
@@ -756,63 +236,17 @@ export default function ProjectsPage() {
 
             <button
               type="button"
-              onClick={openCreateModal}
+              onClick={() => setIsCreateOpen(true)}
               className="inline-flex w-fit cursor-pointer items-center justify-center rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#1b75a6]/20 transition hover:bg-[#155f87]"
             >
               Create New Project
             </button>
           </div>
 
-          <CreateProjectModal
-            isCreateVisible={isCreateVisible}
-            isCreateClosing={isCreateClosing}
-            createStep={createStep}
-            projectName={projectName}
-            projectDescription={projectDescription}
-            expressionFileName={expressionFileName}
-            pseudotimeFileName={pseudotimeFileName}
-            geneCount={geneCount}
-            cellCount={cellCount}
-            isUploadingTempDataset={isUploadingTempDataset}
-            topVariableGenes={topVariableGenes}
-            includeAllTFs={includeAllTFs}
-            normalizeEnabled={normalizeEnabled}
-            logTransformEnabled={logTransformEnabled}
-            selectedIds={selectedIds}
-            compatibleAlgorithms={compatibleAlgorithms}
-            selectedAlgorithms={selectedAlgorithms}
-            estimatedTotalRuntime={estimatedTotalRuntime}
-            ensembleEnabled={ensembleEnabled}
-            datasetSummary={datasetSummary}
-            errors={errors}
-            isSubmitting={isSubmitting}
-            algorithms={algorithms}
-            isLoadingAlgorithms={isLoadingAlgorithms}
-            algorithmLoadError={algorithmLoadError}
-            onClose={closeCreateModal}
-            onBackToUpload={() => setCreateStep("upload")}
-            onBackToPreprocessing={() => setCreateStep("preprocessing")}
-            onBackToAlgorithms={() => setCreateStep("algorithms")}
-            onUploadNext={handleUploadStepNext}
-            onPreprocessingNext={handlePreprocessingStepNext}
-            onAlgorithmsNext={handleAlgorithmsStepNext}
-            onCreateProject={handleCreateProject}
-            onRecommended={handleRecommended}
-            onSelectAll={handleSelectAll}
-            onToggleAlgorithm={toggleAlgorithm}
-            setProjectName={setProjectName}
-            setProjectDescription={setProjectDescription}
-            setExpressionFile={setExpressionFile}
-            setExpressionFileName={setExpressionFileName}
-            setPseudotimeFile={setPseudotimeFile}
-            setPseudotimeFileName={setPseudotimeFileName}
-            setTopVariableGenes={setTopVariableGenes}
-            setIncludeAllTFs={setIncludeAllTFs}
-            setNormalizeEnabled={setNormalizeEnabled}
-            setLogTransformEnabled={setLogTransformEnabled}
-            clearExpressionFile={clearExpressionFile}
-            clearPseudotimeFile={clearPseudotimeFile}
-            setEnsembleEnabled={setEnsembleEnabled}
+          <CreateProjectFlow
+            open={isCreateOpen}
+            onClose={() => setIsCreateOpen(false)}
+            onProjectCreated={handleProjectCreated}
           />
 
           <DeleteProjectModal
@@ -822,6 +256,17 @@ export default function ProjectsPage() {
             onCancel={handleCancelDeleteProject}
             onConfirm={handleConfirmDeleteProject}
           />
+
+          {deleteErrors.length > 0 && (
+            <div className="mt-6 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-5">
+              <ul className="space-y-2 text-sm text-rose-700">
+                {deleteErrors.map((error, index) => (
+                  <li key={index}>• {error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {visibleProjectHistory.length > 0 ? (
             <div className="mt-8 grid gap-5">
               {visibleProjectHistory.map((project) => (
@@ -839,10 +284,7 @@ export default function ProjectsPage() {
                       deletingProjectId === project.id ? "none" : "auto",
                   }}
                 >
-                  <ProjectCard
-                    project={project}
-                    onDelete={handleDeleteProject}
-                  />
+                  <ProjectCard project={project} onDelete={handleDeleteProject} />
                 </div>
               ))}
             </div>

@@ -10,13 +10,13 @@ import ResultsControlsSection from "./_components/ResultsControlsSection";
 import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
 import AlgorithmErrorModal from "./_components/AlgorithmErrorModal";
-import AlgorithmHelpModal from "./_components/AlgorithmHelpModal";
 import ConfirmDownloadModal from "./_components/ConfirmDownloadModal";
 import DatasetHelpModal from "./_components/DatasetHelpModal";
 import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
 import ResultsGuideModal from "./_components/ResultsGuideModal";
 import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
 import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSection";
+import JobProgressBanner from "./_components/JobProgressBanner";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
 
@@ -64,7 +64,6 @@ export default function ProjectDetailPage() {
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
-  const [isAlgorithmHelpOpen, setIsAlgorithmHelpOpen] = useState(false);
   const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
   const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
@@ -733,28 +732,9 @@ useEffect(() => {
             }
           />
 
-
-          <AlgorithmCardsSection
+          <JobProgressBanner
             tasks={latestJob?.tasks ?? []}
             algorithmMetaMap={algorithmMetaMap}
-            projectId={projectId}
-            apiBase={API_BASE}
-            onOpenHelp={() => setIsAlgorithmHelpOpen(true)}
-            onOpenDownload={openDownloadModal}
-            onOpenAlgorithmError={setActiveAlgorithmErrorTask}
-          />
-
-          <DatasetPreprocessingSection
-            expressionMatrixLabel={expressionMatrixLabel}
-            topVariableGenesLabel={topVariableGenesLabel}
-            tfOverrideLabel={tfOverrideLabel}
-            normalizationLabel={normalizationLabel}
-            logTransformLabel={logTransformLabel}
-            onOpenHelp={() => setIsDatasetHelpOpen(true)}
-            onOpenDownloadMenu={() => {
-              if (!projectId) return;
-              setIsFileDownloadMenuOpen(true);
-            }}
           />
 
           <ResultsHubSection
@@ -851,10 +831,28 @@ useEffect(() => {
                 )}
           </ResultsHubSection>
 
-          <AlgorithmHelpModal
-            open={isAlgorithmHelpOpen}
-            onClose={() => setIsAlgorithmHelpOpen(false)}
+          <AlgorithmCardsSection
+            tasks={latestJob?.tasks ?? []}
+            algorithmMetaMap={algorithmMetaMap}
+            projectId={projectId}
+            apiBase={API_BASE}
+            onOpenDownload={openDownloadModal}
+            onOpenAlgorithmError={setActiveAlgorithmErrorTask}
           />
+
+          <DatasetPreprocessingSection
+            expressionMatrixLabel={expressionMatrixLabel}
+            topVariableGenesLabel={topVariableGenesLabel}
+            tfOverrideLabel={tfOverrideLabel}
+            normalizationLabel={normalizationLabel}
+            logTransformLabel={logTransformLabel}
+            onOpenHelp={() => setIsDatasetHelpOpen(true)}
+            onOpenDownloadMenu={() => {
+              if (!projectId) return;
+              setIsFileDownloadMenuOpen(true);
+            }}
+          />
+
           <ResultsGuideModal
             open={isResultsGuideOpen}
             onClose={() => setIsResultsGuideOpen(false)}

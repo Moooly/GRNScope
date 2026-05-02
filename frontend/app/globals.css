@@ -21,7 +21,12 @@ body {
   box-sizing: border-box;
 }
 
-a {
+/*
+ * Use :where() so this rule has zero specificity. Any utility class on a link
+ * (e.g. `text-white`, `text-slate-600`) wins automatically without having to
+ * fight the cascade or depend on Tailwind layer ordering.
+ */
+:where(a) {
   color: inherit;
   text-decoration: none;
 }

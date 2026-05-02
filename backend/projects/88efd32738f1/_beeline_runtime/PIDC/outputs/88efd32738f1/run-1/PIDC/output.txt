@@ -1,3 +1,0 @@
-WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
- 11.194893 seconds (12.47 M allocations: 3.188 GiB, 6.00% gc time)
-  6.695602 seconds (10.77 M allocations: 526.127 MiB, 4.74% gc time)
