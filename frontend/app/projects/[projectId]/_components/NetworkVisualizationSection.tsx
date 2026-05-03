@@ -118,33 +118,6 @@ export default function NetworkVisualizationSection({
     <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
       <div>
         <h3 className="text-lg font-bold text-slate-950">Network Visualization</h3>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-          {networkLayout === "circos" ? (
-            <>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-                Arc length = total weighted degree
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-                Ribbon width = edge score
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-                Ribbon color = source gene
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-                TF nodes = diamonds
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-                Target genes = circles
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600">
-                Edge strength = normalized score
-              </span>
-            </>
-          )}
-        </div>
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">

@@ -384,20 +384,6 @@ export default function CircosNetworkGraph({
 
   return (
     <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-      <div className="mb-3 rounded-[1rem] border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-        Outer ring shows {layout.chromosomeList.length} chromosome
-        {layout.chromosomeList.length === 1 ? "" : "s"} sized to hg38 length.
-        Each gene sits at its true genomic position inside its chromosome
-        sector. Ribbons connect predicted regulatory pairs by genomic locus;
-        ribbon opacity reflects edge score.
-        {layout.droppedNodes > 0 || layout.droppedEdges > 0
-          ? ` (${layout.droppedNodes} unmapped gene${
-              layout.droppedNodes === 1 ? "" : "s"
-            } and ${layout.droppedEdges} edge${
-              layout.droppedEdges === 1 ? "" : "s"
-            } omitted.)`
-          : ""}
-      </div>
 
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
