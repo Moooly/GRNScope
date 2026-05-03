@@ -67,6 +67,15 @@ export type MetadataManifest = {
   };
 };
 
+export type GeneCoordinate = {
+  chromosome: string;
+  start: number;
+  end: number;
+  strand?: string | null;
+  gene_type?: string | null;
+  gene_id?: string | null;
+};
+
 export type AlgorithmStoredResult = {
   algorithm_id: string;
   generated_at?: string;
@@ -80,6 +89,8 @@ export type AlgorithmStoredResult = {
   ranked_edges?: AlgorithmResultEdge[];
   top_edges?: AlgorithmResultEdge[];
   source_file?: string;
+  gene_coordinates?: Record<string, GeneCoordinate>;
+  gene_coordinate_count?: number;
 };
 
 export type AlgorithmResultEdge = {
@@ -127,6 +138,12 @@ export type NodeInfo = {
   isTF: boolean;
   topRegulators: string[];
   topTargets: string[];
+  chromosome?: string | null;
+  start?: number | null;
+  end?: number | null;
+  strand?: string | null;
+  gene_type?: string | null;
+  gene_id?: string | null;
 };
 
 export type OverlapEntry = {

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from ..config import PROJECTS_ROOT
 from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
+from ..services.gene_coordinate_service import get_gene_coordinate
 from ..services.demo_service import (
     get_demo_algorithm_ids,
     get_demo_project_root,
@@ -15,7 +16,44 @@ from ..services.demo_service import (
 )
 
 
+
 router = APIRouter()
+
+def attach_gene_coordinates_to_result(result: dict) -> dict:
+    """Attach chromosome coordinate metadata for genes in a result payload.
+
+    The frontend can use `gene_coordinates` to place genes by chromosome/start
+    position in the Circos view. This keeps the edge payload unchanged while
+    adding a lookup table keyed by gene name.
+    """
+    edges = (
+        result.get("edges")
+        or result.get("top_edges")
+        or result.get("ranked_edges")
+        or []
+    )
+
+    gene_names: set[str] = set()
+    for edge in edges:
+        source = str(edge.get("source", "")).strip()
+        target = str(edge.get("target", "")).strip()
+
+        if source:
+            gene_names.add(source)
+        if target:
+            gene_names.add(target)
+
+    gene_coordinates = {}
+    for gene_name in sorted(gene_names):
+        coordinate = get_gene_coordinate(gene_name)
+        if coordinate:
+            gene_coordinates[gene_name] = coordinate
+
+    return {
+        **result,
+        "gene_coordinates": gene_coordinates,
+        "gene_coordinate_count": len(gene_coordinates),
+    }
 
 def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
     ranked_edges_path = get_demo_ranked_edges_path(algorithm_id)
@@ -86,14 +124,16 @@ def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
                 }
             )
 
-    return {
-        "algorithm_id": algorithm_id.upper(),
-        "edge_count": len(edges),
-        "edges": edges,
-        "top_edges": edges,
-        "ranked_edges": edges,
-        "source_file": str(ranked_edges_path),
-    }
+    return attach_gene_coordinates_to_result(
+        {
+            "algorithm_id": algorithm_id.upper(),
+            "edge_count": len(edges),
+            "edges": edges,
+            "top_edges": edges,
+            "ranked_edges": edges,
+            "source_file": str(ranked_edges_path),
+        }
+    )
 
 @router.get("/api/projects/{project_id}/results")
 async def get_project_results(project_id: str):
@@ -193,7 +233,9 @@ async def get_algorithm_result(project_id: str, algorithm_id: str):
         raise HTTPException(status_code=404, detail="Project not found.")
 
     try:
-        result = read_algorithm_result(project_dir, algorithm_id)
+        result = attach_gene_coordinates_to_result(
+            read_algorithm_result(project_dir, algorithm_id)
+        )
         return {
             "ok": True,
             "project_id": project_id,

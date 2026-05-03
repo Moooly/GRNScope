@@ -261,6 +261,29 @@ export default function ProjectDetailPage() {
     return [];
   }, [activeAlgorithmIds, algorithmEdgeRows, consensusRows]);
 
+  const geneCoordinateMap = useMemo(() => {
+    const coordinates = new Map<string, NonNullable<NodeInfo["chromosome"]> extends never ? never : {
+      chromosome?: string | null;
+      start?: number | null;
+      end?: number | null;
+      strand?: string | null;
+      gene_type?: string | null;
+      gene_id?: string | null;
+    }>();
+
+    activeAlgorithmIds.forEach((algorithmId) => {
+      const resultCoordinates = algorithmResults[algorithmId]?.gene_coordinates ?? {};
+
+      Object.entries(resultCoordinates).forEach(([geneName, coordinate]) => {
+        if (!coordinates.has(geneName)) {
+          coordinates.set(geneName, coordinate);
+        }
+      });
+    });
+
+    return coordinates;
+  }, [activeAlgorithmIds, algorithmResults]);
+
   const filteredNetworkEdges = useMemo(() => {
     const query = geneSearch.trim().toLowerCase();
 
@@ -307,6 +330,8 @@ export default function ProjectDetailPage() {
 
     activeEdges.forEach((edge) => {
       if (!nodes.has(edge.source)) {
+        const coordinate = geneCoordinateMap.get(edge.source) ?? null;
+
         nodes.set(edge.source, {
           id: edge.source,
           inDegree: 0,
@@ -315,10 +340,18 @@ export default function ProjectDetailPage() {
           isTF: stableTFGeneIds.has(edge.source.toUpperCase()),
           topRegulators: [],
           topTargets: [],
+          chromosome: coordinate?.chromosome ?? null,
+          start: coordinate?.start ?? null,
+          end: coordinate?.end ?? null,
+          strand: coordinate?.strand ?? null,
+          gene_type: coordinate?.gene_type ?? null,
+          gene_id: coordinate?.gene_id ?? null,
         });
       }
 
       if (!nodes.has(edge.target)) {
+        const coordinate = geneCoordinateMap.get(edge.target) ?? null;
+
         nodes.set(edge.target, {
           id: edge.target,
           inDegree: 0,
@@ -327,6 +360,12 @@ export default function ProjectDetailPage() {
           isTF: stableTFGeneIds.has(edge.target.toUpperCase()),
           topRegulators: [],
           topTargets: [],
+          chromosome: coordinate?.chromosome ?? null,
+          start: coordinate?.start ?? null,
+          end: coordinate?.end ?? null,
+          strand: coordinate?.strand ?? null,
+          gene_type: coordinate?.gene_type ?? null,
+          gene_id: coordinate?.gene_id ?? null,
         });
       }
 
@@ -355,7 +394,7 @@ export default function ProjectDetailPage() {
     return Array.from(nodes.values())
       .filter((node) => visibleNodeIds.has(node.id))
       .sort((a, b) => b.degree - a.degree);
-  }, [activeEdges, filteredNetworkEdges, stableTFGeneIds]);
+  }, [activeEdges, filteredNetworkEdges, geneCoordinateMap, stableTFGeneIds]);
 
   const selectedNode = useMemo(
     () => networkNodes.find((node) => node.id === selectedGene) ?? null,
