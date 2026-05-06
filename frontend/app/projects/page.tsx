@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CreateProjectFlow from "./_components/CreateProjectFlow";
 import ProjectCard from "./_components/ProjectCard";
@@ -30,7 +30,7 @@ export type ProjectAlgorithm = {
   runner: string;
 };
 
-export default function ProjectsPage() {
+function ProjectsPageContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
   const router = useRouter();
@@ -294,5 +294,13 @@ export default function ProjectsPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-[#f7fbff]" />}>
+      <ProjectsPageContent />
+    </Suspense>
   );
 }

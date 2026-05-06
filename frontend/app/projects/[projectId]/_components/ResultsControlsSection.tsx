@@ -169,7 +169,7 @@ export default function ResultsControlsSection({
         />
         {!compact && (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            Keep only edges whose normalized algorithm score is at least this threshold.
+            Keep only edges whose per-target rank evidence is at least this threshold.
           </p>
         )}
       </div>
@@ -194,7 +194,7 @@ export default function ResultsControlsSection({
         />
         {!compact && (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            An edge is included only if the number of algorithms supporting it meets or exceeds the threshold.
+            An edge is included only if this many algorithms rank it above their individual median.
           </p>
         )}
       </div>

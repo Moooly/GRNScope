@@ -368,6 +368,14 @@ export default function NetworkGraph({
           supportingAlgorithms: Array.isArray(event.target.data("supportingAlgorithms"))
             ? (event.target.data("supportingAlgorithms") as string[])
             : [],
+          directionCoverage: Number(event.target.data("directionCoverage") ?? 0),
+          sign: Number(event.target.data("sign") ?? 0) as -1 | 0 | 1,
+          signConfidence:
+            event.target.data("signConfidence") === null ||
+            event.target.data("signConfidence") === undefined
+              ? null
+              : Number(event.target.data("signConfidence")),
+          signCoverage: Number(event.target.data("signCoverage") ?? 0),
         });
       });
 
@@ -778,7 +786,7 @@ export default function NetworkGraph({
   const containerWidth = containerRef.current?.clientWidth ?? 0;
   const containerHeight = containerRef.current?.clientHeight ?? 0;
   const tooltipWidth = 300;
-  const tooltipHeight = 170;
+  const tooltipHeight = 230;
   const tooltipPadding = 16;
 
   const tooltipLeft = edgeTooltip
@@ -829,7 +837,7 @@ export default function NetworkGraph({
 
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Score</p>
+                <p className="text-slate-500">Edge evidence</p>
                 <p className="mt-1 font-semibold text-slate-900">
                   {edgeTooltip.score.toFixed(3)}
                 </p>
@@ -839,6 +847,29 @@ export default function NetworkGraph({
                 <p className="text-slate-500">Rank</p>
                 <p className="mt-1 font-semibold text-slate-900">
                   {edgeTooltip.rank}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
+                <p className="text-slate-500">Dir. cov</p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {Math.round(edgeTooltip.directionCoverage * 100)}%
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
+                <p className="text-slate-500">Sign</p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {edgeTooltip.sign > 0 ? "+" : edgeTooltip.sign < 0 ? "-" : "-"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
+                <p className="text-slate-500">Sign conf</p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {edgeTooltip.signConfidence === null
+                    ? "-"
+                    : `${Math.round(edgeTooltip.signConfidence * 100)}%`}
                 </p>
               </div>
             </div>

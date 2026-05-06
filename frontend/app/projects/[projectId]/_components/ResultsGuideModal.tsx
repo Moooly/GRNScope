@@ -32,21 +32,28 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Algorithm selector</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Choose which completed algorithms are included in the current result view. Selecting one algorithm shows that method's edges. Selecting two or more algorithms creates a consensus view based on the selected methods.
+              Choose which completed algorithms are included in the current result view. Selecting one algorithm shows that method&apos;s edges. Selecting two or more algorithms creates a consensus view based on the selected methods.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Confidence filter</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum normalized score required for an edge to appear. A higher value keeps only stronger predictions. A lower value shows more edges, including weaker predictions.
+              Controls the minimum edge-existence evidence required for an edge to appear. Evidence is computed by ranking candidate regulators separately for each target gene, so algorithms with different score scales can still be compared.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Consensus threshold</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Used when two or more algorithms are selected. It controls how many selected algorithms must support the same edge before that edge appears in the consensus network and table.
+              Used when two or more algorithms are selected. It controls how many selected algorithms must rank the edge above their own median evidence before the edge appears in the consensus network and table.
+            </p>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+            <h4 className="text-base font-bold text-slate-950">Direction and sign</h4>
+            <p className="mt-1 text-sm leading-5 text-slate-600">
+              Direction and sign are annotations on top of edge evidence. Directed or signed algorithms contribute to their own confidence and coverage metrics, while algorithms that cannot provide that information abstain.
             </p>
           </div>
         </div>

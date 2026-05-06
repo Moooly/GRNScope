@@ -21,7 +21,15 @@ type AggregatedEdge = {
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
+  perAlgorithmRawScores?: Record<string, number>;
+  perAlgorithmSigns?: Record<string, -1 | 0 | 1>;
   supportingAlgorithms: string[];
+  direction: -1 | 0 | 1;
+  directionConfidence: number | null;
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
 };
 
 type NetworkVisualizationSectionProps = {
@@ -67,6 +75,10 @@ export default function NetworkVisualizationSection({
 }: NetworkVisualizationSectionProps) {
   const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
   const [isExportConfirmClosing, setIsExportConfirmClosing] = useState(false);
+  const [isVisualGuideOpen, setIsVisualGuideOpen] = useState(false);
+  const [isVisualGuideClosing, setIsVisualGuideClosing] = useState(false);
+  const [isInspectionGuideOpen, setIsInspectionGuideOpen] = useState(false);
+  const [isInspectionGuideClosing, setIsInspectionGuideClosing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -99,6 +111,12 @@ export default function NetworkVisualizationSection({
         count: edge.count,
         rank: edge.rank,
         supportingAlgorithms: edge.supportingAlgorithms,
+        direction: edge.direction,
+        directionConfidence: edge.directionConfidence,
+        directionCoverage: edge.directionCoverage,
+        sign: edge.sign,
+        signConfidence: edge.signConfidence,
+        signCoverage: edge.signCoverage,
       })),
     [filteredNetworkEdges]
   );
@@ -114,10 +132,38 @@ export default function NetworkVisualizationSection({
     }, 480);
   };
 
+  const closeVisualGuide = () => {
+    setIsVisualGuideClosing(true);
+    window.setTimeout(() => {
+      setIsVisualGuideOpen(false);
+      setIsVisualGuideClosing(false);
+    }, 280);
+  };
+
+  const closeInspectionGuide = () => {
+    setIsInspectionGuideClosing(true);
+    window.setTimeout(() => {
+      setIsInspectionGuideOpen(false);
+      setIsInspectionGuideClosing(false);
+    }, 280);
+  };
+
   return (
     <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
-      <div>
+      <div className="flex items-center gap-2">
         <h3 className="text-lg font-bold text-slate-950">Network Visualization</h3>
+        <button
+          type="button"
+          onClick={() => {
+            setIsVisualGuideClosing(false);
+            setIsVisualGuideOpen(true);
+          }}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+          aria-label="Open network visual guide"
+          title="Open network visual guide"
+        >
+          ?
+        </button>
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
@@ -197,14 +243,31 @@ export default function NetworkVisualizationSection({
               onGraphReady={onGraphReady}
             />
           )}
+
         </div>
 
         <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
           <div className="flex items-center justify-between gap-3">
-            <h4 className="text-base font-bold text-slate-950">
-              {selectedEdge ? "Edge Inspection" : "Node Inspection"}
-            </h4>
-            {(selectedNode || selectedEdge) && (
+            <div className="flex items-center gap-2">
+              <h4 className="text-base font-bold text-slate-950">
+                {selectedEdge ? "Edge Inspection" : "Node Inspection"}
+              </h4>
+              {selectedEdge && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInspectionGuideClosing(false);
+                    setIsInspectionGuideOpen(true);
+                  }}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                  aria-label="Open edge inspection guide"
+                  title="Open edge inspection guide"
+                >
+                  ?
+                </button>
+              )}
+            </div>
+            {selectedNode && !selectedEdge && (
               <button
                 type="button"
                 onClick={() => {
@@ -219,63 +282,127 @@ export default function NetworkVisualizationSection({
           </div>
 
           {selectedEdge ? (
-            <>
-              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                  Selected edge
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-lg font-bold text-slate-950">
+            <div className="mt-4 space-y-4">
+              <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+                    Selected edge
+                  </p>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                      selectedEdge.sign > 0
+                        ? "bg-[#e8f5fb] text-[#0072B2]"
+                        : selectedEdge.sign < 0
+                          ? "bg-[#fff0e8] text-[#D55E00]"
+                          : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {selectedEdge.sign > 0
+                      ? "Activating"
+                      : selectedEdge.sign < 0
+                        ? "Repressing"
+                      : "Unknown"}
+                  </span>
+                </div>
+
+                <div
+                  className="mt-3 min-w-0 whitespace-nowrap text-2xl font-bold leading-tight text-slate-950"
+                  title={`${selectedEdge.source} → ${selectedEdge.target}`}
+                >
                   <span>{selectedEdge.source}</span>
-                  <span className="text-[#1b75a6]">→</span>
+                  <span className="px-2 text-[#1b75a6]">→</span>
                   <span>{selectedEdge.target}</span>
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Consensus score
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Edge evidence
                   </p>
-                  <p className="mt-2 text-lg font-bold text-slate-950">
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
                     {selectedEdge.score.toFixed(3)}
                   </p>
-                </div>
-                <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Rank
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    rank #{selectedEdge.rank}
                   </p>
-                  <p className="mt-2 text-lg font-bold text-slate-950">
-                    {selectedEdge.rank}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Supporting methods
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {selectedEdge.count}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Direction confidence
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {selectedEdge.directionConfidence === null
+                      ? "-"
+                      : `${Math.round(selectedEdge.directionConfidence * 100)}%`}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Sign confidence
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {selectedEdge.signConfidence === null
+                      ? "-"
+                      : `${Math.round(selectedEdge.signConfidence * 100)}%`}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                  Supporting algorithms
-                </p>
+              <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+                    Method evidence
+                  </p>
+                </div>
                 <div className="mt-3 space-y-2">
-                  {selectedEdge.supportingAlgorithms.map((algorithmId) => {
-                    const algorithmScore = selectedEdge.perAlgorithmScores[algorithmId];
+                  {selectedEdge.supportingAlgorithms.length > 0 ? (
+                    selectedEdge.supportingAlgorithms
+                      .map((algorithmId) => ({
+                        algorithmId,
+                        algorithmScore: selectedEdge.perAlgorithmScores[algorithmId],
+                      }))
+                      .sort((a, b) => {
+                        const scoreDifference =
+                          (b.algorithmScore ?? Number.NEGATIVE_INFINITY) -
+                          (a.algorithmScore ?? Number.NEGATIVE_INFINITY);
 
-                    return (
-                      <div
-                        key={algorithmId}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
-                      >
-                        <span className="text-sm font-bold text-slate-700">
-                          {algorithmId}
-                        </span>
-                        <span className="rounded-full border border-[#1b75a6]/15 bg-[#f2f9fc] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6]">
-                          {algorithmScore !== undefined ? algorithmScore.toFixed(3) : "-"}
-                        </span>
-                      </div>
-                    );
-                  })}
+                        return scoreDifference !== 0
+                          ? scoreDifference
+                          : a.algorithmId.localeCompare(b.algorithmId);
+                      })
+                      .map(({ algorithmId, algorithmScore }) => {
+
+                      return (
+                        <div
+                          key={algorithmId}
+                          className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5"
+                        >
+                          <span className="min-w-0 truncate text-sm font-bold text-slate-700">
+                            {algorithmId}
+                          </span>
+                          <span className="whitespace-nowrap rounded-full border border-[#1b75a6]/15 bg-white px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6]">
+                            {algorithmScore !== undefined ? algorithmScore.toFixed(3) : "-"}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">
+                      No selected method ranked this edge above its median evidence.
+                    </p>
+                  )}
                 </div>
               </div>
-
-            </>
+            </div>
           ) : selectedNode ? (
             <>
               <div className="mt-4 rounded-[1.25rem] border border-slate-200 bg-white p-4">
@@ -384,11 +511,218 @@ export default function NetworkVisualizationSection({
             </>
           ) : (
             <div className="mt-4 rounded-[1.25rem] border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
-              Click a node to inspect gene details, or click an edge to inspect its source gene, target gene, supporting algorithms, and normalized scores.
+              Click a node to inspect gene details, or click an edge to inspect edge evidence, direction coverage, sign confidence, and supporting algorithms.
             </div>
           )}
         </div>
       </div>
+      {isMounted &&
+        isVisualGuideOpen &&
+        createPortal(
+          <div
+            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm ${
+              isVisualGuideClosing
+                ? "animate-modal-overlay-out"
+                : "animate-modal-overlay"
+            }`}
+            onClick={closeVisualGuide}
+          >
+            <div
+              className={`w-full max-w-lg rounded-[1.5rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
+                isVisualGuideClosing
+                  ? "animate-modal-panel-out"
+                  : "animate-modal-panel"
+              }`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+                    Visual guide
+                  </p>
+                  <h5 className="mt-2 text-lg font-bold text-slate-950">
+                    How to read network edges
+                  </h5>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeVisualGuide}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                  aria-label="Close visual guide"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-5">
+                <div>
+                  <h6 className="text-sm font-bold text-slate-950">Color</h6>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-3 w-10 rounded-full bg-[#0072B2]" />
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Positive</span>
+                        <span className="block text-xs text-slate-500">high confidence</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-3 w-10 rounded-full bg-[#9fc8dc]" />
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Positive</span>
+                        <span className="block text-xs text-slate-500">low confidence</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-3 w-10 rounded-full bg-[#D55E00]" />
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Negative</span>
+                        <span className="block text-xs text-slate-500">high confidence</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-3 w-10 rounded-full bg-[#e6a58a]" />
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Negative</span>
+                        <span className="block text-xs text-slate-500">low confidence</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 sm:col-span-2">
+                      <span className="h-3 w-10 rounded-full bg-[#8a96a3]" />
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Unknown sign</span>
+                        <span className="block text-xs text-slate-500">no signed-method support</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h6 className="text-sm font-bold text-slate-950">Thickness</h6>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-px w-12 rounded-full bg-slate-500" />
+                      <span className="text-sm font-semibold text-slate-800">Low evidence</span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-1.5 w-12 rounded-full bg-slate-500" />
+                      <span className="text-sm font-semibold text-slate-800">High evidence</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h6 className="text-sm font-bold text-slate-950">Arrowhead</h6>
+                  <div className="mt-3 grid gap-2">
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="inline-flex h-5 w-14 items-center">
+                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                          <path d="M2 9H39" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M39 3L53 9L39 15Z" fill="#64748b" />
+                        </svg>
+                      </span>
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Filled arrow</span>
+                        <span className="block text-xs text-slate-500">high direction confidence</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="inline-flex h-5 w-14 items-center">
+                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                          <path d="M2 9H39" stroke="#64748b" strokeWidth="2" strokeLinecap="round" fill="none" />
+                          <path d="M39 3L53 9L39 15Z" stroke="#64748b" strokeWidth="2" strokeLinejoin="round" fill="white" />
+                        </svg>
+                      </span>
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">Hollow arrow</span>
+                        <span className="block text-xs text-slate-500">low direction confidence</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="inline-flex h-5 w-14 items-center">
+                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                          <path d="M2 9H50" stroke="#64748b" strokeWidth="2" strokeLinecap="round" fill="none" />
+                        </svg>
+                      </span>
+                      <span className="leading-5">
+                        <span className="block text-sm font-semibold text-slate-800">No arrowhead</span>
+                        <span className="block text-xs text-slate-500">no direction information</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      {isMounted &&
+        isInspectionGuideOpen &&
+        createPortal(
+          <div
+            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm ${
+              isInspectionGuideClosing
+                ? "animate-modal-overlay-out"
+                : "animate-modal-overlay"
+            }`}
+            onClick={closeInspectionGuide}
+          >
+            <div
+              className={`w-full max-w-lg rounded-[1.5rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
+                isInspectionGuideClosing
+                  ? "animate-modal-panel-out"
+                  : "animate-modal-panel"
+              }`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+                    Edge inspection
+                  </p>
+                  <h5 className="mt-2 text-lg font-bold text-slate-950">
+                    What do these metrics mean?
+                  </h5>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeInspectionGuide}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                  aria-label="Close edge inspection guide"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <h6 className="text-sm font-bold text-slate-950">Edge evidence</h6>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Consensus strength for this regulator-target edge. Each algorithm is first converted to per-target rank evidence, then selected algorithms are averaged.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <h6 className="text-sm font-bold text-slate-950">Direction confidence</h6>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Agreement among methods that can provide direction. Direction coverage below it shows how much of the edge evidence came from direction-aware methods.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <h6 className="text-sm font-bold text-slate-950">Sign confidence</h6>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Agreement among signed methods on activation or repression. Sign coverage shows how much evidence came from signed methods.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <h6 className="text-sm font-bold text-slate-950">Method evidence</h6>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Standardized per-method evidence used for consensus after converting each algorithm's output to per-target ranks.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
       {isMounted &&
         isExportConfirmOpen &&
         createPortal(

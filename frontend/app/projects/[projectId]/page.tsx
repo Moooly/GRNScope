@@ -22,6 +22,7 @@ import useProjectDetailData from "./_hooks/useProjectDetailData";
 
 import {
   type AggregatedEdge,
+  type AlgorithmResultEdge,
   type MetadataManifest,
   type NodeInfo,
   type OverlapEntry,
@@ -30,6 +31,29 @@ import {
 import { boolText, clamp } from "./_lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+
+type GeneCoordinateInfo = {
+  chromosome?: string | null;
+  start?: number | null;
+  end?: number | null;
+  strand?: string | null;
+  gene_type?: string | null;
+  gene_id?: string | null;
+};
+
+const edgeKeyFor = (source: string, target: string) => `${source}|||${target}`;
+
+function numericEdgeScore(edge: AlgorithmResultEdge) {
+  const rawScore = Number(edge.score ?? edge.weight ?? edge.edge_weight ?? 0);
+  return Number.isFinite(rawScore) ? rawScore : 0;
+}
+
+function signOf(value: number): -1 | 0 | 1 {
+  if (value > 0) return 1;
+  if (value < 0) return -1;
+  return 0;
+}
+
 
 
 export default function ProjectDetailPage() {
@@ -163,97 +187,383 @@ export default function ProjectDetailPage() {
     [algorithmCatalog]
   );
 
+  const stableTFGeneIds = useMemo(() => {
+    const metadataWithTFs = metadata as
+      | (MetadataManifest & {
+          known_tf_genes?: string[];
+          known_tf_gene_names?: string[];
+        })
+      | null;
 
+    const metadataTFList =
+      (Array.isArray(metadataWithTFs?.known_tf_genes) ? metadataWithTFs.known_tf_genes : null) ??
+      (Array.isArray(metadataWithTFs?.known_tf_gene_names)
+        ? metadataWithTFs.known_tf_gene_names
+        : null);
+
+    if (!metadataTFList || metadataTFList.length === 0) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      metadataTFList
+        .map((gene) => String(gene).trim().toUpperCase())
+        .filter((gene) => gene.length > 0)
+    );
+  }, [metadata]);
+
+  const observedResultGenes = useMemo(() => {
+    const allGenes = new Set<string>();
+    const sourceGenes = new Set<string>();
+
+    completedAlgorithmIds.forEach((algorithmId) => {
+      (algorithmResults[algorithmId]?.top_edges ?? []).forEach((edge) => {
+        const source = String(edge.source ?? "").trim();
+        const target = String(edge.target ?? "").trim();
+
+        if (source) {
+          allGenes.add(source);
+          sourceGenes.add(source);
+        }
+        if (target) allGenes.add(target);
+      });
+    });
+
+    return {
+      allGenes: [...allGenes].sort(),
+      sourceGenes: [...sourceGenes].sort(),
+    };
+  }, [algorithmResults, completedAlgorithmIds]);
+
+  const candidateRegulatorIds = useMemo(() => {
+    const observedByUpper = new Map(
+      observedResultGenes.allGenes.map((gene) => [gene.toUpperCase(), gene])
+    );
+    const knownTFsInResults = [...stableTFGeneIds]
+      .map((gene) => observedByUpper.get(gene))
+      .filter((gene): gene is string => Boolean(gene));
+
+    return (knownTFsInResults.length > 0
+      ? knownTFsInResults
+      : observedResultGenes.sourceGenes
+    ).sort();
+  }, [observedResultGenes, stableTFGeneIds]);
+
+  const candidateTargetIds = useMemo(
+    () => observedResultGenes.allGenes,
+    [observedResultGenes]
+  );
+
+  const visualTFGeneIds = useMemo(() => {
+    if (stableTFGeneIds.size > 0) return stableTFGeneIds;
+    return new Set(candidateRegulatorIds.map((gene) => gene.toUpperCase()));
+  }, [candidateRegulatorIds, stableTFGeneIds]);
+
+  const standardizedAlgorithmEdgeRows = useMemo(() => {
+    const next: Record<string, AggregatedEdge[]> = {};
+    const candidateRegulatorSet = new Set(candidateRegulatorIds);
+    const candidateTargetSet = new Set(candidateTargetIds);
+    const regulatorCount = Math.max(candidateRegulatorIds.length, 1);
+
+    completedAlgorithmIds.forEach((algorithmId) => {
+      const algorithmMeta = algorithmMetaMap.get(algorithmId);
+      const isDirected = algorithmMeta?.directed ?? true;
+      const isSigned = algorithmMeta?.signed ?? false;
+      const scoreByEdge = new Map<
+        string,
+        { source: string; target: string; rawScore: number }
+      >();
+
+      const addCandidateScore = (
+        source: string,
+        target: string,
+        rawScore: number
+      ) => {
+        if (source === target) return;
+        if (!candidateRegulatorSet.has(source) || !candidateTargetSet.has(target)) {
+          return;
+        }
+
+        const key = edgeKeyFor(source, target);
+        const current = scoreByEdge.get(key);
+
+        if (!current || Math.abs(rawScore) > Math.abs(current.rawScore)) {
+          scoreByEdge.set(key, { source, target, rawScore });
+        }
+      };
+
+      (algorithmResults[algorithmId]?.top_edges ?? []).forEach((edge) => {
+        const source = String(edge.source ?? "").trim();
+        const target = String(edge.target ?? "").trim();
+        const rawScore = numericEdgeScore(edge);
+
+        if (!source || !target) return;
+
+        addCandidateScore(source, target, rawScore);
+
+        if (!isDirected) {
+          addCandidateScore(target, source, rawScore);
+        }
+      });
+
+      const entriesByTarget = new Map<
+        string,
+        { source: string; target: string; rawScore: number }[]
+      >();
+
+      scoreByEdge.forEach((entry) => {
+        const entries = entriesByTarget.get(entry.target) ?? [];
+        entries.push(entry);
+        entriesByTarget.set(entry.target, entries);
+      });
+
+      const rows: AggregatedEdge[] = [];
+
+      entriesByTarget.forEach((entries) => {
+        entries
+          .sort((a, b) => {
+            const scoreDelta = Math.abs(b.rawScore) - Math.abs(a.rawScore);
+            if (scoreDelta !== 0) return scoreDelta;
+            return a.source.localeCompare(b.source);
+          })
+          .forEach((entry, index) => {
+            const rank = index + 1;
+            const evidence =
+              regulatorCount <= 1
+                ? 1
+                : clamp(1 - (rank - 1) / (regulatorCount - 1), 0, 1);
+            const signVote = isSigned ? signOf(entry.rawScore) : 0;
+            const direction =
+              isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
+            const supportingAlgorithms = evidence > 0.5 ? [algorithmId] : [];
+
+            rows.push({
+              key: `${algorithmId}-${entry.source}-${entry.target}`,
+              source: entry.source,
+              target: entry.target,
+              score: evidence,
+              count: supportingAlgorithms.length,
+              rank,
+              supportingAlgorithms,
+              perAlgorithmScores: {
+                [algorithmId]: evidence,
+              },
+              perAlgorithmRawScores: {
+                [algorithmId]: entry.rawScore,
+              },
+              perAlgorithmSigns: {
+                [algorithmId]: signVote,
+              },
+              direction,
+              directionConfidence: direction === 1 ? 1 : null,
+              directionCoverage: isDirected ? 1 : 0,
+              sign: signVote,
+              signConfidence: signVote === 0 ? null : 1,
+              signCoverage: isSigned && signVote !== 0 ? 1 : 0,
+            });
+          });
+      });
+
+      next[algorithmId] = rows.sort((a, b) => b.score - a.score);
+    });
+
+    return next;
+  }, [
+    algorithmMetaMap,
+    algorithmResults,
+    candidateRegulatorIds,
+    candidateTargetIds,
+    completedAlgorithmIds,
+  ]);
 
   const algorithmEdgeRows = useMemo(() => {
     const next: Record<string, AggregatedEdge[]> = {};
 
     completedAlgorithmIds.forEach((algorithmId) => {
-      const rawEdges = algorithmResults[algorithmId]?.top_edges ?? [];
-      const uniqueEdges: typeof rawEdges = [];
-      const seenEdgeKeys = new Set<string>();
-
-      rawEdges.forEach((edge) => {
-        const edgeKey = `${edge.source}|||${edge.target}`;
-        if (seenEdgeKeys.has(edgeKey)) return;
-        seenEdgeKeys.add(edgeKey);
-        uniqueEdges.push(edge);
-      });
-
-      next[algorithmId] = uniqueEdges
-        .map((edge, index) => {
-          const rawNormalized = edge.normalized_score;
-          const hasNormalized =
-            rawNormalized !== undefined &&
-            rawNormalized !== null &&
-            Number.isFinite(Number(rawNormalized));
-          const rawScore = Number(edge.score ?? edge.weight ?? edge.edge_weight ?? 0);
-          const hasRawScore = Number.isFinite(rawScore);
-          const normalizedScore = hasNormalized
-            ? clamp(Number(rawNormalized), 0, 1)
-            : hasRawScore
-              ? clamp(Math.abs(rawScore), 0, 1)
-              : 0;
-
-          return {
-            key: `${algorithmId}-${edge.source}-${edge.target}-${index}`,
-            source: edge.source,
-            target: edge.target,
-            score: hasRawScore ? rawScore : 0,
-            count: 1,
-            rank: index + 1,
-            supportingAlgorithms: [algorithmId],
-            perAlgorithmScores: {
-              [algorithmId]: normalizedScore,
-            },
-          };
-        })
-        .filter((edge) => edge.perAlgorithmScores[algorithmId] >= confidenceThreshold);
+      next[algorithmId] = (standardizedAlgorithmEdgeRows[algorithmId] ?? [])
+        .filter((edge) => edge.score >= confidenceThreshold)
+        .map((edge, index) => ({ ...edge, rank: index + 1 }));
     });
 
     return next;
-  }, [algorithmResults, completedAlgorithmIds, confidenceThreshold]);
+  }, [completedAlgorithmIds, confidenceThreshold, standardizedAlgorithmEdgeRows]);
 
   const consensusRows = useMemo(() => {
-    const bucket = new Map<string, AggregatedEdge>();
+    if (activeAlgorithmIds.length < 2) return [];
+
+    const sumAlpha = Math.max(activeAlgorithmIds.length, 1);
+    const candidateRegulatorSet = new Set(candidateRegulatorIds);
+    const rowsByAlgorithm = new Map<string, Map<string, AggregatedEdge>>();
 
     activeAlgorithmIds.forEach((algorithmId) => {
-      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
-        const key = `${edge.source}|||${edge.target}`;
-        const current = bucket.get(key);
-        const normalized = edge.perAlgorithmScores[algorithmId] ?? edge.score;
+      rowsByAlgorithm.set(
+        algorithmId,
+        new Map(
+          (standardizedAlgorithmEdgeRows[algorithmId] ?? []).map((edge) => [
+            edgeKeyFor(edge.source, edge.target),
+            edge,
+          ])
+        )
+      );
+    });
 
-        if (!current) {
-          bucket.set(key, {
-            key,
+    type ConsensusAccumulator = {
+      source: string;
+      target: string;
+      totalEvidence: number;
+      directedEvidence: number;
+      signedEvidence: number;
+      signVote: number;
+      signDenominator: number;
+      supportingAlgorithms: string[];
+      perAlgorithmScores: Record<string, number>;
+      perAlgorithmRawScores: Record<string, number>;
+      perAlgorithmSigns: Record<string, -1 | 0 | 1>;
+    };
+
+    const buckets = new Map<string, ConsensusAccumulator>();
+
+    activeAlgorithmIds.forEach((algorithmId) => {
+      const algorithmMeta = algorithmMetaMap.get(algorithmId);
+      const isDirected = algorithmMeta?.directed ?? true;
+      const isSigned = algorithmMeta?.signed ?? false;
+
+      (standardizedAlgorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
+        const key = edgeKeyFor(edge.source, edge.target);
+        const evidence = edge.perAlgorithmScores[algorithmId] ?? edge.score;
+        const rawScore = edge.perAlgorithmRawScores?.[algorithmId];
+        const signVote = edge.perAlgorithmSigns?.[algorithmId] ?? 0;
+        const current =
+          buckets.get(key) ??
+          {
             source: edge.source,
             target: edge.target,
-            score: normalized,
-            count: 1,
-            rank: 0,
-            supportingAlgorithms: [algorithmId],
-            perAlgorithmScores: { [algorithmId]: normalized },
-          });
-          return;
+            totalEvidence: 0,
+            directedEvidence: 0,
+            signedEvidence: 0,
+            signVote: 0,
+            signDenominator: 0,
+            supportingAlgorithms: [],
+            perAlgorithmScores: {},
+            perAlgorithmRawScores: {},
+            perAlgorithmSigns: {},
+          };
+
+        current.totalEvidence += evidence;
+        current.perAlgorithmScores[algorithmId] = evidence;
+
+        if (rawScore !== undefined) {
+          current.perAlgorithmRawScores[algorithmId] = rawScore;
         }
 
-        current.score += normalized;
-        current.count += 1;
-        current.supportingAlgorithms.push(algorithmId);
-        current.perAlgorithmScores[algorithmId] = normalized;
+        current.perAlgorithmSigns[algorithmId] = signVote;
+
+        if (evidence > 0.5) {
+          current.supportingAlgorithms.push(algorithmId);
+        }
+
+        if (isDirected) {
+          current.directedEvidence += evidence;
+        }
+
+        if (isSigned) {
+          current.signedEvidence += evidence;
+          if (signVote !== 0) {
+            current.signVote += evidence * signVote;
+            current.signDenominator += evidence;
+          }
+        }
+
+        buckets.set(key, current);
       });
     });
 
-    return Array.from(bucket.values())
-      .map((edge) => ({
-        ...edge,
-        score: edge.score / edge.count,
-        supportingAlgorithms: [...edge.supportingAlgorithms].sort(),
-      }))
-      .filter((edge) => edge.count >= consensusThreshold)
+    return Array.from(buckets.entries())
+      .map(([key, edge]) => {
+        const score = edge.totalEvidence / sumAlpha;
+        const directionCoverage =
+          edge.totalEvidence > 0 ? edge.directedEvidence / edge.totalEvidence : 0;
+        const signCoverage =
+          edge.totalEvidence > 0 ? edge.signedEvidence / edge.totalEvidence : 0;
+        const signConfidence =
+          edge.signDenominator > 0
+            ? clamp(Math.abs(edge.signVote) / edge.signDenominator, 0, 1)
+            : null;
+        const sign = signOf(edge.signVote);
+
+        let direction: -1 | 0 | 1 = 1;
+        let directionConfidence: number | null = 1;
+
+        if (candidateRegulatorSet.has(edge.target)) {
+          let directionNumerator = 0;
+          let directionDenominator = 0;
+          const reverseKey = edgeKeyFor(edge.target, edge.source);
+
+          activeAlgorithmIds.forEach((algorithmId) => {
+            const algorithmMeta = algorithmMetaMap.get(algorithmId);
+            if (algorithmMeta?.directed === false) return;
+
+            const forward =
+              rowsByAlgorithm
+                .get(algorithmId)
+                ?.get(key)
+                ?.perAlgorithmScores[algorithmId] ?? 0;
+            const reverse =
+              rowsByAlgorithm
+                .get(algorithmId)
+                ?.get(reverseKey)
+                ?.perAlgorithmScores[algorithmId] ?? 0;
+
+            directionNumerator += forward - reverse;
+            directionDenominator += forward + reverse;
+          });
+
+          direction = signOf(directionNumerator);
+          directionConfidence =
+            directionDenominator > 0
+              ? clamp(Math.abs(directionNumerator) / directionDenominator, 0, 1)
+              : null;
+        }
+
+        activeAlgorithmIds.forEach((algorithmId) => {
+          if (edge.perAlgorithmScores[algorithmId] === undefined) {
+            edge.perAlgorithmScores[algorithmId] = 0;
+          }
+        });
+
+        return {
+          key,
+          source: edge.source,
+          target: edge.target,
+          score,
+          count: edge.supportingAlgorithms.length,
+          rank: 0,
+          supportingAlgorithms: [...edge.supportingAlgorithms].sort(),
+          perAlgorithmScores: edge.perAlgorithmScores,
+          perAlgorithmRawScores: edge.perAlgorithmRawScores,
+          perAlgorithmSigns: edge.perAlgorithmSigns,
+          direction,
+          directionConfidence,
+          directionCoverage,
+          sign,
+          signConfidence,
+          signCoverage,
+        } satisfies AggregatedEdge;
+      })
+      .filter(
+        (edge) =>
+          edge.score >= confidenceThreshold && edge.count >= consensusThreshold
+      )
       .sort((a, b) => b.score - a.score)
       .map((edge, index) => ({ ...edge, rank: index + 1 }));
-  }, [activeAlgorithmIds, algorithmEdgeRows, consensusThreshold]);
+  }, [
+    activeAlgorithmIds,
+    algorithmMetaMap,
+    candidateRegulatorIds,
+    confidenceThreshold,
+    consensusThreshold,
+    standardizedAlgorithmEdgeRows,
+  ]);
 
   const activeEdges = useMemo(() => {
     if (activeAlgorithmIds.length >= 2) return consensusRows;
@@ -262,14 +572,7 @@ export default function ProjectDetailPage() {
   }, [activeAlgorithmIds, algorithmEdgeRows, consensusRows]);
 
   const geneCoordinateMap = useMemo(() => {
-    const coordinates = new Map<string, NonNullable<NodeInfo["chromosome"]> extends never ? never : {
-      chromosome?: string | null;
-      start?: number | null;
-      end?: number | null;
-      strand?: string | null;
-      gene_type?: string | null;
-      gene_id?: string | null;
-    }>();
+    const coordinates = new Map<string, GeneCoordinateInfo>();
 
     activeAlgorithmIds.forEach((algorithmId) => {
       const resultCoordinates = algorithmResults[algorithmId]?.gene_coordinates ?? {};
@@ -300,31 +603,6 @@ export default function ProjectDetailPage() {
     });
   }, [activeEdges, geneSearch, isolatedGene]);
 
-  const stableTFGeneIds = useMemo(() => {
-    const metadataWithTFs = metadata as
-      | (MetadataManifest & {
-          known_tf_genes?: string[];
-          known_tf_gene_names?: string[];
-        })
-      | null;
-
-    const metadataTFList =
-      (Array.isArray(metadataWithTFs?.known_tf_genes) ? metadataWithTFs.known_tf_genes : null) ??
-      (Array.isArray(metadataWithTFs?.known_tf_gene_names)
-        ? metadataWithTFs.known_tf_gene_names
-        : null);
-
-    if (!metadataTFList || metadataTFList.length === 0) {
-      return new Set<string>();
-    }
-
-    return new Set(
-      metadataTFList
-        .map((gene) => String(gene).trim().toUpperCase())
-        .filter((gene) => gene.length > 0)
-    );
-  }, [metadata]);
-
   const networkNodes = useMemo(() => {
     const nodes = new Map<string, NodeInfo>();
 
@@ -337,7 +615,7 @@ export default function ProjectDetailPage() {
           inDegree: 0,
           outDegree: 0,
           degree: 0,
-          isTF: stableTFGeneIds.has(edge.source.toUpperCase()),
+          isTF: visualTFGeneIds.has(edge.source.toUpperCase()),
           topRegulators: [],
           topTargets: [],
           chromosome: coordinate?.chromosome ?? null,
@@ -357,7 +635,7 @@ export default function ProjectDetailPage() {
           inDegree: 0,
           outDegree: 0,
           degree: 0,
-          isTF: stableTFGeneIds.has(edge.target.toUpperCase()),
+          isTF: visualTFGeneIds.has(edge.target.toUpperCase()),
           topRegulators: [],
           topTargets: [],
           chromosome: coordinate?.chromosome ?? null,
@@ -372,8 +650,8 @@ export default function ProjectDetailPage() {
       const source = nodes.get(edge.source)!;
       const target = nodes.get(edge.target)!;
 
-      source.isTF = stableTFGeneIds.has(edge.source.toUpperCase());
-      target.isTF = stableTFGeneIds.has(edge.target.toUpperCase());
+      source.isTF = visualTFGeneIds.has(edge.source.toUpperCase());
+      target.isTF = visualTFGeneIds.has(edge.target.toUpperCase());
 
       source.outDegree += 1;
       source.degree += 1;
@@ -394,7 +672,7 @@ export default function ProjectDetailPage() {
     return Array.from(nodes.values())
       .filter((node) => visibleNodeIds.has(node.id))
       .sort((a, b) => b.degree - a.degree);
-  }, [activeEdges, filteredNetworkEdges, geneCoordinateMap, stableTFGeneIds]);
+  }, [activeEdges, filteredNetworkEdges, geneCoordinateMap, visualTFGeneIds]);
 
   const selectedNode = useMemo(
     () => networkNodes.find((node) => node.id === selectedGene) ?? null,
@@ -607,7 +885,7 @@ export default function ProjectDetailPage() {
   );
 
   const handleExportEdgeList = useCallback(() => {
-    const escapeCsvValue = (value: string | number) => {
+    const escapeCsvValue = (value: string | number | null) => {
       const stringValue = String(value);
 
       if (/[",\n]/.test(stringValue)) {
@@ -624,8 +902,14 @@ export default function ProjectDetailPage() {
       selectedView === "consensus" ? "Consensus Rank" : "Rank",
       "Source Gene",
       "Target Gene",
-      "Consensus Count",
-      selectedView === "consensus" ? "Consensus Score" : "Score",
+      "Supporting Method Count",
+      selectedView === "consensus" ? "Consensus Evidence" : "Edge Evidence",
+      "Direction",
+      "Direction Confidence",
+      "Direction Coverage",
+      "Sign",
+      "Sign Confidence",
+      "Sign Coverage",
       ...activeAlgorithmIds,
       "Supporting Algorithms",
     ];
@@ -639,6 +923,12 @@ export default function ProjectDetailPage() {
           edge.target,
           edge.count,
           edge.score.toFixed(3),
+          edge.direction === 1 ? "source_to_target" : edge.direction === -1 ? "reverse" : "unknown",
+          edge.directionConfidence === null ? "" : edge.directionConfidence.toFixed(3),
+          edge.directionCoverage.toFixed(3),
+          edge.sign === 1 ? "positive" : edge.sign === -1 ? "negative" : "unknown",
+          edge.signConfidence === null ? "" : edge.signConfidence.toFixed(3),
+          edge.signCoverage.toFixed(3),
           ...activeAlgorithmIds.map((algorithmId) =>
             edge.perAlgorithmScores[algorithmId] !== undefined
               ? edge.perAlgorithmScores[algorithmId].toFixed(3)

@@ -54,26 +54,6 @@ const CHROMOSOME_ORDER: Record<string, number> = (() => {
   return order;
 })();
 
-/**
- * 24 perceptually-uniform HSL hues at S=62%, L=52% — saturated enough to read
- * on white, light enough that white text stays legible on top. The index
- * permutation places chromosome 1 next to chromosome 13's color, chromosome 2
- * next to chromosome 14's, etc., so adjacent sectors on the ring always have
- * a strong visual contrast even though the palette is regular under the hood.
- */
-const HUE_PERMUTATION = [
-  0, 12, 6, 18, 3, 15, 9, 21,
-  1, 13, 7, 19, 4, 16, 10, 22,
-  2, 14, 8, 20, 5, 17, 11, 23,
-];
-
-function chromosomeColor(chromosome: string): string {
-  const order = CHROMOSOME_ORDER[chromosome];
-  const slot = HUE_PERMUTATION[((order ?? 1) - 1) % HUE_PERMUTATION.length];
-  const hue = (slot * 360) / HUE_PERMUTATION.length;
-  return `hsl(${hue}, 62%, 52%)`;
-}
-
 const WIDTH = 780;
 const HEIGHT = 780;
 const CENTER_X = WIDTH / 2;
@@ -92,6 +72,10 @@ const CHROMOSOME_GAP_RADIANS = 0.014; // small gap between adjacent chromosomes
 const RIBBON_HALF_WIDTH = 0.005; // angular half-width of each ribbon endpoint
 
 const MAX_CIRCOS_EDGES = 120;
+const CIRCOS_ACTIVATION_COLOR = "#0072B2";
+const CIRCOS_REPRESSION_COLOR = "#D55E00";
+const CIRCOS_UNKNOWN_SIGN_COLOR = "#94a3b8";
+const CIRCOS_CHROMOSOME_COLORS = ["#d8e3ed", "#cbd8e4"];
 
 function normalizeChromosome(value?: string | null): string {
   if (!value) return "";
@@ -126,6 +110,23 @@ function getRawEdgeScore(edge: AggregatedEdge) {
             ? e.weight
             : 0;
   return Number.isFinite(candidate) ? Math.max(0, candidate) : 0;
+}
+
+function getConsensusEdgeColor(edge: AggregatedEdge) {
+  if (edge.signConfidence === null || edge.sign === 0 || edge.signCoverage === 0) {
+    return CIRCOS_UNKNOWN_SIGN_COLOR;
+  }
+
+  return edge.sign > 0 ? CIRCOS_ACTIVATION_COLOR : CIRCOS_REPRESSION_COLOR;
+}
+
+function getConsensusEdgeOpacity(edge: AggregatedEdge, score: number) {
+  const signConfidence = edge.signConfidence ?? 0;
+  const signCoverage = edge.signCoverage ?? 0;
+  const confidenceSignal =
+    edge.sign === 0 ? 0.42 : Math.max(0.38, signConfidence * signCoverage);
+
+  return Math.min(0.82, 0.16 + score * 0.4 + confidenceSignal * 0.26);
 }
 
 function polarToCartesian(angle: number, radius: number) {
@@ -304,7 +305,10 @@ export default function CircosNetworkGraph({
         startAngle,
         endAngle,
         length,
-        color: chromosomeColor(chromosome),
+        color: CIRCOS_CHROMOSOME_COLORS[
+          ((CHROMOSOME_ORDER[chromosome] ?? 1) - 1) %
+            CIRCOS_CHROMOSOME_COLORS.length
+        ],
         labelX: labelPt.x,
         labelY: labelPt.y,
       });
@@ -395,7 +399,7 @@ export default function CircosNetworkGraph({
           onSelectEdge?.(null);
         }}
       >
-        {/* Chromosome bands with their number label centred inside the band */}
+        {/* Neutral chromosome bands keep edge color reserved for regulation sign. */}
         {layout.chromosomeLayout.map((chr) => {
           const sectorAngle = chr.endAngle - chr.startAngle;
           // Hide the chromosome number when its sector is too narrow for the
@@ -411,8 +415,8 @@ export default function CircosNetworkGraph({
                   CHROMOSOME_OUTER_RADIUS,
                 )}
                 fill={chr.color}
-                stroke="white"
-                strokeWidth="1.5"
+                stroke="#ffffff"
+                strokeWidth="2"
               >
                 <title>
                   {chr.chromosome} · {(chr.length / 1e6).toFixed(1)} Mb
@@ -424,11 +428,7 @@ export default function CircosNetworkGraph({
                   y={chr.labelY}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  className="pointer-events-none select-none fill-white text-[12px] font-bold tracking-[0.02em]"
-                  paintOrder="stroke"
-                  stroke="rgba(15, 23, 42, 0.45)"
-                  strokeWidth="2.5"
-                  strokeLinejoin="round"
+                  className="pointer-events-none select-none fill-slate-700 text-[12px] font-bold tracking-[0.02em]"
                 >
                   {chr.chromosome.replace("chr", "")}
                 </text>
@@ -491,19 +491,18 @@ export default function CircosNetworkGraph({
             const targetStart = targetGene.angle - RIBBON_HALF_WIDTH;
             const targetEnd = targetGene.angle + RIBBON_HALF_WIDTH;
 
-            const ribbonColor = isActive ? "#0f5e8c" : sourceGene.color;
+            const ribbonColor = getConsensusEdgeColor(edge);
+            const ribbonOpacity = getConsensusEdgeOpacity(edge, score);
 
             return (
               <path
                 key={edgeKey}
                 d={getRibbonPath(sourceStart, sourceEnd, targetStart, targetEnd)}
                 fill={ribbonColor}
-                fillOpacity={
-                  isDimmed ? 0.06 : isActive ? 0.85 : 0.18 + score * 0.45
-                }
+                fillOpacity={isDimmed ? 0.05 : isActive ? 0.88 : ribbonOpacity}
                 stroke={ribbonColor}
-                strokeWidth={isActive ? 1.4 : 0.5}
-                strokeOpacity={isDimmed ? 0.1 : isActive ? 0.95 : 0.5}
+                strokeWidth={isActive ? 1.9 : 0.45 + score * 1.05}
+                strokeOpacity={isDimmed ? 0.1 : isActive ? 0.95 : Math.min(0.72, ribbonOpacity + 0.08)}
                 className="cursor-pointer transition"
                 onClick={(event) => {
                   event.stopPropagation();

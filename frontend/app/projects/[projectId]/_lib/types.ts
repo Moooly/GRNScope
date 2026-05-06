@@ -127,7 +127,15 @@ export type AggregatedEdge = {
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
+  perAlgorithmRawScores?: Record<string, number>;
+  perAlgorithmSigns?: Record<string, -1 | 0 | 1>;
   supportingAlgorithms: string[];
+  direction: -1 | 0 | 1;
+  directionConfidence: number | null;
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
 };
 
 export type NodeInfo = {

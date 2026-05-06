@@ -6,7 +6,15 @@ type AggregatedEdge = {
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
+  perAlgorithmRawScores?: Record<string, number>;
+  perAlgorithmSigns?: Record<string, -1 | 0 | 1>;
   supportingAlgorithms: string[];
+  direction: -1 | 0 | 1;
+  directionConfidence: number | null;
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
 };
 
 type EdgeAnalysisTableSectionProps = {
@@ -73,9 +81,12 @@ export default function EdgeAnalysisTableSection({
     ["rank", selectedView === "consensus" ? "Consensus Rank" : "Rank"],
     ["source", "Source Gene"],
     ["target", "Target Gene"],
-    ["count", "Consensus Count"],
-    ["score", selectedView === "consensus" ? "Consensus Score" : "Raw Score"],
+    ["count", "Supporting Methods"],
+    ["score", selectedView === "consensus" ? "Consensus Evidence" : "Edge Evidence"],
   ];
+
+  const confidencePercent = (value: number | null) =>
+    value === null ? null : Math.round(value * 100);
 
   return (
     <div className="mt-6 rounded-[1.75rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
@@ -109,7 +120,7 @@ export default function EdgeAnalysisTableSection({
             <thead className="bg-slate-50 text-left text-slate-600">
               <tr>
                 {sortColumns.map(([key, label]) => (
-                  <th key={key} className="px-4 py-3 align-top font-medium">
+                  <th key={key} className="px-4 py-3 align-middle font-medium">
                     <button
                       type="button"
                       onClick={() => {
@@ -123,13 +134,13 @@ export default function EdgeAnalysisTableSection({
                           setTableSortDirection("asc");
                         }
                       }}
-                      className="group inline-flex items-start gap-2 text-left transition hover:text-[#1b75a6]"
+                      className="group inline-flex items-center gap-2 text-left transition hover:text-[#1b75a6]"
                     >
                       <span className="block font-bold text-slate-800 group-hover:text-[#1b75a6]">
                         {label}
                       </span>
                       {tableSortKey === key && (
-                        <span className="mt-0.5 text-[#1b75a6]">
+                        <span className="text-[#1b75a6]">
                           {tableSortDirection === "asc" ? "↑" : "↓"}
                         </span>
                       )}
@@ -138,10 +149,16 @@ export default function EdgeAnalysisTableSection({
                 ))}
 
                 {completedAlgorithmIds.map((algorithmId) => (
-                  <th key={algorithmId} className="px-4 py-3 align-top font-medium">
+                  <th key={algorithmId} className="px-4 py-3 align-middle font-medium">
                     <span className="block font-bold text-slate-800">{algorithmId}</span>
                   </th>
                 ))}
+                <th className="px-4 py-3 align-middle font-medium">
+                  <span className="block font-bold text-slate-800">Direction</span>
+                </th>
+                <th className="px-4 py-3 align-middle font-medium">
+                  <span className="block font-bold text-slate-800">Sign</span>
+                </th>
               </tr>
             </thead>
 
@@ -159,7 +176,6 @@ export default function EdgeAnalysisTableSection({
                       className={`cursor-pointer transition hover:bg-[#f2f9fc] ${
                         isSelected ? "bg-[#e8f5fb]" : ""
                       }`}
-                      title={`${edge.source} → ${edge.target} · raw score ${edge.score.toFixed(3)} · ${edge.supportingAlgorithms.join(", ")}`}
                     >
                       <td className="px-4 py-3 font-medium text-slate-600">{edge.rank}</td>
                       <td className="px-4 py-3 font-bold text-slate-950">{edge.source}</td>
@@ -178,6 +194,48 @@ export default function EdgeAnalysisTableSection({
                           )}
                         </td>
                       ))}
+
+                      <td className="px-4 py-3 text-slate-600">
+                        <div className="min-w-[110px]">
+                          <div className="whitespace-nowrap font-medium text-slate-700">
+                            {edge.direction === 1
+                              ? "source -> target"
+                              : edge.direction === -1
+                                ? "reverse"
+                                : "Unknown"}
+                          </div>
+                          <div className="mt-1 text-xs tabular-nums text-slate-400">
+                            {confidencePercent(edge.directionConfidence) !== null
+                              ? `${confidencePercent(edge.directionConfidence)}%`
+                              : "-"}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-600">
+                        <div className="min-w-[92px]">
+                          <div
+                            className={`whitespace-nowrap font-medium ${
+                              edge.sign === 1
+                                ? "text-[#0072B2]"
+                                : edge.sign === -1
+                                  ? "text-[#D55E00]"
+                                  : "text-slate-700"
+                            }`}
+                          >
+                            {edge.sign === 1
+                              ? "positive"
+                              : edge.sign === -1
+                                ? "negative"
+                                : "unknown"}
+                          </div>
+                          <div className="mt-1 text-xs tabular-nums text-slate-400">
+                            {confidencePercent(edge.signConfidence) !== null
+                              ? `${confidencePercent(edge.signConfidence)}%`
+                              : "-"}
+                          </div>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -185,7 +243,7 @@ export default function EdgeAnalysisTableSection({
                 <tr>
                   <td
                     className="px-4 py-8 text-center text-slate-500"
-                    colSpan={5 + completedAlgorithmIds.length}
+                    colSpan={7 + completedAlgorithmIds.length}
                   >
                     No matching edges.
                   </td>

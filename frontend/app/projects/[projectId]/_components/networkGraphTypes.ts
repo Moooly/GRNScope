@@ -16,6 +16,12 @@ export type NetworkEdge = {
   count: number;
   rank: number;
   supportingAlgorithms: string[];
+  direction: -1 | 0 | 1;
+  directionConfidence: number | null;
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
 };
 
 export type NetworkLayoutMode =
@@ -43,6 +49,10 @@ export type EdgeTooltipState = {
   score: number;
   rank: number;
   supportingAlgorithms: string[];
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
 };
 
 export type PositionMap = Record<string, { x: number; y: number }>;

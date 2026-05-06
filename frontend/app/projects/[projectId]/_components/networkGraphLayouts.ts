@@ -503,6 +503,31 @@ export function buildGraphElements(
     );
   };
 
+  const getEdgeColor = (edge: NetworkEdge) => {
+    if (edge.signConfidence === null || edge.sign === 0 || edge.signCoverage === 0) {
+      return "#8a96a3";
+    }
+
+    const isHighConfidence = edge.signConfidence >= 0.7;
+
+    if (edge.sign > 0) {
+      return isHighConfidence ? "#0072B2" : "#9fc8dc";
+    }
+
+    return isHighConfidence ? "#D55E00" : "#e6a58a";
+  };
+
+  const getArrowShape = (edge: NetworkEdge) => {
+    if (edge.direction === 0 || edge.directionCoverage <= 0) return "none";
+    if (edge.directionConfidence === null) return "none";
+    return "triangle";
+  };
+
+  const getArrowFill = (edge: NetworkEdge) => {
+    if (edge.directionConfidence === null) return "filled";
+    return edge.directionConfidence >= 0.7 ? "filled" : "hollow";
+  };
+
   const elements = [
     ...nodes.map((node) => ({
       data: {
@@ -521,18 +546,24 @@ export function buildGraphElements(
         target: edge.target,
         score: edge.score,
         visualScore: getVisualScore(edge.score),
+        edgeColor: getEdgeColor(edge),
+        arrowShape: getArrowShape(edge),
+        arrowFill: getArrowFill(edge),
         count: edge.count,
         rank: edge.rank,
         supportRatio:
           maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
         supportingAlgorithms: edge.supportingAlgorithms,
+        directionCoverage: edge.directionCoverage,
+        sign: edge.sign,
+        signConfidence: edge.signConfidence,
+        signCoverage: edge.signCoverage,
       },
     })),
   ];
 
-  // Cheap structural signature: just the node and edge identities. Style /
-  // score-driven re-renders are handled by separate signals on the cytoscape
-  // instance, not by rebuilding all elements.
+  // Include score/sign annotations so threshold and consensus changes update
+  // visual encodings even when the visible edge identities stay the same.
   const elementsSignature =
     nodes
       .map((node) => `${node.id}/${node.isTF ? 1 : 0}`)
@@ -540,7 +571,10 @@ export function buildGraphElements(
       .join(",") +
     "|" +
     edges
-      .map((edge) => edge.key)
+      .map(
+        (edge) =>
+          `${edge.key}/${edge.score.toFixed(6)}/${edge.count}/${edge.direction}/${edge.directionCoverage.toFixed(4)}/${edge.sign}/${edge.signConfidence?.toFixed(4) ?? "na"}`
+      )
       .sort()
       .join(",");
 
