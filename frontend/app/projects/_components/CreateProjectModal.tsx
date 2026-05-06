@@ -279,63 +279,71 @@ export default function CreateProjectModal({
         </div>
 
         <div className="mt-6 space-y-6">
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-950">Expression matrix</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  CSV with rows = genes, columns = cells. First row = cell IDs, first
-                  column = gene names. Max 500 MB.
-                </p>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-950">Expression matrix</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    CSV with rows = genes, columns = cells. First row = cell IDs, first
+                    column = gene names. Max 500 MB.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-5">
-              <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]">
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    setExpressionFile(file);
-                    setExpressionFileName(file?.name ?? "");
-                  }}
-                />
-                <span className="text-base font-bold text-slate-950">
-                  {expressionFileName || "Drop expression matrix CSV here"}
-                </span>
-                <span className="mt-2 text-sm text-slate-500">
-                  {expressionFileName ? "Click to replace" : "or click to browse"}
-                </span>
-              </label>
-            </div>
-
-            {hasExpressionFile && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
-                {isUploadingTempDataset ? (
-                  <span className="inline-flex items-center gap-2 font-medium text-slate-600">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
-                    Validating dataset…
+              <div className="mt-5">
+                <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setExpressionFile(file);
+                      setExpressionFileName(file?.name ?? "");
+                    }}
+                  />
+                  <span className="text-base font-bold text-slate-950">
+                    {expressionFileName || "Drop expression matrix CSV here"}
                   </span>
-                ) : datasetReady ? (
-                  <>
-                    <span className="inline-flex items-center gap-2 font-bold text-[#178a62]">
-                      <span className="h-2 w-2 rounded-full bg-[#20b779]" />
-                      {expressionFileName}
-                    </span>
-                    {geneCount !== null && cellCount !== null && (
-                      <span className="font-medium text-slate-700">
-                        {geneCount.toLocaleString()} genes ×{" "}
-                        {cellCount.toLocaleString()} cells
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="font-medium text-slate-600">{expressionFileName}</span>
-                )}
+                  <span className="mt-2 text-sm text-slate-500">
+                    {expressionFileName ? "Click to replace" : "or click to browse"}
+                  </span>
+                </label>
               </div>
-            )}
+
+              {hasExpressionFile && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
+                  {isUploadingTempDataset ? (
+                    <span className="inline-flex items-center gap-2 font-medium text-slate-600">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
+                      Validating dataset…
+                    </span>
+                  ) : datasetReady ? (
+                    <>
+                      <span className="inline-flex items-center gap-2 font-bold text-[#178a62]">
+                        <span className="h-2 w-2 rounded-full bg-[#20b779]" />
+                        {expressionFileName}
+                      </span>
+                      {geneCount !== null && cellCount !== null && (
+                        <span className="font-medium text-slate-700">
+                          {geneCount.toLocaleString()} genes ×{" "}
+                          {cellCount.toLocaleString()} cells
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="font-medium text-slate-600">{expressionFileName}</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <UploadStep
+              pseudotimeFileName={pseudotimeFileName}
+              setPseudotimeFile={setPseudotimeFile}
+              setPseudotimeFileName={setPseudotimeFileName}
+            />
           </div>
 
 
@@ -388,27 +396,21 @@ export default function CreateProjectModal({
                   className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
                 />
               </div>
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-                <label
-                  htmlFor="projectDescription"
-                  className="block text-xs font-bold uppercase tracking-[0.18em] text-black"
-                >
-                  Description
-                </label>
-                <input
-                  id="projectDescription"
-                  type="text"
-                  value={projectDescription}
-                  onChange={(event) => setProjectDescription(event.target.value)}
-                  placeholder="GRN analysis created from uploaded expression matrix."
-                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                />
-              </div>
 
-              <UploadStep
-                pseudotimeFileName={pseudotimeFileName}
-                setPseudotimeFile={setPseudotimeFile}
-                setPseudotimeFileName={setPseudotimeFileName}
+
+              <AlgorithmStep
+                algorithms={algorithms}
+                selectedIds={selectedIds}
+                compatibleAlgorithms={compatibleAlgorithms}
+                datasetSummary={datasetSummary}
+                ensembleEnabled={ensembleEnabled}
+                isLoadingAlgorithms={isLoadingAlgorithms}
+                algorithmLoadError={algorithmLoadError}
+                setEnsembleEnabled={setEnsembleEnabled}
+                onToggleAlgorithm={onToggleAlgorithm}
+                onRecommended={onRecommended}
+                onSelectAll={onSelectAll}
+                onShowAlgorithmDetails={handleShowAlgorithmDetails}
               />
 
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
@@ -481,20 +483,6 @@ export default function CreateProjectModal({
                 </div>
               </div>
 
-              <AlgorithmStep
-                algorithms={algorithms}
-                selectedIds={selectedIds}
-                compatibleAlgorithms={compatibleAlgorithms}
-                datasetSummary={datasetSummary}
-                ensembleEnabled={ensembleEnabled}
-                isLoadingAlgorithms={isLoadingAlgorithms}
-                algorithmLoadError={algorithmLoadError}
-                setEnsembleEnabled={setEnsembleEnabled}
-                onToggleAlgorithm={onToggleAlgorithm}
-                onRecommended={onRecommended}
-                onSelectAll={onSelectAll}
-                onShowAlgorithmDetails={handleShowAlgorithmDetails}
-              />
             </div>
           )}
 

@@ -763,12 +763,6 @@ useEffect(() => {
         <div className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10">
           <ProjectHeader
             projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
-            projectDescription={
-              project?.project_description?.trim() ||
-              (isDemoProject
-                ? "Explore a precomputed example gene regulatory network built from BEELINE-compatible sample data."
-                : "No description")
-            }
           />
 
           <JobProgressBanner
@@ -873,9 +867,6 @@ useEffect(() => {
           <AlgorithmCardsSection
             tasks={latestJob?.tasks ?? []}
             algorithmMetaMap={algorithmMetaMap}
-            projectId={projectId}
-            apiBase={API_BASE}
-            onOpenDownload={openDownloadModal}
             onOpenAlgorithmError={setActiveAlgorithmErrorTask}
           />
 
