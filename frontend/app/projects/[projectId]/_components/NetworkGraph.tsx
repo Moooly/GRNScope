@@ -788,17 +788,35 @@ export default function NetworkGraph({
   const tooltipWidth = 300;
   const tooltipHeight = 230;
   const tooltipPadding = 16;
+  const tooltipGap = 32;
+
+  const tooltipShouldFlipLeft = edgeTooltip
+    ? edgeTooltip.x + tooltipGap + tooltipWidth > containerWidth - tooltipPadding
+    : false;
+  const tooltipShouldFlipUp = edgeTooltip
+    ? edgeTooltip.y + tooltipGap + tooltipHeight > containerHeight - tooltipPadding
+    : false;
 
   const tooltipLeft = edgeTooltip
     ? Math.min(
-        Math.max(edgeTooltip.x + 8, tooltipPadding),
+        Math.max(
+          tooltipShouldFlipLeft
+            ? edgeTooltip.x - tooltipWidth - tooltipGap
+            : edgeTooltip.x + tooltipGap,
+          tooltipPadding
+        ),
         Math.max(tooltipPadding, containerWidth - tooltipWidth - tooltipPadding)
       )
     : tooltipPadding;
 
   const tooltipTop = edgeTooltip
     ? Math.min(
-        Math.max(edgeTooltip.y - 4, tooltipPadding),
+        Math.max(
+          tooltipShouldFlipUp
+            ? edgeTooltip.y - tooltipHeight - tooltipGap
+            : edgeTooltip.y + tooltipGap,
+          tooltipPadding
+        ),
         Math.max(tooltipPadding, containerHeight - tooltipHeight - tooltipPadding)
       )
     : tooltipPadding;

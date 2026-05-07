@@ -13,6 +13,7 @@ export type NetworkEdge = {
   source: string;
   target: string;
   score: number;
+  confidence: number;
   count: number;
   rank: number;
   supportingAlgorithms: string[];

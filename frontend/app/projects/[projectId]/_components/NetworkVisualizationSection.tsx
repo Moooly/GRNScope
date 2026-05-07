@@ -18,6 +18,7 @@ type AggregatedEdge = {
   source: string;
   target: string;
   score: number;
+  confidence: number;
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
@@ -108,6 +109,7 @@ export default function NetworkVisualizationSection({
         source: edge.source,
         target: edge.target,
         score: edge.score,
+        confidence: edge.confidence,
         count: edge.count,
         rank: edge.rank,
         supportingAlgorithms: edge.supportingAlgorithms,
@@ -397,7 +399,7 @@ export default function NetworkVisualizationSection({
                     })
                   ) : (
                     <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">
-                      No selected method ranked this edge above its median evidence.
+                      No selected method ranked this edge in the top confidence set.
                     </p>
                   )}
                 </div>
@@ -511,7 +513,7 @@ export default function NetworkVisualizationSection({
             </>
           ) : (
             <div className="mt-4 rounded-[1.25rem] border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
-              Click a node to inspect gene details, or click an edge to inspect edge evidence, direction coverage, sign confidence, and supporting algorithms.
+              Click a node to inspect gene details, or click an edge to inspect evidence, confidence, sign, and supporting algorithms.
             </div>
           )}
         </div>

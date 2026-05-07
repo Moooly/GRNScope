@@ -155,7 +155,7 @@ export default function ResultsControlsSection({
         }`}
       >
         <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
-          <span>Confidence filter</span>
+          <span>Confidence level</span>
           <span>{Math.round(safeConfidenceThreshold * 100)}%</span>
         </div>
         <input
@@ -169,7 +169,7 @@ export default function ResultsControlsSection({
         />
         {!compact && (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            Keep only edges whose per-target rank evidence is at least this threshold.
+            Keep only edges whose inferred confidence is at least this threshold.
           </p>
         )}
       </div>

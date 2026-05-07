@@ -31,6 +31,7 @@ import {
 import { boolText, clamp } from "./_lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+const CONFIDENCE_STABILITY_TOP_K = 10;
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -342,6 +343,7 @@ export default function ProjectDetailPage() {
               source: entry.source,
               target: entry.target,
               score: evidence,
+              confidence: evidence,
               count: supportingAlgorithms.length,
               rank,
               supportingAlgorithms,
@@ -381,7 +383,7 @@ export default function ProjectDetailPage() {
 
     completedAlgorithmIds.forEach((algorithmId) => {
       next[algorithmId] = (standardizedAlgorithmEdgeRows[algorithmId] ?? [])
-        .filter((edge) => edge.score >= confidenceThreshold)
+        .filter((edge) => edge.confidence >= confidenceThreshold)
         .map((edge, index) => ({ ...edge, rank: index + 1 }));
     });
 
@@ -458,7 +460,7 @@ export default function ProjectDetailPage() {
 
         current.perAlgorithmSigns[algorithmId] = signVote;
 
-        if (evidence > 0.5) {
+        if (edge.rank <= CONFIDENCE_STABILITY_TOP_K) {
           current.supportingAlgorithms.push(algorithmId);
         }
 
@@ -481,6 +483,8 @@ export default function ProjectDetailPage() {
     return Array.from(buckets.entries())
       .map(([key, edge]) => {
         const score = edge.totalEvidence / sumAlpha;
+        const stability = edge.supportingAlgorithms.length / sumAlpha;
+        const confidence = clamp(stability * score, 0, 1);
         const directionCoverage =
           edge.totalEvidence > 0 ? edge.directedEvidence / edge.totalEvidence : 0;
         const signCoverage =
@@ -536,6 +540,7 @@ export default function ProjectDetailPage() {
           source: edge.source,
           target: edge.target,
           score,
+          confidence,
           count: edge.supportingAlgorithms.length,
           rank: 0,
           supportingAlgorithms: [...edge.supportingAlgorithms].sort(),
@@ -552,7 +557,7 @@ export default function ProjectDetailPage() {
       })
       .filter(
         (edge) =>
-          edge.score >= confidenceThreshold && edge.count >= consensusThreshold
+          edge.confidence >= confidenceThreshold && edge.count >= consensusThreshold
       )
       .sort((a, b) => b.score - a.score)
       .map((edge, index) => ({ ...edge, rank: index + 1 }));
@@ -904,6 +909,7 @@ export default function ProjectDetailPage() {
       "Target Gene",
       "Supporting Method Count",
       selectedView === "consensus" ? "Consensus Evidence" : "Edge Evidence",
+      "Inferred Confidence",
       "Direction",
       "Direction Confidence",
       "Direction Coverage",
@@ -923,6 +929,7 @@ export default function ProjectDetailPage() {
           edge.target,
           edge.count,
           edge.score.toFixed(3),
+          edge.confidence.toFixed(3),
           edge.direction === 1 ? "source_to_target" : edge.direction === -1 ? "reverse" : "unknown",
           edge.directionConfidence === null ? "" : edge.directionConfidence.toFixed(3),
           edge.directionCoverage.toFixed(3),

@@ -545,6 +545,7 @@ export function buildGraphElements(
         source: edge.source,
         target: edge.target,
         score: edge.score,
+        confidence: edge.confidence,
         visualScore: getVisualScore(edge.score),
         edgeColor: getEdgeColor(edge),
         arrowShape: getArrowShape(edge),
@@ -573,7 +574,7 @@ export function buildGraphElements(
     edges
       .map(
         (edge) =>
-          `${edge.key}/${edge.score.toFixed(6)}/${edge.count}/${edge.direction}/${edge.directionCoverage.toFixed(4)}/${edge.sign}/${edge.signConfidence?.toFixed(4) ?? "na"}`
+          `${edge.key}/${edge.score.toFixed(6)}/${edge.confidence.toFixed(6)}/${edge.count}/${edge.direction}/${edge.directionCoverage.toFixed(4)}/${edge.sign}/${edge.signConfidence?.toFixed(4) ?? "na"}`
       )
       .sort()
       .join(",");

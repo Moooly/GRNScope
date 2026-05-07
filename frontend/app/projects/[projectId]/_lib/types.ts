@@ -124,6 +124,7 @@ export type AggregatedEdge = {
   source: string;
   target: string;
   score: number;
+  confidence: number;
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;

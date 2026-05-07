@@ -37,16 +37,16 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Confidence filter</h4>
+            <h4 className="text-base font-bold text-slate-950">Confidence level</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum edge-existence evidence required for an edge to appear. Evidence is computed by ranking candidate regulators separately for each target gene, so algorithms with different score scales can still be compared.
+              Controls the minimum inferred confidence required for an edge to appear. For one method, confidence is the per-target rank percentile. For consensus, confidence combines rank strength with stability across selected methods.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Consensus threshold</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Used when two or more algorithms are selected. It controls how many selected algorithms must rank the edge above their own median evidence before the edge appears in the consensus network and table.
+              Used when two or more algorithms are selected. It controls how many selected algorithms must rank the edge in the top 10 for its target before the edge appears in the consensus network and table.
             </p>
           </div>
 
