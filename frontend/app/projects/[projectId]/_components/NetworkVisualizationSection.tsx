@@ -558,41 +558,41 @@ export default function NetworkVisualizationSection({
 
               <div className="mt-5 space-y-5">
                 <div>
-                  <h6 className="text-sm font-bold text-slate-950">Color</h6>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <h6 className="text-sm font-bold text-slate-950">Relationship head</h6>
+                  <div className="mt-3 grid gap-2">
                     <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="h-3 w-10 rounded-full bg-[#0072B2]" />
+                      <span className="inline-flex h-5 w-14 items-center">
+                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                          <path d="M2 9H39" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                          <path d="M39 3L53 9L39 15Z" fill="#64748b" />
+                        </svg>
+                      </span>
                       <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Positive</span>
-                        <span className="block text-xs text-slate-500">high confidence</span>
+                        <span className="block text-sm font-semibold text-slate-800">Activation</span>
+                        <span className="block text-xs text-slate-500">arrowhead points to the regulated gene</span>
                       </span>
                     </div>
                     <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="h-3 w-10 rounded-full bg-[#9fc8dc]" />
+                      <span className="inline-flex h-5 w-14 items-center">
+                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                          <path d="M2 9H44" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                          <path d="M44 3V15" stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      </span>
                       <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Positive</span>
-                        <span className="block text-xs text-slate-500">low confidence</span>
+                        <span className="block text-sm font-semibold text-slate-800">Repression</span>
+                        <span className="block text-xs text-slate-500">bar head marks inhibitory regulation</span>
                       </span>
                     </div>
                     <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="h-3 w-10 rounded-full bg-[#D55E00]" />
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Negative</span>
-                        <span className="block text-xs text-slate-500">high confidence</span>
+                      <span className="inline-flex h-5 w-14 items-center">
+                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                          <path d="M2 9H50" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
                       </span>
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="h-3 w-10 rounded-full bg-[#e6a58a]" />
                       <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Negative</span>
-                        <span className="block text-xs text-slate-500">low confidence</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 sm:col-span-2">
-                      <span className="h-3 w-10 rounded-full bg-[#8a96a3]" />
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Unknown sign</span>
-                        <span className="block text-xs text-slate-500">no signed-method support</span>
+                        <span className="block text-sm font-semibold text-slate-800">Unannotated</span>
+                        <span className="block text-xs text-slate-500">no supported sign or direction annotation</span>
                       </span>
                     </div>
                   </div>
@@ -612,46 +612,6 @@ export default function NetworkVisualizationSection({
                   </div>
                 </div>
 
-                <div>
-                  <h6 className="text-sm font-bold text-slate-950">Arrowhead</h6>
-                  <div className="mt-3 grid gap-2">
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="inline-flex h-5 w-14 items-center">
-                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                          <path d="M2 9H39" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M39 3L53 9L39 15Z" fill="#64748b" />
-                        </svg>
-                      </span>
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Filled arrow</span>
-                        <span className="block text-xs text-slate-500">high direction confidence</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="inline-flex h-5 w-14 items-center">
-                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                          <path d="M2 9H39" stroke="#64748b" strokeWidth="2" strokeLinecap="round" fill="none" />
-                          <path d="M39 3L53 9L39 15Z" stroke="#64748b" strokeWidth="2" strokeLinejoin="round" fill="white" />
-                        </svg>
-                      </span>
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Hollow arrow</span>
-                        <span className="block text-xs text-slate-500">low direction confidence</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="inline-flex h-5 w-14 items-center">
-                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                          <path d="M2 9H50" stroke="#64748b" strokeWidth="2" strokeLinecap="round" fill="none" />
-                        </svg>
-                      </span>
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">No arrowhead</span>
-                        <span className="block text-xs text-slate-500">no direction information</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>,

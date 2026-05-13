@@ -503,29 +503,32 @@ export function buildGraphElements(
     );
   };
 
-  const getEdgeColor = (edge: NetworkEdge) => {
-    if (edge.signConfidence === null || edge.sign === 0 || edge.signCoverage === 0) {
-      return "#8a96a3";
-    }
+  const getEdgeColor = () => "#64748b";
 
-    const isHighConfidence = edge.signConfidence >= 0.7;
-
-    if (edge.sign > 0) {
-      return isHighConfidence ? "#0072B2" : "#9fc8dc";
-    }
-
-    return isHighConfidence ? "#D55E00" : "#e6a58a";
-  };
-
-  const getArrowShape = (edge: NetworkEdge) => {
+  const getRelationshipShape = (edge: NetworkEdge) => {
     if (edge.direction === 0 || edge.directionCoverage <= 0) return "none";
     if (edge.directionConfidence === null) return "none";
-    return "triangle";
+    if (edge.signConfidence === null || edge.sign === 0 || edge.signCoverage === 0) {
+      return "none";
+    }
+
+    return edge.sign > 0 ? "triangle" : "tee";
   };
 
-  const getArrowFill = (edge: NetworkEdge) => {
-    if (edge.directionConfidence === null) return "filled";
-    return edge.directionConfidence >= 0.7 ? "filled" : "hollow";
+  const getTargetArrowShape = (edge: NetworkEdge) => {
+    if (edge.direction !== 1) return "none";
+    return getRelationshipShape(edge);
+  };
+
+  const getSourceArrowShape = (edge: NetworkEdge) => {
+    if (edge.direction !== -1) return "none";
+    return getRelationshipShape(edge);
+  };
+
+  const getEndpointDistance = (shape: string) => {
+    if (shape === "tee") return 6;
+    if (shape === "triangle") return 2;
+    return 0;
   };
 
   const elements = [
@@ -539,29 +542,37 @@ export function buildGraphElements(
         isTF: node.isTF ? 1 : 0,
       },
     })),
-    ...edges.map((edge) => ({
-      data: {
-        id: edge.key,
-        source: edge.source,
-        target: edge.target,
-        score: edge.score,
-        confidence: edge.confidence,
-        visualScore: getVisualScore(edge.score),
-        edgeColor: getEdgeColor(edge),
-        arrowShape: getArrowShape(edge),
-        arrowFill: getArrowFill(edge),
-        count: edge.count,
-        rank: edge.rank,
-        supportRatio:
-          maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
-        supportingAlgorithms: edge.supportingAlgorithms,
-        directionConfidence: edge.directionConfidence,
-        directionCoverage: edge.directionCoverage,
-        sign: edge.sign,
-        signConfidence: edge.signConfidence,
-        signCoverage: edge.signCoverage,
-      },
-    })),
+    ...edges.map((edge) => {
+      const sourceArrowShape = getSourceArrowShape(edge);
+      const targetArrowShape = getTargetArrowShape(edge);
+
+      return {
+        data: {
+          id: edge.key,
+          source: edge.source,
+          target: edge.target,
+          score: edge.score,
+          confidence: edge.confidence,
+          visualScore: getVisualScore(edge.score),
+          edgeColor: getEdgeColor(),
+          sourceArrowShape,
+          targetArrowShape,
+          sourceDistanceFromNode: getEndpointDistance(sourceArrowShape),
+          targetDistanceFromNode: getEndpointDistance(targetArrowShape),
+          arrowFill: "filled",
+          count: edge.count,
+          rank: edge.rank,
+          supportRatio:
+            maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
+          supportingAlgorithms: edge.supportingAlgorithms,
+          directionConfidence: edge.directionConfidence,
+          directionCoverage: edge.directionCoverage,
+          sign: edge.sign,
+          signConfidence: edge.signConfidence,
+          signCoverage: edge.signCoverage,
+        },
+      };
+    }),
   ];
 
   // Include score/sign annotations so threshold and consensus changes update
