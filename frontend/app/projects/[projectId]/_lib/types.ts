@@ -98,6 +98,16 @@ export type AlgorithmResultEdge = {
   source: string;
   target: string;
   score: number;
+  confidence?: number;
+  stability?: number;
+  mean_percentile?: number;
+  meanPercentile?: number;
+  mean_z?: number;
+  z_ci_lower?: number | null;
+  z_ci_upper?: number | null;
+  selected_runs?: number;
+  observed_runs?: number;
+  run_count?: number;
   normalized_score?: number;
   weight?: number;
   edge_weight?: number;
@@ -125,6 +135,8 @@ export type AggregatedEdge = {
   target: string;
   score: number;
   confidence: number;
+  stability?: number;
+  meanPercentile?: number;
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;

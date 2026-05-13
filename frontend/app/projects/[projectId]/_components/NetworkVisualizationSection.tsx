@@ -399,7 +399,7 @@ export default function NetworkVisualizationSection({
                     })
                   ) : (
                     <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">
-                      No selected method ranked this edge in the top confidence set.
+                      No selected method recovered this edge in its repeated confidence runs.
                     </p>
                   )}
                 </div>
@@ -659,7 +659,7 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Edge evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Overall support for this edge. A higher value means the selected methods rank this regulator-target relationship more strongly.
+                    Mean per-target percentile rank from the repeated runs. Higher values mean the regulator is ranked closer to the top for this target gene.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -677,7 +677,7 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Method evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    The contribution from each selected algorithm. Use it to see which methods support the edge and which methods do not.
+                    Per-method confidence after repeated runs. Methods listed as supporting recovered this edge with nonzero stability.
                   </p>
                 </div>
               </div>

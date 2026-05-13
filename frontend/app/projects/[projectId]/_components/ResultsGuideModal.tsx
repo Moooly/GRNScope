@@ -39,14 +39,14 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Confidence level</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum inferred confidence required for an edge to appear. For one method, confidence is the per-target rank percentile. For consensus, confidence combines rank strength with stability across selected methods.
+              Controls the minimum inferred confidence required for an edge to appear. Each algorithm is run repeatedly on subsampled cells, then confidence combines how often the edge is recovered with its mean per-target percentile rank.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Minimum Supporting Methods</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Used when two or more algorithms are selected. It controls how many selected algorithms must support an edge before it appears in the consensus network and table.
+              Used when two or more algorithms are selected. A method supports an edge when its repeated runs recover that regulator-target relationship with nonzero stability.
             </p>
           </div>
 

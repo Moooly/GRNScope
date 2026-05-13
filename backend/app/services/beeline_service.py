@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,11 @@ from pathlib import Path
 from ..algorithm_registry import get_algorithm_by_id
 from ..config import BEELINE_ROOT_CANDIDATES, PROJECTS_ROOT
 from ..repositories.project_repository import read_project_manifest
+
+
+DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 100
+DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
+DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
 
 
 def resolve_beeline_root() -> Path:
@@ -72,6 +78,45 @@ def parse_positive_int(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def parse_positive_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def resolve_confidence_settings(project_manifest: dict) -> dict:
+    run_count = (
+        parse_positive_int(project_manifest.get("confidence_bootstrap_runs"))
+        or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_BOOTSTRAP_RUNS"))
+        or DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
+    )
+    stability_top_k = (
+        parse_positive_int(project_manifest.get("confidence_stability_top_k"))
+        or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_STABILITY_TOP_K"))
+        or DEFAULT_CONFIDENCE_STABILITY_TOP_K
+    )
+    subsample_fraction = (
+        parse_positive_float(project_manifest.get("confidence_subsample_fraction"))
+        or parse_positive_float(os.environ.get("GRNSCOPE_CONFIDENCE_SUBSAMPLE_FRACTION"))
+        or DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
+    )
+
+    return {
+        "bootstrap_runs": max(1, run_count),
+        "subsample_fraction": min(max(subsample_fraction, 0.01), 1.0),
+        "stability_top_k": max(1, stability_top_k),
+    }
+
+
+def stable_seed_for(project_id: str, algorithm_id: str) -> int:
+    seed_source = f"{project_id}:{algorithm_id.upper()}"
+    return sum((index + 1) * ord(char) for index, char in enumerate(seed_source))
 
 
 def detect_csv_dialect(raw_text: str) -> csv.Dialect | type[csv.Dialect]:
@@ -258,6 +303,161 @@ def preprocess_expression_matrix(
     destination_expression.write_text(output_buffer.getvalue(), encoding="utf-8")
 
 
+def read_delimited_rows(source_path: Path) -> tuple[list[list[str]], csv.Dialect | type[csv.Dialect]]:
+    raw_text = source_path.read_text(encoding="utf-8")
+    if not raw_text.strip():
+        raise ValueError(f"{source_path.name} is empty.")
+    dialect = detect_csv_dialect(raw_text)
+    return list(csv.reader(io.StringIO(raw_text), dialect=dialect)), dialect
+
+
+def write_delimited_rows(
+    destination_path: Path,
+    rows: list[list[str]],
+    dialect: csv.Dialect | type[csv.Dialect],
+) -> None:
+    output_buffer = io.StringIO()
+    writer = csv.writer(
+        output_buffer,
+        delimiter=getattr(dialect, "delimiter", ","),
+        quotechar=getattr(dialect, "quotechar", '"'),
+        lineterminator="\n",
+    )
+    writer.writerows(rows)
+    destination_path.write_text(output_buffer.getvalue(), encoding="utf-8")
+
+
+def subset_expression_rows_by_cells(
+    rows: list[list[str]],
+    selected_column_indices: list[int],
+) -> list[list[str]]:
+    if not rows:
+        return []
+
+    retained_indices = [0, *selected_column_indices]
+    subset_rows: list[list[str]] = []
+    for row in rows:
+        subset_rows.append(
+            [row[index] if index < len(row) else "" for index in retained_indices]
+        )
+    return subset_rows
+
+
+def subset_pseudotime_rows_by_cells(
+    source_pseudotime: Path,
+    destination_pseudotime: Path,
+    selected_cell_names: set[str],
+) -> None:
+    try:
+        rows, dialect = read_delimited_rows(source_pseudotime)
+    except Exception:
+        shutil.copy2(source_pseudotime, destination_pseudotime)
+        return
+
+    if len(rows) <= 1 or not selected_cell_names:
+        shutil.copy2(source_pseudotime, destination_pseudotime)
+        return
+
+    header = rows[0]
+    retained_rows = [header]
+    matched = 0
+    for row in rows[1:]:
+        if row and row[0] in selected_cell_names:
+            retained_rows.append(row)
+            matched += 1
+
+    if matched == 0:
+        shutil.copy2(source_pseudotime, destination_pseudotime)
+        return
+
+    write_delimited_rows(destination_pseudotime, retained_rows, dialect)
+
+
+def create_confidence_run_inputs(
+    *,
+    runtime_root: Path,
+    input_dir: Path,
+    dataset_id: str,
+    algorithm_id: str,
+    project_manifest: dict,
+    source_expression: Path,
+    source_pseudotime: Path | None,
+) -> tuple[list[str], dict[str, dict], dict]:
+    settings = resolve_confidence_settings(project_manifest)
+    bootstrap_runs = int(settings["bootstrap_runs"])
+    subsample_fraction = float(settings["subsample_fraction"])
+
+    preprocessed_dir = runtime_root / "_preprocessed"
+    preprocessed_dir.mkdir(parents=True, exist_ok=True)
+    preprocessed_expression = preprocessed_dir / "ExpressionData.csv"
+    preprocess_expression_matrix(
+        source_expression=source_expression,
+        destination_expression=preprocessed_expression,
+        project_manifest=project_manifest,
+    )
+
+    expression_rows, expression_dialect = read_delimited_rows(preprocessed_expression)
+    if not expression_rows:
+        raise ValueError("Expression matrix file has no rows after preprocessing.")
+
+    header = expression_rows[0]
+    cell_column_indices = list(range(1, len(header)))
+    if not cell_column_indices:
+        cell_column_indices = []
+
+    sample_size = len(cell_column_indices)
+    if bootstrap_runs > 1 and cell_column_indices:
+        sample_size = max(1, int(round(len(cell_column_indices) * subsample_fraction)))
+
+    seed_base = stable_seed_for(project_id=dataset_id, algorithm_id=algorithm_id)
+    run_ids: list[str] = []
+    run_metadata: dict[str, dict] = {}
+
+    for run_index in range(bootstrap_runs):
+        run_id = f"run-{run_index + 1}"
+        run_ids.append(run_id)
+        run_dir = input_dir / dataset_id / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        seed = seed_base + run_index
+        if bootstrap_runs > 1 and cell_column_indices:
+            rng = random.Random(seed)
+            selected_column_indices = sorted(rng.sample(cell_column_indices, sample_size))
+        else:
+            selected_column_indices = cell_column_indices
+
+        selected_cell_names = {
+            header[index]
+            for index in selected_column_indices
+            if index < len(header) and str(header[index]).strip()
+        }
+        expression_subset = subset_expression_rows_by_cells(
+            expression_rows,
+            selected_column_indices,
+        )
+        write_delimited_rows(run_dir / "ExpressionData.csv", expression_subset, expression_dialect)
+
+        if source_pseudotime and source_pseudotime.exists():
+            subset_pseudotime_rows_by_cells(
+                source_pseudotime,
+                run_dir / "PseudoTime.csv",
+                selected_cell_names,
+            )
+
+        run_metadata[run_id] = {
+            "seed": seed,
+            "cell_count": len(selected_column_indices),
+            "total_cell_count": len(cell_column_indices),
+            "subsample_fraction": (
+                len(selected_column_indices) / len(cell_column_indices)
+                if cell_column_indices
+                else 1.0
+            ),
+        }
+
+    return run_ids, run_metadata, settings
+
+
 def extract_user_friendly_beeline_error(stderr_text: str, algorithm_id: str) -> str:
     if not stderr_text or not stderr_text.strip():
         return f"{algorithm_id} failed during execution, but no detailed error message was returned by BEELINE."
@@ -331,7 +531,7 @@ def prepare_beeline_runtime(
     project_id: str,
     algorithm_id: str,
     project_manifest: dict,
-) -> tuple[Path, Path, Path, str, str]:
+) -> tuple[Path, Path, Path, str, list[str], dict[str, dict], dict]:
     runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
     if runtime_root.exists():
         shutil.rmtree(runtime_root)
@@ -340,9 +540,6 @@ def prepare_beeline_runtime(
     input_dir = runtime_root / "inputs"
     output_dir = runtime_root / "outputs"
     dataset_id = project_id
-    run_id = "run-1"
-    run_dir = input_dir / dataset_id / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
 
     expression_path = project_manifest.get("expression_path")
     pseudotime_path = project_manifest.get("pseudotime_path")
@@ -354,37 +551,54 @@ def prepare_beeline_runtime(
     if not source_expression.exists():
         raise FileNotFoundError("Expression matrix file not found on disk.")
 
-    preprocess_expression_matrix(
-        source_expression=source_expression,
-        destination_expression=run_dir / "ExpressionData.csv",
+    source_pseudotime = None
+    if pseudotime_path:
+        candidate_pseudotime = Path(pseudotime_path)
+        if candidate_pseudotime.exists():
+            source_pseudotime = candidate_pseudotime
+
+    run_ids, run_metadata, confidence_settings = create_confidence_run_inputs(
+        runtime_root=runtime_root,
+        input_dir=input_dir,
+        dataset_id=dataset_id,
+        algorithm_id=algorithm_id,
         project_manifest=project_manifest,
+        source_expression=source_expression,
+        source_pseudotime=source_pseudotime,
     )
 
-    if pseudotime_path:
-        source_pseudotime = Path(pseudotime_path)
-        if source_pseudotime.exists():
-            shutil.copy2(source_pseudotime, run_dir / "PseudoTime.csv")
-
-    return runtime_root, input_dir, output_dir, dataset_id, run_id
+    return (
+        runtime_root,
+        input_dir,
+        output_dir,
+        dataset_id,
+        run_ids,
+        run_metadata,
+        confidence_settings,
+    )
 
 
 def build_beeline_config(
     input_dir: Path,
     output_dir: Path,
     dataset_id: str,
-    run_id: str,
+    run_ids: list[str],
     algorithm_id: str,
     include_pseudotime: bool,
 ) -> str:
     normalized_algorithm_id = algorithm_id.upper()
     image_name = resolve_algorithm_image(algorithm_id)
 
-    run_lines = [
-        f"        - run_id: {yaml_scalar(run_id)}",
-        '          exprData: "ExpressionData.csv"',
-    ]
-    if include_pseudotime:
-        run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
+    run_lines: list[str] = []
+    for run_id in run_ids:
+        run_lines.extend(
+            [
+                f"        - run_id: {yaml_scalar(run_id)}",
+                '          exprData: "ExpressionData.csv"',
+            ]
+        )
+        if include_pseudotime:
+            run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
 
     params = resolve_algorithm_default_params(normalized_algorithm_id)
 
@@ -532,12 +746,228 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
     }
 
 
+def quantile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * q
+    lower_index = int(position)
+    upper_index = min(lower_index + 1, len(ordered) - 1)
+    fraction = position - lower_index
+    return ordered[lower_index] * (1 - fraction) + ordered[upper_index] * fraction
+
+
+def compute_population_sd(values: list[float]) -> float:
+    if len(values) <= 1:
+        return 0.0
+    mean_value = fsum(values) / len(values)
+    variance = fsum((value - mean_value) ** 2 for value in values) / len(values)
+    return variance ** 0.5
+
+
+def aggregate_confidence_edges(
+    run_edges_by_id: dict[str, list[dict]],
+    *,
+    stability_top_k: int,
+) -> tuple[list[dict], dict]:
+    run_ids = list(run_edges_by_id.keys())
+    run_count = max(1, len(run_ids))
+    accumulator: dict[tuple[str, str], dict] = {}
+    all_node_names: set[str] = set()
+
+    for run_id, run_edges in run_edges_by_id.items():
+        entries_by_target: dict[str, list[dict]] = {}
+        for edge in run_edges:
+            source = str(edge.get("source", "")).strip()
+            target = str(edge.get("target", "")).strip()
+            if not source or not target:
+                continue
+            entries_by_target.setdefault(target, []).append(edge)
+            all_node_names.add(source)
+            all_node_names.add(target)
+
+        for target, target_edges in entries_by_target.items():
+            ranked_edges = sorted(
+                target_edges,
+                key=lambda item: (
+                    -abs(float(item.get("score", 0) or 0)),
+                    str(item.get("source", "")),
+                ),
+            )
+            weights = [abs(float(item.get("score", 0) or 0)) for item in ranked_edges]
+            mean_weight = fsum(weights) / len(weights) if weights else 0.0
+            sd_weight = compute_population_sd(weights)
+            denominator = max(len(ranked_edges) - 1, 1)
+
+            for index, edge in enumerate(ranked_edges):
+                source = str(edge.get("source", "")).strip()
+                raw_score = float(edge.get("score", 0) or 0)
+                weight = abs(raw_score)
+                rank = index + 1
+                percentile = 1.0 if len(ranked_edges) <= 1 else 1 - ((rank - 1) / denominator)
+                z_score = 0.0 if sd_weight <= 0 else (weight - mean_weight) / sd_weight
+                key = (source, target)
+                current = accumulator.setdefault(
+                    key,
+                    {
+                        "source": source,
+                        "target": target,
+                        "raw_scores": [],
+                        "z_scores": [],
+                        "percentiles": [],
+                        "selected_runs": 0,
+                        "observed_runs": 0,
+                        "best_rank": None,
+                        "run_ranks": {},
+                    },
+                )
+
+                current["raw_scores"].append(raw_score)
+                current["z_scores"].append(z_score)
+                current["percentiles"].append(percentile)
+                current["observed_runs"] += 1
+                current["run_ranks"][run_id] = rank
+                current["best_rank"] = (
+                    rank
+                    if current["best_rank"] is None
+                    else min(current["best_rank"], rank)
+                )
+                if rank <= stability_top_k:
+                    current["selected_runs"] += 1
+
+    aggregated_edges: list[dict] = []
+    for current in accumulator.values():
+        missing_runs = run_count - int(current["observed_runs"])
+        z_values = [*current["z_scores"], *([0.0] * max(0, missing_runs))]
+        percentile_sum = fsum(current["percentiles"])
+        mean_percentile = percentile_sum / run_count
+        mean_z = fsum(z_values) / run_count
+        stability = int(current["selected_runs"]) / run_count
+        confidence = max(0.0, min(1.0, stability * mean_percentile))
+        raw_scores = current["raw_scores"]
+        mean_raw_score = fsum(raw_scores) / len(raw_scores) if raw_scores else 0.0
+
+        aggregated_edges.append(
+            {
+                "source": current["source"],
+                "target": current["target"],
+                "score": confidence,
+                "confidence": confidence,
+                "stability": stability,
+                "mean_percentile": mean_percentile,
+                "mean_z": mean_z,
+                "z_ci_lower": quantile(z_values, 0.025),
+                "z_ci_upper": quantile(z_values, 0.975),
+                "mean_raw_score": mean_raw_score,
+                "selected_runs": int(current["selected_runs"]),
+                "observed_runs": int(current["observed_runs"]),
+                "run_count": run_count,
+                "best_rank": current["best_rank"],
+                "run_ranks": current["run_ranks"],
+            }
+        )
+
+    aggregated_edges.sort(
+        key=lambda edge: (
+            -float(edge["confidence"]),
+            -float(edge["mean_percentile"]),
+            str(edge["source"]),
+            str(edge["target"]),
+        )
+    )
+    for index, edge in enumerate(aggregated_edges, start=1):
+        edge["rank"] = index
+
+    return aggregated_edges, {
+        "edge_count": len(aggregated_edges),
+        "node_count": len(all_node_names),
+        "confidence_scored": True,
+        "bootstrap_runs": run_count,
+        "stability_top_k": stability_top_k,
+    }
+
+
+def parse_confidence_run_outputs(
+    output_dir: Path,
+    dataset_id: str,
+    run_ids: list[str],
+    algorithm_id: str,
+) -> tuple[dict[str, list[dict]], dict[str, str]]:
+    normalized_algorithm_id = algorithm_id.upper()
+    run_edges_by_id: dict[str, list[dict]] = {}
+    ranked_edge_paths: dict[str, str] = {}
+
+    for run_id in run_ids:
+        ranked_edges_path = (
+            output_dir
+            / dataset_id
+            / run_id
+            / normalized_algorithm_id
+            / "rankedEdges.csv"
+        )
+        run_edges, _ = parse_ranked_edges_csv(ranked_edges_path)
+        run_edges_by_id[run_id] = run_edges
+        ranked_edge_paths[run_id] = str(ranked_edges_path)
+
+    return run_edges_by_id, ranked_edge_paths
+
+
+def write_confidence_ranked_edges_csv(destination_path: Path, edges: list[dict]) -> None:
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "Gene1",
+        "Gene2",
+        "EdgeWeight",
+        "Confidence",
+        "Stability",
+        "MeanPercentile",
+        "MeanZ",
+        "ZCILower",
+        "ZCIUpper",
+        "SelectedRuns",
+        "ObservedRuns",
+        "RunCount",
+        "BestRank",
+    ]
+    with destination_path.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        for edge in edges:
+            writer.writerow(
+                {
+                    "Gene1": edge["source"],
+                    "Gene2": edge["target"],
+                    "EdgeWeight": edge.get("mean_raw_score", 0.0),
+                    "Confidence": edge.get("confidence", 0.0),
+                    "Stability": edge.get("stability", 0.0),
+                    "MeanPercentile": edge.get("mean_percentile", 0.0),
+                    "MeanZ": edge.get("mean_z", 0.0),
+                    "ZCILower": edge.get("z_ci_lower"),
+                    "ZCIUpper": edge.get("z_ci_upper"),
+                    "SelectedRuns": edge.get("selected_runs", 0),
+                    "ObservedRuns": edge.get("observed_runs", 0),
+                    "RunCount": edge.get("run_count", 0),
+                    "BestRank": edge.get("best_rank"),
+                }
+            )
+
+
 def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
     project_dir = PROJECTS_ROOT / project_id
     project_manifest = read_project_manifest(project_dir)
     beeline_root = resolve_beeline_root()
 
-    runtime_root, input_dir, output_dir, dataset_id, run_id = prepare_beeline_runtime(
+    (
+        runtime_root,
+        input_dir,
+        output_dir,
+        dataset_id,
+        run_ids,
+        run_metadata,
+        confidence_settings,
+    ) = prepare_beeline_runtime(
         project_id,
         algorithm_id,
         project_manifest,
@@ -548,7 +978,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         input_dir=input_dir,
         output_dir=output_dir,
         dataset_id=dataset_id,
-        run_id=run_id,
+        run_ids=run_ids,
         algorithm_id=algorithm_id,
         include_pseudotime=bool(project_manifest.get("pseudotime_path")),
     )
@@ -581,9 +1011,18 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         )
         raise RuntimeError(friendly_error)
 
-    normalized_algorithm_id = algorithm_id.upper()
-    ranked_edges_path = output_dir / dataset_id / run_id / normalized_algorithm_id / "rankedEdges.csv"
-    top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
+    run_edges_by_id, ranked_edge_paths = parse_confidence_run_outputs(
+        output_dir,
+        dataset_id,
+        run_ids,
+        algorithm_id,
+    )
+    top_edges, network_summary = aggregate_confidence_edges(
+        run_edges_by_id,
+        stability_top_k=int(confidence_settings["stability_top_k"]),
+    )
+    ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
+    write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
 
     docker_image_version = resolve_algorithm_image(algorithm_id)
     return {
@@ -592,10 +1031,15 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         "docker_image_version": docker_image_version,
         "network_summary": network_summary,
         "top_edges": top_edges,
+        "confidence_summary": {
+            **confidence_settings,
+            "run_metadata": run_metadata,
+        },
+        "run_ranked_edges_paths": ranked_edge_paths,
         "runtime_root": str(runtime_root),
-        "ranked_"
-        "edges_path": str(ranked_edges_path),
+        "ranked_edges_path": str(ranked_edges_path),
     }
+
 
 def run_beeline_with_progress(
     project_id: str,
@@ -615,7 +1059,15 @@ def run_beeline_with_progress(
         progress_label="Preparing runtime",
     )
 
-    runtime_root, input_dir, output_dir, dataset_id, run_id = prepare_beeline_runtime(
+    (
+        runtime_root,
+        input_dir,
+        output_dir,
+        dataset_id,
+        run_ids,
+        run_metadata,
+        confidence_settings,
+    ) = prepare_beeline_runtime(
         project_id,
         algorithm_id,
         project_manifest,
@@ -626,7 +1078,7 @@ def run_beeline_with_progress(
         input_dir=input_dir,
         output_dir=output_dir,
         dataset_id=dataset_id,
-        run_id=run_id,
+        run_ids=run_ids,
         algorithm_id=algorithm_id,
         include_pseudotime=bool(project_manifest.get("pseudotime_path")),
     )
@@ -637,7 +1089,7 @@ def run_beeline_with_progress(
         job_id,
         algorithm_id=algorithm_id,
         progress_percent=15,
-        progress_label="Launching BEELINE",
+        progress_label=f"Launching BEELINE ({len(run_ids)} confidence runs)",
     )
 
     python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
@@ -661,7 +1113,7 @@ def run_beeline_with_progress(
             algorithm_id=algorithm_id,
             elapsed_seconds=elapsed,
             progress_percent=synthetic_progress,
-            progress_label="Running BEELINE",
+            progress_label="Running BEELINE confidence runs",
         )
         time.sleep(1)
 
@@ -679,12 +1131,21 @@ def run_beeline_with_progress(
         job_id,
         algorithm_id=algorithm_id,
         progress_percent=92,
-        progress_label="Parsing ranked edges",
+        progress_label="Aggregating confidence scores",
     )
 
-    normalized_algorithm_id = algorithm_id.upper()
-    ranked_edges_path = output_dir / dataset_id / run_id / normalized_algorithm_id / "rankedEdges.csv"
-    top_edges, network_summary = parse_ranked_edges_csv(ranked_edges_path)
+    run_edges_by_id, ranked_edge_paths = parse_confidence_run_outputs(
+        output_dir,
+        dataset_id,
+        run_ids,
+        algorithm_id,
+    )
+    top_edges, network_summary = aggregate_confidence_edges(
+        run_edges_by_id,
+        stability_top_k=int(confidence_settings["stability_top_k"]),
+    )
+    ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
+    write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
 
     update_job_state_fn(
         project_dir,
@@ -701,6 +1162,11 @@ def run_beeline_with_progress(
         "docker_image_version": docker_image_version,
         "network_summary": network_summary,
         "top_edges": top_edges,
+        "confidence_summary": {
+            **confidence_settings,
+            "run_metadata": run_metadata,
+        },
+        "run_ranked_edges_paths": ranked_edge_paths,
         "runtime_root": str(runtime_root),
         "ranked_edges_path": str(ranked_edges_path),
     }

@@ -194,7 +194,7 @@ export default function ResultsControlsSection({
         />
         {!compact && (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            An edge is included only if this many algorithms rank it above their individual median.
+            An edge is included only if at least this many selected algorithms recover it in the repeated confidence runs.
           </p>
         )}
       </div>

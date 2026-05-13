@@ -49,6 +49,21 @@ function numericEdgeScore(edge: AlgorithmResultEdge) {
   return Number.isFinite(rawScore) ? rawScore : 0;
 }
 
+function numericEdgeConfidence(edge: AlgorithmResultEdge) {
+  const confidence = Number(edge.confidence);
+  return Number.isFinite(confidence) ? clamp(confidence, 0, 1) : null;
+}
+
+function numericMeanPercentile(edge: AlgorithmResultEdge) {
+  const meanPercentile = Number(edge.mean_percentile ?? edge.meanPercentile);
+  return Number.isFinite(meanPercentile) ? clamp(meanPercentile, 0, 1) : null;
+}
+
+function numericStability(edge: AlgorithmResultEdge) {
+  const stability = Number(edge.stability);
+  return Number.isFinite(stability) ? clamp(stability, 0, 1) : null;
+}
+
 function signOf(value: number): -1 | 0 | 1 {
   if (value > 0) return 1;
   if (value < 0) return -1;
@@ -123,9 +138,16 @@ export default function ProjectDetailPage() {
 
   const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
 
-  const completedTasks = useMemo(
-    () => allJobTasks.filter((task) => task.status === "Completed"),
+  const hasActiveJobTasks = useMemo(
+    () => allJobTasks.some((task) => task.status === "Queued" || task.status === "Running"),
     [allJobTasks]
+  );
+
+  const canDisplayResults = isDemoProject || !hasActiveJobTasks;
+
+  const completedTasks = useMemo(
+    () => (canDisplayResults ? allJobTasks.filter((task) => task.status === "Completed") : []),
+    [allJobTasks, canDisplayResults]
   );
 
   const completedAlgorithmIds = useMemo(
@@ -272,13 +294,14 @@ export default function ProjectDetailPage() {
       const isSigned = algorithmMeta?.signed ?? false;
       const scoreByEdge = new Map<
         string,
-        { source: string; target: string; rawScore: number }
+        { source: string; target: string; rawScore: number; edge: AlgorithmResultEdge }
       >();
 
       const addCandidateScore = (
         source: string,
         target: string,
-        rawScore: number
+        rawScore: number,
+        edge: AlgorithmResultEdge
       ) => {
         if (source === target) return;
         if (!candidateRegulatorSet.has(source) || !candidateTargetSet.has(target)) {
@@ -289,7 +312,7 @@ export default function ProjectDetailPage() {
         const current = scoreByEdge.get(key);
 
         if (!current || Math.abs(rawScore) > Math.abs(current.rawScore)) {
-          scoreByEdge.set(key, { source, target, rawScore });
+          scoreByEdge.set(key, { source, target, rawScore, edge });
         }
       };
 
@@ -300,16 +323,16 @@ export default function ProjectDetailPage() {
 
         if (!source || !target) return;
 
-        addCandidateScore(source, target, rawScore);
+        addCandidateScore(source, target, rawScore, edge);
 
         if (!isDirected) {
-          addCandidateScore(target, source, rawScore);
+          addCandidateScore(target, source, rawScore, edge);
         }
       });
 
       const entriesByTarget = new Map<
         string,
-        { source: string; target: string; rawScore: number }[]
+        { source: string; target: string; rawScore: number; edge: AlgorithmResultEdge }[]
       >();
 
       scoreByEdge.forEach((entry) => {
@@ -329,21 +352,36 @@ export default function ProjectDetailPage() {
           })
           .forEach((entry, index) => {
             const rank = index + 1;
-            const evidence =
+            // Per-target percentile rank from the confidence-score pipeline:
+            // pctl_ij = 1 - (rank_ij - 1) / (|T| - 1)
+            // A value near 1 means this regulator is highly ranked for this target.
+            const percentile =
               regulatorCount <= 1
                 ? 1
                 : clamp(1 - (rank - 1) / (regulatorCount - 1), 0, 1);
+            const backendConfidence = numericEdgeConfidence(entry.edge);
+            const backendMeanPercentile = numericMeanPercentile(entry.edge);
+            const backendStability = numericStability(entry.edge);
+            const hasBackendConfidence = backendConfidence !== null;
+            const evidence = backendConfidence ?? percentile;
+            const meanPercentile = backendMeanPercentile ?? percentile;
+            const stability = backendStability ?? (rank <= CONFIDENCE_STABILITY_TOP_K ? 1 : 0);
             const signVote = isSigned ? signOf(entry.rawScore) : 0;
             const direction =
               isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
-            const supportingAlgorithms = evidence > 0.5 ? [algorithmId] : [];
+            const supportingAlgorithms =
+              hasBackendConfidence
+                ? evidence > 0 ? [algorithmId] : []
+                : rank <= CONFIDENCE_STABILITY_TOP_K ? [algorithmId] : [];
 
             rows.push({
               key: `${algorithmId}-${entry.source}-${entry.target}`,
               source: entry.source,
               target: entry.target,
-              score: evidence,
+              score: meanPercentile,
               confidence: evidence,
+              stability,
+              meanPercentile,
               count: supportingAlgorithms.length,
               rank,
               supportingAlgorithms,
@@ -366,7 +404,9 @@ export default function ProjectDetailPage() {
           });
       });
 
-      next[algorithmId] = rows.sort((a, b) => b.score - a.score);
+      next[algorithmId] = rows.sort(
+        (a, b) => b.confidence - a.confidence || b.score - a.score
+      );
     });
 
     return next;
@@ -412,9 +452,9 @@ export default function ProjectDetailPage() {
     type ConsensusAccumulator = {
       source: string;
       target: string;
-      totalEvidence: number;
-      directedEvidence: number;
-      signedEvidence: number;
+      totalConfidence: number;
+      directedConfidence: number;
+      signedConfidence: number;
       signVote: number;
       signDenominator: number;
       supportingAlgorithms: string[];
@@ -432,7 +472,7 @@ export default function ProjectDetailPage() {
 
       (standardizedAlgorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
         const key = edgeKeyFor(edge.source, edge.target);
-        const evidence = edge.perAlgorithmScores[algorithmId] ?? edge.score;
+        const methodConfidence = edge.perAlgorithmScores[algorithmId] ?? edge.confidence;
         const rawScore = edge.perAlgorithmRawScores?.[algorithmId];
         const signVote = edge.perAlgorithmSigns?.[algorithmId] ?? 0;
         const current =
@@ -440,9 +480,9 @@ export default function ProjectDetailPage() {
           {
             source: edge.source,
             target: edge.target,
-            totalEvidence: 0,
-            directedEvidence: 0,
-            signedEvidence: 0,
+            totalConfidence: 0,
+            directedConfidence: 0,
+            signedConfidence: 0,
             signVote: 0,
             signDenominator: 0,
             supportingAlgorithms: [],
@@ -451,8 +491,8 @@ export default function ProjectDetailPage() {
             perAlgorithmSigns: {},
           };
 
-        current.totalEvidence += evidence;
-        current.perAlgorithmScores[algorithmId] = evidence;
+        current.totalConfidence += methodConfidence;
+        current.perAlgorithmScores[algorithmId] = methodConfidence;
 
         if (rawScore !== undefined) {
           current.perAlgorithmRawScores[algorithmId] = rawScore;
@@ -460,19 +500,19 @@ export default function ProjectDetailPage() {
 
         current.perAlgorithmSigns[algorithmId] = signVote;
 
-        if (edge.rank <= CONFIDENCE_STABILITY_TOP_K) {
+        if (edge.supportingAlgorithms.includes(algorithmId)) {
           current.supportingAlgorithms.push(algorithmId);
         }
 
         if (isDirected) {
-          current.directedEvidence += evidence;
+          current.directedConfidence += methodConfidence;
         }
 
         if (isSigned) {
-          current.signedEvidence += evidence;
+          current.signedConfidence += methodConfidence;
           if (signVote !== 0) {
-            current.signVote += evidence * signVote;
-            current.signDenominator += evidence;
+            current.signVote += methodConfidence * signVote;
+            current.signDenominator += methodConfidence;
           }
         }
 
@@ -482,13 +522,13 @@ export default function ProjectDetailPage() {
 
     return Array.from(buckets.entries())
       .map(([key, edge]) => {
-        const score = edge.totalEvidence / sumAlpha;
+        const meanAlgorithmConfidence = edge.totalConfidence / sumAlpha;
         const stability = edge.supportingAlgorithms.length / sumAlpha;
-        const confidence = clamp(stability * score, 0, 1);
+        const confidence = clamp(stability * meanAlgorithmConfidence, 0, 1);
         const directionCoverage =
-          edge.totalEvidence > 0 ? edge.directedEvidence / edge.totalEvidence : 0;
+          edge.totalConfidence > 0 ? edge.directedConfidence / edge.totalConfidence : 0;
         const signCoverage =
-          edge.totalEvidence > 0 ? edge.signedEvidence / edge.totalEvidence : 0;
+          edge.totalConfidence > 0 ? edge.signedConfidence / edge.totalConfidence : 0;
         const signConfidence =
           edge.signDenominator > 0
             ? clamp(Math.abs(edge.signVote) / edge.signDenominator, 0, 1)
@@ -539,8 +579,9 @@ export default function ProjectDetailPage() {
           key,
           source: edge.source,
           target: edge.target,
-          score,
+          score: meanAlgorithmConfidence,
           confidence,
+          stability,
           count: edge.supportingAlgorithms.length,
           rank: 0,
           supportingAlgorithms: [...edge.supportingAlgorithms].sort(),
@@ -559,7 +600,7 @@ export default function ProjectDetailPage() {
         (edge) =>
           edge.confidence >= confidenceThreshold && edge.count >= consensusThreshold
       )
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
       .map((edge, index) => ({ ...edge, rank: index + 1 }));
   }, [
     activeAlgorithmIds,
@@ -736,6 +777,14 @@ export default function ProjectDetailPage() {
 
 
   const resultsAvailabilityNotice = useMemo(() => {
+    if (!canDisplayResults) {
+      return {
+        title: "Analysis still running",
+        description:
+          "The network visualization and edge analysis table will appear after the current analysis finishes.",
+      };
+    }
+
     if (completedAlgorithmIds.length === 0) {
       return {
         title: "No completed algorithm results yet",
@@ -753,7 +802,7 @@ export default function ProjectDetailPage() {
     }
 
     return null;
-  }, [activeAlgorithmIds.length, completedAlgorithmIds.length]);
+  }, [activeAlgorithmIds.length, canDisplayResults, completedAlgorithmIds.length]);
 
   const visibleTableRows = useMemo(() => {
     if (!tableSearch.trim()) {

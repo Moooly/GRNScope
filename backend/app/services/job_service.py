@@ -124,6 +124,8 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "elapsed_seconds": elapsed,
             "network_summary": beeline_result["network_summary"],
             "top_edges": beeline_result["top_edges"],
+            "confidence_summary": beeline_result.get("confidence_summary"),
+            "run_ranked_edges_paths": beeline_result.get("run_ranked_edges_paths"),
             "beeline_runtime_root": beeline_result["runtime_root"],
             "ranked_edges_path": beeline_result["ranked_edges_path"],
         }
