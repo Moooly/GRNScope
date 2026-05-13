@@ -180,7 +180,7 @@ export default function ResultsControlsSection({
         }`}
       >
         <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
-          <span>Consensus threshold</span>
+          <span>Minimum Supporting Methods</span>
           <span>{consensusThreshold}</span>
         </div>
         <input

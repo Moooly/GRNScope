@@ -659,25 +659,25 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Edge evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Consensus strength for this regulator-target edge. Each algorithm is first converted to per-target rank evidence, then selected algorithms are averaged.
+                    Overall support for this edge. A higher value means the selected methods rank this regulator-target relationship more strongly.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Direction confidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Agreement among methods that can provide direction. Direction coverage below it shows how much of the edge evidence came from direction-aware methods.
+                    How confident the app is about which gene regulates the other. Higher confidence means direction-aware methods agree on the arrow direction.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Sign confidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Agreement among signed methods on activation or repression. Sign coverage shows how much evidence came from signed methods.
+                    How confident the app is about activation versus repression. Higher confidence means signed methods agree on the relationship type.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Method evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Standardized per-method evidence used for consensus after converting each algorithm's output to per-target ranks.
+                    The contribution from each selected algorithm. Use it to see which methods support the edge and which methods do not.
                   </p>
                 </div>
               </div>

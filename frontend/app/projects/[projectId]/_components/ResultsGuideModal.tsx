@@ -44,9 +44,9 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Consensus threshold</h4>
+            <h4 className="text-base font-bold text-slate-950">Minimum Supporting Methods</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Used when two or more algorithms are selected. It controls how many selected algorithms must rank the edge in the top 10 for its target before the edge appears in the consensus network and table.
+              Used when two or more algorithms are selected. It controls how many selected algorithms must support an edge before it appears in the consensus network and table.
             </p>
           </div>
 
