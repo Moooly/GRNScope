@@ -555,6 +555,7 @@ export function buildGraphElements(
         supportRatio:
           maxSupportCount <= 1 ? 1 : edge.count / maxSupportCount,
         supportingAlgorithms: edge.supportingAlgorithms,
+        directionConfidence: edge.directionConfidence,
         directionCoverage: edge.directionCoverage,
         sign: edge.sign,
         signConfidence: edge.signConfidence,

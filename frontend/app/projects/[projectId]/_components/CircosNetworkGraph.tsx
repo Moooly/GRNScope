@@ -75,7 +75,7 @@ const MAX_CIRCOS_EDGES = 120;
 const CIRCOS_ACTIVATION_COLOR = "#0072B2";
 const CIRCOS_REPRESSION_COLOR = "#D55E00";
 const CIRCOS_UNKNOWN_SIGN_COLOR = "#94a3b8";
-const CIRCOS_CHROMOSOME_COLORS = ["#d8e3ed", "#cbd8e4"];
+const CIRCOS_CHROMOSOME_COLORS = ["#f3f5f7", "#e5e9ee"];
 
 function normalizeChromosome(value?: string | null): string {
   if (!value) return "";
@@ -415,8 +415,8 @@ export default function CircosNetworkGraph({
                   CHROMOSOME_OUTER_RADIUS,
                 )}
                 fill={chr.color}
-                stroke="#ffffff"
-                strokeWidth="2"
+                stroke="#cbd5df"
+                strokeWidth="1.4"
               >
                 <title>
                   {chr.chromosome} · {(chr.length / 1e6).toFixed(1)} Mb
@@ -428,7 +428,7 @@ export default function CircosNetworkGraph({
                   y={chr.labelY}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  className="pointer-events-none select-none fill-slate-700 text-[12px] font-bold tracking-[0.02em]"
+                  className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
                 >
                   {chr.chromosome.replace("chr", "")}
                 </text>

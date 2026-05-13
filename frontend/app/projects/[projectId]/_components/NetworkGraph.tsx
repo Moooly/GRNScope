@@ -368,7 +368,11 @@ export default function NetworkGraph({
           supportingAlgorithms: Array.isArray(event.target.data("supportingAlgorithms"))
             ? (event.target.data("supportingAlgorithms") as string[])
             : [],
-          directionCoverage: Number(event.target.data("directionCoverage") ?? 0),
+          directionConfidence:
+            event.target.data("directionConfidence") === null ||
+            event.target.data("directionConfidence") === undefined
+              ? null
+              : Number(event.target.data("directionConfidence")),
           sign: Number(event.target.data("sign") ?? 0) as -1 | 0 | 1,
           signConfidence:
             event.target.data("signConfidence") === null ||
@@ -871,9 +875,11 @@ export default function NetworkGraph({
 
             <div className="grid grid-cols-3 gap-2 text-[11px]">
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Dir. cov</p>
+                <p className="text-slate-500">Dir. conf</p>
                 <p className="mt-1 font-semibold text-slate-900">
-                  {Math.round(edgeTooltip.directionCoverage * 100)}%
+                  {edgeTooltip.directionConfidence === null
+                    ? "-"
+                    : `${Math.round(edgeTooltip.directionConfidence * 100)}%`}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
