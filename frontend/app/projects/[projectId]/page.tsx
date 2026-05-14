@@ -49,6 +49,13 @@ function numericEdgeScore(edge: AlgorithmResultEdge) {
   return Number.isFinite(rawScore) ? rawScore : 0;
 }
 
+function numericSignedEdgeScore(edge: AlgorithmResultEdge) {
+  const signedScore = Number(
+    edge.mean_raw_score ?? edge.weight ?? edge.edge_weight ?? edge.score ?? 0
+  );
+  return Number.isFinite(signedScore) ? signedScore : 0;
+}
+
 function numericEdgeConfidence(edge: AlgorithmResultEdge) {
   const confidence = Number(edge.confidence);
   return Number.isFinite(confidence) ? clamp(confidence, 0, 1) : null;
@@ -87,7 +94,7 @@ export default function ProjectDetailPage() {
     error,
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.9);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [geneSearch, setGeneSearch] = useState("");
@@ -138,16 +145,9 @@ export default function ProjectDetailPage() {
 
   const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
 
-  const hasActiveJobTasks = useMemo(
-    () => allJobTasks.some((task) => task.status === "Queued" || task.status === "Running"),
-    [allJobTasks]
-  );
-
-  const canDisplayResults = isDemoProject || !hasActiveJobTasks;
-
   const completedTasks = useMemo(
-    () => (canDisplayResults ? allJobTasks.filter((task) => task.status === "Completed") : []),
-    [allJobTasks, canDisplayResults]
+    () => allJobTasks.filter((task) => task.status === "Completed"),
+    [allJobTasks]
   );
 
   const completedAlgorithmIds = useMemo(
@@ -199,7 +199,7 @@ export default function ProjectDetailPage() {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
     if (activeAlgorithmIds.length < 7) return;
 
-    setConfidenceThreshold(0.85);
+    setConfidenceThreshold(0.9);
     setConsensusThreshold(7);
     setHasTouchedConsensusThreshold(true);
     hasAppliedDemoDefaultsRef.current = true;
@@ -294,13 +294,20 @@ export default function ProjectDetailPage() {
       const isSigned = algorithmMeta?.signed ?? false;
       const scoreByEdge = new Map<
         string,
-        { source: string; target: string; rawScore: number; edge: AlgorithmResultEdge }
+        {
+          source: string;
+          target: string;
+          rawScore: number;
+          signedScore: number;
+          edge: AlgorithmResultEdge;
+        }
       >();
 
       const addCandidateScore = (
         source: string,
         target: string,
         rawScore: number,
+        signedScore: number,
         edge: AlgorithmResultEdge
       ) => {
         if (source === target) return;
@@ -312,7 +319,7 @@ export default function ProjectDetailPage() {
         const current = scoreByEdge.get(key);
 
         if (!current || Math.abs(rawScore) > Math.abs(current.rawScore)) {
-          scoreByEdge.set(key, { source, target, rawScore, edge });
+          scoreByEdge.set(key, { source, target, rawScore, signedScore, edge });
         }
       };
 
@@ -320,19 +327,26 @@ export default function ProjectDetailPage() {
         const source = String(edge.source ?? "").trim();
         const target = String(edge.target ?? "").trim();
         const rawScore = numericEdgeScore(edge);
+        const signedScore = numericSignedEdgeScore(edge);
 
         if (!source || !target) return;
 
-        addCandidateScore(source, target, rawScore, edge);
+        addCandidateScore(source, target, rawScore, signedScore, edge);
 
         if (!isDirected) {
-          addCandidateScore(target, source, rawScore, edge);
+          addCandidateScore(target, source, rawScore, signedScore, edge);
         }
       });
 
       const entriesByTarget = new Map<
         string,
-        { source: string; target: string; rawScore: number; edge: AlgorithmResultEdge }[]
+        {
+          source: string;
+          target: string;
+          rawScore: number;
+          signedScore: number;
+          edge: AlgorithmResultEdge;
+        }[]
       >();
 
       scoreByEdge.forEach((entry) => {
@@ -366,7 +380,7 @@ export default function ProjectDetailPage() {
             const evidence = backendConfidence ?? percentile;
             const meanPercentile = backendMeanPercentile ?? percentile;
             const stability = backendStability ?? (rank <= CONFIDENCE_STABILITY_TOP_K ? 1 : 0);
-            const signVote = isSigned ? signOf(entry.rawScore) : 0;
+            const signVote = isSigned ? signOf(entry.signedScore) : 0;
             const direction =
               isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
             const supportingAlgorithms =
@@ -378,7 +392,7 @@ export default function ProjectDetailPage() {
               key: `${algorithmId}-${entry.source}-${entry.target}`,
               source: entry.source,
               target: entry.target,
-              score: meanPercentile,
+              score: evidence,
               confidence: evidence,
               stability,
               meanPercentile,
@@ -389,7 +403,7 @@ export default function ProjectDetailPage() {
                 [algorithmId]: evidence,
               },
               perAlgorithmRawScores: {
-                [algorithmId]: entry.rawScore,
+                [algorithmId]: entry.signedScore,
               },
               perAlgorithmSigns: {
                 [algorithmId]: signVote,
@@ -449,12 +463,41 @@ export default function ProjectDetailPage() {
       );
     });
 
+    const getPairOrientation = (source: string, target: string) => {
+      const sourceIsRegulator = candidateRegulatorSet.has(source);
+      const targetIsRegulator = candidateRegulatorSet.has(target);
+
+      if (sourceIsRegulator && !targetIsRegulator) {
+        return { source, target };
+      }
+
+      if (targetIsRegulator && !sourceIsRegulator) {
+        return { source: target, target: source };
+      }
+
+      return source.localeCompare(target) <= 0
+        ? { source, target }
+        : { source: target, target: source };
+    };
+
+    const getPairKey = (source: string, target: string) => {
+      const pair = getPairOrientation(source, target);
+      return edgeKeyFor(pair.source, pair.target);
+    };
+
+    type MethodEvidence = {
+      evidence: number;
+      directionVote: -1 | 0 | 1;
+      signVote: -1 | 0 | 1;
+      rawScore: number | undefined;
+    };
+
     type ConsensusAccumulator = {
       source: string;
       target: string;
-      totalConfidence: number;
-      directedConfidence: number;
-      signedConfidence: number;
+      totalEvidence: number;
+      directionVote: number;
+      directionDenominator: number;
       signVote: number;
       signDenominator: number;
       supportingAlgorithms: string[];
@@ -465,109 +508,123 @@ export default function ProjectDetailPage() {
 
     const buckets = new Map<string, ConsensusAccumulator>();
 
+    const allPairKeys = new Set<string>();
+
     activeAlgorithmIds.forEach((algorithmId) => {
-      const algorithmMeta = algorithmMetaMap.get(algorithmId);
-      const isDirected = algorithmMeta?.directed ?? true;
-      const isSigned = algorithmMeta?.signed ?? false;
-
       (standardizedAlgorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
-        const key = edgeKeyFor(edge.source, edge.target);
-        const methodConfidence = edge.perAlgorithmScores[algorithmId] ?? edge.confidence;
-        const rawScore = edge.perAlgorithmRawScores?.[algorithmId];
-        const signVote = edge.perAlgorithmSigns?.[algorithmId] ?? 0;
-        const current =
-          buckets.get(key) ??
-          {
-            source: edge.source,
-            target: edge.target,
-            totalConfidence: 0,
-            directedConfidence: 0,
-            signedConfidence: 0,
-            signVote: 0,
-            signDenominator: 0,
-            supportingAlgorithms: [],
-            perAlgorithmScores: {},
-            perAlgorithmRawScores: {},
-            perAlgorithmSigns: {},
-          };
+        allPairKeys.add(getPairKey(edge.source, edge.target));
+      });
+    });
 
-        current.totalConfidence += methodConfidence;
-        current.perAlgorithmScores[algorithmId] = methodConfidence;
+    allPairKeys.forEach((pairKey) => {
+      const [baseSource, baseTarget] = pairKey.split("|||");
+      if (!baseSource || !baseTarget) return;
 
-        if (rawScore !== undefined) {
-          current.perAlgorithmRawScores[algorithmId] = rawScore;
-        }
+      const accumulator: ConsensusAccumulator = {
+        source: baseSource,
+        target: baseTarget,
+        totalEvidence: 0,
+        directionVote: 0,
+        directionDenominator: 0,
+        signVote: 0,
+        signDenominator: 0,
+        supportingAlgorithms: [],
+        perAlgorithmScores: {},
+        perAlgorithmRawScores: {},
+        perAlgorithmSigns: {},
+      };
 
-        current.perAlgorithmSigns[algorithmId] = signVote;
+      activeAlgorithmIds.forEach((algorithmId) => {
+        const algorithmMeta = algorithmMetaMap.get(algorithmId);
+        const isDirected = algorithmMeta?.directed ?? true;
+        const isSigned = algorithmMeta?.signed ?? false;
+        const rowsForAlgorithm = rowsByAlgorithm.get(algorithmId);
+        const forward = rowsForAlgorithm?.get(edgeKeyFor(baseSource, baseTarget));
+        const reverse = rowsForAlgorithm?.get(edgeKeyFor(baseTarget, baseSource));
 
-        if (edge.supportingAlgorithms.includes(algorithmId)) {
-          current.supportingAlgorithms.push(algorithmId);
-        }
+        const forwardEvidence =
+          forward?.perAlgorithmScores[algorithmId] ?? forward?.confidence ?? 0;
+        const reverseEvidence =
+          reverse?.perAlgorithmScores[algorithmId] ?? reverse?.confidence ?? 0;
 
-        if (isDirected) {
-          current.directedConfidence += methodConfidence;
-        }
+        let methodEvidence: MethodEvidence | null = null;
 
-        if (isSigned) {
-          current.signedConfidence += methodConfidence;
-          if (signVote !== 0) {
-            current.signVote += methodConfidence * signVote;
-            current.signDenominator += methodConfidence;
+        if (forwardEvidence > 0 || reverseEvidence > 0) {
+          if (forwardEvidence >= reverseEvidence) {
+            methodEvidence = {
+              evidence: forwardEvidence,
+              directionVote:
+                isDirected && forwardEvidence !== reverseEvidence ? 1 : 0,
+              signVote: isSigned
+                ? forward?.perAlgorithmSigns?.[algorithmId] ?? 0
+                : 0,
+              rawScore: forward?.perAlgorithmRawScores?.[algorithmId],
+            };
+          } else {
+            methodEvidence = {
+              evidence: reverseEvidence,
+              directionVote: isDirected ? -1 : 0,
+              signVote: isSigned
+                ? reverse?.perAlgorithmSigns?.[algorithmId] ?? 0
+                : 0,
+              rawScore: reverse?.perAlgorithmRawScores?.[algorithmId],
+            };
           }
         }
 
-        buckets.set(key, current);
+        if (!methodEvidence) {
+          accumulator.perAlgorithmScores[algorithmId] = 0;
+          accumulator.perAlgorithmSigns[algorithmId] = 0;
+          return;
+        }
+
+        accumulator.totalEvidence += methodEvidence.evidence;
+        accumulator.perAlgorithmScores[algorithmId] = methodEvidence.evidence;
+        accumulator.perAlgorithmSigns[algorithmId] = methodEvidence.signVote;
+
+        if (methodEvidence.rawScore !== undefined) {
+          accumulator.perAlgorithmRawScores[algorithmId] = methodEvidence.rawScore;
+        }
+
+        if (methodEvidence.evidence > 0) {
+          accumulator.supportingAlgorithms.push(algorithmId);
+        }
+
+        if (isDirected && methodEvidence.directionVote !== 0) {
+          accumulator.directionVote +=
+            methodEvidence.evidence * methodEvidence.directionVote;
+          accumulator.directionDenominator += methodEvidence.evidence;
+        }
+
+        if (isSigned && methodEvidence.signVote !== 0) {
+          accumulator.signVote += methodEvidence.evidence * methodEvidence.signVote;
+          accumulator.signDenominator += methodEvidence.evidence;
+        }
       });
+
+      buckets.set(pairKey, accumulator);
     });
 
     return Array.from(buckets.entries())
       .map(([key, edge]) => {
-        const meanAlgorithmConfidence = edge.totalConfidence / sumAlpha;
+        const edgeEvidence = clamp(edge.totalEvidence / sumAlpha, 0, 1);
         const stability = edge.supportingAlgorithms.length / sumAlpha;
-        const confidence = clamp(stability * meanAlgorithmConfidence, 0, 1);
+        const direction = signOf(edge.directionVote);
+        const directionConfidence =
+          edge.directionDenominator > 0
+            ? clamp(Math.abs(edge.directionVote) / edge.directionDenominator, 0, 1)
+            : null;
         const directionCoverage =
-          edge.totalConfidence > 0 ? edge.directedConfidence / edge.totalConfidence : 0;
-        const signCoverage =
-          edge.totalConfidence > 0 ? edge.signedConfidence / edge.totalConfidence : 0;
+          edge.totalEvidence > 0 ? edge.directionDenominator / edge.totalEvidence : 0;
+        const sign = signOf(edge.signVote);
         const signConfidence =
           edge.signDenominator > 0
             ? clamp(Math.abs(edge.signVote) / edge.signDenominator, 0, 1)
             : null;
-        const sign = signOf(edge.signVote);
-
-        let direction: -1 | 0 | 1 = 1;
-        let directionConfidence: number | null = 1;
-
-        if (candidateRegulatorSet.has(edge.target)) {
-          let directionNumerator = 0;
-          let directionDenominator = 0;
-          const reverseKey = edgeKeyFor(edge.target, edge.source);
-
-          activeAlgorithmIds.forEach((algorithmId) => {
-            const algorithmMeta = algorithmMetaMap.get(algorithmId);
-            if (algorithmMeta?.directed === false) return;
-
-            const forward =
-              rowsByAlgorithm
-                .get(algorithmId)
-                ?.get(key)
-                ?.perAlgorithmScores[algorithmId] ?? 0;
-            const reverse =
-              rowsByAlgorithm
-                .get(algorithmId)
-                ?.get(reverseKey)
-                ?.perAlgorithmScores[algorithmId] ?? 0;
-
-            directionNumerator += forward - reverse;
-            directionDenominator += forward + reverse;
-          });
-
-          direction = signOf(directionNumerator);
-          directionConfidence =
-            directionDenominator > 0
-              ? clamp(Math.abs(directionNumerator) / directionDenominator, 0, 1)
-              : null;
-        }
+        const signCoverage =
+          edge.totalEvidence > 0 ? edge.signDenominator / edge.totalEvidence : 0;
+        const displaySource = direction === -1 ? edge.target : edge.source;
+        const displayTarget = direction === -1 ? edge.source : edge.target;
 
         activeAlgorithmIds.forEach((algorithmId) => {
           if (edge.perAlgorithmScores[algorithmId] === undefined) {
@@ -577,10 +634,10 @@ export default function ProjectDetailPage() {
 
         return {
           key,
-          source: edge.source,
-          target: edge.target,
-          score: meanAlgorithmConfidence,
-          confidence,
+          source: displaySource,
+          target: displayTarget,
+          score: edgeEvidence,
+          confidence: edgeEvidence,
           stability,
           count: edge.supportingAlgorithms.length,
           rank: 0,
@@ -588,7 +645,7 @@ export default function ProjectDetailPage() {
           perAlgorithmScores: edge.perAlgorithmScores,
           perAlgorithmRawScores: edge.perAlgorithmRawScores,
           perAlgorithmSigns: edge.perAlgorithmSigns,
-          direction,
+          direction: direction === 0 ? 0 : 1,
           directionConfidence,
           directionCoverage,
           sign,
@@ -777,19 +834,11 @@ export default function ProjectDetailPage() {
 
 
   const resultsAvailabilityNotice = useMemo(() => {
-    if (!canDisplayResults) {
-      return {
-        title: "Analysis still running",
-        description:
-          "The network visualization and edge analysis table will appear after the current analysis finishes.",
-      };
-    }
-
     if (completedAlgorithmIds.length === 0) {
       return {
         title: "No completed algorithm results yet",
         description:
-          "The network visualization and edge analysis table will appear after at least one algorithm finishes successfully.",
+          "The network visualization, overlap summary, and edge analysis table will appear after the first algorithm finishes successfully.",
       };
     }
 
@@ -802,7 +851,7 @@ export default function ProjectDetailPage() {
     }
 
     return null;
-  }, [activeAlgorithmIds.length, canDisplayResults, completedAlgorithmIds.length]);
+  }, [activeAlgorithmIds.length, completedAlgorithmIds.length]);
 
   const visibleTableRows = useMemo(() => {
     if (!tableSearch.trim()) {

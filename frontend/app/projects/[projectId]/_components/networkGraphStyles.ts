@@ -66,6 +66,14 @@ export function getNetworkGraphStylesheet() {
       },
     },
     {
+      selector: "edge.reciprocal",
+      style: {
+        "curve-style": "unbundled-bezier",
+        "control-point-distances": "data(controlPointDistance)",
+        "control-point-weights": "data(controlPointWeight)",
+      },
+    },
+    {
       selector: "node:selected",
       style: {
         "border-width": 6,

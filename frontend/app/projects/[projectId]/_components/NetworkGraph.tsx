@@ -144,8 +144,9 @@ export default function NetworkGraph({
       return;
     }
 
-    const gap = 38;
-    const maxRowWidth = 460;
+    const gap = 64;
+    const containerWidth = containerRef.current?.clientWidth ?? 900;
+    const maxRowWidth = Math.max(680, containerWidth * 0.72);
     let cursorX = 0;
     let cursorY = 0;
     let rowHeight = 0;
@@ -157,8 +158,8 @@ export default function NetworkGraph({
       );
 
       const box = collection.boundingBox();
-      const width = Math.max(92, box.w);
-      const height = Math.max(92, box.h);
+      const width = Math.max(118, box.w + 16);
+      const height = Math.max(118, box.h + 16);
 
       if (cursorX > 0 && cursorX + width > maxRowWidth) {
         cursorX = 0;
@@ -205,6 +206,71 @@ export default function NetworkGraph({
         });
       });
     });
+  };
+
+  const relaxNodeSpacing = (cy: Core) => {
+    const graphNodes = cy.nodes().toArray();
+    if (graphNodes.length < 2) return;
+
+    const maxDegree = Math.max(
+      ...graphNodes.map((node) => Number(node.data("degree") ?? 0)),
+      1
+    );
+
+    for (let pass = 0; pass < 6; pass += 1) {
+      const shifts = new Map<string, { x: number; y: number }>();
+
+      graphNodes.forEach((node) => {
+        shifts.set(node.id(), { x: 0, y: 0 });
+      });
+
+      for (let i = 0; i < graphNodes.length; i += 1) {
+        for (let j = i + 1; j < graphNodes.length; j += 1) {
+          const a = graphNodes[i];
+          const b = graphNodes[j];
+          const aPosition = a.position();
+          const bPosition = b.position();
+          let dx = bPosition.x - aPosition.x;
+          let dy = bPosition.y - aPosition.y;
+          let distance = Math.hypot(dx, dy);
+
+          if (distance < 0.001) {
+            const seed = a.id().localeCompare(b.id()) <= 0 ? 1 : -1;
+            dx = seed;
+            dy = -seed;
+            distance = Math.SQRT2;
+          }
+
+          const aDegree = Number(a.data("degree") ?? 0);
+          const bDegree = Number(b.data("degree") ?? 0);
+          const hubBoost = Math.max(aDegree, bDegree) / maxDegree;
+          const minDistance = 76 + hubBoost * 22;
+
+          if (distance >= minDistance) continue;
+
+          const push = ((minDistance - distance) / distance) * 0.5;
+          const shiftX = dx * push;
+          const shiftY = dy * push;
+          const aShift = shifts.get(a.id())!;
+          const bShift = shifts.get(b.id())!;
+
+          aShift.x -= shiftX;
+          aShift.y -= shiftY;
+          bShift.x += shiftX;
+          bShift.y += shiftY;
+        }
+      }
+
+      graphNodes.forEach((node) => {
+        const shift = shifts.get(node.id());
+        if (!shift) return;
+        const current = node.position();
+        node.position({
+          x: current.x + shift.x,
+          y: current.y + shift.y,
+        });
+      });
+    }
   };
 
   const [edgeTooltip, setEdgeTooltip] = useState<EdgeTooltipState | null>(null);
@@ -274,6 +340,8 @@ export default function NetworkGraph({
     const baseConfig = getLayoutConfig(
       layoutMode,
       graphCounts,
+      nodes,
+      edges,
       hierarchicalPositions,
       concentricPositions,
       circularPositions
@@ -361,8 +429,16 @@ export default function NetworkGraph({
         setEdgeTooltip({
           x: renderedPosition.x,
           y: renderedPosition.y,
-          source: String(event.target.data("source") ?? ""),
-          target: String(event.target.data("target") ?? ""),
+          source: String(
+            event.target.data("displaySource") ??
+              event.target.data("source") ??
+              ""
+          ),
+          target: String(
+            event.target.data("displayTarget") ??
+              event.target.data("target") ??
+              ""
+          ),
           score: Number(event.target.data("score") ?? 0),
           rank: Number(event.target.data("rank") ?? 0),
           supportingAlgorithms: Array.isArray(event.target.data("supportingAlgorithms"))
@@ -447,6 +523,7 @@ export default function NetworkGraph({
             activeLayoutRef.current = null;
 
             if (layout === "force") {
+              relaxNodeSpacing(graph);
               packDisconnectedComponents(graph);
             }
 
@@ -667,6 +744,7 @@ export default function NetworkGraph({
         activeLayoutRef.current = null;
 
         if (layout === "force") {
+          relaxNodeSpacing(cy);
           packDisconnectedComponents(cy);
         }
 

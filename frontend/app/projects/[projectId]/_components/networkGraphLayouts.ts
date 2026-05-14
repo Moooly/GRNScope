@@ -411,6 +411,8 @@ function computeBarycenter(
 export function getLayoutConfig(
   layout: NetworkLayoutMode,
   graphCounts: GraphCounts,
+  nodes: NetworkNode[] = [],
+  edges: NetworkEdge[] = [],
   hierarchicalPositions?: PositionMap,
   concentricPositions?: PositionMap,
   circularPositions?: PositionMap
@@ -445,34 +447,57 @@ export function getLayoutConfig(
     } as const;
   }
 
-  // Force-directed (cose-bilkent). Tune parameters based on graph size.
+  // Force-directed (cose-bilkent). Tune parameters based on graph size,
+  // hub pressure, and the evidence profile of the visible edges.
   const isSparseGraph =
     graphCounts.edgeCount <= graphCounts.nodeCount * 1.5;
   const edgesPerNode =
     graphCounts.edgeCount / Math.max(graphCounts.nodeCount, 1);
-  const densityFactor = isSparseGraph
-    ? 0.82
-    : Math.max(0.68, Math.min(1.2, edgesPerNode / 2));
-  const componentSpacing = isSparseGraph ? 20 : 40;
+  const maxDegree = Math.max(...nodes.map((node) => node.degree), 1);
+  const hubRatio = maxDegree / Math.max(graphCounts.nodeCount, 1);
+  const evidenceValues = edges
+    .map((edge) => Number(edge.confidence ?? edge.score))
+    .filter((score) => Number.isFinite(score));
+  const meanEvidence =
+    evidenceValues.length > 0
+      ? evidenceValues.reduce((sum, score) => sum + score, 0) /
+        evidenceValues.length
+      : 0.8;
+  const nodeScale = Math.max(1, Math.min(2.15, Math.sqrt(graphCounts.nodeCount / 18)));
+  const hubRepulsionBoost = 1 + Math.min(0.72, hubRatio * 1.9);
+  const densityRepulsionBoost = Math.max(1, Math.min(1.34, edgesPerNode / 2.4));
+  const baseRepulsion = isSparseGraph ? 8600 : 9400;
+  const evidenceLengthFactor = meanEvidence >= 0.86 ? 0.94 : 1.08;
+  const componentSpacing = isSparseGraph ? 72 : 96;
 
   return {
     name: "cose-bilkent",
+    quality: graphCounts.nodeCount <= 80 ? "proof" : "default",
     animate: false,
+    nodeDimensionsIncludeLabels: true,
     // randomize is decided by the caller based on whether positions exist; the
     // base config defaults to false so existing positions are kept.
     randomize: false,
     fit: true,
-    padding: isSparseGraph ? 28 : 44,
-    nodeRepulsion: isSparseGraph ? 6600 : 7200 * densityFactor,
-    idealEdgeLength: isSparseGraph ? 88 : 96 * densityFactor,
-    edgeElasticity: isSparseGraph ? 0.32 : 0.22,
-    nestingFactor: 1,
-    gravity: isSparseGraph ? 1.05 : 0.86,
-    gravityRangeCompound: isSparseGraph ? 3.2 : 2.4,
+    padding: isSparseGraph ? 42 : 56,
+    nodeRepulsion: Math.round(
+      baseRepulsion * nodeScale * hubRepulsionBoost * densityRepulsionBoost
+    ),
+    idealEdgeLength: Math.round(
+      (isSparseGraph ? 118 : 108) *
+        (1 + Math.min(0.28, hubRatio)) *
+        evidenceLengthFactor
+    ),
+    edgeElasticity: isSparseGraph ? 0.28 : 0.2,
+    nestingFactor: 0.95,
+    gravity: isSparseGraph ? 0.72 : 0.58,
+    gravityRange: isSparseGraph ? 4.8 : 4.2,
+    gravityRangeCompound: isSparseGraph ? 3.8 : 3.1,
     componentSpacing,
-    tilingPaddingVertical: isSparseGraph ? 12 : 18,
-    tilingPaddingHorizontal: isSparseGraph ? 12 : 18,
-    numIter: isSparseGraph ? 2200 : 1800,
+    tilingPaddingVertical: isSparseGraph ? 26 : 34,
+    tilingPaddingHorizontal: isSparseGraph ? 26 : 34,
+    numIter: isSparseGraph ? 3200 : 2800,
+    initialEnergyOnIncremental: 0.38,
     tile: true,
   } as const;
 }
@@ -515,20 +540,25 @@ export function buildGraphElements(
     return edge.sign > 0 ? "triangle" : "tee";
   };
 
-  const getTargetArrowShape = (edge: NetworkEdge) => {
-    if (edge.direction !== 1) return "none";
-    return getRelationshipShape(edge);
-  };
-
-  const getSourceArrowShape = (edge: NetworkEdge) => {
-    if (edge.direction !== -1) return "none";
-    return getRelationshipShape(edge);
-  };
-
   const getEndpointDistance = (shape: string) => {
     if (shape === "tee") return 6;
     if (shape === "triangle") return 2;
     return 0;
+  };
+
+  const directedPairs = new Set(
+    edges.map((edge) => `${edge.source}|||${edge.target}`)
+  );
+
+  const hasReciprocalEdge = (edge: NetworkEdge) =>
+    directedPairs.has(`${edge.target}|||${edge.source}`);
+
+  const getEffectiveDirection = (edge: NetworkEdge, hasReciprocal: boolean) => {
+    // If both A->B and B->A survived the filters, show them as true reciprocal
+    // edges instead of letting low-confidence direction inference collapse them
+    // onto the same visual direction.
+    if (hasReciprocal) return 1;
+    return edge.direction;
   };
 
   const elements = [
@@ -543,14 +573,23 @@ export function buildGraphElements(
       },
     })),
     ...edges.map((edge) => {
-      const sourceArrowShape = getSourceArrowShape(edge);
-      const targetArrowShape = getTargetArrowShape(edge);
+      const hasReciprocal = hasReciprocalEdge(edge);
+      const effectiveDirection = getEffectiveDirection(edge, hasReciprocal);
+      const displaySource = effectiveDirection === -1 ? edge.target : edge.source;
+      const displayTarget = effectiveDirection === -1 ? edge.source : edge.target;
+      const sourceArrowShape =
+        effectiveDirection === -1 ? getRelationshipShape(edge) : "none";
+      const targetArrowShape =
+        effectiveDirection === 1 ? getRelationshipShape(edge) : "none";
 
       return {
+        classes: hasReciprocal ? "reciprocal" : undefined,
         data: {
           id: edge.key,
           source: edge.source,
           target: edge.target,
+          displaySource,
+          displayTarget,
           score: edge.score,
           confidence: edge.confidence,
           visualScore: getVisualScore(edge.score),
@@ -559,6 +598,8 @@ export function buildGraphElements(
           targetArrowShape,
           sourceDistanceFromNode: getEndpointDistance(sourceArrowShape),
           targetDistanceFromNode: getEndpointDistance(targetArrowShape),
+          controlPointDistance: hasReciprocal ? 34 : 0,
+          controlPointWeight: 0.5,
           arrowFill: "filled",
           count: edge.count,
           rank: edge.rank,

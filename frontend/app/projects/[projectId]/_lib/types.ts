@@ -102,6 +102,7 @@ export type AlgorithmResultEdge = {
   stability?: number;
   mean_percentile?: number;
   meanPercentile?: number;
+  mean_raw_score?: number;
   mean_z?: number;
   z_ci_lower?: number | null;
   z_ci_upper?: number | null;
