@@ -95,6 +95,8 @@ export default function ProjectDetailPage() {
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.9);
+  const [directionConfidenceThreshold, setDirectionConfidenceThreshold] = useState(0);
+  const [signConfidenceThreshold, setSignConfidenceThreshold] = useState(0);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [geneSearch, setGeneSearch] = useState("");
@@ -435,14 +437,36 @@ export default function ProjectDetailPage() {
   const algorithmEdgeRows = useMemo(() => {
     const next: Record<string, AggregatedEdge[]> = {};
 
+    const meetsConfidenceFilters = (edge: AggregatedEdge) => {
+      const meetsDirectionConfidence =
+        directionConfidenceThreshold <= 0 ||
+        (edge.directionConfidence !== null &&
+          edge.directionConfidence >= directionConfidenceThreshold);
+      const meetsSignConfidence =
+        signConfidenceThreshold <= 0 ||
+        (edge.signConfidence !== null && edge.signConfidence >= signConfidenceThreshold);
+
+      return (
+        edge.confidence >= confidenceThreshold &&
+        meetsDirectionConfidence &&
+        meetsSignConfidence
+      );
+    };
+
     completedAlgorithmIds.forEach((algorithmId) => {
       next[algorithmId] = (standardizedAlgorithmEdgeRows[algorithmId] ?? [])
-        .filter((edge) => edge.confidence >= confidenceThreshold)
+        .filter(meetsConfidenceFilters)
         .map((edge, index) => ({ ...edge, rank: index + 1 }));
     });
 
     return next;
-  }, [completedAlgorithmIds, confidenceThreshold, standardizedAlgorithmEdgeRows]);
+  }, [
+    completedAlgorithmIds,
+    confidenceThreshold,
+    directionConfidenceThreshold,
+    signConfidenceThreshold,
+    standardizedAlgorithmEdgeRows,
+  ]);
 
   const consensusRows = useMemo(() => {
     if (activeAlgorithmIds.length < 2) return [];
@@ -655,7 +679,14 @@ export default function ProjectDetailPage() {
       })
       .filter(
         (edge) =>
-          edge.confidence >= confidenceThreshold && edge.count >= consensusThreshold
+          edge.confidence >= confidenceThreshold &&
+          edge.count >= consensusThreshold &&
+          (directionConfidenceThreshold <= 0 ||
+            (edge.directionConfidence !== null &&
+              edge.directionConfidence >= directionConfidenceThreshold)) &&
+          (signConfidenceThreshold <= 0 ||
+            (edge.signConfidence !== null &&
+              edge.signConfidence >= signConfidenceThreshold))
       )
       .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
       .map((edge, index) => ({ ...edge, rank: index + 1 }));
@@ -665,6 +696,8 @@ export default function ProjectDetailPage() {
     candidateRegulatorIds,
     confidenceThreshold,
     consensusThreshold,
+    directionConfidenceThreshold,
+    signConfidenceThreshold,
     standardizedAlgorithmEdgeRows,
   ]);
 
@@ -1119,6 +1152,8 @@ useEffect(() => {
     tableSortKey,
     selectedAlgorithmIds,
     confidenceThreshold,
+    directionConfidenceThreshold,
+    signConfidenceThreshold,
     consensusThreshold,
     isolatedGene,
     geneSearch,
@@ -1180,6 +1215,10 @@ useEffect(() => {
                   }}
                   confidenceThreshold={confidenceThreshold}
                   onChangeConfidenceThreshold={setConfidenceThreshold}
+                  directionConfidenceThreshold={directionConfidenceThreshold}
+                  onChangeDirectionConfidenceThreshold={setDirectionConfidenceThreshold}
+                  signConfidenceThreshold={signConfidenceThreshold}
+                  onChangeSignConfidenceThreshold={setSignConfidenceThreshold}
                   consensusThreshold={consensusThreshold}
                   maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
                   onChangeConsensusThreshold={(value) => {

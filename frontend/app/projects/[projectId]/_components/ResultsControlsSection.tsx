@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 type ResultsControlsSectionProps = {
   completedAlgorithmIds: string[];
@@ -6,6 +7,10 @@ type ResultsControlsSectionProps = {
   onChangeSelectedAlgorithmIds: (value: string[]) => void;
   confidenceThreshold: number;
   onChangeConfidenceThreshold: (value: number) => void;
+  directionConfidenceThreshold: number;
+  onChangeDirectionConfidenceThreshold: (value: number) => void;
+  signConfidenceThreshold: number;
+  onChangeSignConfidenceThreshold: (value: number) => void;
   consensusThreshold: number;
   maxConsensusThreshold: number;
   onChangeConsensusThreshold: (value: number) => void;
@@ -15,32 +20,47 @@ type ResultsControlsSectionProps = {
   onOpenGuide?: () => void;
 };
 
+type SettingsPanel = "algorithms";
+
 export default function ResultsControlsSection({
   completedAlgorithmIds,
   selectedAlgorithmIds,
   onChangeSelectedAlgorithmIds,
-  confidenceThreshold = 0.3,
+  confidenceThreshold = 0.9,
   onChangeConfidenceThreshold = () => {},
+  directionConfidenceThreshold = 0,
+  onChangeDirectionConfidenceThreshold = () => {},
+  signConfidenceThreshold = 0,
+  onChangeSignConfidenceThreshold = () => {},
   consensusThreshold,
-  maxConsensusThreshold,
   onChangeConsensusThreshold,
   isConsensusView,
   compact = false,
-  projectId,
   onOpenGuide,
 }: ResultsControlsSectionProps) {
-  const [isAlgorithmMenuOpen, setIsAlgorithmMenuOpen] = useState(false);
-  const algorithmMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const algorithmButtonLabel = useMemo(() => {
     if (selectedAlgorithmIds.length === 0) return "Choose algorithms";
     if (selectedAlgorithmIds.length === completedAlgorithmIds.length) return "All algorithms";
     if (selectedAlgorithmIds.length === 1) return selectedAlgorithmIds[0];
-    return `${selectedAlgorithmIds.length} algorithms selected`;
+    return `${selectedAlgorithmIds.length} algorithms`;
   }, [completedAlgorithmIds.length, selectedAlgorithmIds]);
 
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
-  const safeConfidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.8;
+  const safeEvidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.9;
+  const safeDirectionThreshold = Number.isFinite(directionConfidenceThreshold)
+    ? directionConfidenceThreshold
+    : 0;
+  const safeSignThreshold = Number.isFinite(signConfidenceThreshold)
+    ? signConfidenceThreshold
+    : 0;
+  const safeConsensusThreshold = Math.max(
+    1,
+    Math.min(consensusThreshold, effectiveMaxConsensusThreshold)
+  );
 
   const toggleAlgorithm = (algorithmId: string) => {
     const isSelected = selectedAlgorithmIds.includes(algorithmId);
@@ -52,13 +72,36 @@ export default function ResultsControlsSection({
     onChangeSelectedAlgorithmIds([...selectedAlgorithmIds, algorithmId]);
   };
 
+  const clampPercent = (value: number) => Math.min(1, Math.max(0, value));
+
+  const updatePercent = (value: number, onChange: (value: number) => void) => {
+    if (!Number.isFinite(value)) return;
+    onChange(clampPercent(value / 100));
+  };
+
+  const adjustPercent = (
+    currentValue: number,
+    delta: number,
+    onChange: (value: number) => void
+  ) => {
+    onChange(clampPercent(currentValue + delta / 100));
+  };
+
+  const adjustSupportingMethods = (delta: number) => {
+    const nextValue = Math.min(
+      effectiveMaxConsensusThreshold,
+      Math.max(1, safeConsensusThreshold + delta)
+    );
+    onChangeConsensusThreshold(nextValue);
+  };
+
   useEffect(() => {
-    if (!isAlgorithmMenuOpen) return;
+    if (!isSettingsMenuOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (!algorithmMenuRef.current) return;
-      if (!algorithmMenuRef.current.contains(event.target as Node)) {
-        setIsAlgorithmMenuOpen(false);
+      if (!settingsMenuRef.current) return;
+      if (!settingsMenuRef.current.contains(event.target as Node)) {
+        setIsSettingsMenuOpen(false);
       }
     };
 
@@ -66,139 +109,227 @@ export default function ResultsControlsSection({
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
     };
-  }, [isAlgorithmMenuOpen]);
+  }, [isSettingsMenuOpen]);
+
+  const panelHeader = (
+    panel: SettingsPanel,
+    title: string
+  ) => {
+    const isOpen = openPanel === panel;
+
+    return (
+      <button
+        type="button"
+        onClick={() => setOpenPanel((currentPanel) => (currentPanel === panel ? null : panel))}
+        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+          isOpen
+            ? "border-[#1b75a6] bg-[#1b75a6] text-white shadow-sm"
+            : "border-slate-200 bg-[#eef3f7] text-slate-800 hover:border-[#1b75a6]/30 hover:bg-[#e7f2f7]"
+        }`}
+      >
+        <span className="flex min-w-0 items-center">
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-bold">{title}</span>
+          </span>
+        </span>
+        <span className="shrink-0 text-xs font-bold">{isOpen ? "▴" : "▾"}</span>
+      </button>
+    );
+  };
+
+  const inlinePercentControl = (
+    value: number,
+    onChange: (value: number) => void,
+    label: string
+  ) => (
+    <div
+      className="flex h-9 w-[132px] shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => adjustPercent(value, -5, onChange)}
+        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+        aria-label={`Decrease ${label}`}
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={Math.round(value * 100)}
+        onChange={(e) => updatePercent(Number(e.target.value), onChange)}
+        className="h-full min-w-0 flex-1 border-x border-slate-200 bg-white px-1 text-center text-sm font-bold text-slate-900 outline-none"
+        aria-label={label}
+      />
+      <span className="px-1 text-xs font-bold text-slate-500">%</span>
+      <button
+        type="button"
+        onClick={() => adjustPercent(value, 5, onChange)}
+        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+        aria-label={`Increase ${label}`}
+      >
+        +
+      </button>
+    </div>
+  );
+
+  const inlineMethodsControl = () => (
+    <div
+      className="flex h-9 w-[132px] shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => adjustSupportingMethods(-1)}
+        disabled={!isConsensusView || safeConsensusThreshold <= 1}
+        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Decrease supporting methods"
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={safeConsensusThreshold}
+        onChange={(e) => {
+          const inputValue = Number(e.target.value);
+          if (!Number.isFinite(inputValue)) return;
+          const nextValue = Math.min(
+            effectiveMaxConsensusThreshold,
+            Math.max(1, inputValue)
+          );
+          onChangeConsensusThreshold(nextValue);
+        }}
+        disabled={!isConsensusView}
+        className="h-full min-w-0 flex-1 border-x border-slate-200 bg-white px-1 text-center text-sm font-bold text-slate-900 outline-none disabled:opacity-50"
+        aria-label="Minimum supporting methods"
+      />
+      <button
+        type="button"
+        onClick={() => adjustSupportingMethods(1)}
+        disabled={!isConsensusView || safeConsensusThreshold >= effectiveMaxConsensusThreshold}
+        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Increase supporting methods"
+      >
+        +
+      </button>
+    </div>
+  );
+
+  const inlineRow = (
+    title: string,
+    control: ReactNode
+  ) => (
+    <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-[#eef3f7] px-3 py-2 text-left text-slate-800">
+      <span className="flex min-w-0 items-center">
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-bold">{title}</span>
+        </span>
+      </span>
+      {control}
+    </div>
+  );
 
   return (
     <div
-      className={`border border-slate-200 bg-white text-slate-900 ${
-        compact ? "rounded-[1.25rem] p-2" : "rounded-[1.5rem] p-3"
-      }`}
+      ref={settingsMenuRef}
+      className={
+        compact
+          ? "relative shrink-0 text-slate-900"
+          : "relative rounded-[1.5rem] border border-slate-200 bg-white p-4 text-slate-900 shadow-sm"
+      }
     >
-      <div className="mb-2 flex items-center gap-2 px-1">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
-          Results settings
-        </p>
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={onOpenGuide}
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-          aria-label="Open results controls guide"
-          title="Open results controls guide"
+          onClick={() => setIsSettingsMenuOpen((value) => !value)}
+          className={`inline-flex h-10 items-center gap-3 rounded-xl px-4 text-sm font-bold transition ${
+            isSettingsMenuOpen
+              ? "bg-[#1b75a6] text-white shadow-sm"
+              : "border border-slate-200 bg-slate-50 text-slate-900 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+          }`}
         >
-          ?
+          <span className={isSettingsMenuOpen ? "text-white/90" : "text-[#1b75a6]"}>⚙</span>
+          <span>Results Settings</span>
+          <span className="text-xs">{isSettingsMenuOpen ? "▴" : "▾"}</span>
         </button>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
-        <div
-          ref={algorithmMenuRef}
-          className={`relative min-w-0 rounded-[1rem] border border-slate-200 bg-slate-50/80 ${
-            compact ? "px-3 py-2" : "px-4 py-3"
-          }`}
-        >
-          {!compact && (
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Algorithms</p>
-          )}
-          <button
-            type="button"
-            onClick={() => setIsAlgorithmMenuOpen((prev) => !prev)}
-            className={`flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none transition hover:border-[#1b75a6]/30 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 ${
-              compact ? "py-2" : "mt-2 py-2"
-            }`}
-          >
-            <span className="truncate">{algorithmButtonLabel}</span>
-            <span className="text-slate-500">▾</span>
-          </button>
-          {!compact && (
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              Select algorithms to control the overlap view, network visualization, and edge table.
-            </p>
-          )}
-
-          {isAlgorithmMenuOpen && (
-            <div
-              className={`absolute z-30 rounded-xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/15 ${
-                compact ? "left-3 right-3 top-[52px]" : "left-4 right-4 top-[76px]"
-              }`}
-            >
-              <div className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                Select one or more algorithms
-              </div>
-              <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-                {completedAlgorithmIds.map((algorithmId) => {
-                  const checked = selectedAlgorithmIds.includes(algorithmId);
-                  return (
-                    <label
-                      key={algorithmId}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleAlgorithm(algorithmId)}
-                        className="h-4 w-4 accent-[#1b75a6]"
-                      />
-                      <span>{algorithmId}</span>
-                    </label>
-                  );
-                })}
-              </div>
+      {isSettingsMenuOpen && (
+        <div className="absolute right-0 top-[48px] z-40 w-[min(90vw,400px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-2 py-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
+                Results settings
+              </p>
+              <button
+                type="button"
+                onClick={onOpenGuide}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                aria-label="Open results controls guide"
+                title="Open results controls guide"
+              >
+                ?
+              </button>
             </div>
-          )}
+            {panelHeader("algorithms", "Algorithms")}
+            {openPanel === "algorithms" && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-2">
+                <div className="mb-1 px-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Select algorithms
+                </div>
+                <div className="grid max-h-48 gap-1 overflow-y-auto">
+                  {completedAlgorithmIds.map((algorithmId) => {
+                    const checked = selectedAlgorithmIds.includes(algorithmId);
+                    return (
+                      <label
+                        key={algorithmId}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold transition ${
+                          checked
+                            ? "bg-[#f2f9fc] text-[#1b75a6]"
+                            : "text-slate-700 hover:bg-white hover:text-[#1b75a6]"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleAlgorithm(algorithmId)}
+                          className="h-4 w-4 accent-[#1b75a6]"
+                        />
+                        <span>{algorithmId}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {inlineRow(
+              "Evidence",
+              inlinePercentControl(safeEvidenceThreshold, onChangeConfidenceThreshold, "Evidence")
+            )}
+            {inlineRow(
+              "Direction confidence",
+              inlinePercentControl(
+                safeDirectionThreshold,
+                onChangeDirectionConfidenceThreshold,
+                "Direction confidence"
+              )
+            )}
+            {inlineRow(
+              "Sign confidence",
+              inlinePercentControl(safeSignThreshold, onChangeSignConfidenceThreshold, "Sign confidence")
+            )}
+            {inlineRow(
+              "Minimum supporting methods",
+              inlineMethodsControl()
+            )}
+          </div>
         </div>
-
-
-
-      <div
-        className={`min-w-0 rounded-[1rem] border border-slate-200 bg-slate-50/80 ${
-          compact ? "px-3 py-2" : "px-4 py-3"
-        }`}
-      >
-        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
-          <span>Confidence level</span>
-          <span>{Math.round(safeConfidenceThreshold * 100)}%</span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={5}
-          value={Math.round(safeConfidenceThreshold * 100)}
-          onChange={(e) => onChangeConfidenceThreshold(Number(e.target.value) / 100)}
-          className={`${compact ? "mt-2" : "mt-3"} w-full accent-[#1b75a6]`}
-        />
-        {!compact && (
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Keep only edges whose inferred confidence is at least this threshold.
-          </p>
-        )}
-      </div>
-
-      <div
-        className={`min-w-0 rounded-[1rem] border border-slate-200 bg-slate-50/80 ${
-          compact ? "px-3 py-2" : "px-4 py-3"
-        }`}
-      >
-        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]">
-          <span>Minimum Supporting Methods</span>
-          <span>{consensusThreshold}</span>
-        </div>
-        <input
-          type="range"
-          min={1}
-          max={effectiveMaxConsensusThreshold}
-          value={Math.min(consensusThreshold, effectiveMaxConsensusThreshold)}
-          onChange={(e) => onChangeConsensusThreshold(Number(e.target.value))}
-          disabled={!isConsensusView}
-          className={`${compact ? "mt-2" : "mt-3"} w-full accent-[#1b75a6] disabled:opacity-40`}
-        />
-        {!compact && (
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            An edge is included only if at least this many selected algorithms recover it in the repeated confidence runs.
-          </p>
-        )}
-      </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -37,23 +37,30 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Confidence level</h4>
+            <h4 className="text-base font-bold text-slate-950">Evidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum inferred confidence required for an edge to appear. Each algorithm is run repeatedly on subsampled cells, then confidence combines how often the edge is recovered with its mean per-target percentile rank.
+              Controls the minimum integrated edge evidence required for an edge to appear. Evidence is computed from repeated runs and normalized per target so different algorithms can be compared.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Minimum Supporting Methods</h4>
+            <h4 className="text-base font-bold text-slate-950">Direction confidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Used when two or more algorithms are selected. A method supports an edge when its repeated runs recover that regulator-target relationship with nonzero stability.
+              Keeps edges only when direction-aware methods agree strongly enough on the arrow direction. Methods that cannot infer direction abstain instead of lowering this confidence.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Direction and sign</h4>
+            <h4 className="text-base font-bold text-slate-950">Sign confidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Direction and sign are annotations on top of edge evidence. Directed or signed algorithms contribute to their own confidence and coverage metrics, while algorithms that cannot provide that information abstain.
+              Keeps edges only when signed methods agree strongly enough on activation versus repression. Unsigned methods abstain instead of lowering this confidence.
+            </p>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+            <h4 className="text-base font-bold text-slate-950">Minimum supporting methods</h4>
+            <p className="mt-1 text-sm leading-5 text-slate-600">
+              Used when two or more algorithms are selected. An edge must be supported by at least this many selected algorithms to remain visible.
             </p>
           </div>
         </div>
