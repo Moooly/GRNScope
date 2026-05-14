@@ -17,6 +17,16 @@ function polarPosition(angle: number, radius: number) {
   };
 }
 
+function edgeEvidence(edge: NetworkEdge) {
+  const score = Number(edge.confidence ?? edge.score);
+  if (!Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(1, score));
+}
+
+function nodePriority(node: NetworkNode) {
+  return (node.isTF ? 1000 : 0) + node.outDegree * 4 + node.degree;
+}
+
 type DirectedAdjacency = {
   // node id -> set of regulator ids (incoming edges)
   inMap: Map<string, Set<string>>;
@@ -52,6 +62,76 @@ function buildAdjacency(
   return { inMap, outMap, undirected };
 }
 
+function buildWeightedUndirectedAdjacency(
+  nodes: NetworkNode[],
+  edges: NetworkEdge[]
+) {
+  const adjacency = new Map<string, Map<string, number>>();
+
+  for (const node of nodes) {
+    adjacency.set(node.id, new Map());
+  }
+
+  for (const edge of edges) {
+    if (!adjacency.has(edge.source) || !adjacency.has(edge.target)) continue;
+    if (edge.source === edge.target) continue;
+
+    const weight = 0.35 + edgeEvidence(edge) * 0.65;
+    const sourceNeighbors = adjacency.get(edge.source)!;
+    const targetNeighbors = adjacency.get(edge.target)!;
+
+    sourceNeighbors.set(
+      edge.target,
+      Math.max(sourceNeighbors.get(edge.target) ?? 0, weight)
+    );
+    targetNeighbors.set(
+      edge.source,
+      Math.max(targetNeighbors.get(edge.source) ?? 0, weight)
+    );
+  }
+
+  return adjacency;
+}
+
+function connectedComponents(
+  nodes: NetworkNode[],
+  undirected: Map<string, Set<string>>
+) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const visited = new Set<string>();
+  const components: NetworkNode[][] = [];
+
+  for (const node of nodes) {
+    if (visited.has(node.id)) continue;
+
+    const component: NetworkNode[] = [];
+    const stack = [node.id];
+    visited.add(node.id);
+
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      const currentNode = nodeById.get(currentId);
+      if (currentNode) component.push(currentNode);
+
+      for (const neighborId of undirected.get(currentId) ?? []) {
+        if (visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        stack.push(neighborId);
+      }
+    }
+
+    components.push(component);
+  }
+
+  return components.sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length;
+    const priorityA = Math.max(...a.map(nodePriority), 0);
+    const priorityB = Math.max(...b.map(nodePriority), 0);
+    if (priorityA !== priorityB) return priorityB - priorityA;
+    return a[0]?.id.localeCompare(b[0]?.id ?? "") ?? 0;
+  });
+}
+
 // ----------------------------------------------------------------------------
 // Circular layout (edge-aware: barycenter ordering reduces edge crossings)
 // ----------------------------------------------------------------------------
@@ -63,38 +143,48 @@ export function buildCircularPositions(
   if (nodes.length === 0) return {} as PositionMap;
 
   const { undirected } = buildAdjacency(nodes, edges);
+  const weightedUndirected = buildWeightedUndirectedAdjacency(nodes, edges);
+  const components = connectedComponents(nodes, undirected);
 
-  // Initial ordering: TFs first, then by degree desc, then alpha for stability
-  let order: string[] = [...nodes]
-    .sort((a, b) => {
-      if (a.isTF !== b.isTF) return a.isTF ? -1 : 1;
-      if (b.degree !== a.degree) return b.degree - a.degree;
-      return a.id.localeCompare(b.id);
-    })
-    .map((node) => node.id);
+  // Initial ordering: keep connected components contiguous, then sort inside
+  // each component by biological/graph priority. This avoids small detached
+  // motifs being interleaved through the main ring.
+  let order: string[] = components.flatMap((component) =>
+    [...component]
+      .sort((a, b) => {
+        const priorityDelta = nodePriority(b) - nodePriority(a);
+        if (priorityDelta !== 0) return priorityDelta;
+        return a.id.localeCompare(b.id);
+      })
+      .map((node) => node.id)
+  );
 
   // Iterative barycenter passes. Each node moves toward the average angular
-  // position of its neighbors. Three passes is enough to settle small/medium
-  // graphs without over-clustering.
+  // position of its neighbors. Edge evidence is used as the weight so strong
+  // relationships stay visually close on the ring.
   if (edges.length > 0) {
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < 5; pass++) {
       const indexById = new Map<string, number>();
       order.forEach((id, idx) => indexById.set(id, idx));
 
       const scored = order.map((id) => {
-        const neighbors = undirected.get(id);
+        const neighbors = weightedUndirected.get(id);
         if (!neighbors || neighbors.size === 0) {
           return { id, score: indexById.get(id) ?? 0 };
         }
         let sum = 0;
-        let count = 0;
-        for (const neighborId of neighbors) {
+        let totalWeight = 0;
+        for (const [neighborId, weight] of neighbors) {
           const idx = indexById.get(neighborId);
           if (idx === undefined) continue;
-          sum += idx;
-          count += 1;
+          sum += idx * weight;
+          totalWeight += weight;
         }
-        return { id, score: count === 0 ? indexById.get(id) ?? 0 : sum / count };
+        return {
+          id,
+          score:
+            totalWeight === 0 ? indexById.get(id) ?? 0 : sum / totalWeight,
+        };
       });
 
       scored.sort((a, b) => {
@@ -108,12 +198,24 @@ export function buildCircularPositions(
   // Radius scales with node count so nodes stay roughly the same arc apart
   // regardless of graph size. Each node reserves ~62 px of perimeter
   // (matching the styled node diameter) plus a small gap.
-  const minPerimeter = nodes.length * 78;
-  const radius = Math.max(160, minPerimeter / (2 * Math.PI));
+  const componentGapSlots = Math.max(0, components.length - 1) * 0.85;
+  const minPerimeter = (nodes.length + componentGapSlots) * 90;
+  const radius = Math.max(190, minPerimeter / (2 * Math.PI));
+  const componentBreaks = new Set<string>();
+  let offset = 0;
+  for (const component of components.slice(0, -1)) {
+    offset += component.length;
+    const nextId = order[offset];
+    if (nextId) componentBreaks.add(nextId);
+  }
 
   const positions: PositionMap = {};
+  let gapOffset = 0;
   order.forEach((id, idx) => {
-    const angle = -Math.PI / 2 + (idx / order.length) * Math.PI * 2;
+    if (componentBreaks.has(id)) gapOffset += 0.85;
+    const slot = idx + gapOffset;
+    const totalSlots = Math.max(order.length + componentGapSlots, 1);
+    const angle = -Math.PI / 2 + (slot / totalSlots) * Math.PI * 2;
     positions[id] = polarPosition(angle, radius);
   });
 
@@ -133,10 +235,8 @@ export function buildConcentricPositions(
   // Sort by priority: TF status (boost), out-degree (regulators are hubs),
   // total degree, with id tiebreak for stable layouts.
   const sorted = [...nodes].sort((a, b) => {
-    const priorityA =
-      (a.isTF ? 1000 : 0) + a.outDegree * 3 + a.degree;
-    const priorityB =
-      (b.isTF ? 1000 : 0) + b.outDegree * 3 + b.degree;
+    const priorityA = nodePriority(a);
+    const priorityB = nodePriority(b);
     if (priorityA !== priorityB) return priorityB - priorityA;
     if (b.degree !== a.degree) return b.degree - a.degree;
     return a.id.localeCompare(b.id);
@@ -145,17 +245,35 @@ export function buildConcentricPositions(
   const positions: PositionMap = {};
   if (sorted.length === 0) return positions;
 
-  // Single hub at center — the highest-priority node.
-  const [hub, ...rest] = sorted;
-  positions[hub.id] = { x: 0, y: 0 };
+  const topPriority = nodePriority(sorted[0]);
+  const coreCount = Math.max(
+    1,
+    Math.min(
+      4,
+      sorted.filter((node) => nodePriority(node) >= topPriority * 0.72).length,
+      Math.ceil(Math.sqrt(sorted.length) / 2)
+    )
+  );
+  const coreNodes = sorted.slice(0, coreCount);
+  const rest = sorted.slice(coreCount);
+
+  if (coreNodes.length === 1) {
+    positions[coreNodes[0].id] = { x: 0, y: 0 };
+  } else {
+    const coreRadius = 72;
+    coreNodes.forEach((node, idx) => {
+      const angle = -Math.PI / 2 + (idx / coreNodes.length) * Math.PI * 2;
+      positions[node.id] = polarPosition(angle, coreRadius);
+    });
+  }
 
   if (rest.length === 0) return positions;
 
   // Determine ring count based on remaining count. Each ring holds about
   // (2π·radius / nodeSpacing) nodes, with radius growing per ring.
-  const nodeSpacing = 78;
-  const baseRadius = 140;
-  const radiusStep = 110;
+  const nodeSpacing = 92;
+  const baseRadius = coreNodes.length === 1 ? 165 : 205;
+  const radiusStep = 132;
 
   const ringCapacityFor = (ringIndex: number) => {
     const radius = baseRadius + ringIndex * radiusStep;
@@ -177,7 +295,11 @@ export function buildConcentricPositions(
   // edges look cleaner.
   const { undirected } = buildAdjacency(nodes, edges);
   const angleByNode = new Map<string, number>();
-  angleByNode.set(hub.id, 0);
+  coreNodes.forEach((node) => {
+    const position = positions[node.id];
+    if (!position) return;
+    angleByNode.set(node.id, Math.atan2(position.y, position.x));
+  });
 
   rings.forEach((ringNodes, idx) => {
     const radius = baseRadius + idx * radiusStep;
@@ -189,7 +311,11 @@ export function buildConcentricPositions(
         : [...ringNodes].sort((a, b) => {
             const baryA = computeAngularBarycenter(a.id, undirected, angleByNode);
             const baryB = computeAngularBarycenter(b.id, undirected, angleByNode);
-            if (baryA === null && baryB === null) return 0;
+            if (baryA === null && baryB === null) {
+              const priorityDelta = nodePriority(b) - nodePriority(a);
+              if (priorityDelta !== 0) return priorityDelta;
+              return a.id.localeCompare(b.id);
+            }
             if (baryA === null) return 1;
             if (baryB === null) return -1;
             return baryA - baryB;
@@ -296,8 +422,12 @@ export function buildHierarchicalPositions(
   const xPositionById = new Map<string, number>();
   const positions: PositionMap = {};
 
-  const rowGap = 160;
-  const minColumnGap = 130;
+  const maxLevelWidth = Math.max(...sortedLevels.map((levelNodes) => levelNodes.length), 1);
+  const rowGap = Math.max(175, Math.min(245, 158 + Math.sqrt(nodes.length) * 10));
+  const minColumnGap = Math.max(
+    142,
+    Math.min(205, 122 + Math.sqrt(edges.length + maxLevelWidth) * 9)
+  );
   const totalHeight = maxLevel * rowGap;
 
   sortedLevels.forEach((levelNodes, lvl) => {
@@ -305,7 +435,8 @@ export function buildHierarchicalPositions(
     if (lvl === 0 || edges.length === 0) {
       ordered = [...levelNodes].sort((a, b) => {
         if (a.isTF !== b.isTF) return a.isTF ? -1 : 1;
-        if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
+        const priorityDelta = nodePriority(b) - nodePriority(a);
+        if (priorityDelta !== 0) return priorityDelta;
         if (b.degree !== a.degree) return b.degree - a.degree;
         return a.id.localeCompare(b.id);
       });
@@ -315,7 +446,8 @@ export function buildHierarchicalPositions(
         const baryA = computeBarycenter(a.id, inMap, xPositionById);
         const baryB = computeBarycenter(b.id, inMap, xPositionById);
         if (baryA === null && baryB === null) {
-          if (b.outDegree !== a.outDegree) return b.outDegree - a.outDegree;
+          const priorityDelta = nodePriority(b) - nodePriority(a);
+          if (priorityDelta !== 0) return priorityDelta;
           return a.id.localeCompare(b.id);
         }
         if (baryA === null) return 1;
@@ -346,7 +478,11 @@ export function buildHierarchicalPositions(
     const sortedByBary = [...levelNodes].sort((a, b) => {
       const baryA = computeBarycenter(a.id, inMap, xPositionById);
       const baryB = computeBarycenter(b.id, inMap, xPositionById);
-      if (baryA === null && baryB === null) return 0;
+      if (baryA === null && baryB === null) {
+        const priorityDelta = nodePriority(b) - nodePriority(a);
+        if (priorityDelta !== 0) return priorityDelta;
+        return a.id.localeCompare(b.id);
+      }
       if (baryA === null) return 1;
       if (baryB === null) return -1;
       return baryA - baryB;
@@ -359,6 +495,40 @@ export function buildHierarchicalPositions(
 
     sortedByBary.forEach((node, idx) => {
       const x = startX + idx * columnGap;
+      positions[node.id] = { x, y };
+      xPositionById.set(node.id, x);
+    });
+  }
+
+  // Upward pass: pull regulators toward the center of their placed targets.
+  // This reduces the long diagonal sweeps that can appear when a regulator has
+  // many downstream targets spread across a wide row.
+  for (let lvl = maxLevel - 1; lvl >= 0; lvl--) {
+    const levelNodes = sortedLevels[lvl];
+    if (!levelNodes || levelNodes.length === 0) continue;
+
+    const sortedByChildren = [...levelNodes].sort((a, b) => {
+      const baryA = computeBarycenter(a.id, outMap, xPositionById);
+      const baryB = computeBarycenter(b.id, outMap, xPositionById);
+      if (baryA === null && baryB === null) {
+        const priorityDelta = nodePriority(b) - nodePriority(a);
+        if (priorityDelta !== 0) return priorityDelta;
+        return a.id.localeCompare(b.id);
+      }
+      if (baryA === null) return 1;
+      if (baryB === null) return -1;
+      return baryA - baryB;
+    });
+
+    const rowWidth = Math.max(0, (sortedByChildren.length - 1) * minColumnGap);
+    const startX = -rowWidth / 2;
+    const y = lvl * rowGap - totalHeight / 2;
+
+    sortedByChildren.forEach((node, idx) => {
+      const childBarycenter = computeBarycenter(node.id, outMap, xPositionById);
+      const orderedX = startX + idx * minColumnGap;
+      const x =
+        childBarycenter === null ? orderedX : orderedX * 0.55 + childBarycenter * 0.45;
       positions[node.id] = { x, y };
       xPositionById.set(node.id, x);
     });

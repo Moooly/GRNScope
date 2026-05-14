@@ -209,6 +209,9 @@ export default function EdgeAnalysisTableSection({
                             {confidencePercent(edge.directionConfidence) !== null
                               ? `${confidencePercent(edge.directionConfidence)}%`
                               : "-"}
+                            <span className="ml-1 text-slate-300">
+                              cov {Math.round(edge.directionCoverage * 100)}%
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -234,6 +237,9 @@ export default function EdgeAnalysisTableSection({
                             {confidencePercent(edge.signConfidence) !== null
                               ? `${confidencePercent(edge.signConfidence)}%`
                               : "-"}
+                            <span className="ml-1 text-slate-300">
+                              cov {Math.round(edge.signCoverage * 100)}%
+                            </span>
                           </div>
                         </div>
                       </td>

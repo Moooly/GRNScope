@@ -51,6 +51,7 @@ export type EdgeTooltipState = {
   rank: number;
   supportingAlgorithms: string[];
   directionConfidence: number | null;
+  directionCoverage: number;
   sign: -1 | 0 | 1;
   signConfidence: number | null;
   signCoverage: number;

@@ -449,6 +449,7 @@ export default function NetworkGraph({
             event.target.data("directionConfidence") === undefined
               ? null
               : Number(event.target.data("directionConfidence")),
+          directionCoverage: Number(event.target.data("directionCoverage") ?? 0),
           sign: Number(event.target.data("sign") ?? 0) as -1 | 0 | 1,
           signConfidence:
             event.target.data("signConfidence") === null ||
@@ -959,6 +960,9 @@ export default function NetworkGraph({
                     ? "-"
                     : `${Math.round(edgeTooltip.directionConfidence * 100)}%`}
                 </p>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  cov {Math.round(edgeTooltip.directionCoverage * 100)}%
+                </p>
               </div>
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
                 <p className="text-slate-500">Sign</p>
@@ -972,6 +976,9 @@ export default function NetworkGraph({
                   {edgeTooltip.signConfidence === null
                     ? "-"
                     : `${Math.round(edgeTooltip.signConfidence * 100)}%`}
+                </p>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  cov {Math.round(edgeTooltip.signCoverage * 100)}%
                 </p>
               </div>
             </div>

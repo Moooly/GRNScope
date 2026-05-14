@@ -346,6 +346,9 @@ export default function NetworkVisualizationSection({
                       ? "-"
                       : `${Math.round(selectedEdge.directionConfidence * 100)}%`}
                   </p>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    coverage {Math.round(selectedEdge.directionCoverage * 100)}%
+                  </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
@@ -355,6 +358,9 @@ export default function NetworkVisualizationSection({
                     {selectedEdge.signConfidence === null
                       ? "-"
                       : `${Math.round(selectedEdge.signConfidence * 100)}%`}
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    coverage {Math.round(selectedEdge.signCoverage * 100)}%
                   </p>
                 </div>
               </div>
@@ -663,15 +669,15 @@ export default function NetworkVisualizationSection({
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <h6 className="text-sm font-bold text-slate-950">Direction confidence</h6>
+                  <h6 className="text-sm font-bold text-slate-950">Direction confidence & coverage</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    How confident the app is about which gene regulates the other. Higher confidence means direction-aware methods agree on the arrow direction.
+                    Agreement among direction-aware methods on arrow direction. Direction coverage shows how much total edge evidence came from methods that can vote on direction.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <h6 className="text-sm font-bold text-slate-950">Sign confidence</h6>
+                  <h6 className="text-sm font-bold text-slate-950">Sign confidence & coverage</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    How confident the app is about activation versus repression. Higher confidence means signed methods agree on the relationship type.
+                    Agreement among signed methods on activation versus repression. Sign coverage shows how much total edge evidence came from methods that can vote on sign.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
