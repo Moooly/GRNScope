@@ -53,16 +53,30 @@ function numericEvidenceScore(edge: AlgorithmResultEdge, fallback: number) {
   const normalizedScore = Number(edge.normalized_score);
   if (Number.isFinite(normalizedScore)) return clamp(normalizedScore, 0, 1);
 
-  const score = Number(edge.score);
-  if (Number.isFinite(score) && score >= 0 && score <= 1) return score;
-
   const meanPercentile = numericMeanPercentile(edge);
   if (meanPercentile !== null) return meanPercentile;
+
+  const score = Number(edge.score);
+  if (Number.isFinite(score) && score >= 0 && score <= 1) return score;
 
   const confidence = numericEdgeConfidence(edge);
   if (confidence !== null) return confidence;
 
   return fallback;
+}
+
+function numericConfidenceScore(edge: AlgorithmResultEdge, fallbackPercentile: number) {
+  const confidence = numericEdgeConfidence(edge);
+  if (confidence !== null) return confidence;
+
+  const stability = numericStability(edge);
+  const meanPercentile = numericMeanPercentile(edge) ?? fallbackPercentile;
+
+  if (stability !== null) {
+    return clamp(stability * meanPercentile, 0, 1);
+  }
+
+  return meanPercentile;
 }
 
 function numericSignedEdgeScore(edge: AlgorithmResultEdge) {
@@ -392,18 +406,17 @@ export default function ProjectDetailPage() {
               regulatorCount <= 1
                 ? 1
                 : clamp(1 - (rank - 1) / (regulatorCount - 1), 0, 1);
-            const backendConfidence = numericEdgeConfidence(entry.edge);
             const backendMeanPercentile = numericMeanPercentile(entry.edge);
             const backendStability = numericStability(entry.edge);
             const evidence = numericEvidenceScore(entry.edge, percentile);
-            const confidence = backendConfidence ?? backendStability ?? percentile;
+            const confidence = numericConfidenceScore(entry.edge, percentile);
             const meanPercentile = backendMeanPercentile ?? percentile;
             const stability = backendStability ?? (rank <= CONFIDENCE_STABILITY_TOP_K ? 1 : 0);
             const signVote = isSigned ? signOf(entry.signedScore) : 0;
             const direction =
               isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
             const supportingAlgorithms =
-              evidence > 0 || confidence > 0 || rank <= CONFIDENCE_STABILITY_TOP_K
+              evidence >= 0.5 || rank <= CONFIDENCE_STABILITY_TOP_K
                 ? [algorithmId]
                 : [];
 
@@ -533,6 +546,7 @@ export default function ProjectDetailPage() {
       directionVote: -1 | 0 | 1;
       signVote: -1 | 0 | 1;
       rawScore: number | undefined;
+      isSupported: boolean;
     };
 
     type ConsensusAccumulator = {
@@ -541,6 +555,7 @@ export default function ProjectDetailPage() {
       totalEvidence: number;
       directionVote: number;
       directionDenominator: number;
+      directionCoverageEvidence: number;
       signVote: number;
       signDenominator: number;
       supportingAlgorithms: string[];
@@ -569,6 +584,7 @@ export default function ProjectDetailPage() {
         totalEvidence: 0,
         directionVote: 0,
         directionDenominator: 0,
+        directionCoverageEvidence: 0,
         signVote: 0,
         signDenominator: 0,
         supportingAlgorithms: [],
@@ -589,6 +605,7 @@ export default function ProjectDetailPage() {
           forward?.perAlgorithmScores[algorithmId] ?? forward?.confidence ?? 0;
         const reverseEvidence =
           reverse?.perAlgorithmScores[algorithmId] ?? reverse?.confidence ?? 0;
+        const directionEvidence = forwardEvidence + reverseEvidence;
 
         let methodEvidence: MethodEvidence | null = null;
 
@@ -602,6 +619,7 @@ export default function ProjectDetailPage() {
                 ? forward?.perAlgorithmSigns?.[algorithmId] ?? 0
                 : 0,
               rawScore: forward?.perAlgorithmRawScores?.[algorithmId],
+              isSupported: forward?.supportingAlgorithms.includes(algorithmId) ?? false,
             };
           } else {
             methodEvidence = {
@@ -611,6 +629,7 @@ export default function ProjectDetailPage() {
                 ? reverse?.perAlgorithmSigns?.[algorithmId] ?? 0
                 : 0,
               rawScore: reverse?.perAlgorithmRawScores?.[algorithmId],
+              isSupported: reverse?.supportingAlgorithms.includes(algorithmId) ?? false,
             };
           }
         }
@@ -629,14 +648,14 @@ export default function ProjectDetailPage() {
           accumulator.perAlgorithmRawScores[algorithmId] = methodEvidence.rawScore;
         }
 
-        if (methodEvidence.evidence > 0) {
+        if (methodEvidence.isSupported) {
           accumulator.supportingAlgorithms.push(algorithmId);
         }
 
-        if (isDirected && methodEvidence.directionVote !== 0) {
-          accumulator.directionVote +=
-            methodEvidence.evidence * methodEvidence.directionVote;
-          accumulator.directionDenominator += methodEvidence.evidence;
+        if (isDirected && directionEvidence > 0) {
+          accumulator.directionVote += forwardEvidence - reverseEvidence;
+          accumulator.directionDenominator += directionEvidence;
+          accumulator.directionCoverageEvidence += methodEvidence.evidence;
         }
 
         if (isSigned && methodEvidence.signVote !== 0) {
@@ -658,7 +677,7 @@ export default function ProjectDetailPage() {
             ? clamp(Math.abs(edge.directionVote) / edge.directionDenominator, 0, 1)
             : null;
         const directionCoverage =
-          edge.totalEvidence > 0 ? edge.directionDenominator / edge.totalEvidence : 0;
+          edge.totalEvidence > 0 ? edge.directionCoverageEvidence / edge.totalEvidence : 0;
         const sign = signOf(edge.signVote);
         const signConfidence =
           edge.signDenominator > 0
@@ -680,7 +699,7 @@ export default function ProjectDetailPage() {
           source: displaySource,
           target: displayTarget,
           score: edgeEvidence,
-          confidence: stability,
+          confidence: clamp(stability * edgeEvidence, 0, 1),
           stability,
           count: edge.supportingAlgorithms.length,
           rank: 0,

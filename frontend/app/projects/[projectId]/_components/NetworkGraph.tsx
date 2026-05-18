@@ -629,6 +629,13 @@ export default function NetworkGraph({
       previousPositions[node.id()] = { ...node.position() };
     });
 
+    const previousLayoutCacheKey = getLayoutCacheKey(
+      lastLayoutRef.current,
+      lastAppliedSignatureRef.current || layoutCacheSignature
+    );
+    layoutPositionCacheRef.current[previousLayoutCacheKey] = previousPositions;
+    cacheViewportForKey(previousLayoutCacheKey, cy);
+
     const preservedPositions = {
       ...lastNodePositionsRef.current,
       ...previousPositions,
@@ -653,7 +660,9 @@ export default function NetworkGraph({
       !signatureChanged && hasCompleteSavedPositions && Boolean(cachedPositionsForLayout);
 
     const shouldRerunLayout =
-      layoutChanged || signatureChanged || !hasCompleteSavedPositions;
+      signatureChanged ||
+      !hasCompleteSavedPositions ||
+      (layoutChanged && !cachedPositionsForLayout);
 
     const elementsWithPositions = elements.map((element) => {
       const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
@@ -721,11 +730,6 @@ export default function NetworkGraph({
       const hasAnyPriorPositions =
         Object.keys(lastNodePositionsRef.current).length > 0;
 
-      if (layoutChanged || signatureChanged) {
-        delete layoutPositionCacheRef.current[layoutCacheKey];
-        delete layoutViewportCacheRef.current[layoutCacheKey];
-      }
-
       const rerunLayout = cy.layout(
         getLayoutOptions(
           layout,
@@ -791,7 +795,10 @@ export default function NetworkGraph({
 
     cy.endBatch();
 
-    if (signatureChanged || layoutChanged) {
+    if (cachedViewportForLayout && canRestoreExactLayout) {
+      cy.zoom(cachedViewportForLayout.zoom);
+      cy.pan(cachedViewportForLayout.pan);
+    } else if (signatureChanged || layoutChanged) {
       window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
     } else if (cachedViewportForLayout) {
       cy.zoom(cachedViewportForLayout.zoom);
