@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CreateProjectModal from "./CreateProjectModal";
 import type { ProjectAlgorithm } from "../page";
 import type { Project } from "../_types/project";
+import { apiFetch } from "../../_lib/clientIdentity";
 
 type BackendAlgorithmEntry = {
   id: string;
@@ -478,7 +479,7 @@ export default function CreateProjectFlow({
       formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
       formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
 
-      const response = await fetch(`${API_BASE}/projects/create-from-temp`, {
+      const response = await apiFetch(`${API_BASE}/projects/create-from-temp`, {
         method: "POST",
         body: formData,
       });

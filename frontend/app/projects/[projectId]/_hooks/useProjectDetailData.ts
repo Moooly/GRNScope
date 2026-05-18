@@ -8,6 +8,7 @@ import type {
   ProjectJob,
   ProjectManifest,
 } from "../_lib/types";
+import { apiFetch } from "../../../_lib/clientIdentity";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const API_ROOT = API_BASE.replace(/\/api\/?$/, "");
@@ -75,7 +76,7 @@ type CompletedResultRow = {
 };
 
 async function loadCompletedAlgorithmResults(projectId: string) {
-  const resultsResponse = await fetch(`${API_BASE}/projects/${projectId}/results`);
+  const resultsResponse = await apiFetch(`${API_BASE}/projects/${projectId}/results`);
 
   if (!resultsResponse.ok) return {};
 
@@ -91,7 +92,7 @@ async function loadCompletedAlgorithmResults(projectId: string) {
   const payloads = await Promise.all(
     completedRows.map(async (item) => {
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
         );
 
@@ -184,7 +185,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
       setError("");
 
       try {
-        const projectResponse = await fetch(`${API_BASE}/projects/${projectId}`);
+        const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`);
 
         if (!projectResponse.ok) {
           if (!cancelled) {
@@ -213,7 +214,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
       }
 
       try {
-        const metadataResponse = await fetch(`${API_BASE}/projects/${projectId}/metadata`);
+        const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
 
         if (!cancelled && metadataResponse.ok) {
           const metadataData = await metadataResponse.json();
@@ -245,7 +246,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
     const poll = async () => {
       try {
-        const projectResponse = await fetch(`${API_BASE}/projects/${projectId}`);
+        const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`);
 
         if (projectResponse.ok) {
           const projectData = await projectResponse.json();

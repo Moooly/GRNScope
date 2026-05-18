@@ -6,9 +6,14 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Response
 
 from ..config import PROJECTS_ROOT
+from .client_identity import (
+    get_or_create_client_id,
+    project_belongs_to_client,
+    require_project_owner,
+)
 from ..repositories.job_repository import read_jobs_manifest, write_jobs_manifest
 from ..repositories.project_repository import (
     list_project_directories,
@@ -48,6 +53,8 @@ def load_known_tf_gene_names() -> list[str]:
 @router.post("/api/projects/create-from-temp", response_model=CreateProjectResponse)
 async def create_project_from_temp(
     background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
     temp_upload_id: str = Form(...),
     project_name: str = Form(...),
     project_description: str = Form(""),
@@ -58,6 +65,7 @@ async def create_project_from_temp(
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
 ):
+    owner_id = get_or_create_client_id(request, response)
     meta_path = temp_metadata_path(temp_upload_id)
     if not meta_path.exists():
         return CreateProjectResponse(
@@ -104,6 +112,7 @@ async def create_project_from_temp(
 
         project_manifest = {
             "project_id": project_id,
+            "owner_id": owner_id,
             "project_name": project_name,
             "project_description": project_description,
             "created_at": time.time(),
@@ -121,6 +130,7 @@ async def create_project_from_temp(
 
         metadata_manifest = {
             "project_id": project_id,
+            "owner_id": owner_id,
             "project_name": project_name,
             "project_description": project_description,
             "expression_filename": upload_metadata.get("expression_filename"),
@@ -183,7 +193,8 @@ async def create_project_from_temp(
 # --- Job monitoring endpoints ---
 
 @router.get("/api/projects")
-async def list_projects():
+async def list_projects(request: Request, response: Response):
+    owner_id = get_or_create_client_id(request, response)
     try:
         project_items = []
         try:
@@ -225,6 +236,8 @@ async def list_projects():
         for project_dir in list_project_directories():
             try:
                 project_manifest = read_project_manifest(project_dir)
+                if not project_belongs_to_client(project_dir, owner_id):
+                    continue
                 jobs_manifest = read_jobs_manifest(project_dir)
                 latest_job = jobs_manifest[-1] if jobs_manifest else None
 
@@ -271,7 +284,8 @@ async def list_projects():
 
 
 @router.get("/api/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: str, request: Request, response: Response):
+    owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         demo_project = get_demo_project()
         return {
@@ -310,8 +324,7 @@ async def get_project(project_id: str):
         }
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     try:
         project_manifest = read_project_manifest(project_dir)
@@ -331,7 +344,8 @@ async def get_project(project_id: str):
 
 
 @router.get("/api/projects/{project_id}/metadata")
-async def get_project_metadata(project_id: str):
+async def get_project_metadata(project_id: str, request: Request, response: Response):
+    owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         manifest = load_demo_manifest()
         dataset = manifest.get("dataset", {})
@@ -370,8 +384,7 @@ async def get_project_metadata(project_id: str):
         }
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     metadata_path = project_dir / "metadata.json"
     if not metadata_path.exists():
@@ -389,13 +402,13 @@ async def get_project_metadata(project_id: str):
 
     
 @router.delete("/api/projects/{project_id}")
-async def delete_project(project_id: str):
+async def delete_project(project_id: str, request: Request, response: Response):
+    owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         raise HTTPException(status_code=403, detail="Demo project is read-only.")
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     try:
         shutil.rmtree(project_dir)

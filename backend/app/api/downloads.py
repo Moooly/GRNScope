@@ -7,11 +7,12 @@ import csv
 from pathlib import Path
 from io import StringIO
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request, Response as FastAPIResponse
 from fastapi.responses import FileResponse, Response
 
 from ..algorithm_registry import get_algorithm_by_id
 from ..config import PROJECTS_ROOT
+from .client_identity import get_or_create_client_id, require_project_owner
 from ..services.demo_service import (
     get_demo_algorithm_ids,
     get_demo_input_file_path,
@@ -24,7 +25,12 @@ router = APIRouter()
 
 
 @router.get("/api/projects/{project_id}/download/expression")
-async def download_expression_file(project_id: str):
+async def download_expression_file(
+    project_id: str,
+    request: Request,
+    cookie_response: FastAPIResponse,
+):
+    owner_id = get_or_create_client_id(request, cookie_response)
     if is_demo_project(project_id):
         try:
             manifest = load_demo_manifest()
@@ -42,8 +48,7 @@ async def download_expression_file(project_id: str):
             raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     metadata_path = project_dir / "metadata.json"
     project_manifest_path = project_dir / "project.json"
@@ -77,7 +82,12 @@ async def download_expression_file(project_id: str):
 
 
 @router.get("/api/projects/{project_id}/download/pseudotime")
-async def download_pseudotime_file(project_id: str):
+async def download_pseudotime_file(
+    project_id: str,
+    request: Request,
+    cookie_response: FastAPIResponse,
+):
+    owner_id = get_or_create_client_id(request, cookie_response)
     if is_demo_project(project_id):
         try:
             manifest = load_demo_manifest()
@@ -95,8 +105,7 @@ async def download_pseudotime_file(project_id: str):
             raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     metadata_path = project_dir / "metadata.json"
     project_manifest_path = project_dir / "project.json"
@@ -130,7 +139,13 @@ async def download_pseudotime_file(project_id: str):
 
 
 @router.get("/api/projects/{project_id}/download/result/{algorithm_id}")
-async def download_algorithm_result_file(project_id: str, algorithm_id: str):
+async def download_algorithm_result_file(
+    project_id: str,
+    algorithm_id: str,
+    request: Request,
+    cookie_response: FastAPIResponse,
+):
+    owner_id = get_or_create_client_id(request, cookie_response)
     if is_demo_project(project_id):
         try:
             file_path = get_demo_ranked_edges_path(algorithm_id)
@@ -189,8 +204,7 @@ async def download_algorithm_result_file(project_id: str, algorithm_id: str):
             raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     jobs_path = project_dir / "jobs.json"
 
@@ -319,11 +333,14 @@ async def download_algorithm_result_file(project_id: str, algorithm_id: str):
 @router.get("/api/projects/{project_id}/download/metadata")
 async def download_analysis_metadata_file(
     project_id: str,
+    request: Request,
+    cookie_response: FastAPIResponse,
     selected_view: str = Query("consensus"),
     top_n: int = Query(0),
     consensus_threshold: int = Query(0),
     selected_algorithms: str = Query(""),
 ):
+    owner_id = get_or_create_client_id(request, cookie_response)
     if is_demo_project(project_id):
         try:
             manifest = load_demo_manifest()
@@ -395,8 +412,7 @@ async def download_analysis_metadata_file(
             raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     metadata_path = project_dir / "metadata.json"
     project_manifest_path = project_dir / "project.json"

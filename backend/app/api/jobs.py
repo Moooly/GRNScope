@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..config import PROJECTS_ROOT
+from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
 
 router = APIRouter()
 
 @router.get("/api/projects/{project_id}/jobs")
-async def get_project_jobs(project_id: str):
+async def get_project_jobs(project_id: str, request: Request, response: Response):
+    owner_id = get_or_create_client_id(request, response)
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     try:
         jobs_manifest = read_jobs_manifest(project_dir)

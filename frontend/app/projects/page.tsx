@@ -7,6 +7,7 @@ import ProjectCard from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
 import EmptyProjectHistory from "./_components/EmptyProjectHistory";
+import { apiFetch } from "../_lib/clientIdentity";
 
 export type ProjectAlgorithm = {
   id: string;
@@ -61,7 +62,7 @@ function ProjectsPageContent() {
 
     const loadProjectHistory = async () => {
       try {
-        const response = await fetch(`${API_BASE}/projects`);
+        const response = await apiFetch(`${API_BASE}/projects`);
         if (!response.ok) {
           setProjectHistory([]);
           return;
@@ -114,7 +115,7 @@ function ProjectsPageContent() {
         const responses = await Promise.all(
           activeProjectIds.map(async (projectId) => {
             try {
-              const response = await fetch(`${API_BASE}/projects/${projectId}`);
+              const response = await apiFetch(`${API_BASE}/projects/${projectId}`);
               if (!response.ok) return null;
               const data = await response.json();
               return {
@@ -167,7 +168,7 @@ function ProjectsPageContent() {
 
     try {
       setIsDeletingProject(true);
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE}/projects/${projectPendingDelete.id}`,
         { method: "DELETE" },
       );

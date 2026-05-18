@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import csv
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..config import PROJECTS_ROOT
+from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
 from ..services.gene_coordinate_service import get_gene_coordinate
@@ -136,7 +137,8 @@ def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
     )
 
 @router.get("/api/projects/{project_id}/results")
-async def get_project_results(project_id: str):
+async def get_project_results(project_id: str, request: Request, response: Response):
+    owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         results = []
         for algorithm_id in get_demo_algorithm_ids():
@@ -171,8 +173,7 @@ async def get_project_results(project_id: str):
 
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     try:
         jobs_manifest = read_jobs_manifest(project_dir)
@@ -210,7 +211,13 @@ async def get_project_results(project_id: str):
 
 
 @router.get("/api/projects/{project_id}/results/{algorithm_id}")
-async def get_algorithm_result(project_id: str, algorithm_id: str):
+async def get_algorithm_result(
+    project_id: str,
+    algorithm_id: str,
+    request: Request,
+    response: Response,
+):
+    owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         try:
             result = read_demo_algorithm_result_from_csv(algorithm_id)
@@ -229,8 +236,7 @@ async def get_algorithm_result(project_id: str, algorithm_id: str):
 
     project_dir = PROJECTS_ROOT / project_id
 
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project not found.")
+    require_project_owner(project_dir, owner_id)
 
     try:
         result = attach_gene_coordinates_to_result(

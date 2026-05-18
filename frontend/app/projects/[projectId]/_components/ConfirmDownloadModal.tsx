@@ -2,6 +2,8 @@
 
 "use client";
 
+import { apiFetch } from "../../../_lib/clientIdentity";
+
 type PendingDownload = {
   label: string;
   href: string;
@@ -20,6 +22,27 @@ export default function ConfirmDownloadModal({
   onClose,
 }: ConfirmDownloadModalProps) {
   if (!pendingDownload) return null;
+
+  const downloadFile = async () => {
+    try {
+      const response = await apiFetch(pendingDownload.href);
+      if (!response.ok) return;
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = pendingDownload.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      onClose();
+    } catch {
+      return;
+    }
+  };
 
   return (
     <div
@@ -63,14 +86,13 @@ export default function ConfirmDownloadModal({
           >
             Cancel
           </button>
-          <a
-            href={pendingDownload.href}
-            download={pendingDownload.filename}
-            onClick={onClose}
+          <button
+            type="button"
+            onClick={downloadFile}
             className="rounded-full bg-[#1b75a6] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#155f87]"
           >
             Download
-          </a>
+          </button>
         </div>
       </div>
     </div>
