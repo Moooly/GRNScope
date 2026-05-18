@@ -1,0 +1,31 @@
+{
+  "project_id": "19374d63a4f8",
+  "owner_id": "fce125ce23034a7f800c575b84c7ef16",
+  "project_name": "ExpressionData",
+  "project_description": "",
+  "created_at": 1779117789.10061,
+  "created_at_display": "2026-05-18 08:23",
+  "top_variable_genes": "19",
+  "include_all_tfs": "true",
+  "normalize_enabled": "true",
+  "log_transform_enabled": "true",
+  "selected_algorithms": [
+    "PIDC",
+    "GENIE3",
+    "GRNBOOST2",
+    "PPCOR",
+    "PEARSON",
+    "SCODE",
+    "SINCERITIES",
+    "SCRIBE",
+    "SINGE",
+    "LEAP",
+    "GRISLI",
+    "GRNVBEM",
+    "JUMP3"
+  ],
+  "ensemble_enabled": "true",
+  "expression_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/expression__ExpressionData.csv",
+  "pseudotime_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/pseudotime__PseudoTime.csv",
+  "latest_job_id": "2c8a71dbd4f2"
+}

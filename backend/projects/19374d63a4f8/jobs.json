@@ -1,0 +1,140 @@
+[
+  {
+    "job_id": "2c8a71dbd4f2",
+    "project_id": "19374d63a4f8",
+    "overall_status": "Failed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "PIDC",
+        "status": "Completed",
+        "elapsed_seconds": 758,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/PIDC.json",
+        "completed_at": "2026-05-18 08:35:47",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Failed",
+        "elapsed_seconds": 4435,
+        "error_message": "RuntimeError: Docker command failed (exit 125). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/GENIE3/outputs/19374d63a4f8/run-11/GENIE3/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "status": "Completed",
+        "elapsed_seconds": 861,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/GRNBOOST2.json",
+        "completed_at": "2026-05-18 08:37:30",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Completed",
+        "elapsed_seconds": 98,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/PPCOR.json",
+        "completed_at": "2026-05-18 08:24:47",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "PEARSON",
+        "status": "Completed",
+        "elapsed_seconds": 8,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/PEARSON.json",
+        "completed_at": "2026-05-18 08:23:17",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SCODE",
+        "status": "Failed",
+        "elapsed_seconds": 4436,
+        "error_message": "RuntimeError: Docker command failed (exit 125). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/SCODE/outputs/19374d63a4f8/run-6/SCODE/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "SINCERITIES",
+        "status": "Completed",
+        "elapsed_seconds": 362,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/SINCERITIES.json",
+        "completed_at": "2026-05-18 08:29:11",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SCRIBE",
+        "status": "Completed",
+        "elapsed_seconds": 1594,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/SCRIBE.json",
+        "completed_at": "2026-05-18 08:49:43",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SINGE",
+        "status": "Failed",
+        "elapsed_seconds": 4436,
+        "error_message": "RuntimeError: Docker command failed (exit 125). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/SINGE/outputs/19374d63a4f8/run-13/SINGE/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "LEAP",
+        "status": "Failed",
+        "elapsed_seconds": 270,
+        "error_message": "RuntimeError: Docker command failed (exit 127). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/LEAP/outputs/19374d63a4f8/run-5/LEAP/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "GRISLI",
+        "status": "Completed",
+        "elapsed_seconds": 3589,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/results/GRISLI.json",
+        "completed_at": "2026-05-18 09:22:58",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GRNVBEM",
+        "status": "Failed",
+        "elapsed_seconds": 4436,
+        "error_message": "RuntimeError: Docker command failed (exit 125). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/GRNVBEM/outputs/19374d63a4f8/run-2/GRNVBEM/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "JUMP3",
+        "status": "Failed",
+        "elapsed_seconds": 65,
+        "error_message": "RuntimeError: Docker command failed (exit 249). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/JUMP3/outputs/19374d63a4f8/run-1/JUMP3/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      }
+    ]
+  }
+]

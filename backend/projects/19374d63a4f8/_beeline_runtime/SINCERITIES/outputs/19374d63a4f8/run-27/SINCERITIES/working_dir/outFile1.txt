@@ -1,0 +1,362 @@
+SourceGENES,TargetGENES,Interaction,Edges
+UGR,FOXL2,1,activation
+CTNNB1,CBX2,0.638186406940238,repression
+CBX2,FOXL2,0.583048729249717,repression
+RSPO1,CBX2,0.571319093381294,repression
+CBX2,SRY,0.528471403783237,repression
+CTNNB1,SRY,0.494694913699678,repression
+RSPO1,WNT4,0.482630013835091,activation
+RSPO1,SRY,0.481344131308746,repression
+NR5A1,CBX2,0.456483008161265,activation
+UGR,SRY,0.431357043952215,repression
+CTNNB1,CTNNB1,0.407334685439436,activation
+CBX2,UGR,0.391828335442743,activation
+SRY,FOXL2,0.363457713074224,repression
+NR5A1,CTNNB1,0.357903366889216,repression
+CTNNB1,UGR,0.34502456158519,repression
+NR5A1,DMRT1,0.335770958958249,repression
+CTNNB1,FOXL2,0.330830559443539,activation
+CBX2,WNT4,0.324104968189582,repression
+CBX2,CBX2,0.306505134883139,activation
+CBX2,NR0B1,0.26987137943055,repression
+CTNNB1,WNT4,0.257816594673931,activation
+UGR,UGR,0.249358886739262,activation
+FOXL2,FOXL2,0.245107466954398,activation
+RSPO1,UGR,0.209579891129667,repression
+CTNNB1,WT1mKTS,0.208586586692096,repression
+FOXL2,SRY,0.20771716417553,repression
+CTNNB1,RSPO1,0.185532778454379,activation
+NR5A1,DKK1,0.182012321782764,repression
+RSPO1,CTNNB1,0.16685553377799,activation
+SRY,WT1pKTS,0.165768887563379,repression
+UGR,WT1mKTS,0.161993969872969,activation
+SRY,GATA4,0.161800644295223,repression
+SRY,WT1mKTS,0.157327664430012,repression
+NR5A1,GATA4,0.156742213758011,activation
+UGR,NR0B1,0.156033504150092,repression
+UGR,WNT4,0.15221028981289,repression
+NR5A1,WT1mKTS,0.148391865750261,activation
+SRY,PGD2,0.140706601086139,repression
+CBX2,CTNNB1,0.131978320845375,repression
+CBX2,WT1mKTS,0.128709826551026,activation
+FOXL2,DHH,0.119951186179482,activation
+CTNNB1,NR0B1,0.119152514509328,repression
+RSPO1,DMRT1,0.115452065961965,activation
+SRY,AMH,0.112353958811477,repression
+FOXL2,WT1mKTS,0.112061570838794,repression
+CBX2,WT1pKTS,0.108256815087879,repression
+FOXL2,NR0B1,0.106012316538624,activation
+NR5A1,RSPO1,0.0985091038947887,repression
+SRY,NR0B1,0.0952583754743668,activation
+SRY,UGR,0.0890193466828686,repression
+CTNNB1,DMRT1,0.0865998221081877,repression
+SRY,SRY,0.0804127450535561,activation
+NR5A1,SRY,0.078933633338929,repression
+FOXL2,FGF9,0.0755290158329508,repression
+DKK1,RSPO1,0.0724167387975838,repression
+SRY,FGF9,0.0647775762637896,repression
+CBX2,RSPO1,0.0644813840730953,repression
+SRY,SOX9,0.0642322302047168,repression
+SRY,DHH,0.0634549572703737,repression
+FOXL2,PGD2,0.0632571478878067,repression
+NR5A1,WNT4,0.062375077843786,repression
+FOXL2,AMH,0.0578507331688386,repression
+DKK1,SOX9,0.049914062295453,activation
+SRY,WNT4,0.0491390378612774,repression
+DKK1,NR5A1,0.0491031670229248,repression
+DKK1,CTNNB1,0.0472792078371889,repression
+FOXL2,UGR,0.0406923140305753,activation
+DKK1,CBX2,0.0393332737906446,repression
+UGR,AMH,0.039244429827378,repression
+UGR,CBX2,0.036440235155159,activation
+UGR,WT1pKTS,0.0310321459762115,activation
+NR5A1,UGR,0.0299067296859612,repression
+NR0B1,FOXL2,0.0183142072344886,activation
+NR0B1,SOX9,0.0174610989712121,activation
+DKK1,GATA4,0.0124839371469605,repression
+FOXL2,WT1pKTS,0.012141249437772,activation
+DHH,SOX9,0.0115897072039477,activation
+PGD2,SOX9,0.0101270237318778,activation
+NR0B1,FGF9,0.00923729085969037,repression
+NR0B1,PGD2,0.00871051476239192,repression
+NR0B1,AMH,0.00847932538698018,repression
+DHH,PGD2,0.0082226625274894,activation
+DHH,FGF9,0.00718501483198139,activation
+NR5A1,NR5A1,0.00704038404693038,activation
+NR0B1,GATA4,0.00686005959828263,activation
+NR0B1,DHH,0.00679623594503553,repression
+DKK1,WT1mKTS,0.00508162203835702,activation
+DHH,DHH,0.00495551375041632,activation
+UGR,DHH,0.00476796413900796,repression
+DHH,AMH,0.0038873571341814,activation
+PGD2,FGF9,0.00327012350604939,activation
+RSPO1,NR0B1,0.00321581435700072,repression
+PGD2,NR5A1,0.00317284654494899,repression
+DKK1,UGR,0.00317238909757515,repression
+DHH,GATA4,0.00309448024067751,repression
+NR0B1,WNT4,0.00250277670910141,activation
+DHH,NR5A1,0.0017709840659318,repression
+PGD2,PGD2,0.00165995830587814,activation
+PGD2,DHH,0.00137284678656902,activation
+PGD2,RSPO1,0.00133369065715568,repression
+NR0B1,WT1mKTS,0.00103317679083564,activation
+DHH,RSPO1,0.000973725682362198,repression
+PGD2,AMH,0.000969409548415942,activation
+NR0B1,UGR,0.000820005288473309,repression
+DHH,WNT4,0.000452013760882638,repression
+PGD2,WNT4,0.000288029654252961,repression
+NR0B1,WT1pKTS,0.000241656635589527,activation
+WNT4,FOXL2,1.3461094174675e-35,repression
+AMH,SOX9,7.19667600340007e-36,activation
+FGF9,SOX9,6.204859118176e-36,activation
+WT1pKTS,SOX9,5.26296565321577e-36,repression
+DMRT1,RSPO1,4.91889318592226e-36,activation
+WNT4,DMRT1,4.66609686064143e-36,repression
+WT1mKTS,SOX9,3.43574614475759e-36,repression
+DMRT1,CTNNB1,3.31649173917124e-36,repression
+AMH,FGF9,3.19807055599478e-36,activation
+GATA4,SOX9,3.02046124275544e-36,repression
+SOX9,DMRT1,3.00867145066289e-36,activation
+DMRT1,CBX2,2.94833059006403e-36,repression
+DMRT1,NR5A1,2.90576103367548e-36,repression
+DMRT1,SOX9,2.90119486867041e-36,activation
+FGF9,PGD2,2.76167160413192e-36,activation
+WT1mKTS,WNT4,2.54711996414356e-36,repression
+AMH,NR5A1,2.50187356242543e-36,repression
+WNT4,UGR,2.3715211022222e-36,repression
+DMRT1,FOXL2,2.37090274633201e-36,repression
+AMH,DHH,2.29682266178761e-36,activation
+FGF9,FGF9,2.20802415079753e-36,activation
+FGF9,NR5A1,2.11936336170854e-36,repression
+WT1pKTS,WNT4,2.10426515018852e-36,repression
+WNT4,SRY,2.05193005051758e-36,repression
+GATA4,WNT4,1.93811768519233e-36,repression
+AMH,PGD2,1.93537213074136e-36,activation
+WNT4,DKK1,1.90290808889245e-36,repression
+SOX9,DKK1,1.74532334237374e-36,activation
+WT1pKTS,FGF9,1.72774695797502e-36,repression
+WNT4,CTNNB1,1.57293026516446e-36,activation
+WT1pKTS,GATA4,1.50730338767905e-36,activation
+DMRT1,UGR,1.34330219640599e-36,repression
+WT1pKTS,RSPO1,1.28319993247345e-36,repression
+DMRT1,WT1mKTS,1.05181900026274e-36,activation
+DMRT1,WT1pKTS,1.01328902253199e-36,repression
+FGF9,WNT4,9.41375249133114e-37,repression
+WT1mKTS,NR0B1,8.82627338168132e-37,activation
+WT1mKTS,PGD2,8.51661664679945e-37,repression
+WNT4,WNT4,8.25944607052164e-37,activation
+WT1pKTS,DHH,8.14629610209591e-37,repression
+FGF9,RSPO1,7.61079690300371e-37,repression
+FGF9,DHH,7.2823354297246e-37,activation
+SOX9,CBX2,7.09527252437635e-37,repression
+WT1mKTS,UGR,6.9990229089589e-37,activation
+WT1mKTS,FGF9,6.50515319899312e-37,repression
+FGF9,AMH,6.11297852486273e-37,activation
+SOX9,WNT4,5.55268088274923e-37,repression
+SOX9,CTNNB1,5.34297168962565e-37,repression
+WT1pKTS,FOXL2,5.05313779065101e-37,activation
+AMH,RSPO1,4.85067720807072e-37,repression
+AMH,AMH,4.60111316845018e-37,activation
+WT1mKTS,SRY,4.32748136624689e-37,repression
+WNT4,CBX2,4.13179348822392e-37,repression
+WT1pKTS,UGR,3.97385562639496e-37,activation
+WT1pKTS,CBX2,3.43415826241836e-37,repression
+WT1mKTS,RSPO1,3.21631415666367e-37,repression
+GATA4,RSPO1,3.10415645588319e-37,activation
+DMRT1,GATA4,3.09260422539634e-37,repression
+WT1pKTS,WT1mKTS,1.60885244584723e-37,activation
+WT1mKTS,DHH,1.35286476902095e-37,repression
+SOX9,NR5A1,8.80482664319815e-38,activation
+WNT4,NR5A1,7.8678633393018e-38,repression
+SOX9,SRY,4.04303375012299e-38,repression
+WT1pKTS,AMH,1.24826075254813e-38,repression
+DMRT1,DMRT1,0,no regulation
+DMRT1,FGF9,0,no regulation
+DMRT1,DHH,0,no regulation
+DMRT1,PGD2,0,no regulation
+DMRT1,SRY,0,no regulation
+DMRT1,DKK1,0,no regulation
+DMRT1,WNT4,0,no regulation
+DMRT1,AMH,0,no regulation
+DMRT1,NR0B1,0,no regulation
+FGF9,DMRT1,0,no regulation
+FGF9,CTNNB1,0,no regulation
+FGF9,WT1mKTS,0,no regulation
+FGF9,SRY,0,no regulation
+FGF9,DKK1,0,no regulation
+FGF9,CBX2,0,no regulation
+FGF9,NR0B1,0,no regulation
+FGF9,WT1pKTS,0,no regulation
+FGF9,FOXL2,0,no regulation
+FGF9,UGR,0,no regulation
+FGF9,GATA4,0,no regulation
+RSPO1,FGF9,0,no regulation
+RSPO1,RSPO1,0,no regulation
+RSPO1,DHH,0,no regulation
+RSPO1,PGD2,0,no regulation
+RSPO1,WT1mKTS,0,no regulation
+RSPO1,DKK1,0,no regulation
+RSPO1,AMH,0,no regulation
+RSPO1,NR5A1,0,no regulation
+RSPO1,WT1pKTS,0,no regulation
+RSPO1,FOXL2,0,no regulation
+RSPO1,SOX9,0,no regulation
+RSPO1,GATA4,0,no regulation
+DHH,DMRT1,0,no regulation
+DHH,CTNNB1,0,no regulation
+DHH,WT1mKTS,0,no regulation
+DHH,SRY,0,no regulation
+DHH,DKK1,0,no regulation
+DHH,CBX2,0,no regulation
+DHH,NR0B1,0,no regulation
+DHH,WT1pKTS,0,no regulation
+DHH,FOXL2,0,no regulation
+DHH,UGR,0,no regulation
+CTNNB1,FGF9,0,no regulation
+CTNNB1,DHH,0,no regulation
+CTNNB1,PGD2,0,no regulation
+CTNNB1,DKK1,0,no regulation
+CTNNB1,AMH,0,no regulation
+CTNNB1,NR5A1,0,no regulation
+CTNNB1,WT1pKTS,0,no regulation
+CTNNB1,SOX9,0,no regulation
+CTNNB1,GATA4,0,no regulation
+PGD2,DMRT1,0,no regulation
+PGD2,CTNNB1,0,no regulation
+PGD2,WT1mKTS,0,no regulation
+PGD2,SRY,0,no regulation
+PGD2,DKK1,0,no regulation
+PGD2,CBX2,0,no regulation
+PGD2,NR0B1,0,no regulation
+PGD2,WT1pKTS,0,no regulation
+PGD2,FOXL2,0,no regulation
+PGD2,UGR,0,no regulation
+PGD2,GATA4,0,no regulation
+WT1mKTS,DMRT1,0,no regulation
+WT1mKTS,CTNNB1,0,no regulation
+WT1mKTS,WT1mKTS,0,no regulation
+WT1mKTS,DKK1,0,no regulation
+WT1mKTS,CBX2,0,no regulation
+WT1mKTS,AMH,0,no regulation
+WT1mKTS,NR5A1,0,no regulation
+WT1mKTS,WT1pKTS,0,no regulation
+WT1mKTS,FOXL2,0,no regulation
+WT1mKTS,GATA4,0,no regulation
+SRY,DMRT1,0,no regulation
+SRY,RSPO1,0,no regulation
+SRY,CTNNB1,0,no regulation
+SRY,DKK1,0,no regulation
+SRY,CBX2,0,no regulation
+SRY,NR5A1,0,no regulation
+DKK1,DMRT1,0,no regulation
+DKK1,FGF9,0,no regulation
+DKK1,DHH,0,no regulation
+DKK1,PGD2,0,no regulation
+DKK1,SRY,0,no regulation
+DKK1,DKK1,0,no regulation
+DKK1,WNT4,0,no regulation
+DKK1,AMH,0,no regulation
+DKK1,NR0B1,0,no regulation
+DKK1,WT1pKTS,0,no regulation
+DKK1,FOXL2,0,no regulation
+WNT4,FGF9,0,no regulation
+WNT4,RSPO1,0,no regulation
+WNT4,DHH,0,no regulation
+WNT4,PGD2,0,no regulation
+WNT4,WT1mKTS,0,no regulation
+WNT4,AMH,0,no regulation
+WNT4,NR0B1,0,no regulation
+WNT4,WT1pKTS,0,no regulation
+WNT4,SOX9,0,no regulation
+WNT4,GATA4,0,no regulation
+CBX2,DMRT1,0,no regulation
+CBX2,FGF9,0,no regulation
+CBX2,DHH,0,no regulation
+CBX2,PGD2,0,no regulation
+CBX2,DKK1,0,no regulation
+CBX2,AMH,0,no regulation
+CBX2,NR5A1,0,no regulation
+CBX2,SOX9,0,no regulation
+CBX2,GATA4,0,no regulation
+AMH,DMRT1,0,no regulation
+AMH,CTNNB1,0,no regulation
+AMH,WT1mKTS,0,no regulation
+AMH,SRY,0,no regulation
+AMH,DKK1,0,no regulation
+AMH,WNT4,0,no regulation
+AMH,CBX2,0,no regulation
+AMH,NR0B1,0,no regulation
+AMH,WT1pKTS,0,no regulation
+AMH,FOXL2,0,no regulation
+AMH,UGR,0,no regulation
+AMH,GATA4,0,no regulation
+NR0B1,DMRT1,0,no regulation
+NR0B1,RSPO1,0,no regulation
+NR0B1,CTNNB1,0,no regulation
+NR0B1,SRY,0,no regulation
+NR0B1,DKK1,0,no regulation
+NR0B1,CBX2,0,no regulation
+NR0B1,NR0B1,0,no regulation
+NR0B1,NR5A1,0,no regulation
+NR5A1,FGF9,0,no regulation
+NR5A1,DHH,0,no regulation
+NR5A1,PGD2,0,no regulation
+NR5A1,AMH,0,no regulation
+NR5A1,NR0B1,0,no regulation
+NR5A1,WT1pKTS,0,no regulation
+NR5A1,FOXL2,0,no regulation
+NR5A1,SOX9,0,no regulation
+WT1pKTS,DMRT1,0,no regulation
+WT1pKTS,CTNNB1,0,no regulation
+WT1pKTS,PGD2,0,no regulation
+WT1pKTS,SRY,0,no regulation
+WT1pKTS,DKK1,0,no regulation
+WT1pKTS,NR0B1,0,no regulation
+WT1pKTS,NR5A1,0,no regulation
+WT1pKTS,WT1pKTS,0,no regulation
+FOXL2,DMRT1,0,no regulation
+FOXL2,RSPO1,0,no regulation
+FOXL2,CTNNB1,0,no regulation
+FOXL2,DKK1,0,no regulation
+FOXL2,WNT4,0,no regulation
+FOXL2,CBX2,0,no regulation
+FOXL2,NR5A1,0,no regulation
+FOXL2,SOX9,0,no regulation
+FOXL2,GATA4,0,no regulation
+UGR,DMRT1,0,no regulation
+UGR,FGF9,0,no regulation
+UGR,RSPO1,0,no regulation
+UGR,CTNNB1,0,no regulation
+UGR,PGD2,0,no regulation
+UGR,DKK1,0,no regulation
+UGR,NR5A1,0,no regulation
+UGR,SOX9,0,no regulation
+UGR,GATA4,0,no regulation
+SOX9,FGF9,0,no regulation
+SOX9,RSPO1,0,no regulation
+SOX9,DHH,0,no regulation
+SOX9,PGD2,0,no regulation
+SOX9,WT1mKTS,0,no regulation
+SOX9,AMH,0,no regulation
+SOX9,NR0B1,0,no regulation
+SOX9,WT1pKTS,0,no regulation
+SOX9,FOXL2,0,no regulation
+SOX9,UGR,0,no regulation
+SOX9,SOX9,0,no regulation
+SOX9,GATA4,0,no regulation
+GATA4,DMRT1,0,no regulation
+GATA4,FGF9,0,no regulation
+GATA4,DHH,0,no regulation
+GATA4,CTNNB1,0,no regulation
+GATA4,PGD2,0,no regulation
+GATA4,WT1mKTS,0,no regulation
+GATA4,SRY,0,no regulation
+GATA4,DKK1,0,no regulation
+GATA4,CBX2,0,no regulation
+GATA4,AMH,0,no regulation
+GATA4,NR0B1,0,no regulation
+GATA4,NR5A1,0,no regulation
+GATA4,WT1pKTS,0,no regulation
+GATA4,FOXL2,0,no regulation
+GATA4,UGR,0,no regulation
+GATA4,GATA4,0,no regulation

@@ -83,7 +83,7 @@ export default function EdgeAnalysisTableSection({
     ["source", "Source Gene"],
     ["target", "Target Gene"],
     ["count", "Supporting Methods"],
-    ["score", selectedView === "consensus" ? "Consensus Evidence" : "Edge Evidence"],
+    ["score", selectedView === "consensus" ? "Consensus Evidence" : "Regulation Evidence"],
   ];
 
   const confidencePercent = (value: number | null) =>

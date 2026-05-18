@@ -663,7 +663,7 @@ export default function NetworkVisualizationSection({
 
               <div className="mt-5 space-y-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <h6 className="text-sm font-bold text-slate-950">Edge evidence</h6>
+                  <h6 className="text-sm font-bold text-slate-950">Regulation evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
                     Mean per-target percentile rank from the repeated runs. Higher values mean the regulator is ranked closer to the top for this target gene.
                   </p>
@@ -671,13 +671,13 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Direction confidence & coverage</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Agreement among direction-aware methods on arrow direction. Direction coverage shows how much total edge evidence came from methods that can vote on direction.
+                    Agreement among direction-aware methods on arrow direction. Direction coverage shows how much total regulation evidence came from methods that can vote on direction.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Sign confidence & coverage</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Agreement among signed methods on activation versus repression. Sign coverage shows how much total edge evidence came from methods that can vote on sign.
+                    Agreement among signed methods on activation versus repression. Sign coverage shows how much total regulation evidence came from methods that can vote on sign.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

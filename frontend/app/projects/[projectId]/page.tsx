@@ -1079,7 +1079,7 @@ export default function ProjectDetailPage() {
       "Source Gene",
       "Target Gene",
       "Supporting Method Count",
-      selectedView === "consensus" ? "Consensus Evidence" : "Edge Evidence",
+      selectedView === "consensus" ? "Consensus Evidence" : "Regulation Evidence",
       "Inferred Confidence",
       "Direction",
       "Direction Confidence",

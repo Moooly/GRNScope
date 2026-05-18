@@ -1,0 +1,84 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+$expressionFile
+[1] "/usr/working_dir/ExpressionData0.csv"
+
+$cellFile
+[1] "/usr/working_dir/pseudoTimeData0.csv"
+
+$geneFile
+[1] "/usr/working_dir/GeneData.csv"
+
+$lowerDetectionLimit
+[1] 0
+
+$expressionFamily
+[1] "uninormal"
+
+$method
+[1] "ucRDI"
+
+$delay
+[1] "5"
+
+$log
+[1] "FALSE"
+
+$outPrefix
+[1] "/usr/working_dir/"
+
+$outFile
+[1] "outFile0.csv"
+
+$ignorePT
+[1] TRUE
+
+$help
+[1] FALSE
+
+Using uninormal() as expression family.
+Using experimental time instead of PseudoTime computed using
+      monocle.
+Computing ucRDI 
+Done.
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+$expressionFile
+[1] "/usr/working_dir/ExpressionData1.csv"
+
+$cellFile
+[1] "/usr/working_dir/pseudoTimeData1.csv"
+
+$geneFile
+[1] "/usr/working_dir/GeneData.csv"
+
+$lowerDetectionLimit
+[1] 0
+
+$expressionFamily
+[1] "uninormal"
+
+$method
+[1] "ucRDI"
+
+$delay
+[1] "5"
+
+$log
+[1] "FALSE"
+
+$outPrefix
+[1] "/usr/working_dir/"
+
+$outFile
+[1] "outFile1.csv"
+
+$ignorePT
+[1] TRUE
+
+$help
+[1] FALSE
+
+Using uninormal() as expression family.
+Using experimental time instead of PseudoTime computed using
+      monocle.
+Computing ucRDI 
+Done.

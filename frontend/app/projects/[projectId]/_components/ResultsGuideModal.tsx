@@ -41,7 +41,7 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Evidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum integrated edge evidence required for an edge to appear. Evidence is computed from repeated runs and normalized per target so different algorithms can be compared.
+              Controls the minimum integrated regulation evidence required for a regulation to appear. Evidence is computed from repeated runs and normalized per target so different algorithms can be compared.
             </p>
           </div>
 

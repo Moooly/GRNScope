@@ -1,0 +1,4 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+It took 38.7823s to generate the 1 experimental matrices, with R=3000
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+It took 40.3085s to generate the 1 experimental matrices, with R=3000

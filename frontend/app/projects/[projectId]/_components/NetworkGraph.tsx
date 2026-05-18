@@ -945,7 +945,7 @@ export default function NetworkGraph({
 
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Edge evidence</p>
+                <p className="text-slate-500">Regulation evidence</p>
                 <p className="mt-1 font-semibold text-slate-900">
                   {edgeTooltip.score.toFixed(3)}
                 </p>
