@@ -49,6 +49,22 @@ function numericEdgeScore(edge: AlgorithmResultEdge) {
   return Number.isFinite(rawScore) ? rawScore : 0;
 }
 
+function numericEvidenceScore(edge: AlgorithmResultEdge, fallback: number) {
+  const normalizedScore = Number(edge.normalized_score);
+  if (Number.isFinite(normalizedScore)) return clamp(normalizedScore, 0, 1);
+
+  const score = Number(edge.score);
+  if (Number.isFinite(score) && score >= 0 && score <= 1) return score;
+
+  const meanPercentile = numericMeanPercentile(edge);
+  if (meanPercentile !== null) return meanPercentile;
+
+  const confidence = numericEdgeConfidence(edge);
+  if (confidence !== null) return confidence;
+
+  return fallback;
+}
+
 function numericSignedEdgeScore(edge: AlgorithmResultEdge) {
   const signedScore = Number(
     edge.mean_raw_score ?? edge.weight ?? edge.edge_weight ?? edge.score ?? 0
@@ -94,6 +110,7 @@ export default function ProjectDetailPage() {
     error,
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
+  const [evidenceThreshold, setEvidenceThreshold] = useState(0.9);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.9);
   const [directionConfidenceThreshold, setDirectionConfidenceThreshold] = useState(0);
   const [signConfidenceThreshold, setSignConfidenceThreshold] = useState(0);
@@ -201,7 +218,7 @@ export default function ProjectDetailPage() {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
     if (activeAlgorithmIds.length < 7) return;
 
-    setConfidenceThreshold(0.9);
+    setEvidenceThreshold(0.9);
     setConsensusThreshold(7);
     setHasTouchedConsensusThreshold(true);
     hasAppliedDemoDefaultsRef.current = true;
@@ -378,24 +395,24 @@ export default function ProjectDetailPage() {
             const backendConfidence = numericEdgeConfidence(entry.edge);
             const backendMeanPercentile = numericMeanPercentile(entry.edge);
             const backendStability = numericStability(entry.edge);
-            const hasBackendConfidence = backendConfidence !== null;
-            const evidence = backendConfidence ?? percentile;
+            const evidence = numericEvidenceScore(entry.edge, percentile);
+            const confidence = backendConfidence ?? backendStability ?? percentile;
             const meanPercentile = backendMeanPercentile ?? percentile;
             const stability = backendStability ?? (rank <= CONFIDENCE_STABILITY_TOP_K ? 1 : 0);
             const signVote = isSigned ? signOf(entry.signedScore) : 0;
             const direction =
               isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
             const supportingAlgorithms =
-              hasBackendConfidence
-                ? evidence > 0 ? [algorithmId] : []
-                : rank <= CONFIDENCE_STABILITY_TOP_K ? [algorithmId] : [];
+              evidence > 0 || confidence > 0 || rank <= CONFIDENCE_STABILITY_TOP_K
+                ? [algorithmId]
+                : [];
 
             rows.push({
               key: `${algorithmId}-${entry.source}-${entry.target}`,
               source: entry.source,
               target: entry.target,
               score: evidence,
-              confidence: evidence,
+              confidence,
               stability,
               meanPercentile,
               count: supportingAlgorithms.length,
@@ -447,6 +464,7 @@ export default function ProjectDetailPage() {
         (edge.signConfidence !== null && edge.signConfidence >= signConfidenceThreshold);
 
       return (
+        edge.score >= evidenceThreshold &&
         edge.confidence >= confidenceThreshold &&
         meetsDirectionConfidence &&
         meetsSignConfidence
@@ -462,6 +480,7 @@ export default function ProjectDetailPage() {
     return next;
   }, [
     completedAlgorithmIds,
+    evidenceThreshold,
     confidenceThreshold,
     directionConfidenceThreshold,
     signConfidenceThreshold,
@@ -661,7 +680,7 @@ export default function ProjectDetailPage() {
           source: displaySource,
           target: displayTarget,
           score: edgeEvidence,
-          confidence: edgeEvidence,
+          confidence: stability,
           stability,
           count: edge.supportingAlgorithms.length,
           rank: 0,
@@ -680,6 +699,7 @@ export default function ProjectDetailPage() {
       .filter(
         (edge) =>
           edge.confidence >= confidenceThreshold &&
+          edge.score >= evidenceThreshold &&
           edge.count >= consensusThreshold &&
           (directionConfidenceThreshold <= 0 ||
             (edge.directionConfidence !== null &&
@@ -694,6 +714,7 @@ export default function ProjectDetailPage() {
     activeAlgorithmIds,
     algorithmMetaMap,
     candidateRegulatorIds,
+    evidenceThreshold,
     confidenceThreshold,
     consensusThreshold,
     directionConfidenceThreshold,
@@ -1151,6 +1172,7 @@ useEffect(() => {
     tableSortDirection,
     tableSortKey,
     selectedAlgorithmIds,
+    evidenceThreshold,
     confidenceThreshold,
     directionConfidenceThreshold,
     signConfidenceThreshold,
@@ -1213,6 +1235,8 @@ useEffect(() => {
                     setSelectedEdgeKey(null);
                     setIsolatedGene(null);
                   }}
+                  evidenceThreshold={evidenceThreshold}
+                  onChangeEvidenceThreshold={setEvidenceThreshold}
                   confidenceThreshold={confidenceThreshold}
                   onChangeConfidenceThreshold={setConfidenceThreshold}
                   directionConfidenceThreshold={directionConfidenceThreshold}
@@ -1226,6 +1250,7 @@ useEffect(() => {
                     setConsensusThreshold(value);
                   }}
                   isConsensusView={activeAlgorithmIds.length >= 2}
+                  isGuideOpen={isResultsGuideOpen}
                   onOpenGuide={() => setIsResultsGuideOpen(true)}
                 />
             }
@@ -1333,7 +1358,7 @@ useEffect(() => {
             pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
             hasPseudotime={metadata?.has_pseudotime}
             activeAlgorithmIds={activeAlgorithmIds}
-            confidenceThreshold={confidenceThreshold}
+            confidenceThreshold={evidenceThreshold}
             consensusThreshold={consensusThreshold}
             onClose={() => setIsFileDownloadMenuOpen(false)}
             onOpenDownload={openDownloadModal}

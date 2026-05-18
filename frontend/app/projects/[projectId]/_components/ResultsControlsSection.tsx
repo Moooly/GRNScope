@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 type ResultsControlsSectionProps = {
   completedAlgorithmIds: string[];
   selectedAlgorithmIds: string[];
   onChangeSelectedAlgorithmIds: (value: string[]) => void;
+  evidenceThreshold: number;
+  onChangeEvidenceThreshold: (value: number) => void;
   confidenceThreshold: number;
   onChangeConfidenceThreshold: (value: number) => void;
   directionConfidenceThreshold: number;
@@ -17,6 +19,7 @@ type ResultsControlsSectionProps = {
   isConsensusView: boolean;
   compact?: boolean;
   projectId?: string;
+  isGuideOpen?: boolean;
   onOpenGuide?: () => void;
 };
 
@@ -26,6 +29,8 @@ export default function ResultsControlsSection({
   completedAlgorithmIds,
   selectedAlgorithmIds,
   onChangeSelectedAlgorithmIds,
+  evidenceThreshold = 0.9,
+  onChangeEvidenceThreshold = () => {},
   confidenceThreshold = 0.9,
   onChangeConfidenceThreshold = () => {},
   directionConfidenceThreshold = 0,
@@ -36,21 +41,16 @@ export default function ResultsControlsSection({
   onChangeConsensusThreshold,
   isConsensusView,
   compact = false,
+  isGuideOpen = false,
   onOpenGuide,
 }: ResultsControlsSectionProps) {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const algorithmButtonLabel = useMemo(() => {
-    if (selectedAlgorithmIds.length === 0) return "Choose algorithms";
-    if (selectedAlgorithmIds.length === completedAlgorithmIds.length) return "All algorithms";
-    if (selectedAlgorithmIds.length === 1) return selectedAlgorithmIds[0];
-    return `${selectedAlgorithmIds.length} algorithms`;
-  }, [completedAlgorithmIds.length, selectedAlgorithmIds]);
-
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
-  const safeEvidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.9;
+  const safeEvidenceThreshold = Number.isFinite(evidenceThreshold) ? evidenceThreshold : 0.9;
+  const safeConfidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.9;
   const safeDirectionThreshold = Number.isFinite(directionConfidenceThreshold)
     ? directionConfidenceThreshold
     : 0;
@@ -99,6 +99,7 @@ export default function ResultsControlsSection({
     if (!isSettingsMenuOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
+      if (isGuideOpen) return;
       if (!settingsMenuRef.current) return;
       if (!settingsMenuRef.current.contains(event.target as Node)) {
         setIsSettingsMenuOpen(false);
@@ -109,7 +110,7 @@ export default function ResultsControlsSection({
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
     };
-  }, [isSettingsMenuOpen]);
+  }, [isGuideOpen, isSettingsMenuOpen]);
 
   const panelHeader = (
     panel: SettingsPanel,
@@ -136,6 +137,11 @@ export default function ResultsControlsSection({
       </button>
     );
   };
+
+  const algorithmSelectionSummary =
+    selectedAlgorithmIds.length === completedAlgorithmIds.length
+      ? "All selected"
+      : `${selectedAlgorithmIds.length}/${completedAlgorithmIds.length} selected`;
 
   const inlinePercentControl = (
     value: number,
@@ -246,13 +252,20 @@ export default function ResultsControlsSection({
         <button
           type="button"
           onClick={() => setIsSettingsMenuOpen((value) => !value)}
-          className={`inline-flex h-10 items-center gap-3 rounded-xl px-4 text-sm font-bold transition ${
+          className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-bold transition ${
             isSettingsMenuOpen
               ? "bg-[#1b75a6] text-white shadow-sm"
               : "border border-slate-200 bg-slate-50 text-slate-900 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
           }`}
         >
-          <span className={isSettingsMenuOpen ? "text-white/90" : "text-[#1b75a6]"}>⚙</span>
+          <span
+            className={`inline-flex w-5 items-center justify-center text-2xl leading-none ${
+              isSettingsMenuOpen ? "text-white/90" : "text-[#1b75a6]"
+            }`}
+            aria-hidden="true"
+          >
+            ⚙
+          </span>
           <span>Results Settings</span>
           <span className="text-xs">{isSettingsMenuOpen ? "▴" : "▾"}</span>
         </button>
@@ -278,28 +291,37 @@ export default function ResultsControlsSection({
             {panelHeader("algorithms", "Algorithms")}
             {openPanel === "algorithms" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-2">
-                <div className="mb-1 px-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Select algorithms
+                <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                    {algorithmSelectionSummary}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onChangeSelectedAlgorithmIds([...completedAlgorithmIds])}
+                    className="rounded-full border border-[#1b75a6]/20 bg-white px-2 py-1 text-[10px] font-bold text-[#1b75a6] transition hover:bg-[#f2f9fc]"
+                  >
+                    Select all
+                  </button>
                 </div>
-                <div className="grid max-h-48 gap-1 overflow-y-auto">
+                <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto pr-1">
                   {completedAlgorithmIds.map((algorithmId) => {
                     const checked = selectedAlgorithmIds.includes(algorithmId);
                     return (
                       <label
                         key={algorithmId}
-                        className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold transition ${
+                        className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 text-xs font-bold transition ${
                           checked
-                            ? "bg-[#f2f9fc] text-[#1b75a6]"
-                            : "text-slate-700 hover:bg-white hover:text-[#1b75a6]"
+                            ? "border-[#1b75a6]/25 bg-[#f2f9fc] text-[#1b75a6]"
+                            : "border-transparent bg-white text-slate-600 hover:border-[#1b75a6]/20 hover:text-[#1b75a6]"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleAlgorithm(algorithmId)}
-                          className="h-4 w-4 accent-[#1b75a6]"
+                          className="h-3.5 w-3.5 shrink-0 accent-[#1b75a6]"
                         />
-                        <span>{algorithmId}</span>
+                        <span className="min-w-0 truncate">{algorithmId}</span>
                       </label>
                     );
                   })}
@@ -309,7 +331,19 @@ export default function ResultsControlsSection({
 
             {inlineRow(
               "Evidence",
-              inlinePercentControl(safeEvidenceThreshold, onChangeConfidenceThreshold, "Evidence")
+              inlinePercentControl(
+                safeEvidenceThreshold,
+                onChangeEvidenceThreshold,
+                "Evidence"
+              )
+            )}
+            {inlineRow(
+              "Confidence level",
+              inlinePercentControl(
+                safeConfidenceThreshold,
+                onChangeConfidenceThreshold,
+                "Confidence level"
+              )
             )}
             {inlineRow(
               "Direction confidence",
