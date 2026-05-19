@@ -1,5 +1,6 @@
 import { Project } from "../_types/project";
 import Link from "next/link";
+import { formatProjectCreatedAt } from "../_lib/time";
 
 interface ProjectCardProps {
   project: Project;
@@ -8,6 +9,10 @@ interface ProjectCardProps {
 
 export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
   const latestJob = project.latestJob;
+  const createdAtLabel = formatProjectCreatedAt(
+    project.createdAtTimestamp,
+    project.createdAt
+  );
 
   const tasks = latestJob?.tasks ?? [];
 
@@ -70,7 +75,7 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
               </span>
             )}
             <span className="text-xs font-semibold text-slate-500">
-              Created {project.createdAt}
+              Created {createdAtLabel}
             </span>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { Project } from "../_types/project";
+import { formatProjectCreatedAt } from "../_lib/time";
 
 interface DeleteProjectModalProps {
   project: Project | null;
@@ -18,6 +19,11 @@ export default function DeleteProjectModal({
   if (!project) {
     return null;
   }
+
+  const createdAtLabel = formatProjectCreatedAt(
+    project.createdAtTimestamp,
+    project.createdAt
+  );
 
   return (
     <div
@@ -44,7 +50,7 @@ export default function DeleteProjectModal({
         <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-bold text-slate-950">{project.name}</p>
           <p className="mt-2 text-xs font-medium text-slate-500">
-            Created {project.createdAt}
+            Created {createdAtLabel}
           </p>
         </div>
 

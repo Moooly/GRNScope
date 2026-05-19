@@ -328,6 +328,7 @@ async def list_projects(request: Request, response: Response):
                         "createdAt": project_manifest.get(
                             "created_at_display", "Unknown"
                         ),
+                        "createdAtTimestamp": created_at,
                         "datasetCount": 1,
                         "jobCount": len(jobs_manifest) if jobs_manifest else 0,
                         "latestJob": latest_job,

@@ -21,6 +21,7 @@ export type Project = {
   name: string;
   description: string;
   createdAt: string;
+  createdAtTimestamp?: number | string | null;
   datasetCount: number;
   jobCount: number;
   latestJob?: ProjectJob | null;

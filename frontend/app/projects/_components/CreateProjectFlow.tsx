@@ -506,6 +506,7 @@ export default function CreateProjectFlow({
             hour12: false,
           })
           .replace(",", ""),
+        createdAtTimestamp: now.getTime() / 1000,
         datasetCount: 1,
         jobCount: 1,
         latestJob: {
