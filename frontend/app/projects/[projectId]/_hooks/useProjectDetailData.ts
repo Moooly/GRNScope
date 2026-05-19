@@ -77,7 +77,10 @@ type CompletedResultRow = {
 
 async function loadCompletedAlgorithmResults(
   projectId: string,
-  currentResults: Record<string, AlgorithmStoredResult> = {}
+  currentResults: Record<string, AlgorithmStoredResult> = {},
+  options: {
+    onProgress?: (results: Record<string, AlgorithmStoredResult>) => void;
+  } = {}
 ) {
   const resultsResponse = await apiFetch(`${API_BASE}/projects/${projectId}/results`);
 
@@ -100,6 +103,8 @@ async function loadCompletedAlgorithmResults(
     }
   });
 
+  options.onProgress?.({ ...next });
+
   const missingRows = completedRows.filter((item) => !next[item.algorithm_id]);
   const payloads = await Promise.all(
     missingRows.map(async (item) => {
@@ -111,7 +116,18 @@ async function loadCompletedAlgorithmResults(
         if (!response.ok) return null;
 
         const data = await response.json();
-        return data.result as AlgorithmStoredResult;
+        const result = data.result as AlgorithmStoredResult;
+        const algorithmId = result?.algorithm_id || item.algorithm_id;
+
+        if (result && algorithmId) {
+          next[algorithmId] = {
+            ...result,
+            algorithm_id: algorithmId,
+          };
+          options.onProgress?.({ ...next });
+        }
+
+        return result;
       } catch {
         return null;
       }
@@ -144,6 +160,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
   const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
   const [algorithmCatalog, setAlgorithmCatalog] = useState<AlgorithmCatalogItem[]>([]);
+  const [isLoadingCompletedResults, setIsLoadingCompletedResults] = useState(false);
   const [error, setError] = useState("");
   const algorithmResultsRef = useRef<Record<string, AlgorithmStoredResult>>({});
 
@@ -172,11 +189,17 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
         setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
       }
 
-      const nextResults = await loadCompletedAlgorithmResults(
-        projectId,
-        algorithmResultsRef.current
-      );
-      setAlgorithmResults(nextResults);
+      setIsLoadingCompletedResults(true);
+      try {
+        const nextResults = await loadCompletedAlgorithmResults(
+          projectId,
+          algorithmResultsRef.current,
+          { onProgress: setAlgorithmResults }
+        );
+        setAlgorithmResults(nextResults);
+      } finally {
+        setIsLoadingCompletedResults(false);
+      }
     } catch {
       return;
     }
@@ -223,6 +246,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
     const load = async () => {
       setError("");
+      setIsLoadingCompletedResults(true);
 
       try {
         const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`);
@@ -231,6 +255,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           if (!cancelled) {
             setProject(null);
             setLatestJob(null);
+            setIsLoadingCompletedResults(false);
 
             if (isDemoRoute) {
               setError(
@@ -265,10 +290,16 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
       }
 
       try {
-        const nextResults = await loadCompletedAlgorithmResults(projectId);
+        const nextResults = await loadCompletedAlgorithmResults(projectId, {}, {
+          onProgress: (results) => {
+            if (!cancelled) setAlgorithmResults(results);
+          },
+        });
         if (!cancelled) setAlgorithmResults(nextResults);
       } catch {
         if (!cancelled) setAlgorithmResults({});
+      } finally {
+        if (!cancelled) setIsLoadingCompletedResults(false);
       }
     };
 
@@ -297,11 +328,21 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           }
         }
 
-        const nextResults = await loadCompletedAlgorithmResults(
-          projectId,
-          algorithmResultsRef.current
-        );
-        if (!cancelled) setAlgorithmResults(nextResults);
+        if (!cancelled) setIsLoadingCompletedResults(true);
+        try {
+          const nextResults = await loadCompletedAlgorithmResults(
+            projectId,
+            algorithmResultsRef.current,
+            {
+              onProgress: (results) => {
+                if (!cancelled) setAlgorithmResults(results);
+              },
+            }
+          );
+          if (!cancelled) setAlgorithmResults(nextResults);
+        } finally {
+          if (!cancelled) setIsLoadingCompletedResults(false);
+        }
       } catch {
         return;
       }
@@ -325,6 +366,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
     latestJob,
     algorithmResults,
     algorithmCatalog,
+    isLoadingCompletedResults,
     error,
     refreshProjectData,
     setLatestJob,

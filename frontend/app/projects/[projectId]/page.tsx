@@ -196,6 +196,7 @@ export default function ProjectDetailPage() {
     latestJob,
     algorithmResults,
     algorithmCatalog,
+    isLoadingCompletedResults,
     error,
     refreshProjectData,
     setLatestJob,
@@ -280,6 +281,16 @@ export default function ProjectDetailPage() {
     () => completedTasks.map((task) => task.algorithm_id),
     [completedTasks]
   );
+
+  const loadedCompletedAlgorithmCount = useMemo(() => {
+    return completedAlgorithmIds.filter((algorithmId) => Boolean(algorithmResults[algorithmId]))
+      .length;
+  }, [algorithmResults, completedAlgorithmIds]);
+
+  const isPreparingFinishedResults =
+    completedAlgorithmIds.length > 0 &&
+    loadedCompletedAlgorithmCount < completedAlgorithmIds.length &&
+    isLoadingCompletedResults;
 
 
   // When new algorithms finish, merge them into the user's current selection
@@ -1080,6 +1091,10 @@ export default function ProjectDetailPage() {
 
 
   const resultsAvailabilityNotice = useMemo(() => {
+    if (isPreparingFinishedResults) {
+      return null;
+    }
+
     if (completedAlgorithmIds.length === 0) {
       return {
         title: "No completed algorithm results yet",
@@ -1097,7 +1112,11 @@ export default function ProjectDetailPage() {
     }
 
     return null;
-  }, [activeAlgorithmIds.length, completedAlgorithmIds.length]);
+  }, [
+    activeAlgorithmIds.length,
+    completedAlgorithmIds.length,
+    isPreparingFinishedResults,
+  ]);
 
   const visibleTableRows = useMemo(() => {
     if (!tableSearch.trim()) {
@@ -1608,7 +1627,29 @@ useEffect(() => {
               renderResultsControls()
             }
           >
-                {activeAlgorithmIds.length >= 2 && (
+                {isPreparingFinishedResults && (
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span
+                        className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-200 border-t-[#1b75a6]"
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-950">
+                          Preparing finished results
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                          Loading saved edge files and building the visualizations. No action is needed.
+                        </p>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {loadedCompletedAlgorithmCount}/{completedAlgorithmIds.length} loaded
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!isPreparingFinishedResults && activeAlgorithmIds.length >= 2 && (
                   <div className="w-full">
                     <ResultsSummarySection
                       perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
@@ -1620,7 +1661,7 @@ useEffect(() => {
                   </div>
                 )}
 
-                {resultsAvailabilityNotice ? (
+                {isPreparingFinishedResults ? null : resultsAvailabilityNotice ? (
                   <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50/80 p-8 text-center">
                     <p className="text-lg font-bold text-slate-950">{resultsAvailabilityNotice.title}</p>
                     <p className="mt-3 text-sm leading-6 text-slate-600">
