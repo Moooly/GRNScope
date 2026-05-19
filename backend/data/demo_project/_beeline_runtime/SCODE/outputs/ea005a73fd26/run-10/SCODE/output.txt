@@ -1,0 +1,2 @@
+mkdir: cannot create directory ‘/usr/working_dir/0’: File exists
+mkdir: cannot create directory ‘/usr/working_dir/1’: File exists

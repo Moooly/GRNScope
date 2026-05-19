@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
@@ -11,6 +12,7 @@ from ..services.result_service import read_algorithm_result
 from ..services.gene_coordinate_service import get_gene_coordinate
 from ..services.demo_service import (
     get_demo_algorithm_ids,
+    get_demo_algorithm_result_path,
     get_demo_project_root,
     get_demo_ranked_edges_path,
     is_demo_project,
@@ -55,6 +57,23 @@ def attach_gene_coordinates_to_result(result: dict) -> dict:
         "gene_coordinates": gene_coordinates,
         "gene_coordinate_count": len(gene_coordinates),
     }
+
+
+def read_demo_algorithm_result_from_json(algorithm_id: str) -> dict:
+    result_path = get_demo_algorithm_result_path(algorithm_id)
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["project_id"] = "demo"
+    result["job_id"] = "demo"
+    result["algorithm_id"] = algorithm_id.upper()
+    result["source_file"] = str(result_path)
+
+    try:
+        result["ranked_edges_path"] = str(get_demo_ranked_edges_path(algorithm_id))
+    except FileNotFoundError:
+        result.pop("ranked_edges_path", None)
+
+    return attach_gene_coordinates_to_result(result)
+
 
 def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
     ranked_edges_path = get_demo_ranked_edges_path(algorithm_id)
@@ -143,18 +162,21 @@ async def get_project_results(project_id: str, request: Request, response: Respo
         results = []
         for algorithm_id in get_demo_algorithm_ids():
             try:
-                ranked_edges_path = get_demo_ranked_edges_path(algorithm_id)
+                result_path = get_demo_algorithm_result_path(algorithm_id)
                 status = "Completed"
-                result_path = str(ranked_edges_path)
             except FileNotFoundError:
-                status = "Failed"
-                result_path = None
+                try:
+                    result_path = get_demo_ranked_edges_path(algorithm_id)
+                    status = "Completed"
+                except FileNotFoundError:
+                    status = "Failed"
+                    result_path = None
 
             results.append(
                 {
                     "algorithm_id": algorithm_id,
                     "status": status,
-                    "result_path": result_path,
+                    "result_path": str(result_path) if result_path else None,
                     "completed_at": "demo",
                     "elapsed_seconds": 0,
                     "progress_percent": 100 if status == "Completed" else 0,
@@ -220,7 +242,10 @@ async def get_algorithm_result(
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         try:
-            result = read_demo_algorithm_result_from_csv(algorithm_id)
+            try:
+                result = read_demo_algorithm_result_from_json(algorithm_id)
+            except FileNotFoundError:
+                result = read_demo_algorithm_result_from_csv(algorithm_id)
             return {
                 "ok": True,
                 "project_id": project_id,

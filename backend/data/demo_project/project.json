@@ -1,0 +1,31 @@
+{
+  "project_id": "ea005a73fd26",
+  "owner_id": "mpcc4zni8e52mex8oop",
+  "project_name": "ExpressionData",
+  "project_description": "",
+  "created_at": 1779177623.1786757,
+  "created_at_display": "2026-05-19 08:00",
+  "notification_email": "immoooly@gmail.com",
+  "top_variable_genes": "19",
+  "include_all_tfs": "true",
+  "normalize_enabled": "true",
+  "log_transform_enabled": "true",
+  "selected_algorithms": [
+    "PEARSON",
+    "PPCOR",
+    "LEAP",
+    "SCODE",
+    "SINCERITIES",
+    "GRNBOOST2",
+    "GENIE3",
+    "GRISLI",
+    "GRNVBEM",
+    "PIDC",
+    "SCRIBE",
+    "SINGE"
+  ],
+  "ensemble_enabled": "true",
+  "expression_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/expression__ExpressionData.csv",
+  "pseudotime_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/pseudotime__PseudoTime.csv",
+  "latest_job_id": "33eb795d2b1e"
+}

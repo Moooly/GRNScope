@@ -1,0 +1,116 @@
+================================================
+= Running AR1MA1-VBEM method for GRN inference =
+================================================
+
+
+( use [Ctrl]+[C] to abort the execution )
+
+
+ # Choosing dataset...
+
+file =
+
+    '/usr/working_dir/ExpressionData0.csv'
+
+Elapsed time is 0.205670 seconds.
+
+
+ - DMRT1
+  VBEM converges after 11129 iteractions
+ - FGF9
+  VBEM converges after 27885 iteractions
+ - RSPO1
+  VBEM converges after 12341 iteractions
+ - DHH
+  VBEM converges after 2592 iteractions
+ - CTNNB1
+  VBEM converges after 33887 iteractions
+ - PGD2
+  VBEM converges after 18622 iteractions
+ - WT1mKTS
+  VBEM converges after 77900 iteractions
+ - SRY
+  VBEM converges after 50566 iteractions
+ - DKK1
+  VBEM converges after 4423 iteractions
+ - WNT4
+  VBEM converges after 17659 iteractions
+ - CBX2
+  VBEM converges after 28443 iteractions
+ - AMH
+  VBEM converges after 19670 iteractions
+ - NR0B1
+  VBEM converges after 7930 iteractions
+ - NR5A1
+  VBEM converges after 60773 iteractions
+ - WT1pKTS
+  VBEM converges after 57074 iteractions
+ - FOXL2
+  VBEM converges after 8508 iteractions
+ - UGR
+  VBEM converges after 38577 iteractions
+ - SOX9
+  VBEM converges after 18258 iteractions
+ - GATA4
+  VBEM converges after 76699 iteractions
+Elapsed time is 124.622464 seconds.
+
+
+================================================
+= Running AR1MA1-VBEM method for GRN inference =
+================================================
+
+
+( use [Ctrl]+[C] to abort the execution )
+
+
+ # Choosing dataset...
+
+file =
+
+    '/usr/working_dir/ExpressionData1.csv'
+
+Elapsed time is 0.141100 seconds.
+
+
+ - DMRT1
+  VBEM converges after 11918 iteractions
+ - FGF9
+  VBEM converges after 15226 iteractions
+ - RSPO1
+  VBEM converges after 3375 iteractions
+ - DHH
+  VBEM converges after 3801 iteractions
+ - CTNNB1
+  VBEM converges after 927 iteractions
+ - PGD2
+  VBEM converges after 2995 iteractions
+ - WT1mKTS
+  VBEM converges after 59542 iteractions
+ - SRY
+  VBEM converges after 71346 iteractions
+ - DKK1
+  VBEM converges after 9811 iteractions
+ - WNT4
+  VBEM converges after 47409 iteractions
+ - CBX2
+  VBEM converges after 55357 iteractions
+ - AMH
+  VBEM converges after 1738 iteractions
+ - NR0B1
+  VBEM converges after 8400 iteractions
+ - NR5A1
+  VBEM converges after 13253 iteractions
+ - WT1pKTS
+  VBEM converges after 68732 iteractions
+ - FOXL2
+  VBEM converges after 36978 iteractions
+ - UGR
+  VBEM converges after 3365 iteractions
+ - SOX9
+  VBEM converges after 1726 iteractions
+ - GATA4
+  VBEM converges after 62045 iteractions
+Elapsed time is 99.283663 seconds.
+
+

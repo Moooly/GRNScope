@@ -1,0 +1,2 @@
+It took 6.2808s to generate the 1 experimental matrices, with R=3000
+It took 5.5826s to generate the 1 experimental matrices, with R=3000

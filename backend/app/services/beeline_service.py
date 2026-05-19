@@ -794,13 +794,22 @@ def aggregate_confidence_edges(
             all_node_names.add(target)
 
         for target, target_edges in entries_by_target.items():
-            ranked_edges = sorted(
+            ranked_edges_with_duplicates = sorted(
                 target_edges,
                 key=lambda item: (
                     -abs(float(item.get("score", 0) or 0)),
                     str(item.get("source", "")),
                 ),
             )
+            ranked_edges: list[dict] = []
+            seen_sources: set[str] = set()
+            for edge in ranked_edges_with_duplicates:
+                source = str(edge.get("source", "")).strip()
+                if not source or source in seen_sources:
+                    continue
+                seen_sources.add(source)
+                ranked_edges.append(edge)
+
             weights = [abs(float(item.get("score", 0) or 0)) for item in ranked_edges]
             mean_weight = fsum(weights) / len(weights) if weights else 0.0
             sd_weight = compute_population_sd(weights)

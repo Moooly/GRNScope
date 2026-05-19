@@ -1,0 +1,132 @@
+[
+  {
+    "job_id": "33eb795d2b1e",
+    "project_id": "ea005a73fd26",
+    "overall_status": "Completed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "PEARSON",
+        "status": "Completed",
+        "elapsed_seconds": 2,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/PEARSON.json",
+        "completed_at": "2026-05-19 08:00:25",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Completed",
+        "elapsed_seconds": 24,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/PPCOR.json",
+        "completed_at": "2026-05-19 08:00:47",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "LEAP",
+        "status": "Completed",
+        "elapsed_seconds": 387,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/LEAP.json",
+        "completed_at": "2026-05-19 10:09:32",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SCODE",
+        "status": "Completed",
+        "elapsed_seconds": 6859,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/SCODE.json",
+        "completed_at": "2026-05-19 11:56:49",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SINCERITIES",
+        "status": "Completed",
+        "elapsed_seconds": 117,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/SINCERITIES.json",
+        "completed_at": "2026-05-19 09:57:50",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "status": "Completed",
+        "elapsed_seconds": 262,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/GRNBOOST2.json",
+        "completed_at": "2026-05-19 08:05:10",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Completed",
+        "elapsed_seconds": 1350,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/GENIE3.json",
+        "completed_at": "2026-05-19 08:27:40",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GRISLI",
+        "status": "Completed",
+        "elapsed_seconds": 747,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/GRISLI.json",
+        "completed_at": "2026-05-19 09:55:52",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "GRNVBEM",
+        "status": "Completed",
+        "elapsed_seconds": 7358,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/GRNVBEM.json",
+        "completed_at": "2026-05-19 10:03:04",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "PIDC",
+        "status": "Completed",
+        "elapsed_seconds": 278,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/PIDC.json",
+        "completed_at": "2026-05-19 10:02:28",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SCRIBE",
+        "status": "Completed",
+        "elapsed_seconds": 400,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/SCRIBE.json",
+        "completed_at": "2026-05-19 10:16:12",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      },
+      {
+        "algorithm_id": "SINGE",
+        "status": "Completed",
+        "elapsed_seconds": 4544,
+        "error_message": null,
+        "result_path": "/home/immoooly/GRNScope/backend/projects/ea005a73fd26/results/SINGE.json",
+        "completed_at": "2026-05-19 09:43:24",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      }
+    ],
+    "notification_error": "Email notification is not configured on the server.",
+    "notification_attempted_at": "2026-05-19 11:56:49"
+  }
+]
