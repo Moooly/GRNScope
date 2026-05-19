@@ -21,6 +21,8 @@ type AlgorithmCardsSectionProps = {
   tasks: AlgorithmTask[];
   algorithmMetaMap: Map<string, AlgorithmMeta>;
   onOpenAlgorithmError: (task: AlgorithmErrorTask) => void;
+  onStopAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
+  onRerunAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
 };
 
 /**
@@ -33,6 +35,8 @@ export default function AlgorithmCardsSection({
   tasks,
   algorithmMetaMap,
   onOpenAlgorithmError,
+  onStopAlgorithm,
+  onRerunAlgorithm,
 }: AlgorithmCardsSectionProps) {
   if (tasks.length === 0) return null;
 
@@ -46,7 +50,8 @@ export default function AlgorithmCardsSection({
           const name = meta?.name ?? task.algorithm_id;
           const isCompleted = task.status === "Completed";
           const isFailed = task.status === "Failed";
-          const isPending = !isCompleted && !isFailed;
+          const isStopped = task.status === "Stopped";
+          const canStop = task.status === "Running" || task.status === "Queued";
 
           return (
             <div
@@ -71,6 +76,18 @@ export default function AlgorithmCardsSection({
                               task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
                               "This algorithm failed. The server did not return a detailed message.",
                           })
+                      : canStop
+                        ? () =>
+                            onStopAlgorithm({
+                              algorithmId: task.algorithm_id,
+                              algorithmName: name,
+                            })
+                        : isStopped
+                          ? () =>
+                              onRerunAlgorithm({
+                                algorithmId: task.algorithm_id,
+                                algorithmName: name,
+                              })
                       : undefined
                   }
                 />
@@ -119,6 +136,48 @@ function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void
       >
         !
       </button>
+    );
+  }
+
+  if (status === "Stopped") {
+    return (
+      <button
+        type="button"
+        aria-label="Run algorithm again"
+        title="Run again"
+        onClick={onClick}
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5">
+          <path
+            d="M12.6 5.1A5 5 0 1 0 13 9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <path
+            d="M12.7 2.7v2.7h-2.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        aria-label="Stop algorithm"
+        title="Stop algorithm"
+        onClick={onClick}
+        className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[#1b75a6]/20 border-t-[#1b75a6]"
+      />
     );
   }
 

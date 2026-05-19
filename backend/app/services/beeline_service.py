@@ -6,6 +6,7 @@ import json
 import os
 import random
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -20,6 +21,10 @@ from ..repositories.project_repository import read_project_manifest
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 30
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
+
+
+class AlgorithmStoppedError(RuntimeError):
+    pass
 
 
 def resolve_beeline_root() -> Path:
@@ -1046,6 +1051,8 @@ def run_beeline_with_progress(
     job_id: str,
     algorithm_id: str,
     update_job_state_fn,
+    stop_event=None,
+    on_process_start=None,
 ) -> dict:
     project_dir = PROJECTS_ROOT / project_id
     project_manifest = read_project_manifest(project_dir)
@@ -1058,6 +1065,9 @@ def run_beeline_with_progress(
         progress_percent=5,
         progress_label="Preparing runtime",
     )
+
+    if stop_event is not None and stop_event.is_set():
+        raise AlgorithmStoppedError("Algorithm run was stopped.")
 
     (
         runtime_root,
@@ -1092,6 +1102,9 @@ def run_beeline_with_progress(
         progress_label=f"Launching BEELINE ({len(run_ids)} confidence runs)",
     )
 
+    if stop_event is not None and stop_event.is_set():
+        raise AlgorithmStoppedError("Algorithm run was stopped.")
+
     python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
     command = [python_executable, "BLRunner.py", "-c", str(config_path)]
 
@@ -1102,9 +1115,26 @@ def run_beeline_with_progress(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
     )
+    if on_process_start is not None:
+        on_process_start(process)
 
     while process.poll() is None:
+        if stop_event is not None and stop_event.is_set():
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            break
+
         elapsed = int(time.time() - started_at)
         synthetic_progress = min(85, 20 + elapsed // 2)
         update_job_state_fn(
@@ -1121,6 +1151,9 @@ def run_beeline_with_progress(
 
     (runtime_root / "stdout.log").write_text(stdout_text or "", encoding="utf-8")
     (runtime_root / "stderr.log").write_text(stderr_text or "", encoding="utf-8")
+
+    if stop_event is not None and stop_event.is_set():
+        raise AlgorithmStoppedError("Algorithm run was stopped.")
 
     if process.returncode != 0:
         friendly_error = extract_user_friendly_beeline_error(stderr_text or "", algorithm_id)

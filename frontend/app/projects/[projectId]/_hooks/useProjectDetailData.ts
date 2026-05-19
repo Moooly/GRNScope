@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AlgorithmCatalogItem,
   AlgorithmStoredResult,
@@ -138,9 +138,31 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
   const hasActiveTasks = useMemo(() => {
     return (latestJob?.tasks ?? []).some(
-      (task) => task.status === "Queued" || task.status === "Running"
+      (task) =>
+        task.status === "Queued" ||
+        task.status === "Running" ||
+        task.status === "Stopping"
     );
   }, [latestJob]);
+
+  const refreshProjectData = useCallback(async () => {
+    if (!projectId) return;
+
+    try {
+      const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`);
+
+      if (projectResponse.ok) {
+        const projectData = await projectResponse.json();
+        setProject((projectData.project ?? null) as ProjectManifest | null);
+        setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
+      }
+
+      const nextResults = await loadCompletedAlgorithmResults(projectId);
+      setAlgorithmResults(nextResults);
+    } catch {
+      return;
+    }
+  }, [projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,5 +305,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
     algorithmResults,
     algorithmCatalog,
     error,
+    refreshProjectData,
+    setLatestJob,
   };
 }

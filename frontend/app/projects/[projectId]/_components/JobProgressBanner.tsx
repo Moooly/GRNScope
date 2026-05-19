@@ -28,14 +28,16 @@ export default function JobProgressBanner({
 
   const queued = tasks.filter((task) => task.status === "Queued");
   const running = tasks.filter((task) => task.status === "Running");
+  const stopping = tasks.filter((task) => task.status === "Stopping");
   const completed = tasks.filter((task) => task.status === "Completed");
   const failed = tasks.filter((task) => task.status === "Failed");
+  const stopped = tasks.filter((task) => task.status === "Stopped");
 
-  const hasActiveWork = queued.length > 0 || running.length > 0;
+  const hasActiveWork = queued.length > 0 || running.length > 0 || stopping.length > 0;
   if (!hasActiveWork) return null;
 
   const total = tasks.length;
-  const finished = completed.length + failed.length;
+  const finished = completed.length + failed.length + stopped.length;
 
   // Overall percent blends finished tasks with the partial progress of any
   // currently-running tasks. Each finished task = 1 unit, each running task
@@ -49,7 +51,9 @@ export default function JobProgressBanner({
   const statusSummary = [
     `${completed.length} completed`,
     `${running.length} running`,
+    stopping.length > 0 ? `${stopping.length} stopping` : null,
     queued.length > 0 ? `${queued.length} queued` : null,
+    stopped.length > 0 ? `${stopped.length} stopped` : null,
     failed.length > 0 ? `${failed.length} failed` : null,
   ].filter(Boolean);
 

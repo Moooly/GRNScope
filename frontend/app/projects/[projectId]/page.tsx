@@ -19,6 +19,7 @@ import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSecti
 import JobProgressBanner from "./_components/JobProgressBanner";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
+import { apiFetch } from "../../_lib/clientIdentity";
 
 import {
   type AggregatedEdge,
@@ -122,6 +123,8 @@ export default function ProjectDetailPage() {
     algorithmResults,
     algorithmCatalog,
     error,
+    refreshProjectData,
+    setLatestJob,
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
   const [evidenceThreshold, setEvidenceThreshold] = useState(0.9);
@@ -147,6 +150,12 @@ export default function ProjectDetailPage() {
   const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
   const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
+  const [pendingAlgorithmAction, setPendingAlgorithmAction] = useState<{
+    type: "stop" | "rerun";
+    algorithmId: string;
+    algorithmName: string;
+  } | null>(null);
+  const [isAlgorithmActionSubmitting, setIsAlgorithmActionSubmitting] = useState(false);
 
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
   const networkGraphRef = useRef<Core | null>(null);
@@ -985,6 +994,49 @@ export default function ProjectDetailPage() {
     }, 280);
   };
 
+  const requestAlgorithmAction = (
+    type: "stop" | "rerun",
+    task: { algorithmId: string; algorithmName: string }
+  ) => {
+    if (!latestJob || !projectId || isDemoProject) return;
+
+    setPendingAlgorithmAction({
+      type,
+      algorithmId: task.algorithmId,
+      algorithmName: task.algorithmName,
+    });
+  };
+
+  const closeAlgorithmActionModal = () => {
+    if (isAlgorithmActionSubmitting) return;
+    setPendingAlgorithmAction(null);
+  };
+
+  const confirmAlgorithmAction = async () => {
+    if (!pendingAlgorithmAction || !latestJob || !projectId) return;
+
+    setIsAlgorithmActionSubmitting(true);
+
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/projects/${projectId}/jobs/${latestJob.job_id}/tasks/${pendingAlgorithmAction.algorithmId}/${pendingAlgorithmAction.type === "stop" ? "stop" : "rerun"}`,
+        { method: "POST" }
+      );
+
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload.latest_job) {
+          setLatestJob(payload.latest_job);
+        }
+        await refreshProjectData();
+      }
+
+      setPendingAlgorithmAction(null);
+    } finally {
+      setIsAlgorithmActionSubmitting(false);
+    }
+  };
+
 
 
   const handleExportNetwork = useCallback(
@@ -1346,6 +1398,8 @@ useEffect(() => {
             tasks={latestJob?.tasks ?? []}
             algorithmMetaMap={algorithmMetaMap}
             onOpenAlgorithmError={setActiveAlgorithmErrorTask}
+            onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
+            onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
           />
 
           <DatasetPreprocessingSection
@@ -1392,6 +1446,59 @@ useEffect(() => {
             task={activeAlgorithmErrorTask}
             onClose={() => setActiveAlgorithmErrorTask(null)}
           />
+
+          {pendingAlgorithmAction && (
+            <div
+              className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm"
+              onClick={closeAlgorithmActionModal}
+            >
+              <div
+                className="w-full max-w-md rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+                  {pendingAlgorithmAction.type === "stop" ? "Stop algorithm" : "Run again"}
+                </p>
+                <h3 className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
+                  {pendingAlgorithmAction.type === "stop"
+                    ? `Stop ${pendingAlgorithmAction.algorithmName}?`
+                    : `Run ${pendingAlgorithmAction.algorithmName} again?`}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  {pendingAlgorithmAction.type === "stop"
+                    ? "This will terminate the current run. Partial results will not be used."
+                    : "This will start a fresh run using the same project input files."}
+                </p>
+
+                <div className="mt-6 flex flex-wrap justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={closeAlgorithmActionModal}
+                    disabled={isAlgorithmActionSubmitting}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmAlgorithmAction}
+                    disabled={isAlgorithmActionSubmitting}
+                    className={`rounded-full px-4 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      pendingAlgorithmAction.type === "stop"
+                        ? "bg-rose-600 hover:bg-rose-700"
+                        : "bg-[#1b75a6] hover:bg-[#155f87]"
+                    }`}
+                  >
+                    {isAlgorithmActionSubmitting
+                      ? "Working..."
+                      : pendingAlgorithmAction.type === "stop"
+                        ? "Stop"
+                        : "Run again"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </main>
