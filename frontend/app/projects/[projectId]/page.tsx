@@ -109,7 +109,80 @@ function signOf(value: number): -1 | 0 | 1 {
   return 0;
 }
 
+const CIRCOS_EXPORT_STYLE_PROPERTIES = [
+  "fill",
+  "fill-opacity",
+  "stroke",
+  "stroke-width",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-opacity",
+  "opacity",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "letter-spacing",
+  "text-anchor",
+  "dominant-baseline",
+];
 
+function getSvgExportSize(svgElement: SVGSVGElement) {
+  const viewBox = svgElement.getAttribute("viewBox");
+  const viewBoxValues = viewBox
+    ?.trim()
+    .split(/[\s,]+/)
+    .map((value) => Number.parseFloat(value));
+
+  const viewBoxWidth =
+    viewBoxValues && viewBoxValues.length === 4 && Number.isFinite(viewBoxValues[2])
+      ? viewBoxValues[2]
+      : 0;
+  const viewBoxHeight =
+    viewBoxValues && viewBoxValues.length === 4 && Number.isFinite(viewBoxValues[3])
+      ? viewBoxValues[3]
+      : 0;
+
+  const fallbackWidth = svgElement.viewBox.baseVal.width || svgElement.clientWidth || 780;
+  const fallbackHeight = svgElement.viewBox.baseVal.height || svgElement.clientHeight || 780;
+  const width = viewBoxWidth > 0 ? viewBoxWidth : fallbackWidth;
+  const height = viewBoxHeight > 0 ? viewBoxHeight : fallbackHeight;
+
+  return {
+    width,
+    height,
+    viewBox: viewBox ?? `0 0 ${width} ${height}`,
+  };
+}
+
+function inlineSvgComputedStyles(sourceSvg: SVGSVGElement, clonedSvg: SVGSVGElement) {
+  const sourceElements = [
+    sourceSvg,
+    ...Array.from(sourceSvg.querySelectorAll<SVGElement>("*")),
+  ];
+  const clonedElements = [
+    clonedSvg,
+    ...Array.from(clonedSvg.querySelectorAll<SVGElement>("*")),
+  ];
+
+  sourceElements.forEach((sourceElement, index) => {
+    const clonedElement = clonedElements[index];
+    if (!clonedElement) return;
+
+    const computedStyle = window.getComputedStyle(sourceElement);
+    const inlineStyle = CIRCOS_EXPORT_STYLE_PROPERTIES
+      .map((property) => {
+        const value = computedStyle.getPropertyValue(property);
+        return value ? `${property}:${value}` : "";
+      })
+      .filter(Boolean)
+      .join(";");
+
+    if (inlineStyle) {
+      clonedElement.setAttribute("style", inlineStyle);
+    }
+    clonedElement.removeAttribute("class");
+  });
+}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
@@ -1144,6 +1217,71 @@ export default function ProjectDetailPage() {
 
 
 
+  const handleExportCircosPng = useCallback(
+    async (svgElement: SVGSVGElement) => {
+      const activeViewLabel =
+        activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "network";
+      const isolatedLabel = isolatedGene ? `isolated-${isolatedGene}` : "full-view";
+      const baseFilename = `${projectId ?? "project"}-${activeViewLabel}-circos-${isolatedLabel}-filtered`;
+      const { width, height, viewBox } = getSvgExportSize(svgElement);
+      const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
+
+      inlineSvgComputedStyles(svgElement, clonedSvg);
+
+      clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clonedSvg.setAttribute("width", String(width));
+      clonedSvg.setAttribute("height", String(height));
+      clonedSvg.setAttribute("viewBox", viewBox);
+
+      const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      background.setAttribute("x", "0");
+      background.setAttribute("y", "0");
+      background.setAttribute("width", String(width));
+      background.setAttribute("height", String(height));
+      background.setAttribute("fill", "#ffffff");
+      clonedSvg.insertBefore(background, clonedSvg.firstChild);
+
+      const serializedSvg = new XMLSerializer().serializeToString(clonedSvg);
+      const svgBlob = new Blob([serializedSvg], {
+        type: "image/svg+xml;charset=utf-8",
+      });
+      const objectUrl = URL.createObjectURL(svgBlob);
+
+      try {
+        const image = new Image();
+        const imageLoad = new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("Could not render Circos SVG export."));
+        });
+
+        image.src = objectUrl;
+        await imageLoad;
+
+        const scale = 3;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+
+        const context = canvas.getContext("2d");
+        if (!context) return;
+
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        const link = document.createElement("a");
+        link.href = canvas.toDataURL("image/png");
+        link.download = `${baseFilename}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    },
+    [activeAlgorithmIds, isolatedGene, projectId]
+  );
+
   const handleExportNetwork = useCallback(
     (format: "png" | "svg") => {
       const cy = networkGraphRef.current;
@@ -1461,6 +1599,7 @@ useEffect(() => {
                       networkLayout={networkLayout}
                       setNetworkLayout={setNetworkLayout}
                       onExportNetwork={handleExportNetwork}
+                      onExportCircosPng={handleExportCircosPng}
                       onGraphReady={(cy) => {
                         networkGraphRef.current = cy;
                       }}

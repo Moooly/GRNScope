@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import NetworkGraph from "./NetworkGraph";
 import CircosNetworkGraph from "./CircosNetworkGraph";
@@ -38,6 +38,7 @@ type NetworkVisualizationSectionProps = {
   networkLayout: "force" | "hierarchical" | "concentric" | "circular" | "circos";
   setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular" | "circos") => void;
   onExportNetwork: (format: "png" | "svg") => void;
+  onExportCircosPng: (svgElement: SVGSVGElement) => void | Promise<void>;
   onGraphReady?: (cy: import("cytoscape").Core | null) => void;
   networkNodes: NodeInfo[];
   filteredNetworkEdges: AggregatedEdge[];
@@ -63,6 +64,7 @@ export default function NetworkVisualizationSection({
   networkLayout,
   setNetworkLayout,
   onExportNetwork,
+  onExportCircosPng,
   onGraphReady,
   networkNodes,
   filteredNetworkEdges,
@@ -81,6 +83,7 @@ export default function NetworkVisualizationSection({
   const [isInspectionGuideOpen, setIsInspectionGuideOpen] = useState(false);
   const [isInspectionGuideClosing, setIsInspectionGuideClosing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const circosSvgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -195,18 +198,12 @@ export default function NetworkVisualizationSection({
               <button
                 type="button"
                 onClick={() => {
-                  if (networkLayout === "circos") return;
                   setIsExportConfirmClosing(false);
                   setIsExportConfirmOpen(true);
                 }}
-                disabled={networkLayout === "circos"}
                 aria-label="Download current network"
-                title={networkLayout === "circos" ? "Download is not available for Circos view yet" : "Download current network"}
-                className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${
-                  networkLayout === "circos"
-                    ? "cursor-not-allowed text-slate-400"
-                    : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                }`}
+                title="Download current network"
+                className="rounded-xl px-4 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
               >
                 Download
               </button>
@@ -226,6 +223,7 @@ export default function NetworkVisualizationSection({
                 setSelectedEdgeKey(edgeKey);
                 setSelectedGene(null);
               }}
+              svgRef={circosSvgRef}
             />
           ) : (
             <NetworkGraph
@@ -711,7 +709,9 @@ export default function NetworkVisualizationSection({
               <div>
                 <h5 className="text-lg font-bold text-slate-950">Export current network?</h5>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Download exactly what is currently shown on the canvas, including the current zoom level, node positions, and any isolated sub-network. Choose PNG or SVG below.
+                  {networkLayout === "circos"
+                    ? "Download the current filtered Circos view as a PNG. The file uses the same filtered regulations shown in the plot."
+                    : "Download exactly what is currently shown on the canvas, including the current zoom level, node positions, and any isolated sub-network. Choose PNG or SVG below."}
                 </p>
               </div>
 
@@ -723,20 +723,30 @@ export default function NetworkVisualizationSection({
                 >
                   Cancel
                 </button>
+                {networkLayout !== "circos" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onExportNetwork("svg");
+                      closeExportConfirm();
+                    }}
+                    className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2.5 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                  >
+                    Download SVG
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
-                    onExportNetwork("svg");
-                    closeExportConfirm();
-                  }}
-                  className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-4 py-2.5 text-sm font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-                >
-                  Download SVG
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onExportNetwork("png");
+                    if (networkLayout === "circos") {
+                      if (circosSvgRef.current) {
+                        void Promise.resolve(onExportCircosPng(circosSvgRef.current)).catch(
+                          () => undefined
+                        );
+                      }
+                    } else {
+                      onExportNetwork("png");
+                    }
                     closeExportConfirm();
                   }}
                   className="rounded-full bg-[#1b75a6] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"

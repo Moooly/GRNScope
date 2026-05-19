@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type Ref } from "react";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
 
 type CircosNetworkGraphProps = {
@@ -10,6 +10,7 @@ type CircosNetworkGraphProps = {
   selectedEdgeKey?: string | null;
   onSelectGene?: (geneId: string | null) => void;
   onSelectEdge?: (edgeKey: string | null) => void;
+  svgRef?: Ref<SVGSVGElement>;
 };
 
 /**
@@ -234,6 +235,7 @@ export default function CircosNetworkGraph({
   selectedEdgeKey = null,
   onSelectGene,
   onSelectEdge,
+  svgRef,
 }: CircosNetworkGraphProps) {
   const layout = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
@@ -390,6 +392,7 @@ export default function CircosNetworkGraph({
     <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
 
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="h-[680px] w-full rounded-[1rem] bg-white"
         role="img"
