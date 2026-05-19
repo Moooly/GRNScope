@@ -59,26 +59,17 @@ export default function JobProgressBanner({
 
   return (
     <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <span
-              aria-hidden="true"
-              className="inline-flex h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]"
-            />
-            <h2 className="text-lg font-bold text-slate-950">Analysis running</h2>
-          </div>
-          <p className="mt-1 text-sm font-semibold text-slate-500">
-            {statusSummary.join(" · ")}
-          </p>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]"
+          />
+          <h2 className="text-lg font-bold text-slate-950">Analysis running</h2>
         </div>
-
-        <div className="text-right">
-          <p className="text-xl font-bold tabular-nums text-[#1b75a6]">{overall}%</p>
-          <p className="mt-0.5 text-xs font-semibold text-slate-500">
-            {finished} of {total} finished
-          </p>
-        </div>
+        <p className="mt-1 text-sm font-semibold text-slate-500">
+          {statusSummary.join(" · ")}
+        </p>
       </div>
 
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
