@@ -520,6 +520,83 @@ export default function ProjectDetailPage() {
     standardizedAlgorithmEdgeRows,
   ]);
 
+  const displayAlgorithmEdgeRows = useMemo(() => {
+    const next: Record<string, AggregatedEdge[]> = {};
+    const candidateRegulatorSet = new Set(candidateRegulatorIds);
+
+    const getPairOrientation = (source: string, target: string) => {
+      const sourceIsRegulator = candidateRegulatorSet.has(source);
+      const targetIsRegulator = candidateRegulatorSet.has(target);
+
+      if (sourceIsRegulator && !targetIsRegulator) {
+        return { source, target };
+      }
+
+      if (targetIsRegulator && !sourceIsRegulator) {
+        return { source: target, target: source };
+      }
+
+      return source.localeCompare(target) <= 0
+        ? { source, target }
+        : { source: target, target: source };
+    };
+
+    const isStrongerDisplayEdge = (
+      candidate: AggregatedEdge,
+      current: AggregatedEdge
+    ) => {
+      if (candidate.confidence !== current.confidence) {
+        return candidate.confidence > current.confidence;
+      }
+      if (candidate.score !== current.score) {
+        return candidate.score > current.score;
+      }
+      return candidate.rank < current.rank;
+    };
+
+    completedAlgorithmIds.forEach((algorithmId) => {
+      const rows = algorithmEdgeRows[algorithmId] ?? [];
+      const algorithmMeta = algorithmMetaMap.get(algorithmId);
+
+      if (algorithmMeta?.directed ?? true) {
+        next[algorithmId] = rows;
+        return;
+      }
+
+      const rowByPair = new Map<string, AggregatedEdge>();
+
+      rows.forEach((edge) => {
+        const pair = getPairOrientation(edge.source, edge.target);
+        const pairKey = edgeKeyFor(pair.source, pair.target);
+        const displayEdge: AggregatedEdge = {
+          ...edge,
+          key: `${algorithmId}-${pair.source}-${pair.target}`,
+          source: pair.source,
+          target: pair.target,
+          direction: 0,
+          directionConfidence: null,
+          directionCoverage: 0,
+        };
+        const current = rowByPair.get(pairKey);
+
+        if (!current || isStrongerDisplayEdge(displayEdge, current)) {
+          rowByPair.set(pairKey, displayEdge);
+        }
+      });
+
+      next[algorithmId] = Array.from(rowByPair.values())
+        .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
+        .map((edge, index) => ({ ...edge, rank: index + 1 }));
+    });
+
+    return next;
+  }, [
+    algorithmEdgeRows,
+    algorithmMetaMap,
+    candidateRegulatorIds,
+    completedAlgorithmIds,
+  ]);
+
   const consensusRows = useMemo(() => {
     if (activeAlgorithmIds.length < 2) return [];
 
@@ -763,9 +840,11 @@ export default function ProjectDetailPage() {
 
   const activeEdges = useMemo(() => {
     if (activeAlgorithmIds.length >= 2) return consensusRows;
-    if (activeAlgorithmIds.length === 1) return algorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
+    if (activeAlgorithmIds.length === 1) {
+      return displayAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
+    }
     return [];
-  }, [activeAlgorithmIds, algorithmEdgeRows, consensusRows]);
+  }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
   const geneCoordinateMap = useMemo(() => {
     const coordinates = new Map<string, GeneCoordinateInfo>();
@@ -878,9 +957,9 @@ export default function ProjectDetailPage() {
   const perAlgorithmEdgeCounts = useMemo(() => {
     return activeAlgorithmIds.map((algorithmId) => ({
       algorithmId,
-      count: algorithmEdgeRows[algorithmId]?.length ?? 0,
+      count: displayAlgorithmEdgeRows[algorithmId]?.length ?? 0,
     }));
-  }, [activeAlgorithmIds, algorithmEdgeRows]);
+  }, [activeAlgorithmIds, displayAlgorithmEdgeRows]);
 
   const maxAlgorithmEdgeCount = useMemo(() => {
     return Math.max(...perAlgorithmEdgeCounts.map((item) => item.count), 1);
@@ -892,7 +971,7 @@ export default function ProjectDetailPage() {
     const edgeMembership = new Map<string, string[]>();
 
     activeAlgorithmIds.forEach((algorithmId) => {
-      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
+      (displayAlgorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
         const key = `${edge.source}|||${edge.target}`;
         const current = edgeMembership.get(key) ?? [];
         if (!current.includes(algorithmId)) current.push(algorithmId);
@@ -919,7 +998,7 @@ export default function ProjectDetailPage() {
     });
 
     return Array.from(buckets.values()).sort((a, b) => b.count - a.count);
-  }, [activeAlgorithmIds, algorithmEdgeRows]);
+  }, [activeAlgorithmIds, displayAlgorithmEdgeRows]);
 
   const maxOverlapCount = useMemo(() => {
     return Math.max(...overlapEntries.map((entry) => entry.count), 1);
