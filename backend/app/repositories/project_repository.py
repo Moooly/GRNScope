@@ -13,6 +13,11 @@ def read_project_manifest(project_dir: Path) -> dict:
     return json.loads(project_path.read_text(encoding="utf-8"))
 
 
+def write_project_manifest(project_dir: Path, project_manifest: dict) -> None:
+    project_path = project_dir / "project.json"
+    project_path.write_text(json.dumps(project_manifest, indent=2), encoding="utf-8")
+
+
 def list_project_directories() -> list[Path]:
     if not PROJECTS_ROOT.exists():
         return []

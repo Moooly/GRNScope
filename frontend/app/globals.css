@@ -31,6 +31,14 @@ body {
   text-decoration: none;
 }
 
+.grnscope-email-input:-webkit-autofill,
+.grnscope-email-input:-webkit-autofill:hover,
+.grnscope-email-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a;
+  box-shadow: 0 0 0 1000px #fff inset;
+  caret-color: #0f172a;
+}
+
 .animate-modal-overlay {
   animation: modalOverlayFade 480ms ease-out;
 }

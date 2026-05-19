@@ -38,3 +38,7 @@ class CreateProjectResponse(BaseModel):
     project_id: Optional[str] = None
     job_id: Optional[str] = None
     errors: list[str] = []
+
+
+class UpdateNotificationEmailRequest(BaseModel):
+    notification_email: Optional[str] = None

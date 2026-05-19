@@ -12,7 +12,13 @@ from pathlib import Path
 from ..algorithm_registry import sort_algorithm_ids_by_difficulty
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from ..repositories.job_repository import read_jobs_manifest, write_jobs_manifest
+from ..repositories.project_repository import read_project_manifest
 from ..services.beeline_service import AlgorithmStoppedError, run_beeline_with_progress
+from ..services.email_service import (
+    normalize_notification_email,
+    send_job_completion_email,
+    smtp_is_configured,
+)
 from ..services.result_service import algorithm_result_path, write_algorithm_result
 
 
@@ -40,6 +46,7 @@ MAX_CONCURRENT_ALGORITHM_TASKS = read_positive_int_env(
 ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
     MAX_CONCURRENT_ALGORITHM_TASKS
 )
+TERMINAL_JOB_STATUSES = {"Completed", "Failed", "Stopped"}
 
 
 def task_key(project_id: str, job_id: str, algorithm_id: str) -> tuple[str, str, str]:
@@ -237,11 +244,110 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 break
 
             job["overall_status"] = "Running"
+            job.pop("notification_sent_at", None)
+            job.pop("notification_started_at", None)
+            job.pop("notification_error", None)
+            job.pop("notification_attempted_at", None)
+            write_jobs_manifest(project_dir, jobs_manifest)
+            return
+
+
+def send_job_completion_notification_if_needed(project_dir: Path, job_id: str) -> None:
+    try:
+        project_manifest = read_project_manifest(project_dir)
+    except FileNotFoundError:
+        return
+
+    notification_email = normalize_notification_email(
+        project_manifest.get("notification_email")
+    )
+    if not notification_email:
+        return
+
+    now_display = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    job_snapshot: dict | None = None
+
+    with JOB_FILE_LOCK:
+        jobs_manifest = read_jobs_manifest(project_dir)
+
+        for job in jobs_manifest:
+            if job.get("job_id") != job_id:
+                continue
+
+            if job.get("overall_status") not in TERMINAL_JOB_STATUSES:
+                return
+            if (
+                job.get("notification_sent_at")
+                or job.get("notification_started_at")
+                or job.get("notification_error")
+            ):
+                return
+
+            if not smtp_is_configured():
+                job["notification_error"] = "Email notification is not configured on the server."
+                job["notification_attempted_at"] = now_display
+                write_jobs_manifest(project_dir, jobs_manifest)
+                return
+
+            job["notification_started_at"] = now_display
+            job_snapshot = dict(job)
+            job_snapshot["tasks"] = [dict(task) for task in job.get("tasks", [])]
+            write_jobs_manifest(project_dir, jobs_manifest)
+            break
+
+    if job_snapshot is None:
+        return
+
+    tasks = job_snapshot.get("tasks", [])
+    completed_count = sum(1 for task in tasks if task.get("status") == "Completed")
+    failed_count = sum(1 for task in tasks if task.get("status") == "Failed")
+    stopped_count = sum(1 for task in tasks if task.get("status") == "Stopped")
+
+    try:
+        send_job_completion_email(
+            to_email=notification_email,
+            project_id=str(project_manifest.get("project_id") or project_dir.name),
+            project_name=str(project_manifest.get("project_name") or project_dir.name),
+            job_status=str(job_snapshot.get("overall_status") or "Completed"),
+            completed_count=completed_count,
+            failed_count=failed_count,
+            stopped_count=stopped_count,
+            total_count=len(tasks),
+        )
+    except Exception as exc:
+        with JOB_FILE_LOCK:
+            jobs_manifest = read_jobs_manifest(project_dir)
+            for job in jobs_manifest:
+                if job.get("job_id") != job_id:
+                    continue
+                job.pop("notification_started_at", None)
+                job["notification_error"] = str(exc)
+                job["notification_attempted_at"] = time.strftime(
+                    "%Y-%m-%d %H:%M:%S",
+                    time.localtime(),
+                )
+                write_jobs_manifest(project_dir, jobs_manifest)
+                return
+        return
+
+    with JOB_FILE_LOCK:
+        jobs_manifest = read_jobs_manifest(project_dir)
+        for job in jobs_manifest:
+            if job.get("job_id") != job_id:
+                continue
+            job.pop("notification_started_at", None)
+            job.pop("notification_error", None)
+            job["notification_sent_at"] = time.strftime(
+                "%Y-%m-%d %H:%M:%S",
+                time.localtime(),
+            )
             write_jobs_manifest(project_dir, jobs_manifest)
             return
 
 
 def recompute_overall_status(project_dir: Path, job_id: str) -> None:
+    should_check_notification = False
+
     with JOB_FILE_LOCK:
         jobs_manifest = read_jobs_manifest(project_dir)
 
@@ -269,8 +375,12 @@ def recompute_overall_status(project_dir: Path, job_id: str) -> None:
             else:
                 job["overall_status"] = "Stopped"
 
+            should_check_notification = job["overall_status"] in TERMINAL_JOB_STATUSES
             write_jobs_manifest(project_dir, jobs_manifest)
-            return
+            break
+
+    if should_check_notification:
+        send_job_completion_notification_if_needed(project_dir, job_id)
 
 
 def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> None:

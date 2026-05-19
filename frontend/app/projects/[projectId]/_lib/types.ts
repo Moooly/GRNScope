@@ -29,6 +29,7 @@ export type ProjectManifest = {
   latest_job_id?: string | null;
   created_at?: string | null;
   created_at_display?: string | null;
+  notification_email?: string | null;
   is_demo?: boolean;
   read_only?: boolean;
 };

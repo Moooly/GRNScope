@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Response
 
 from ..algorithm_registry import sort_algorithm_ids_by_difficulty
-from ..config import PROJECTS_ROOT
+from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from .client_identity import (
     get_or_create_client_id,
     project_belongs_to_client,
@@ -19,14 +19,20 @@ from ..repositories.job_repository import read_jobs_manifest, write_jobs_manifes
 from ..repositories.project_repository import (
     list_project_directories,
     read_project_manifest,
+    write_project_manifest,
 )
 from ..storage import move_temp_upload_to_project, temp_metadata_path
 from ..schemas import (
     CreateProjectFromTempRequest,
     CreateProjectFromTempResponse,
     CreateProjectResponse,
+    UpdateNotificationEmailRequest,
 )
-from ..services.job_service import launch_independent_algorithm_tasks
+from ..services.email_service import normalize_notification_email
+from ..services.job_service import (
+    launch_independent_algorithm_tasks,
+    send_job_completion_notification_if_needed,
+)
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
 
 router = APIRouter()
@@ -120,6 +126,7 @@ async def create_project_from_temp(
             "project_description": project_description,
             "created_at": time.time(),
             "created_at_display": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
+            "notification_email": None,
             "top_variable_genes": top_variable_genes,
             "include_all_tfs": include_all_tfs,
             "normalize_enabled": normalize_enabled,
@@ -191,6 +198,65 @@ async def create_project_from_temp(
         )
     except Exception as e:
         return CreateProjectResponse(ok=False, errors=[str(e)])
+
+
+@router.patch("/api/projects/{project_id}/notification-email")
+async def update_project_notification_email(
+    project_id: str,
+    payload: UpdateNotificationEmailRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
+):
+    owner_id = get_or_create_client_id(request, response)
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    raw_email = (payload.notification_email or "").strip()
+    notification_email = normalize_notification_email(raw_email)
+    if raw_email and not notification_email:
+        raise HTTPException(status_code=400, detail="Invalid notification email.")
+
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        project_manifest["notification_email"] = notification_email
+        write_project_manifest(project_dir, project_manifest)
+
+        latest_job = None
+        with JOB_FILE_LOCK:
+            jobs_manifest = read_jobs_manifest(project_dir)
+            if jobs_manifest:
+                latest_job = jobs_manifest[-1]
+                if isinstance(latest_job, dict):
+                    latest_job.pop("notification_sent_at", None)
+                    latest_job.pop("notification_started_at", None)
+                    latest_job.pop("notification_error", None)
+                    latest_job.pop("notification_attempted_at", None)
+                    write_jobs_manifest(project_dir, jobs_manifest)
+
+        if (
+            notification_email
+            and isinstance(latest_job, dict)
+            and latest_job.get("overall_status") in {"Completed", "Failed", "Stopped"}
+            and latest_job.get("job_id")
+        ):
+            background_tasks.add_task(
+                send_job_completion_notification_if_needed,
+                project_dir,
+                str(latest_job.get("job_id")),
+            )
+
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "notification_email": notification_email,
+            "project": project_manifest,
+            "latest_job": latest_job,
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # --- Job monitoring endpoints ---

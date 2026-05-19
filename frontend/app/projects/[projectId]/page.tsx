@@ -1215,6 +1215,37 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleSaveNotificationEmail = useCallback(
+    async (email: string) => {
+      if (!projectId || isDemoProject) return false;
+
+      try {
+        const response = await apiFetch(
+          `${API_BASE}/projects/${projectId}/notification-email`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ notification_email: email }),
+          }
+        );
+
+        if (!response.ok) return false;
+
+        const data = await response.json();
+        if (data.latest_job) {
+          setLatestJob(data.latest_job);
+        }
+        await refreshProjectData();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [isDemoProject, projectId, refreshProjectData, setLatestJob]
+  );
+
 
 
   const handleExportCircosPng = useCallback(
@@ -1566,6 +1597,10 @@ useEffect(() => {
           <JobProgressBanner
             tasks={latestJob?.tasks ?? []}
             algorithmMetaMap={algorithmMetaMap}
+            notificationEmail={project?.notification_email ?? null}
+            onSaveNotificationEmail={
+              isDemoProject ? undefined : handleSaveNotificationEmail
+            }
           />
 
           <ResultsHubSection
