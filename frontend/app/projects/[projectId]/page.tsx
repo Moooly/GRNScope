@@ -128,8 +128,8 @@ export default function ProjectDetailPage() {
     setLatestJob,
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
-  const [evidenceThreshold, setEvidenceThreshold] = useState(0.9);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.9);
+  const [evidenceThreshold, setEvidenceThreshold] = useState(0.8);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [directionConfidenceThreshold, setDirectionConfidenceThreshold] = useState(0);
   const [signConfidenceThreshold, setSignConfidenceThreshold] = useState(0);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
@@ -252,7 +252,8 @@ export default function ProjectDetailPage() {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
     if (activeAlgorithmIds.length < 7) return;
 
-    setEvidenceThreshold(0.9);
+    setEvidenceThreshold(0.8);
+    setConfidenceThreshold(0.8);
     setConsensusThreshold(7);
     setHasTouchedConsensusThreshold(true);
     hasAppliedDemoDefaultsRef.current = true;

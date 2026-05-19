@@ -29,9 +29,9 @@ export default function ResultsControlsSection({
   completedAlgorithmIds,
   selectedAlgorithmIds,
   onChangeSelectedAlgorithmIds,
-  evidenceThreshold = 0.9,
+  evidenceThreshold = 0.8,
   onChangeEvidenceThreshold = () => {},
-  confidenceThreshold = 0.9,
+  confidenceThreshold = 0.8,
   onChangeConfidenceThreshold = () => {},
   directionConfidenceThreshold = 0,
   onChangeDirectionConfidenceThreshold = () => {},
@@ -49,8 +49,8 @@ export default function ResultsControlsSection({
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
-  const safeEvidenceThreshold = Number.isFinite(evidenceThreshold) ? evidenceThreshold : 0.9;
-  const safeConfidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.9;
+  const safeEvidenceThreshold = Number.isFinite(evidenceThreshold) ? evidenceThreshold : 0.8;
+  const safeConfidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.8;
   const safeDirectionThreshold = Number.isFinite(directionConfidenceThreshold)
     ? directionConfidenceThreshold
     : 0;
