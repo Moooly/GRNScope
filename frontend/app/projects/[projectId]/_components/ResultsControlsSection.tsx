@@ -252,27 +252,31 @@ export default function ResultsControlsSection({
         <button
           type="button"
           onClick={() => setIsSettingsMenuOpen((value) => !value)}
-          className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-bold transition ${
+          className={`inline-flex h-10 items-center gap-2 rounded-xl border bg-white/95 px-3.5 text-sm font-bold shadow-sm transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 ${
             isSettingsMenuOpen
-              ? "bg-[#1b75a6] text-white shadow-sm"
-              : "border border-slate-200 bg-slate-50 text-slate-900 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+              ? "border-[#1b75a6]/35 text-[#1b75a6] shadow-md shadow-slate-200/70"
+              : "border-slate-200 text-slate-900 hover:border-[#1b75a6]/35 hover:bg-[#f8fbfd] hover:text-[#1b75a6]"
           }`}
         >
           <span
-            className={`inline-flex w-5 items-center justify-center text-2xl leading-none ${
-              isSettingsMenuOpen ? "text-white/90" : "text-[#1b75a6]"
-            }`}
+            className="inline-flex w-5 items-center justify-center text-[21px] leading-none text-[#1b75a6]"
             aria-hidden="true"
           >
             ⚙
           </span>
           <span>Results Settings</span>
-          <span className="text-xs">{isSettingsMenuOpen ? "▴" : "▾"}</span>
+          <span
+            className={`ml-0.5 text-[11px] leading-none ${
+              isSettingsMenuOpen ? "text-[#1b75a6]" : "text-slate-500"
+            }`}
+          >
+            {isSettingsMenuOpen ? "▴" : "▾"}
+          </span>
         </button>
       </div>
 
       {isSettingsMenuOpen && (
-        <div className="absolute right-0 top-[48px] z-40 w-[min(90vw,400px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[min(90vw,400px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-2 py-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#1b75a6]">

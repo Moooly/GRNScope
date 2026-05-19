@@ -90,9 +90,9 @@ export default function EdgeAnalysisTableSection({
     value === null ? null : Math.round(value * 100);
 
   return (
-    <div className="mt-6 rounded-[1.75rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
+    <div className="rounded-[1.75rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <h3 className="text-xl font-bold tracking-tight text-slate-950">
+        <h3 className="text-base font-semibold text-slate-900">
           Edge Analysis Table
         </h3>
 

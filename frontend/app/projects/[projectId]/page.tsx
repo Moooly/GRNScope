@@ -1362,6 +1362,38 @@ useEffect(() => {
   }, [totalTablePages]);
 
 
+  const renderResultsControls = () => (
+    <ResultsControlsSection
+      compact
+      projectId={projectId}
+      completedAlgorithmIds={completedAlgorithmIds}
+      selectedAlgorithmIds={selectedAlgorithmIds}
+      onChangeSelectedAlgorithmIds={(value) => {
+        setSelectedAlgorithmIds(value);
+        setSelectedGene(null);
+        setSelectedEdgeKey(null);
+        setIsolatedGene(null);
+      }}
+      evidenceThreshold={evidenceThreshold}
+      onChangeEvidenceThreshold={setEvidenceThreshold}
+      confidenceThreshold={confidenceThreshold}
+      onChangeConfidenceThreshold={setConfidenceThreshold}
+      directionConfidenceThreshold={directionConfidenceThreshold}
+      onChangeDirectionConfidenceThreshold={setDirectionConfidenceThreshold}
+      signConfidenceThreshold={signConfidenceThreshold}
+      onChangeSignConfidenceThreshold={setSignConfidenceThreshold}
+      consensusThreshold={consensusThreshold}
+      maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
+      onChangeConsensusThreshold={(value) => {
+        setHasTouchedConsensusThreshold(true);
+        setConsensusThreshold(value);
+      }}
+      isConsensusView={activeAlgorithmIds.length >= 2}
+      isGuideOpen={isResultsGuideOpen}
+      onOpenGuide={() => setIsResultsGuideOpen(true)}
+    />
+  );
+
 
   if (error) {
     return (
@@ -1400,35 +1432,7 @@ useEffect(() => {
 
           <ResultsHubSection
             controls={
-              <ResultsControlsSection
-                  compact
-                  projectId={projectId}
-                  completedAlgorithmIds={completedAlgorithmIds}
-                  selectedAlgorithmIds={selectedAlgorithmIds}
-                  onChangeSelectedAlgorithmIds={(value) => {
-                    setSelectedAlgorithmIds(value);
-                    setSelectedGene(null);
-                    setSelectedEdgeKey(null);
-                    setIsolatedGene(null);
-                  }}
-                  evidenceThreshold={evidenceThreshold}
-                  onChangeEvidenceThreshold={setEvidenceThreshold}
-                  confidenceThreshold={confidenceThreshold}
-                  onChangeConfidenceThreshold={setConfidenceThreshold}
-                  directionConfidenceThreshold={directionConfidenceThreshold}
-                  onChangeDirectionConfidenceThreshold={setDirectionConfidenceThreshold}
-                  signConfidenceThreshold={signConfidenceThreshold}
-                  onChangeSignConfidenceThreshold={setSignConfidenceThreshold}
-                  consensusThreshold={consensusThreshold}
-                  maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
-                  onChangeConsensusThreshold={(value) => {
-                    setHasTouchedConsensusThreshold(true);
-                    setConsensusThreshold(value);
-                  }}
-                  isConsensusView={activeAlgorithmIds.length >= 2}
-                  isGuideOpen={isResultsGuideOpen}
-                  onOpenGuide={() => setIsResultsGuideOpen(true)}
-                />
+              renderResultsControls()
             }
           >
                 {activeAlgorithmIds.length >= 2 && (
