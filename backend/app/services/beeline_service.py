@@ -879,7 +879,6 @@ def aggregate_confidence_edges(
                 "observed_runs": int(current["observed_runs"]),
                 "run_count": run_count,
                 "best_rank": current["best_rank"],
-                "run_ranks": current["run_ranks"],
             }
         )
 

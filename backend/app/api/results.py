@@ -22,6 +22,62 @@ from ..services.demo_service import (
 
 router = APIRouter()
 
+CLIENT_RESULT_EDGE_FIELDS = {
+    "rank",
+    "source",
+    "target",
+    "score",
+    "confidence",
+    "stability",
+    "mean_percentile",
+    "meanPercentile",
+    "mean_raw_score",
+    "selected_runs",
+    "observed_runs",
+    "run_count",
+    "normalized_score",
+    "weight",
+    "edge_weight",
+    "algorithm_id",
+}
+
+
+def compact_result_for_client(result: dict) -> dict:
+    """Return only fields needed by the project-detail UI.
+
+    Older saved result manifests may keep detailed per-run debugging fields
+    such as run_ranks and file paths. Those are useful on disk, but expensive
+    to send to the browser and are not used by the visualization/table views.
+    """
+    edges = (
+        result.get("top_edges")
+        or result.get("edges")
+        or result.get("ranked_edges")
+        or []
+    )
+
+    compact_edges = [
+        {
+            key: value
+            for key, value in edge.items()
+            if key in CLIENT_RESULT_EDGE_FIELDS
+        }
+        for edge in edges
+        if isinstance(edge, dict)
+    ]
+
+    compact = {
+        "algorithm_id": result.get("algorithm_id"),
+        "generated_at": result.get("generated_at"),
+        "elapsed_seconds": result.get("elapsed_seconds"),
+        "network_summary": result.get("network_summary"),
+        "edge_count": result.get("edge_count", len(compact_edges)),
+        "top_edges": compact_edges,
+    }
+
+    return {key: value for key, value in compact.items() if value is not None}
+
+
 def attach_gene_coordinates_to_result(result: dict) -> dict:
     """Attach chromosome coordinate metadata for genes in a result payload.
 
@@ -72,7 +128,7 @@ def read_demo_algorithm_result_from_json(algorithm_id: str) -> dict:
     except FileNotFoundError:
         result.pop("ranked_edges_path", None)
 
-    return attach_gene_coordinates_to_result(result)
+    return attach_gene_coordinates_to_result(compact_result_for_client(result))
 
 
 def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
@@ -145,15 +201,18 @@ def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
             )
 
     return attach_gene_coordinates_to_result(
-        {
-            "algorithm_id": algorithm_id.upper(),
-            "edge_count": len(edges),
-            "edges": edges,
-            "top_edges": edges,
-            "ranked_edges": edges,
-            "source_file": str(ranked_edges_path),
-        }
+        compact_result_for_client(
+            {
+                "algorithm_id": algorithm_id.upper(),
+                "edge_count": len(edges),
+                "edges": edges,
+                "top_edges": edges,
+                "ranked_edges": edges,
+                "source_file": str(ranked_edges_path),
+            }
+        )
     )
+
 
 @router.get("/api/projects/{project_id}/results")
 async def get_project_results(project_id: str, request: Request, response: Response):
@@ -265,7 +324,7 @@ async def get_algorithm_result(
 
     try:
         result = attach_gene_coordinates_to_result(
-            read_algorithm_result(project_dir, algorithm_id)
+            compact_result_for_client(read_algorithm_result(project_dir, algorithm_id))
         )
         return {
             "ok": True,
