@@ -33,6 +33,7 @@ import { boolText, clamp } from "./_lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const CONFIDENCE_STABILITY_TOP_K = 10;
+const MODAL_ANIMATION_MS = 480;
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -156,14 +157,24 @@ export default function ProjectDetailPage() {
     algorithmName: string;
   } | null>(null);
   const [isAlgorithmActionSubmitting, setIsAlgorithmActionSubmitting] = useState(false);
+  const [isAlgorithmActionModalClosing, setIsAlgorithmActionModalClosing] = useState(false);
 
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
   const networkGraphRef = useRef<Core | null>(null);
   const hasAppliedDemoDefaultsRef = useRef(false);
+  const algorithmActionCloseTimeoutRef = useRef<number | null>(null);
 
   const demoProjectFlag = project as (ProjectManifest & { is_demo?: boolean; read_only?: boolean }) | null;
   const demoMetadataFlag = metadata as (MetadataManifest & { is_demo?: boolean; read_only?: boolean }) | null;
   const isDemoProject = isDemoRoute || demoProjectFlag?.is_demo === true || demoMetadataFlag?.is_demo === true;
+
+  useEffect(() => {
+    return () => {
+      if (algorithmActionCloseTimeoutRef.current) {
+        window.clearTimeout(algorithmActionCloseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const expressionMatrixLabel =
     metadata?.gene_count && metadata?.cell_count
@@ -999,7 +1010,12 @@ export default function ProjectDetailPage() {
     task: { algorithmId: string; algorithmName: string }
   ) => {
     if (!latestJob || !projectId || isDemoProject) return;
+    if (algorithmActionCloseTimeoutRef.current) {
+      window.clearTimeout(algorithmActionCloseTimeoutRef.current);
+      algorithmActionCloseTimeoutRef.current = null;
+    }
 
+    setIsAlgorithmActionModalClosing(false);
     setPendingAlgorithmAction({
       type,
       algorithmId: task.algorithmId,
@@ -1007,9 +1023,18 @@ export default function ProjectDetailPage() {
     });
   };
 
+  const finishAlgorithmActionModal = () => {
+    setIsAlgorithmActionModalClosing(true);
+    algorithmActionCloseTimeoutRef.current = window.setTimeout(() => {
+      setPendingAlgorithmAction(null);
+      setIsAlgorithmActionModalClosing(false);
+      algorithmActionCloseTimeoutRef.current = null;
+    }, MODAL_ANIMATION_MS);
+  };
+
   const closeAlgorithmActionModal = () => {
-    if (isAlgorithmActionSubmitting) return;
-    setPendingAlgorithmAction(null);
+    if (isAlgorithmActionSubmitting || isAlgorithmActionModalClosing) return;
+    finishAlgorithmActionModal();
   };
 
   const confirmAlgorithmAction = async () => {
@@ -1031,7 +1056,7 @@ export default function ProjectDetailPage() {
         await refreshProjectData();
       }
 
-      setPendingAlgorithmAction(null);
+      finishAlgorithmActionModal();
     } finally {
       setIsAlgorithmActionSubmitting(false);
     }
@@ -1449,11 +1474,15 @@ useEffect(() => {
 
           {pendingAlgorithmAction && (
             <div
-              className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm"
+              className={`fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm ${
+                isAlgorithmActionModalClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
+              }`}
               onClick={closeAlgorithmActionModal}
             >
               <div
-                className="w-full max-w-md rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20"
+                className={`w-full max-w-md rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
+                  isAlgorithmActionModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
+                }`}
                 onClick={(event) => event.stopPropagation()}
               >
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
@@ -1474,7 +1503,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={closeAlgorithmActionModal}
-                    disabled={isAlgorithmActionSubmitting}
+                    disabled={isAlgorithmActionSubmitting || isAlgorithmActionModalClosing}
                     className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancel
@@ -1482,7 +1511,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={confirmAlgorithmAction}
-                    disabled={isAlgorithmActionSubmitting}
+                    disabled={isAlgorithmActionSubmitting || isAlgorithmActionModalClosing}
                     className={`rounded-full px-4 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       pendingAlgorithmAction.type === "stop"
                         ? "bg-rose-600 hover:bg-rose-700"

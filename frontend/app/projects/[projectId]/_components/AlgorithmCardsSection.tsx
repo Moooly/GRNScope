@@ -176,8 +176,11 @@ function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void
         aria-label="Stop algorithm"
         title="Stop algorithm"
         onClick={onClick}
-        className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[#1b75a6]/20 border-t-[#1b75a6]"
-      />
+        className="group/stop relative inline-flex h-6 w-6 shrink-0 items-center justify-center text-[#1b75a6] transition hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 focus-visible:ring-offset-2"
+      >
+        <span className="absolute h-5 w-5 animate-spin rounded-full border-2 border-current/20 border-t-current" />
+        <span className="h-1.5 w-1.5 rounded-[2px] bg-current transition group-hover/stop:scale-110" />
+      </button>
     );
   }
 
@@ -185,7 +188,7 @@ function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void
     <span
       aria-label={status}
       title={status}
-      className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[#1b75a6]/20 border-t-[#1b75a6]"
+      className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-slate-200 border-t-slate-400"
     />
   );
 }
