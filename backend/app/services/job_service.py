@@ -25,6 +25,22 @@ TASK_CONTROLS_LOCK = threading.Lock()
 TASK_CONTROLS: dict[tuple[str, str, str], TaskControl] = {}
 
 
+def read_positive_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
+MAX_CONCURRENT_ALGORITHM_TASKS = read_positive_int_env(
+    "GRNSCOPE_MAX_CONCURRENT_ALGORITHMS",
+    2,
+)
+ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
+    MAX_CONCURRENT_ALGORITHM_TASKS
+)
+
+
 def task_key(project_id: str, job_id: str, algorithm_id: str) -> tuple[str, str, str]:
     return (project_id, job_id, algorithm_id)
 
@@ -378,6 +394,22 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
         recompute_overall_status(project_dir, job_id)
 
 
+def run_algorithm_task_with_slot(project_id: str, job_id: str, algorithm_id: str) -> None:
+    control = get_or_create_task_control(project_id, job_id, algorithm_id)
+
+    while not control.stop_event.is_set():
+        if ALGORITHM_TASK_SEMAPHORE.acquire(timeout=0.5):
+            break
+    else:
+        run_single_algorithm_task(project_id, job_id, algorithm_id)
+        return
+
+    try:
+        run_single_algorithm_task(project_id, job_id, algorithm_id)
+    finally:
+        ALGORITHM_TASK_SEMAPHORE.release()
+
+
 def launch_independent_algorithm_tasks(
     project_id: str,
     job_id: str,
@@ -393,7 +425,7 @@ def launch_independent_algorithm_tasks(
     for algorithm_id in selected_algorithms_list:
         get_or_create_task_control(project_id, job_id, algorithm_id)
         worker = threading.Thread(
-            target=run_single_algorithm_task,
+            target=run_algorithm_task_with_slot,
             args=(project_id, job_id, algorithm_id),
             daemon=True,
         )

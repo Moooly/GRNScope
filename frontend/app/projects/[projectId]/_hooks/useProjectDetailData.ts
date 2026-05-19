@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlgorithmCatalogItem,
   AlgorithmStoredResult,
@@ -75,10 +75,13 @@ type CompletedResultRow = {
   status?: string;
 };
 
-async function loadCompletedAlgorithmResults(projectId: string) {
+async function loadCompletedAlgorithmResults(
+  projectId: string,
+  currentResults: Record<string, AlgorithmStoredResult> = {}
+) {
   const resultsResponse = await apiFetch(`${API_BASE}/projects/${projectId}/results`);
 
-  if (!resultsResponse.ok) return {};
+  if (!resultsResponse.ok) return currentResults;
 
   const resultsData = await resultsResponse.json();
   const resultRows = Array.isArray(resultsData.results)
@@ -88,9 +91,18 @@ async function loadCompletedAlgorithmResults(projectId: string) {
     (item): item is { algorithm_id: string; status: string } =>
       Boolean(item.algorithm_id) && item.status === "Completed"
   );
+  const completedIds = new Set(completedRows.map((item) => item.algorithm_id));
+  const next: Record<string, AlgorithmStoredResult> = {};
 
+  Object.entries(currentResults).forEach(([algorithmId, result]) => {
+    if (completedIds.has(algorithmId)) {
+      next[algorithmId] = result;
+    }
+  });
+
+  const missingRows = completedRows.filter((item) => !next[item.algorithm_id]);
   const payloads = await Promise.all(
-    completedRows.map(async (item) => {
+    missingRows.map(async (item) => {
       try {
         const response = await apiFetch(
           `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
@@ -106,10 +118,8 @@ async function loadCompletedAlgorithmResults(projectId: string) {
     })
   );
 
-  const next: Record<string, AlgorithmStoredResult> = {};
-
   payloads.forEach((result, index) => {
-    const fallbackAlgorithmId = completedRows[index]?.algorithm_id;
+    const fallbackAlgorithmId = missingRows[index]?.algorithm_id;
     const algorithmId = result?.algorithm_id || fallbackAlgorithmId;
 
     if (result && algorithmId) {
@@ -135,6 +145,11 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
   const [algorithmCatalog, setAlgorithmCatalog] = useState<AlgorithmCatalogItem[]>([]);
   const [error, setError] = useState("");
+  const algorithmResultsRef = useRef<Record<string, AlgorithmStoredResult>>({});
+
+  useEffect(() => {
+    algorithmResultsRef.current = algorithmResults;
+  }, [algorithmResults]);
 
   const hasActiveTasks = useMemo(() => {
     return (latestJob?.tasks ?? []).some(
@@ -157,7 +172,10 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
         setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
       }
 
-      const nextResults = await loadCompletedAlgorithmResults(projectId);
+      const nextResults = await loadCompletedAlgorithmResults(
+        projectId,
+        algorithmResultsRef.current
+      );
       setAlgorithmResults(nextResults);
     } catch {
       return;
@@ -279,7 +297,10 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           }
         }
 
-        const nextResults = await loadCompletedAlgorithmResults(projectId);
+        const nextResults = await loadCompletedAlgorithmResults(
+          projectId,
+          algorithmResultsRef.current
+        );
         if (!cancelled) setAlgorithmResults(nextResults);
       } catch {
         return;
