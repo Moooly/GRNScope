@@ -11,21 +11,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeHeaderItem, setActiveHeaderItem] = useState<string | null>(null);
-
-  useEffect(() => {
-    const syncLoginState = () => {
-      setIsLoggedIn(localStorage.getItem("grnscope-demo-login") === "true");
-    };
-
-    syncLoginState();
-    window.addEventListener("storage", syncLoginState);
-
-    return () => {
-      window.removeEventListener("storage", syncLoginState);
-    };
-  }, []);
 
   useEffect(() => {
     if (pathname === "/") {
@@ -47,8 +33,6 @@ export default function RootLayout({
       setActiveHeaderItem("workspace");
     }
   }, [pathname]);
-
-  const workspaceHref = isLoggedIn ? "/projects" : "/login";
 
   const navItemClass = (isActive: boolean) =>
     [
@@ -214,7 +198,7 @@ export default function RootLayout({
               </Link>
 
               <Link
-                href={workspaceHref}
+                href="/projects"
                 onClick={() => setActiveHeaderItem("workspace")}
                 className={navItemClass(isActive("workspace"))}
               >

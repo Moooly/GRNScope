@@ -107,12 +107,12 @@ export default function RegisterPage() {
               </form>
 
               <p className="mt-6 text-sm text-slate-400">
-                Already have an account?{" "}
+                Ready to view your projects?{" "}
                 <Link
-                  href="/login"
+                  href="/projects"
                   className="font-medium text-teal-300 transition hover:text-teal-200"
                 >
-                  Log in
+                  Open workspace
                 </Link>
               </p>
             </div>
