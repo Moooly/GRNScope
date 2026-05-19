@@ -727,7 +727,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "signed": False,
         "requires_pseudotime": True,
         "supports_expression_matrix": True,
-        "active": True,
+        "active": False,
         "recommended": False,
         "estimated_runtime": "Medium",
         "strengths": [
@@ -768,7 +768,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "signed": True,
         "requires_pseudotime": False,
         "supports_expression_matrix": True,
-        "active": True,
+        "active": False,
         "recommended": False,
         "estimated_runtime": "Medium",
         "strengths": [

@@ -1,7 +1,7 @@
 {
   "project_id": "demo",
   "name": "Demo Project",
-  "description": "This demo uses all GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary.",
+  "description": "This demo uses selected GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary.",
   "is_demo": true,
   "read_only": true,
   "dataset": {
@@ -43,7 +43,6 @@
     "PPCOR",
     "SCODE",
     "SCRIBE",
-    "SCSGL",
     "SINCERITIES",
     "SINGE"
   ],
