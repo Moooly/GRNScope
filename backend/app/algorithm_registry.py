@@ -822,10 +822,48 @@ RECOMMENDED_ALGORITHM_IDS: list[str] = [
     "GRNBOOST2",
 ]
 
+ALGORITHM_RUN_DIFFICULTY_ORDER: list[str] = [
+    "PEARSON",
+    "PPCOR",
+    "LEAP",
+    "SCODE",
+    "SINCERITIES",
+    "GRNBOOST2",
+    "JUMP3",
+    "SCSGL",
+    "GENIE3",
+    "GRISLI",
+    "GRNVBEM",
+    "PIDC",
+    "SCRIBE",
+    "SINGE",
+]
+
+ALGORITHM_RUN_DIFFICULTY_RANK: dict[str, int] = {
+    algorithm_id: index
+    for index, algorithm_id in enumerate(ALGORITHM_RUN_DIFFICULTY_ORDER)
+}
+
 
 ALGORITHM_BY_ID: dict[str, AlgorithmInfo] = {
     algorithm["id"]: algorithm for algorithm in ALGORITHMS
 }
+
+
+def sort_algorithm_ids_by_difficulty(algorithm_ids: list[str]) -> list[str]:
+    return [
+        algorithm_id
+        for _, algorithm_id in sorted(
+            enumerate(algorithm_ids),
+            key=lambda item: (
+                ALGORITHM_RUN_DIFFICULTY_RANK.get(
+                    item[1],
+                    len(ALGORITHM_RUN_DIFFICULTY_RANK),
+                ),
+                item[0],
+            ),
+        )
+    ]
 
 
 def get_algorithms(

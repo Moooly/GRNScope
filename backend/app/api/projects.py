@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Response
 
+from ..algorithm_registry import sort_algorithm_ids_by_difficulty
 from ..config import PROJECTS_ROOT
 from .client_identity import (
     get_or_create_client_id,
@@ -80,7 +81,9 @@ async def create_project_from_temp(
         move_result = move_temp_upload_to_project(temp_upload_id, project_id)
 
         project_dir = Path(move_result["project_dir"])
-        selected_algorithms_list = json.loads(selected_algorithms)
+        selected_algorithms_list = sort_algorithm_ids_by_difficulty(
+            json.loads(selected_algorithms)
+        )
 
         upload_metadata_path = project_dir / "upload_metadata.json"
         upload_metadata = {}

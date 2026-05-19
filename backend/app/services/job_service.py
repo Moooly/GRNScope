@@ -9,6 +9,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..algorithm_registry import sort_algorithm_ids_by_difficulty
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from ..repositories.job_repository import read_jobs_manifest, write_jobs_manifest
 from ..services.beeline_service import AlgorithmStoppedError, run_beeline_with_progress
@@ -422,7 +423,7 @@ def launch_independent_algorithm_tasks(
 
     update_job_state(project_dir, job_id, overall_status="Running")
 
-    for algorithm_id in selected_algorithms_list:
+    for algorithm_id in sort_algorithm_ids_by_difficulty(selected_algorithms_list):
         get_or_create_task_control(project_id, job_id, algorithm_id)
         worker = threading.Thread(
             target=run_algorithm_task_with_slot,
