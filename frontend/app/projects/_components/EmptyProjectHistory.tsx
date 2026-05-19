@@ -1,15 +1,11 @@
 export default function EmptyProjectHistory() {
   return (
-    <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-10 text-center text-slate-900 shadow-sm">
-      <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-        No project history
-      </p>
-      <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
-        You have not created any projects yet.
+    <div className="mt-8 rounded-xl border border-slate-200 bg-white px-6 py-7 text-center text-slate-900 shadow-sm">
+      <h3 className="text-lg font-bold tracking-tight text-slate-950">
+        No projects yet
       </h3>
-      <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-        Create your first project to upload a dataset, configure preprocessing,
-        run GRN inference algorithms, and explore network results.
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+        Create a project to start analyzing a dataset.
       </p>
     </div>
   );

@@ -1,5 +1,0 @@
-WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
-mkdir: cannot create directory ‘/usr/working_dir/0’: File exists
-WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
-mkdir: cannot create directory ‘/usr/working_dir/1’: File exists
-time="2026-05-18T09:36:53-07:00" level=error msg="error waiting for container: unexpected EOF"

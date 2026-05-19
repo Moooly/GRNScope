@@ -1,4 +1,0 @@
-WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
-docker: Error response from daemon: failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: error mounting "/host_mnt/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/LEAP/outputs/19374d63a4f8/run-5/LEAP/working_dir" to rootfs at "/usr/working_dir": mount src=/host_mnt/Users/molyloo/Documents/TRU/GRNScope/backend/projects/19374d63a4f8/_beeline_runtime/LEAP/outputs/19374d63a4f8/run-5/LEAP/working_dir, dst=/usr/working_dir, dstFd=/proc/thread-self/fd/11, flags=MS_BIND|MS_REC: no such file or directory
-
-Run 'docker run --help' for more information

@@ -74,14 +74,9 @@ export default function AlgorithmCardsSection({
                       : undefined
                   }
                 />
-                <p className="min-w-0 flex-1 whitespace-nowrap text-sm font-semibold text-slate-950">
+                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-950" title={name}>
                   {name}
                 </p>
-                {isPending ? (
-                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    {task.status}
-                  </span>
-                ) : null}
               </div>
             </div>
           );
@@ -131,9 +126,7 @@ function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void
     <span
       aria-label={status}
       title={status}
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white"
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-    </span>
+      className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[#1b75a6]/20 border-t-[#1b75a6]"
+    />
   );
 }

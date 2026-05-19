@@ -1,0 +1,30 @@
+[
+  {
+    "job_id": "609f577c0d68",
+    "project_id": "e72e82a084e2",
+    "overall_status": "Failed",
+    "ensemble_enabled": "true",
+    "tasks": [
+      {
+        "algorithm_id": "GENIE3",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/e72e82a084e2/_beeline_runtime/GENIE3/outputs/e72e82a084e2/run-1/GENIE3/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "status": "Failed",
+        "elapsed_seconds": 1,
+        "error_message": "RuntimeError: Docker command failed (exit 1). See /Users/molyloo/Documents/TRU/GRNScope/backend/projects/e72e82a084e2/_beeline_runtime/PPCOR/outputs/e72e82a084e2/run-1/PPCOR/output.txt for details.",
+        "result_path": null,
+        "completed_at": null,
+        "progress_percent": 0,
+        "progress_label": "Failed"
+      }
+    ]
+  }
+]

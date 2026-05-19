@@ -1,0 +1,20 @@
+[
+  {
+    "job_id": "63b4ed4ae9c1",
+    "project_id": "f60e6fb14877",
+    "overall_status": "Completed",
+    "ensemble_enabled": "false",
+    "tasks": [
+      {
+        "algorithm_id": "PEARSON",
+        "status": "Completed",
+        "elapsed_seconds": 3,
+        "error_message": null,
+        "result_path": "/Users/molyloo/Documents/TRU/GRNScope/backend/projects/f60e6fb14877/results/PEARSON.json",
+        "completed_at": "2026-05-18 17:20:22",
+        "progress_percent": 100,
+        "progress_label": "Completed"
+      }
+    ]
+  }
+]
