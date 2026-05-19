@@ -1,3 +1,0 @@
-WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
-Loading required package: MASS
-time="2026-05-18T17:36:37-07:00" level=error msg="error waiting for container: unexpected EOF"
