@@ -69,12 +69,15 @@ export type MetadataManifest = {
 };
 
 export type GeneCoordinate = {
+  gene_name?: string | null;
   chromosome: string;
   start: number;
   end: number;
   strand?: string | null;
   gene_type?: string | null;
   gene_id?: string | null;
+  matched_gene_name?: string | null;
+  coordinate_match?: string | null;
 };
 
 export type AlgorithmStoredResult = {
