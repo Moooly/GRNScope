@@ -1,3 +1,5 @@
+import type { DragEvent } from "react";
+
 interface UploadStepProps {
   pseudotimeFileName: string;
   setPseudotimeFile: (file: File | null) => void;
@@ -9,6 +11,18 @@ export default function UploadStep({
   setPseudotimeFile,
   setPseudotimeFileName,
 }: UploadStepProps) {
+  const selectPseudotimeFile = (file: File | null) => {
+    setPseudotimeFile(file);
+    setPseudotimeFileName(file?.name ?? "");
+  };
+
+  const handlePseudotimeDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer.files?.[0] ?? null;
+    selectPseudotimeFile(file);
+  };
+
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -27,15 +41,25 @@ export default function UploadStep({
       </div>
 
       <div className="mt-5">
-        <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]">
+        <label
+          className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+          onDragEnter={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onDrop={handlePseudotimeDrop}
+        >
           <input
             type="file"
             accept=".csv"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
-              setPseudotimeFile(file);
-              setPseudotimeFileName(file?.name ?? "");
+              selectPseudotimeFile(file);
             }}
           />
           <span className="text-base font-bold text-slate-950">

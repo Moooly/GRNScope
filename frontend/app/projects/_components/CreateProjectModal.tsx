@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmDetailModal from "./AlgorithmDetailModal";
 import AlgorithmStep from "./AlgorithmStep";
@@ -113,6 +114,18 @@ export default function CreateProjectModal({
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
   const datasetReady = hasExpressionFile && tempUploadId.length > 0 && !isUploadingTempDataset;
+
+  const selectExpressionFile = (file: File | null) => {
+    setExpressionFile(file);
+    setExpressionFileName(file?.name ?? "");
+  };
+
+  const handleExpressionDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer.files?.[0] ?? null;
+    selectExpressionFile(file);
+  };
 
   useEffect(() => {
     if (isCreateVisible) {
@@ -292,15 +305,25 @@ export default function CreateProjectModal({
               </div>
 
               <div className="mt-5">
-                <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]">
+                <label
+                  className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDrop={handleExpressionDrop}
+                >
                   <input
                     type="file"
                     accept=".csv"
                     className="hidden"
                     onChange={(event) => {
                       const file = event.target.files?.[0] ?? null;
-                      setExpressionFile(file);
-                      setExpressionFileName(file?.name ?? "");
+                      selectExpressionFile(file);
                     }}
                   />
                   <span className="text-base font-bold text-slate-950">

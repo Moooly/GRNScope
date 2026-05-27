@@ -1649,18 +1649,6 @@ useEffect(() => {
                   </div>
                 )}
 
-                {!isPreparingFinishedResults && activeAlgorithmIds.length >= 2 && (
-                  <div className="w-full">
-                    <ResultsSummarySection
-                      perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
-                      maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
-                      completedAlgorithmIds={activeAlgorithmIds}
-                      overlapEntries={overlapEntries}
-                      maxOverlapCount={maxOverlapCount}
-                    />
-                  </div>
-                )}
-
                 {isPreparingFinishedResults ? null : resultsAvailabilityNotice ? (
                   <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50/80 p-8 text-center">
                     <p className="text-lg font-bold text-slate-950">{resultsAvailabilityNotice.title}</p>
@@ -1714,6 +1702,18 @@ useEffect(() => {
                       sortedTableRows={sortedTableRows}
                       tablePage={tablePage}
                     />
+
+                    {activeAlgorithmIds.length >= 2 && (
+                      <div className="w-full">
+                        <ResultsSummarySection
+                          perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
+                          maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
+                          completedAlgorithmIds={activeAlgorithmIds}
+                          overlapEntries={overlapEntries}
+                          maxOverlapCount={maxOverlapCount}
+                        />
+                      </div>
+                    )}
                   </>
                 )}
           </ResultsHubSection>
