@@ -682,7 +682,7 @@ export default function ProjectDetailPage() {
     completedAlgorithmIds,
   ]);
 
-  const consensusRows = useMemo(() => {
+  const consensusCandidateRows = useMemo(() => {
     if (activeAlgorithmIds.length < 2) return [];
 
     const sumAlpha = Math.max(activeAlgorithmIds.length, 1);
@@ -897,6 +897,18 @@ export default function ProjectDetailPage() {
           signCoverage,
         } satisfies AggregatedEdge;
       })
+      .filter((edge) => edge.score > 0 || edge.confidence > 0)
+      .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
+      .map((edge, index) => ({ ...edge, rank: index + 1 }));
+  }, [
+    activeAlgorithmIds,
+    algorithmMetaMap,
+    candidateRegulatorIds,
+    standardizedAlgorithmEdgeRows,
+  ]);
+
+  const consensusRows = useMemo(() => {
+    return consensusCandidateRows
       .filter(
         (edge) =>
           edge.confidence >= confidenceThreshold &&
@@ -909,18 +921,14 @@ export default function ProjectDetailPage() {
             (edge.signConfidence !== null &&
               edge.signConfidence >= signConfidenceThreshold))
       )
-      .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
       .map((edge, index) => ({ ...edge, rank: index + 1 }));
   }, [
-    activeAlgorithmIds,
-    algorithmMetaMap,
-    candidateRegulatorIds,
+    consensusCandidateRows,
     evidenceThreshold,
     confidenceThreshold,
     consensusThreshold,
     directionConfidenceThreshold,
     signConfidenceThreshold,
-    standardizedAlgorithmEdgeRows,
   ]);
 
   const activeEdges = useMemo(() => {
@@ -930,6 +938,61 @@ export default function ProjectDetailPage() {
     }
     return [];
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
+
+  useEffect(() => {
+    if (activeAlgorithmIds.length === 0 || activeEdges.length > 0) return;
+
+    const snapThreshold = (value: number | null | undefined) => {
+      if (value === null || value === undefined || !Number.isFinite(value)) return 0;
+      return clamp(Math.floor(clamp(value, 0, 1) * 20) / 20, 0, 1);
+    };
+
+    const candidateEdges =
+      activeAlgorithmIds.length >= 2
+        ? consensusCandidateRows.filter((edge) => edge.count > 0)
+        : standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
+    const fallbackEdge = candidateEdges.find(
+      (edge) => Number.isFinite(edge.score) && Number.isFinite(edge.confidence)
+    );
+
+    if (!fallbackEdge) return;
+
+    setEvidenceThreshold((current) =>
+      current <= fallbackEdge.score ? current : snapThreshold(fallbackEdge.score)
+    );
+    setConfidenceThreshold((current) =>
+      current <= fallbackEdge.confidence
+        ? current
+        : snapThreshold(fallbackEdge.confidence)
+    );
+    setDirectionConfidenceThreshold((current) => {
+      const edgeThreshold =
+        fallbackEdge.directionConfidence === null
+          ? 0
+          : snapThreshold(fallbackEdge.directionConfidence);
+      return current <= edgeThreshold ? current : edgeThreshold;
+    });
+    setSignConfidenceThreshold((current) => {
+      const edgeThreshold =
+        fallbackEdge.signConfidence === null
+          ? 0
+          : snapThreshold(fallbackEdge.signConfidence);
+      return current <= edgeThreshold ? current : edgeThreshold;
+    });
+
+    if (activeAlgorithmIds.length >= 2) {
+      const supportingMethodCount = Math.max(1, fallbackEdge.count);
+      setConsensusThreshold((current) =>
+        current <= supportingMethodCount ? current : supportingMethodCount
+      );
+      setHasTouchedConsensusThreshold(true);
+    }
+  }, [
+    activeAlgorithmIds,
+    activeEdges.length,
+    consensusCandidateRows,
+    standardizedAlgorithmEdgeRows,
+  ]);
 
   const geneCoordinateMap = useMemo(() => {
     const coordinates = new Map<string, GeneCoordinateInfo>();
