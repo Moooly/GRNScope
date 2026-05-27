@@ -33,6 +33,7 @@ import { boolText, clamp } from "./_lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const CONFIDENCE_STABILITY_TOP_K = 10;
+const DEFAULT_NETWORK_EDGE_TARGET = 3;
 const MODAL_ANIMATION_MS = 480;
 
 type GeneCoordinateInfo = {
@@ -208,6 +209,7 @@ export default function ProjectDetailPage() {
   const [signConfidenceThreshold, setSignConfidenceThreshold] = useState(0);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
+  const [hasTouchedResultFilters, setHasTouchedResultFilters] = useState(false);
   const [geneSearch, setGeneSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
@@ -931,7 +933,7 @@ export default function ProjectDetailPage() {
     signConfidenceThreshold,
   ]);
 
-  const activeEdges = useMemo(() => {
+  const uncappedActiveEdges = useMemo(() => {
     if (activeAlgorithmIds.length >= 2) return consensusRows;
     if (activeAlgorithmIds.length === 1) {
       return displayAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
@@ -939,59 +941,82 @@ export default function ProjectDetailPage() {
     return [];
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
+  const activeEdges = useMemo(() => {
+    if (hasTouchedResultFilters) return uncappedActiveEdges;
+    return uncappedActiveEdges.slice(0, DEFAULT_NETWORK_EDGE_TARGET);
+  }, [hasTouchedResultFilters, uncappedActiveEdges]);
+
   useEffect(() => {
-    if (activeAlgorithmIds.length === 0 || activeEdges.length > 0) return;
+    if (activeAlgorithmIds.length === 0 || hasTouchedResultFilters) return;
+
+    const shouldAutoTune =
+      uncappedActiveEdges.length === 0 ||
+      uncappedActiveEdges.length > DEFAULT_NETWORK_EDGE_TARGET;
+    if (!shouldAutoTune) return;
 
     const snapThreshold = (value: number | null | undefined) => {
       if (value === null || value === undefined || !Number.isFinite(value)) return 0;
       return clamp(Math.floor(clamp(value, 0, 1) * 20) / 20, 0, 1);
     };
 
+    const tuneThreshold = (current: number, target: number) => {
+      return uncappedActiveEdges.length === 0
+        ? Math.min(current, target)
+        : Math.max(current, target);
+    };
+
+    const tuneCount = (current: number, target: number) => {
+      return uncappedActiveEdges.length === 0
+        ? Math.min(current, target)
+        : Math.max(current, target);
+    };
+
     const candidateEdges =
       activeAlgorithmIds.length >= 2
         ? consensusCandidateRows.filter((edge) => edge.count > 0)
         : standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
-    const fallbackEdge = candidateEdges.find(
+    const finiteCandidateEdges = candidateEdges.filter(
       (edge) => Number.isFinite(edge.score) && Number.isFinite(edge.confidence)
     );
+    const targetIndex = Math.min(DEFAULT_NETWORK_EDGE_TARGET, finiteCandidateEdges.length) - 1;
+    const fallbackEdge = finiteCandidateEdges[Math.max(0, targetIndex)];
 
     if (!fallbackEdge) return;
 
     setEvidenceThreshold((current) =>
-      current <= fallbackEdge.score ? current : snapThreshold(fallbackEdge.score)
+      tuneThreshold(current, snapThreshold(fallbackEdge.score))
     );
     setConfidenceThreshold((current) =>
-      current <= fallbackEdge.confidence
-        ? current
-        : snapThreshold(fallbackEdge.confidence)
+      tuneThreshold(current, snapThreshold(fallbackEdge.confidence))
     );
     setDirectionConfidenceThreshold((current) => {
       const edgeThreshold =
         fallbackEdge.directionConfidence === null
           ? 0
           : snapThreshold(fallbackEdge.directionConfidence);
-      return current <= edgeThreshold ? current : edgeThreshold;
+      return tuneThreshold(current, edgeThreshold);
     });
     setSignConfidenceThreshold((current) => {
       const edgeThreshold =
         fallbackEdge.signConfidence === null
           ? 0
           : snapThreshold(fallbackEdge.signConfidence);
-      return current <= edgeThreshold ? current : edgeThreshold;
+      return tuneThreshold(current, edgeThreshold);
     });
 
     if (activeAlgorithmIds.length >= 2) {
       const supportingMethodCount = Math.max(1, fallbackEdge.count);
       setConsensusThreshold((current) =>
-        current <= supportingMethodCount ? current : supportingMethodCount
+        tuneCount(current, supportingMethodCount)
       );
       setHasTouchedConsensusThreshold(true);
     }
   }, [
     activeAlgorithmIds,
-    activeEdges.length,
     consensusCandidateRows,
+    hasTouchedResultFilters,
     standardizedAlgorithmEdgeRows,
+    uncappedActiveEdges.length,
   ]);
 
   const geneCoordinateMap = useMemo(() => {
@@ -1626,16 +1651,29 @@ useEffect(() => {
         setIsolatedGene(null);
       }}
       evidenceThreshold={evidenceThreshold}
-      onChangeEvidenceThreshold={setEvidenceThreshold}
+      onChangeEvidenceThreshold={(value) => {
+        setHasTouchedResultFilters(true);
+        setEvidenceThreshold(value);
+      }}
       confidenceThreshold={confidenceThreshold}
-      onChangeConfidenceThreshold={setConfidenceThreshold}
+      onChangeConfidenceThreshold={(value) => {
+        setHasTouchedResultFilters(true);
+        setConfidenceThreshold(value);
+      }}
       directionConfidenceThreshold={directionConfidenceThreshold}
-      onChangeDirectionConfidenceThreshold={setDirectionConfidenceThreshold}
+      onChangeDirectionConfidenceThreshold={(value) => {
+        setHasTouchedResultFilters(true);
+        setDirectionConfidenceThreshold(value);
+      }}
       signConfidenceThreshold={signConfidenceThreshold}
-      onChangeSignConfidenceThreshold={setSignConfidenceThreshold}
+      onChangeSignConfidenceThreshold={(value) => {
+        setHasTouchedResultFilters(true);
+        setSignConfidenceThreshold(value);
+      }}
       consensusThreshold={consensusThreshold}
       maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
       onChangeConsensusThreshold={(value) => {
+        setHasTouchedResultFilters(true);
         setHasTouchedConsensusThreshold(true);
         setConsensusThreshold(value);
       }}
