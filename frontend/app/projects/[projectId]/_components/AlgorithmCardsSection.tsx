@@ -1,11 +1,16 @@
 "use client";
 
+import { runtimeLabel, runtimeTitle } from "../_lib/runtime";
+
 type AlgorithmTask = {
   algorithm_id: string;
   status: string;
+  elapsed_seconds?: number | null;
   error_message?: string | null;
   progress_percent?: number | null;
   progress_label?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
 };
 
 type AlgorithmMeta = {
@@ -29,7 +34,7 @@ type AlgorithmCardsSectionProps = {
  * Compact summary of every algorithm that participated in this project's job.
  * Lives at the bottom of the project page now — the live progress for any
  * still-running algorithms is surfaced separately by JobProgressBanner near
- * the top, so this section only needs to expose terminal state + actions.
+ * the top, so this section keeps final status, runtime, and actions compact.
  */
 export default function AlgorithmCardsSection({
   tasks,
@@ -52,11 +57,18 @@ export default function AlgorithmCardsSection({
           const isFailed = task.status === "Failed";
           const isStopped = task.status === "Stopped";
           const canStop = task.status === "Running" || task.status === "Queued";
+          const algorithmRuntimeLabel = runtimeLabel(task.status, task.elapsed_seconds);
+          const algorithmRuntimeTitle = runtimeTitle({
+            status: task.status,
+            elapsedSeconds: task.elapsed_seconds,
+            startedAt: task.started_at,
+            completedAt: task.completed_at,
+          });
 
           return (
             <div
               key={task.algorithm_id}
-              className={`group flex min-h-[3.5rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
+              className={`group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
                 isFailed
                   ? "border-rose-200 bg-rose-50/50"
                   : isCompleted
@@ -91,9 +103,17 @@ export default function AlgorithmCardsSection({
                       : undefined
                   }
                 />
-                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-950" title={name}>
-                  {name}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-950" title={name}>
+                    {name}
+                  </p>
+                  <p
+                    className="mt-0.5 truncate text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500"
+                    title={algorithmRuntimeTitle}
+                  >
+                    {algorithmRuntimeLabel}
+                  </p>
+                </div>
               </div>
             </div>
           );

@@ -111,7 +111,10 @@ async def create_project_from_temp(
                     "elapsed_seconds": 0,
                     "error_message": None,
                     "result_path": None,
+                    "started_at": None,
+                    "started_at_timestamp": None,
                     "completed_at": None,
+                    "completed_at_timestamp": None,
                     "progress_percent": 0,
                     "progress_label": "Queued",
                 }
@@ -287,7 +290,10 @@ async def list_projects(request: Request, response: Response):
                                 "elapsed_seconds": 0,
                                 "error_message": None,
                                 "result_path": None,
+                                "started_at": None,
+                                "started_at_timestamp": None,
                                 "completed_at": "demo",
+                                "completed_at_timestamp": None,
                                 "progress_percent": 100,
                                 "progress_label": "Completed",
                             }
@@ -384,7 +390,10 @@ async def get_project(project_id: str, request: Request, response: Response):
                         "elapsed_seconds": 0,
                         "error_message": None,
                         "result_path": None,
+                        "started_at": None,
+                        "started_at_timestamp": None,
                         "completed_at": "demo",
+                        "completed_at_timestamp": None,
                         "progress_percent": 100,
                         "progress_label": "Completed",
                     }

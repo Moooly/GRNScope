@@ -49,6 +49,10 @@ ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
 TERMINAL_JOB_STATUSES = {"Completed", "Failed", "Stopped"}
 
 
+def format_runtime_timestamp(timestamp: float | None = None) -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp or time.time()))
+
+
 def task_key(project_id: str, job_id: str, algorithm_id: str) -> tuple[str, str, str]:
     return (project_id, job_id, algorithm_id)
 
@@ -165,7 +169,10 @@ def update_job_state(
     result_path: str | None = None,
     progress_percent: int | None = None,
     progress_label: str | None = None,
+    started_at: str | None = None,
+    started_at_timestamp: float | None = None,
     completed_at: str | None = None,
+    completed_at_timestamp: float | None = None,
     process_pid: int | None = None,
 ) -> None:
     with JOB_FILE_LOCK:
@@ -195,8 +202,14 @@ def update_job_state(
                         task["progress_percent"] = progress_percent
                     if progress_label is not None:
                         task["progress_label"] = progress_label
+                    if started_at is not None:
+                        task["started_at"] = started_at
+                    if started_at_timestamp is not None:
+                        task["started_at_timestamp"] = started_at_timestamp
                     if completed_at is not None:
                         task["completed_at"] = completed_at
+                    if completed_at_timestamp is not None:
+                        task["completed_at_timestamp"] = completed_at_timestamp
                     if process_pid is not None:
                         if process_pid > 0:
                             task["process_pid"] = process_pid
@@ -234,7 +247,10 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["elapsed_seconds"] = 0
                 task["error_message"] = None
                 task["result_path"] = None
+                task["started_at"] = None
+                task["started_at_timestamp"] = None
                 task["completed_at"] = None
+                task["completed_at_timestamp"] = None
                 task["progress_percent"] = 0
                 task["progress_label"] = "Queued"
                 task.pop("process_pid", None)
@@ -390,8 +406,8 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
         return
 
     control = get_or_create_task_control(project_id, job_id, algorithm_id)
-    started_at = time.time()
     if control.stop_event.is_set():
+        completed_at_timestamp = time.time()
         update_job_state(
             project_dir,
             job_id,
@@ -400,13 +416,16 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             elapsed_seconds=0,
             progress_percent=0,
             progress_label="Stopped",
-            completed_at=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            completed_at=format_runtime_timestamp(completed_at_timestamp),
+            completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
         recompute_overall_status(project_dir, job_id)
         clear_task_control(project_id, job_id, algorithm_id)
         return
 
+    started_at_timestamp = time.time()
+    started_at = format_runtime_timestamp(started_at_timestamp)
     update_job_state(
         project_dir,
         job_id,
@@ -416,6 +435,8 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
         error_message=None,
         progress_percent=1,
         progress_label="Starting",
+        started_at=started_at,
+        started_at_timestamp=started_at_timestamp,
     )
     recompute_overall_status(project_dir, job_id)
 
@@ -432,17 +453,23 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
                 algorithm_id,
                 process,
             ),
+            elapsed_started_at=started_at_timestamp,
         )
 
-        elapsed = int(time.time() - started_at)
-        completed_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        completed_at_timestamp = time.time()
+        elapsed = int(completed_at_timestamp - started_at_timestamp)
+        completed_at = format_runtime_timestamp(completed_at_timestamp)
 
         actual_result = {
             "project_id": project_id,
             "job_id": job_id,
             "algorithm_id": algorithm_id,
             "status": "Completed",
+            "started_at": started_at,
+            "started_at_timestamp": started_at_timestamp,
             "generated_at": completed_at,
+            "completed_at": completed_at,
+            "completed_at_timestamp": completed_at_timestamp,
             "elapsed_seconds": elapsed,
             "network_summary": beeline_result["network_summary"],
             "top_edges": beeline_result["top_edges"],
@@ -469,11 +496,13 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             progress_percent=100,
             progress_label="Completed",
             completed_at=completed_at,
+            completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
     except AlgorithmStoppedError:
-        elapsed = int(time.time() - started_at)
-        completed_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        completed_at_timestamp = time.time()
+        elapsed = int(completed_at_timestamp - started_at_timestamp)
+        completed_at = format_runtime_timestamp(completed_at_timestamp)
         cleanup_algorithm_runtime(project_id, algorithm_id)
         update_job_state(
             project_dir,
@@ -485,10 +514,12 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             progress_percent=0,
             progress_label="Stopped",
             completed_at=completed_at,
+            completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
     except Exception as exc:
-        elapsed = int(time.time() - started_at)
+        completed_at_timestamp = time.time()
+        elapsed = int(completed_at_timestamp - started_at_timestamp)
         update_job_state(
             project_dir,
             job_id,
@@ -498,6 +529,8 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             progress_percent=0,
             progress_label="Failed",
             error_message=str(exc),
+            completed_at=format_runtime_timestamp(completed_at_timestamp),
+            completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
     finally:
@@ -572,6 +605,7 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
     terminate_process(control.process, fallback_pid=fallback_pid)
 
     if status == "Queued" or (control.process is None and fallback_pid is not None):
+        completed_at_timestamp = time.time()
         cleanup_algorithm_runtime(project_id, algorithm_id)
         update_job_state(
             project_dir,
@@ -580,7 +614,8 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
             task_status="Stopped",
             progress_percent=0,
             progress_label="Stopped",
-            completed_at=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            completed_at=format_runtime_timestamp(completed_at_timestamp),
+            completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
 

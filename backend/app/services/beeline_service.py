@@ -1061,6 +1061,7 @@ def run_beeline_with_progress(
     update_job_state_fn,
     stop_event=None,
     on_process_start=None,
+    elapsed_started_at: float | None = None,
 ) -> dict:
     project_dir = PROJECTS_ROOT / project_id
     project_manifest = read_project_manifest(project_dir)
@@ -1116,7 +1117,7 @@ def run_beeline_with_progress(
     python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
     command = [python_executable, "BLRunner.py", "-c", str(config_path)]
 
-    started_at = time.time()
+    started_at = elapsed_started_at or time.time()
     process = subprocess.Popen(
         command,
         cwd=beeline_root,

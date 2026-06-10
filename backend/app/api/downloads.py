@@ -529,6 +529,10 @@ async def download_analysis_metadata_file(
                 {
                     "algorithm_name": algorithm_name,
                     "docker_version": docker_version,
+                    "status": task.get("status"),
+                    "started_at": task.get("started_at"),
+                    "completed_at": task.get("completed_at"),
+                    "elapsed_seconds": task.get("elapsed_seconds"),
                 }
             )
 

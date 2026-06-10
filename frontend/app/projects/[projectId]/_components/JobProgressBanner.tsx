@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { formatAlgorithmRuntime, runtimeTitle } from "../_lib/runtime";
 
 type JobTask = {
   algorithm_id: string;
   status: string;
+  elapsed_seconds?: number | null;
   progress_percent?: number | null;
   progress_label?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
 };
 
 type AlgorithmMeta = {
@@ -27,6 +31,7 @@ type JobProgressBannerProps = {
  */
 export default function JobProgressBanner({
   tasks,
+  algorithmMetaMap,
   notificationEmail = null,
   onSaveNotificationEmail,
 }: JobProgressBannerProps) {
@@ -34,12 +39,6 @@ export default function JobProgressBanner({
   const [emailDraft, setEmailDraft] = useState(notificationEmail ?? "");
   const [emailMessage, setEmailMessage] = useState("");
   const [isSavingEmail, setIsSavingEmail] = useState(false);
-
-  useEffect(() => {
-    if (!isEditingEmail) {
-      setEmailDraft(notificationEmail ?? "");
-    }
-  }, [isEditingEmail, notificationEmail]);
 
   if (tasks.length === 0) return null;
 
@@ -55,6 +54,9 @@ export default function JobProgressBanner({
 
   const total = tasks.length;
   const finished = completed.length + failed.length + stopped.length;
+  const activeTasks = tasks.filter((task) =>
+    ["Queued", "Running", "Stopping"].includes(task.status)
+  );
 
   // Overall percent blends finished tasks with the partial progress of any
   // currently-running tasks. Each finished task = 1 unit, each running task
@@ -127,6 +129,7 @@ export default function JobProgressBanner({
                 type="button"
                 onClick={() => {
                   setEmailMessage("");
+                  setEmailDraft(notificationEmail ?? "");
                   setIsEditingEmail(true);
                 }}
                 className="inline-flex h-10 max-w-full items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] lg:ml-auto"
@@ -164,6 +167,7 @@ export default function JobProgressBanner({
                     type="button"
                     onClick={() => {
                       setIsEditingEmail(false);
+                      setEmailDraft(notificationEmail ?? "");
                       setEmailMessage("");
                     }}
                     className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm font-bold text-slate-500 transition hover:text-slate-900"
@@ -192,6 +196,43 @@ export default function JobProgressBanner({
           style={{ width: `${overall}%` }}
         />
       </div>
+
+      {activeTasks.length > 0 && (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {activeTasks.map((task) => {
+            const name = algorithmMetaMap.get(task.algorithm_id)?.name ?? task.algorithm_id;
+            const progress = clampPercent(task.progress_percent);
+            const progressLabel = task.progress_label || task.status;
+            const isQueued = task.status === "Queued";
+            const timingLabel = isQueued
+              ? "Not started"
+              : formatAlgorithmRuntime(task.elapsed_seconds);
+
+            return (
+              <div
+                key={task.algorithm_id}
+                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2"
+                title={runtimeTitle({
+                  status: task.status,
+                  elapsedSeconds: task.elapsed_seconds,
+                  startedAt: task.started_at,
+                  completedAt: task.completed_at,
+                })}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-950">{name}</p>
+                  <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                    {isQueued ? "Waiting for slot" : `${progress}% · ${progressLabel}`}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                  {timingLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

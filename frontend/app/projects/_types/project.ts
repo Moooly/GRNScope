@@ -6,7 +6,10 @@ export type ProjectTask = {
   progress_percent?: number;
   progress_label?: string | null;
   result_path?: string | null;
+  started_at?: string | null;
+  started_at_timestamp?: number | null;
   completed_at?: string | null;
+  completed_at_timestamp?: number | null;
 };
 
 export type ProjectJob = {
