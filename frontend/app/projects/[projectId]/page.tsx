@@ -1716,7 +1716,6 @@ useEffect(() => {
 
           <JobProgressBanner
             tasks={latestJob?.tasks ?? []}
-            algorithmMetaMap={algorithmMetaMap}
             notificationEmail={project?.notification_email ?? null}
             onSaveNotificationEmail={
               isDemoProject ? undefined : handleSaveNotificationEmail

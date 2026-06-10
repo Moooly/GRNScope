@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { formatAlgorithmRuntime, runtimeTitle } from "../_lib/runtime";
 
 type JobTask = {
   algorithm_id: string;
@@ -13,13 +12,8 @@ type JobTask = {
   completed_at?: string | null;
 };
 
-type AlgorithmMeta = {
-  name?: string;
-};
-
 type JobProgressBannerProps = {
   tasks: JobTask[];
-  algorithmMetaMap: Map<string, AlgorithmMeta>;
   notificationEmail?: string | null;
   onSaveNotificationEmail?: (email: string) => Promise<boolean>;
 };
@@ -31,7 +25,6 @@ type JobProgressBannerProps = {
  */
 export default function JobProgressBanner({
   tasks,
-  algorithmMetaMap,
   notificationEmail = null,
   onSaveNotificationEmail,
 }: JobProgressBannerProps) {
@@ -54,9 +47,6 @@ export default function JobProgressBanner({
 
   const total = tasks.length;
   const finished = completed.length + failed.length + stopped.length;
-  const activeTasks = tasks.filter((task) =>
-    ["Queued", "Running", "Stopping"].includes(task.status)
-  );
 
   // Overall percent blends finished tasks with the partial progress of any
   // currently-running tasks. Each finished task = 1 unit, each running task
@@ -196,43 +186,6 @@ export default function JobProgressBanner({
           style={{ width: `${overall}%` }}
         />
       </div>
-
-      {activeTasks.length > 0 && (
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {activeTasks.map((task) => {
-            const name = algorithmMetaMap.get(task.algorithm_id)?.name ?? task.algorithm_id;
-            const progress = clampPercent(task.progress_percent);
-            const progressLabel = task.progress_label || task.status;
-            const isQueued = task.status === "Queued";
-            const timingLabel = isQueued
-              ? "Not started"
-              : formatAlgorithmRuntime(task.elapsed_seconds);
-
-            return (
-              <div
-                key={task.algorithm_id}
-                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2"
-                title={runtimeTitle({
-                  status: task.status,
-                  elapsedSeconds: task.elapsed_seconds,
-                  startedAt: task.started_at,
-                  completedAt: task.completed_at,
-                })}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-950">{name}</p>
-                  <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
-                    {isQueued ? "Waiting for slot" : `${progress}% · ${progressLabel}`}
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                  {timingLabel}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </section>
   );
 }
