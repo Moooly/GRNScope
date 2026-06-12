@@ -574,7 +574,7 @@ def extract_user_friendly_beeline_error(log_text: str, algorithm_id: str) -> str
     return (
         f"{algorithm_id} stopped before producing a usable result. "
         "The available logs only contain progress updates, so no specific error message was returned. "
-        "Try rerunning this algorithm; if it fails again, check the server Docker logs for the underlying runtime error."
+        "Try rerunning this algorithm once. If it fails again, contact support so the server logs can be checked."
     )
 
 
@@ -634,7 +634,8 @@ def build_missing_ranked_edges_error(
         return f"{base_message} The most relevant log message was: {log_message}"
     return (
         f"{base_message} No clear error message was found in the BEELINE logs. "
-        "If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm."
+        "If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm. "
+        "If the problem continues, contact support with this project."
     )
 
 

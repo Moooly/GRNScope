@@ -1,13 +1,41 @@
 "use client";
 
 import "./globals.css";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+
+import ContactSupportModal, { type ContactSupportContext } from "./ContactSupportModal";
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [isContactOpen, setIsContactOpen] = useState(false);
+  const [contactContext, setContactContext] = useState<ContactSupportContext>({});
+
+  useEffect(() => {
+    function handleOpenContact(event: Event) {
+      const detail =
+        event instanceof CustomEvent && typeof event.detail === "object" && event.detail
+          ? (event.detail as ContactSupportContext)
+          : {};
+
+      setContactContext(detail);
+      setIsContactOpen(true);
+    }
+
+    window.addEventListener("grnscope:open-contact", handleOpenContact);
+    return () => window.removeEventListener("grnscope:open-contact", handleOpenContact);
+  }, []);
+
+  function openContactModal() {
+    setContactContext({
+      pageUrl: typeof window !== "undefined" ? window.location.href : undefined,
+    });
+    setIsContactOpen(true);
+  }
+
   return (
     <html lang="en">
       <body style={{ "--grnscope-header-height": "78px" } as React.CSSProperties}>
@@ -105,10 +133,22 @@ export default function RootLayout({
                 GRNScope
               </p>
             </Link>
+            <button
+              type="button"
+              onClick={openContactModal}
+              className="ml-auto cursor-pointer rounded-full bg-transparent px-4 py-2.5 text-base font-bold text-white/90 transition hover:text-white"
+            >
+              Contact
+            </button>
           </div>
         </header>
 
         {children}
+        <ContactSupportModal
+          open={isContactOpen}
+          context={contactContext}
+          onClose={() => setIsContactOpen(false)}
+        />
       </body>
     </html>
   );

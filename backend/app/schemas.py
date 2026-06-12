@@ -42,3 +42,16 @@ class CreateProjectResponse(BaseModel):
 
 class UpdateNotificationEmailRequest(BaseModel):
     notification_email: Optional[str] = None
+
+
+class ContactSupportRequest(BaseModel):
+    question: str
+    reply_to_email: Optional[str] = None
+    page_url: Optional[str] = None
+    project_id: Optional[str] = None
+    algorithm_id: Optional[str] = None
+
+
+class ContactSupportResponse(BaseModel):
+    ok: bool
+    errors: list[str] = []

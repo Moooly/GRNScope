@@ -16,6 +16,21 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
   if (!task) return null;
 
   const errorMessage = normalizeAlgorithmErrorMessage(task.errorMessage, task.algorithmId);
+  const openContactSupport = () => {
+    const pageUrl = typeof window !== "undefined" ? window.location.href : "";
+    const projectId = pageUrl.match(/\/projects\/([^/?#]+)/)?.[1];
+
+    window.dispatchEvent(
+      new CustomEvent("grnscope:open-contact", {
+        detail: {
+          algorithmId: task.algorithmId,
+          projectId,
+          pageUrl,
+          question: `Algorithm ${task.algorithmId} failed.\n\nReason shown by GRNScope:\n${errorMessage}`,
+        },
+      }),
+    );
+  };
 
   return (
     <div
@@ -34,7 +49,7 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
             {task.algorithmId} failed
           </h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            The selected algorithm did not finish successfully. Review the message below for details.
+            GRNScope could not finish this algorithm. The message below shows the most likely reason. If it is still unclear, contact us and we can inspect the runtime logs.
           </p>
         </div>
 
@@ -44,7 +59,14 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
           </pre>
         </div>
 
-        <div className="mt-5 flex justify-end">
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={openContactSupport}
+            className="rounded-full bg-[#1b75a6] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#16638f]"
+          >
+            Contact us
+          </button>
           <button
             type="button"
             onClick={onClose}
@@ -63,14 +85,14 @@ function normalizeAlgorithmErrorMessage(message: string, algorithmId: string): s
   const lowered = trimmedMessage.toLowerCase();
 
   if (looksLikeProgressOnlyMessage(trimmedMessage)) {
-    return `${algorithmId} stopped before producing a usable result. The available logs only contain progress updates, so no specific error message was returned. Try rerunning this algorithm; if it fails again, check the server Docker logs for the underlying runtime error.`;
+    return `${algorithmId} stopped before writing an edge result. The captured logs only contain progress updates, so BEELINE did not return the real runtime error. Try rerunning this algorithm once. If it fails again, contact us so we can check the server logs.`;
   }
 
   if (
     lowered.includes("rankededges.csv not found") ||
     (lowered.includes("rankededges.csv") && lowered.includes("no such file"))
   ) {
-    return `${algorithmId} finished without producing an edge result. This usually means the algorithm container stopped before exporting its output. If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm.`;
+    return `${algorithmId} finished without producing an edge result file. This usually means the Docker container stopped before exporting the algorithm output. If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm. If the problem continues, contact us with this project.`;
   }
 
   return trimmedMessage
