@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "./_lib/clientIdentity";
 import CreateProjectFlow from "./projects/_components/CreateProjectFlow";
 import { formatProjectCreatedAt } from "./projects/_lib/time";
@@ -13,6 +13,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 export default function HomePage() {
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const metadataRequestIds = useRef<Set<string>>(new Set());
   const router = useRouter();
 
   const visibleProjectHistory = useMemo(
@@ -124,6 +125,85 @@ export default function HomePage() {
       window.clearInterval(intervalId);
     };
   }, [activeProjectIds]);
+
+  const projectsMissingDimensions = useMemo(
+    () =>
+      visibleProjectHistory
+        .filter(
+          (project) =>
+            project.geneCount === undefined ||
+            project.geneCount === null ||
+            project.cellCount === undefined ||
+            project.cellCount === null,
+        )
+        .map((project) => project.id),
+    [visibleProjectHistory],
+  );
+
+  useEffect(() => {
+    const projectIds = projectsMissingDimensions.filter(
+      (projectId) => !metadataRequestIds.current.has(projectId),
+    );
+    if (projectIds.length === 0) return;
+
+    let isCancelled = false;
+    projectIds.forEach((projectId) => metadataRequestIds.current.add(projectId));
+
+    const loadProjectDimensions = async () => {
+      const responses = await Promise.all(
+        projectIds.map(async (projectId) => {
+          try {
+            const response = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            const metadata = data.metadata ?? {};
+            return {
+              projectId,
+              geneCount: toOptionalNumber(metadata.gene_count),
+              cellCount: toOptionalNumber(metadata.cell_count),
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      if (isCancelled) return;
+
+      const dimensionsByProjectId = new Map(
+        responses
+          .filter(
+            (
+              item,
+            ): item is {
+              projectId: string;
+              geneCount: number | null;
+              cellCount: number | null;
+            } => item !== null,
+          )
+          .map((item) => [item.projectId, item]),
+      );
+
+      if (dimensionsByProjectId.size === 0) return;
+
+      setProjectHistory((currentProjects) =>
+        currentProjects.map((project) => {
+          const dimensions = dimensionsByProjectId.get(project.id);
+          if (!dimensions) return project;
+          return {
+            ...project,
+            geneCount: dimensions.geneCount ?? project.geneCount,
+            cellCount: dimensions.cellCount ?? project.cellCount,
+          };
+        }),
+      );
+    };
+
+    void loadProjectDimensions();
+    return () => {
+      isCancelled = true;
+    };
+  }, [projectsMissingDimensions]);
 
   const handleProjectCreated = (project: Project) => {
     setProjectHistory((currentProjects) => [project, ...currentProjects]);
@@ -283,6 +363,10 @@ function HomeProjectCard({ project }: { project: Project }) {
     typeof project.geneCount === "number"
       ? project.geneCount.toLocaleString()
       : "-";
+  const cellSummary =
+    typeof project.cellCount === "number"
+      ? project.cellCount.toLocaleString()
+      : "-";
 
   return (
     <Link
@@ -305,12 +389,18 @@ function HomeProjectCard({ project }: { project: Project }) {
         </span>
       </div>
 
-      <div className="mt-auto grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+      <div className="mt-auto grid grid-cols-3 gap-3 border-t border-slate-100 pt-3">
         <div>
           <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
             Genes
           </p>
           <p className="mt-1 text-sm font-bold text-slate-800">{geneSummary}</p>
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Cells
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-800">{cellSummary}</p>
         </div>
         <div>
           <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
@@ -321,6 +411,11 @@ function HomeProjectCard({ project }: { project: Project }) {
       </div>
     </Link>
   );
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function getProjectStatus(project: Project) {
