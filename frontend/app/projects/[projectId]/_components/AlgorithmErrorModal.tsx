@@ -15,6 +15,8 @@ type AlgorithmErrorModalProps = {
 export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorModalProps) {
   if (!task) return null;
 
+  const errorMessage = normalizeAlgorithmErrorMessage(task.errorMessage, task.algorithmId);
+
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
@@ -38,7 +40,7 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
 
         <div className="mt-5 max-h-[45vh] overflow-y-auto rounded-[1.25rem] border border-rose-100 bg-rose-50/70 p-4">
           <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-rose-700">
-            {task.errorMessage}
+            {errorMessage}
           </pre>
         </div>
 
@@ -54,4 +56,20 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
       </div>
     </div>
   );
+}
+
+function normalizeAlgorithmErrorMessage(message: string, algorithmId: string): string {
+  const trimmedMessage = message.trim();
+  const lowered = trimmedMessage.toLowerCase();
+
+  if (
+    lowered.includes("rankededges.csv not found") ||
+    (lowered.includes("rankededges.csv") && lowered.includes("no such file"))
+  ) {
+    return `${algorithmId} finished without producing an edge result. This usually means the algorithm container stopped before exporting its output. If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm.`;
+  }
+
+  return trimmedMessage
+    .replace(/\/home\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file")
+    .replace(/\/Users\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file");
 }

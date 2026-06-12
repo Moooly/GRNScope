@@ -5,6 +5,7 @@ import io
 import json
 import os
 import random
+import re
 import shutil
 import signal
 import subprocess
@@ -25,6 +26,51 @@ DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
 
 class AlgorithmStoppedError(RuntimeError):
     pass
+
+
+ERROR_PRIORITY_MARKERS = (
+    "error",
+    "exception",
+    "failed",
+    "no such file",
+    "not found",
+    "cannot",
+    "missing",
+    "invalid",
+    "valueerror",
+    "keyerror",
+    "typeerror",
+    "runtimeerror",
+    "importerror",
+    "filenotfounderror",
+    "out of memory",
+    "killed",
+)
+
+ERROR_NOISE_MARKERS = (
+    "traceback",
+    'file "',
+    "during handling of the above exception",
+    "return future.result()",
+    "await ",
+    "raise ",
+    "self.",
+    "module = ",
+    "config.load()",
+    "response = ",
+    "raw_response = ",
+    "return await",
+    "ld_library_path",
+    "matlab runtime cache",
+    "creating matlab runtime cache",
+    "acquiring matlab runtime cache",
+    "command being timed",
+    "user time",
+    "system time",
+    "percent of cpu",
+    "elapsed wall clock",
+    "maximum resident set size",
+)
 
 
 def resolve_beeline_root() -> Path:
@@ -463,31 +509,29 @@ def create_confidence_run_inputs(
     return run_ids, run_metadata, settings
 
 
-def extract_user_friendly_beeline_error(stderr_text: str, algorithm_id: str) -> str:
-    if not stderr_text or not stderr_text.strip():
-        return f"{algorithm_id} failed during execution, but no detailed error message was returned by BEELINE."
+def sanitize_error_message(message: str) -> str:
+    cleaned = re.sub(r"\x1b\[[0-9;]*m", "", message)
+    cleaned = cleaned.replace("Traceback (most recent call last):", "")
+    cleaned = cleaned.replace("BEELINE failed for", "")
+    cleaned = re.sub(r"/home/[^ ]+/GRNScope/backend/projects/[^\s'\"]+", "project runtime file", cleaned)
+    cleaned = re.sub(r"/Users/[^ ]+/GRNScope/backend/projects/[^\s'\"]+", "project runtime file", cleaned)
+    cleaned = re.sub(r"/private/var/[^\s'\"]+", "temporary runtime file", cleaned)
+    cleaned = " ".join(cleaned.split())
+    return cleaned.strip(" :")
 
-    lines = [line.strip() for line in stderr_text.splitlines() if line.strip()]
 
-    ignore_prefixes = (
-        "traceback",
-        'file "',
-        "during handling of the above exception",
-        "return future.result()",
-        "await ",
-        "raise ",
-        "self.",
-        "module = ",
-        "config.load()",
-        "response = ",
-        "raw_response = ",
-        "return await",
-    )
+def extract_useful_error_message(log_text: str, algorithm_id: str) -> str | None:
+    if not log_text or not log_text.strip():
+        return None
 
     useful_lines: list[str] = []
-    for line in lines:
+    for raw_line in log_text.splitlines():
+        line = sanitize_error_message(raw_line.strip())
+        if not line:
+            continue
+
         lowered = line.lower()
-        if lowered.startswith(ignore_prefixes):
+        if lowered.startswith(ERROR_NOISE_MARKERS):
             continue
         if lowered.startswith("line ") and " in " in lowered:
             continue
@@ -495,41 +539,87 @@ def extract_user_friendly_beeline_error(stderr_text: str, algorithm_id: str) -> 
             continue
         useful_lines.append(line)
 
-    priority_markers = (
-        "error",
-        "exception",
-        "failed",
-        "no such file",
-        "not found",
-        "cannot",
-        "missing",
-        "invalid",
-        "valueerror",
-        "keyerror",
-        "typeerror",
-        "runtimeerror",
-        "importerror",
-        "filenotfounderror",
-    )
-
     prioritized = [
-        line for line in useful_lines if any(marker in line.lower() for marker in priority_markers)
+        line
+        for line in useful_lines
+        if any(marker in line.lower() for marker in ERROR_PRIORITY_MARKERS)
     ]
-
-    chosen_lines = prioritized[:3] if prioritized else useful_lines[-3:]
+    chosen_lines = prioritized[-4:] if prioritized else useful_lines[-4:]
     message = " ".join(chosen_lines).strip()
-
     if not message:
-        return f"{algorithm_id} failed during execution. Check the server logs for more details."
+        return None
 
-    message = message.replace("BEELINE failed for", "")
-    message = message.replace("Traceback (most recent call last):", "")
-    message = " ".join(message.split())
+    message = sanitize_error_message(message)
+    if len(message) > 500:
+        message = message[:497].rstrip() + "..."
+    return message or None
 
-    if len(message) > 400:
-        message = message[:397].rstrip() + "..."
 
-    return message
+def extract_user_friendly_beeline_error(log_text: str, algorithm_id: str) -> str:
+    message = extract_useful_error_message(log_text, algorithm_id)
+    if message:
+        return message
+    return f"{algorithm_id} failed during execution, but BEELINE did not return a clear error message."
+
+
+def read_recent_log_text(path: Path, max_bytes: int = 20000) -> str:
+    try:
+        if not path.is_file() or path.stat().st_size <= 0:
+            return ""
+        with path.open("rb") as file:
+            file.seek(0, os.SEEK_END)
+            size = file.tell()
+            file.seek(max(0, size - max_bytes))
+            return file.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def collect_algorithm_error_log_text(
+    *,
+    runtime_root: Path,
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+) -> str:
+    normalized_algorithm_id = algorithm_id.upper()
+    run_output_dir = output_dir / dataset_id / run_id / normalized_algorithm_id
+    log_paths = [
+        run_output_dir / "output.txt",
+        *sorted((run_output_dir / "working_dir").glob("time*.txt")),
+        runtime_root / "stderr.log",
+        runtime_root / "stdout.log",
+    ]
+    return "\n".join(read_recent_log_text(path) for path in log_paths)
+
+
+def build_missing_ranked_edges_error(
+    *,
+    runtime_root: Path,
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+) -> str:
+    log_text = collect_algorithm_error_log_text(
+        runtime_root=runtime_root,
+        output_dir=output_dir,
+        dataset_id=dataset_id,
+        run_id=run_id,
+        algorithm_id=algorithm_id,
+    )
+    log_message = extract_useful_error_message(log_text, algorithm_id)
+    base_message = (
+        f"{algorithm_id} finished without producing an edge result. "
+        "This usually means the algorithm container stopped before exporting its output."
+    )
+    if log_message:
+        return f"{base_message} The most relevant log message was: {log_message}"
+    return (
+        f"{base_message} No clear error message was found in the BEELINE logs. "
+        "If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm."
+    )
 
 
 def prepare_beeline_runtime(
@@ -907,6 +997,8 @@ def parse_confidence_run_outputs(
     dataset_id: str,
     run_ids: list[str],
     algorithm_id: str,
+    *,
+    runtime_root: Path,
 ) -> tuple[dict[str, list[dict]], dict[str, str]]:
     normalized_algorithm_id = algorithm_id.upper()
     run_edges_by_id: dict[str, list[dict]] = {}
@@ -920,7 +1012,22 @@ def parse_confidence_run_outputs(
             / normalized_algorithm_id
             / "rankedEdges.csv"
         )
-        run_edges, _ = parse_ranked_edges_csv(ranked_edges_path)
+        try:
+            run_edges, _ = parse_ranked_edges_csv(ranked_edges_path)
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                build_missing_ranked_edges_error(
+                    runtime_root=runtime_root,
+                    output_dir=output_dir,
+                    dataset_id=dataset_id,
+                    run_id=run_id,
+                    algorithm_id=algorithm_id,
+                )
+            ) from exc
+        except ValueError as exc:
+            raise RuntimeError(
+                f"{algorithm_id} produced an edge result, but GRNScope could not read it: {sanitize_error_message(str(exc))}"
+            ) from exc
         run_edges_by_id[run_id] = run_edges
         ranked_edge_paths[run_id] = str(ranked_edges_path)
 
@@ -1045,7 +1152,12 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
 
     if completed_process.returncode != 0:
         friendly_error = extract_user_friendly_beeline_error(
-            completed_process.stderr or "",
+            "\n".join(
+                [
+                    completed_process.stderr or "",
+                    completed_process.stdout or "",
+                ]
+            ),
             algorithm_id,
         )
         raise RuntimeError(friendly_error)
@@ -1055,6 +1167,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         dataset_id,
         run_ids,
         algorithm_id,
+        runtime_root=runtime_root,
     )
     top_edges, network_summary = aggregate_confidence_edges(
         run_edges_by_id,
@@ -1215,7 +1328,10 @@ def run_beeline_with_progress(
         raise AlgorithmStoppedError("Algorithm run was stopped.")
 
     if process.returncode != 0:
-        friendly_error = extract_user_friendly_beeline_error(stderr_text or "", algorithm_id)
+        friendly_error = extract_user_friendly_beeline_error(
+            "\n".join([stderr_text or "", stdout_text or ""]),
+            algorithm_id,
+        )
         raise RuntimeError(friendly_error)
 
     update_job_state_fn(
@@ -1231,6 +1347,7 @@ def run_beeline_with_progress(
         dataset_id,
         run_ids,
         algorithm_id,
+        runtime_root=runtime_root,
     )
     top_edges, network_summary = aggregate_confidence_edges(
         run_edges_by_id,
