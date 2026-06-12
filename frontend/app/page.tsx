@@ -284,7 +284,7 @@ function HomeProjectCard({ project }: { project: Project }) {
   ).length;
   const methodSummary =
     tasks.length > 0
-      ? `${completedCount}/${tasks.length} methods complete`
+      ? `${completedCount}/${tasks.length} algorithms complete`
       : "No algorithm run yet";
 
   return (
@@ -308,10 +308,9 @@ function HomeProjectCard({ project }: { project: Project }) {
         </span>
       </div>
 
-      <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
+      <div className="mt-4 border-t border-slate-100 pt-3">
         <p className="text-sm font-bold text-slate-800">{methodSummary}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
-          <span>{project.jobCount} run{project.jobCount === 1 ? "" : "s"}</span>
           {runningCount > 0 && <span>{runningCount} active</span>}
           {failedCount > 0 && <span className="text-rose-500">{failedCount} failed</span>}
         </div>
