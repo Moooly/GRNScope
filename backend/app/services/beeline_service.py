@@ -927,6 +927,32 @@ def parse_confidence_run_outputs(
     return run_edges_by_id, ranked_edge_paths
 
 
+def count_completed_confidence_run_outputs(
+    output_dir: Path,
+    dataset_id: str,
+    run_ids: list[str],
+    algorithm_id: str,
+) -> int:
+    normalized_algorithm_id = algorithm_id.upper()
+    completed = 0
+
+    for run_id in run_ids:
+        ranked_edges_path = (
+            output_dir
+            / dataset_id
+            / run_id
+            / normalized_algorithm_id
+            / "rankedEdges.csv"
+        )
+        try:
+            if ranked_edges_path.is_file() and ranked_edges_path.stat().st_size > 0:
+                completed += 1
+        except OSError:
+            continue
+
+    return completed
+
+
 def write_confidence_ranked_edges_csv(destination_path: Path, edges: list[dict]) -> None:
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
@@ -1108,7 +1134,7 @@ def run_beeline_with_progress(
         job_id,
         algorithm_id=algorithm_id,
         progress_percent=15,
-        progress_label=f"Launching BEELINE ({len(run_ids)} confidence runs)",
+        progress_label="Launching analysis",
     )
 
     if stop_event is not None and stop_event.is_set():
@@ -1145,14 +1171,38 @@ def run_beeline_with_progress(
             break
 
         elapsed = int(time.time() - started_at)
-        synthetic_progress = min(85, 20 + elapsed // 2)
+        completed_run_count = count_completed_confidence_run_outputs(
+            output_dir,
+            dataset_id,
+            run_ids,
+            algorithm_id,
+        )
+        estimated_remaining_seconds = None
+        if completed_run_count > 0:
+            average_seconds_per_completed_run = elapsed / completed_run_count
+            estimated_remaining_seconds = int(
+                round(
+                    average_seconds_per_completed_run
+                    * max(0, len(run_ids) - completed_run_count)
+                )
+            )
+            progress_percent = min(
+                85,
+                20 + round((completed_run_count / max(1, len(run_ids))) * 65),
+            )
+            progress_label = "Running analysis"
+        else:
+            progress_percent = min(25, 20 + elapsed // 10)
+            progress_label = "Starting analysis"
+
         update_job_state_fn(
             project_dir,
             job_id,
             algorithm_id=algorithm_id,
             elapsed_seconds=elapsed,
-            progress_percent=synthetic_progress,
-            progress_label="Running BEELINE confidence runs",
+            progress_percent=progress_percent,
+            progress_label=progress_label,
+            estimated_remaining_seconds=estimated_remaining_seconds,
         )
         time.sleep(1)
 

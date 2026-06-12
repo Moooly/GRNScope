@@ -288,6 +288,7 @@ async def get_project_results(project_id: str, request: Request, response: Respo
                     "elapsed_seconds": task.get("elapsed_seconds"),
                     "progress_percent": task.get("progress_percent"),
                     "progress_label": task.get("progress_label"),
+                    "estimated_remaining_seconds": task.get("estimated_remaining_seconds"),
                 }
             )
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatAlgorithmRuntime } from "../_lib/runtime";
 
 type JobTask = {
   algorithm_id: string;
@@ -8,12 +9,14 @@ type JobTask = {
   elapsed_seconds?: number | null;
   progress_percent?: number | null;
   progress_label?: string | null;
+  estimated_remaining_seconds?: number | null;
   started_at?: string | null;
   completed_at?: string | null;
 };
 
 type JobProgressBannerProps = {
   tasks: JobTask[];
+  algorithmMetaMap?: Map<string, { name: string }>;
   notificationEmail?: string | null;
   onSaveNotificationEmail?: (email: string) => Promise<boolean>;
 };
@@ -25,6 +28,7 @@ type JobProgressBannerProps = {
  */
 export default function JobProgressBanner({
   tasks,
+  algorithmMetaMap,
   notificationEmail = null,
   onSaveNotificationEmail,
 }: JobProgressBannerProps) {
@@ -61,12 +65,40 @@ export default function JobProgressBanner({
     `${completed.length} completed`,
     `${running.length} running`,
     stopping.length > 0 ? `${stopping.length} stopping` : null,
-    queued.length > 0 ? `${queued.length} queued` : null,
+    queued.length > 0 ? `${queued.length} waiting` : null,
     stopped.length > 0 ? `${stopped.length} stopped` : null,
     failed.length > 0 ? `${failed.length} failed` : null,
   ].filter(Boolean);
 
   const hasNotificationEmail = Boolean(notificationEmail);
+  const getAlgorithmName = (algorithmId: string) =>
+    algorithmMetaMap?.get(algorithmId)?.name ?? algorithmId;
+  const runningMessages = running.slice(0, 2).map((task) => {
+    const algorithmName = getAlgorithmName(task.algorithm_id);
+    const remainingSeconds = Number(task.estimated_remaining_seconds);
+
+    if (Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
+      return `${algorithmName} is running · about ${formatAlgorithmRuntime(remainingSeconds)} remaining`;
+    }
+
+    if (Number.isFinite(remainingSeconds) && remainingSeconds === 0) {
+      return `${algorithmName} is running · finishing up`;
+    }
+
+    return `${algorithmName} is running · estimating time`;
+  });
+  const hiddenRunningCount = Math.max(0, running.length - runningMessages.length);
+  if (hiddenRunningCount > 0) {
+    runningMessages.push(`${hiddenRunningCount} more running`);
+  }
+  const queuedNames = queued.slice(0, 3).map((task) => getAlgorithmName(task.algorithm_id));
+  const hiddenQueuedCount = Math.max(0, queued.length - queuedNames.length);
+  const queuedMessage =
+    queuedNames.length > 0
+      ? `${formatNameList(queuedNames)} ${
+          queuedNames.length === 1 ? "is" : "are"
+        } waiting for a compute slot${hiddenQueuedCount > 0 ? `, plus ${hiddenQueuedCount} more` : ""}.`
+      : "";
 
   const saveNotificationEmail = async () => {
     if (!onSaveNotificationEmail || isSavingEmail) return;
@@ -186,6 +218,14 @@ export default function JobProgressBanner({
           style={{ width: `${overall}%` }}
         />
       </div>
+
+      <div className="mt-3 space-y-1.5 text-sm font-medium leading-6 text-slate-600">
+        {runningMessages.length > 0 ? (
+          <p className="text-slate-700">{runningMessages.join(" · ")}</p>
+        ) : null}
+        {queuedMessage ? <p>{queuedMessage}</p> : null}
+        <p>Results appear as each method finishes. Long-running methods may continue in the background.</p>
+      </div>
     </section>
   );
 }
@@ -194,4 +234,10 @@ function clampPercent(value: number | null | undefined): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function formatNameList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }

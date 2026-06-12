@@ -169,6 +169,7 @@ def update_job_state(
     result_path: str | None = None,
     progress_percent: int | None = None,
     progress_label: str | None = None,
+    estimated_remaining_seconds: int | None = None,
     started_at: str | None = None,
     started_at_timestamp: float | None = None,
     completed_at: str | None = None,
@@ -202,6 +203,8 @@ def update_job_state(
                         task["progress_percent"] = progress_percent
                     if progress_label is not None:
                         task["progress_label"] = progress_label
+                    if estimated_remaining_seconds is not None:
+                        task["estimated_remaining_seconds"] = estimated_remaining_seconds
                     if started_at is not None:
                         task["started_at"] = started_at
                     if started_at_timestamp is not None:
@@ -253,6 +256,7 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["completed_at_timestamp"] = None
                 task["progress_percent"] = 0
                 task["progress_label"] = "Queued"
+                task.pop("estimated_remaining_seconds", None)
                 task.pop("process_pid", None)
                 result_path = algorithm_result_path(project_dir, algorithm_id)
                 if result_path.exists():
@@ -416,6 +420,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             elapsed_seconds=0,
             progress_percent=0,
             progress_label="Stopped",
+            estimated_remaining_seconds=0,
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
@@ -495,6 +500,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             result_path=saved_result_path,
             progress_percent=100,
             progress_label="Completed",
+            estimated_remaining_seconds=0,
             completed_at=completed_at,
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
@@ -513,6 +519,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             error_message=None,
             progress_percent=0,
             progress_label="Stopped",
+            estimated_remaining_seconds=0,
             completed_at=completed_at,
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
@@ -529,6 +536,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             progress_percent=0,
             progress_label="Failed",
             error_message=str(exc),
+            estimated_remaining_seconds=0,
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
@@ -614,6 +622,7 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
             task_status="Stopped",
             progress_percent=0,
             progress_label="Stopped",
+            estimated_remaining_seconds=0,
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
