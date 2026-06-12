@@ -3,6 +3,7 @@
 import "./globals.css";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import ContactSupportModal, { type ContactSupportContext } from "./ContactSupportModal";
 
@@ -13,6 +14,8 @@ export default function RootLayout({
 }>) {
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [contactContext, setContactContext] = useState<ContactSupportContext>({});
+  const pathname = usePathname();
+  const isHomeActive = pathname === "/";
 
   useEffect(() => {
     function handleOpenContact(event: Event) {
@@ -133,13 +136,26 @@ export default function RootLayout({
                 GRNScope
               </p>
             </Link>
-            <button
-              type="button"
-              onClick={openContactModal}
-              className="ml-auto cursor-pointer rounded-full bg-transparent px-4 py-2.5 text-base font-bold text-white/90 transition hover:text-white"
-            >
-              Contact us
-            </button>
+            <nav className="ml-auto flex items-center gap-5" aria-label="Main navigation">
+              <Link
+                href="/"
+                aria-current={isHomeActive ? "page" : undefined}
+                className={`cursor-pointer rounded-full px-4 py-2.5 text-base font-bold transition hover:text-white ${
+                  isHomeActive
+                    ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                    : "bg-transparent text-white/90"
+                }`}
+              >
+                Home
+              </Link>
+              <button
+                type="button"
+                onClick={openContactModal}
+                className="cursor-pointer rounded-full bg-transparent px-4 py-2.5 text-base font-bold text-white/90 transition hover:text-white"
+              >
+                Contact us
+              </button>
+            </nav>
           </div>
         </header>
 
