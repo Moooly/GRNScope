@@ -98,7 +98,15 @@ export default function JobProgressBanner({
   });
   const visibleRunningItems = runningItems.slice(0, 2);
   const hiddenRunningCount = Math.max(0, runningItems.length - visibleRunningItems.length);
-  const waitingSummary = [queued.length > 0 ? `${queued.length} waiting` : null, stopping.length > 0 ? `${stopping.length} stopping` : null]
+  const queuedNames = queued.slice(0, 2).map((task) => getAlgorithmName(task.algorithm_id));
+  const hiddenQueuedCount = Math.max(0, queued.length - queuedNames.length);
+  const queuedMessage =
+    queuedNames.length > 0
+      ? `${formatNameList(queuedNames)}${
+          hiddenQueuedCount > 0 ? ` and ${hiddenQueuedCount} more` : ""
+        }`
+      : "";
+  const waitingSummary = [queuedMessage, stopping.length > 0 ? `${stopping.length} stopping` : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -222,14 +230,15 @@ export default function JobProgressBanner({
         />
       </div>
 
-      <div className="mt-3 flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-3 flex flex-col gap-1.5 text-sm font-medium text-slate-600 lg:flex-row lg:items-center lg:justify-between">
         {visibleRunningItems.length > 0 ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold text-slate-500">Running:</span>
             {visibleRunningItems.map((item, index) => (
-              <span key={item.name} className="flex min-w-0 items-center gap-3">
-                <span className="min-w-0 truncate font-bold text-slate-900">
-                  {item.name} <span className="font-semibold text-slate-500">{item.detail}</span>
+              <span key={item.name} className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 truncate text-slate-700">
+                  <span className="font-semibold text-slate-900">{item.name}</span>{" "}
+                  <span>{item.detail}</span>
                 </span>
                 {(index < visibleRunningItems.length - 1 || hiddenRunningCount > 0) && (
                   <span className="text-slate-300">·</span>
@@ -243,7 +252,12 @@ export default function JobProgressBanner({
             )}
           </div>
         ) : null}
-        {waitingSummary ? <p className="shrink-0 text-slate-500">{waitingSummary}</p> : null}
+        {waitingSummary ? (
+          <p className="min-w-0 text-slate-500 lg:shrink-0">
+            <span className="font-semibold">Waiting:</span>{" "}
+            <span className="text-slate-600">{waitingSummary}</span>
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -253,4 +267,10 @@ function clampPercent(value: number | null | undefined): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function formatNameList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
