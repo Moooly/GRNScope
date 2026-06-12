@@ -230,14 +230,14 @@ export default function JobProgressBanner({
         />
       </div>
 
-      <div className="mt-3 flex flex-col gap-1.5 text-sm font-medium text-slate-600 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mt-3 flex flex-col gap-1.5 text-sm font-semibold text-slate-600 lg:flex-row lg:items-center lg:justify-between">
         {visibleRunningItems.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold text-slate-500">Running:</span>
+            <span className="text-slate-500">Running:</span>
             {visibleRunningItems.map((item, index) => (
               <span key={item.name} className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 truncate text-slate-700">
-                  <span className="font-semibold text-slate-900">{item.name}</span>{" "}
+                <span className="min-w-0 truncate text-slate-600">
+                  <span>{item.name}</span>{" "}
                   <span>{item.detail}</span>
                 </span>
                 {(index < visibleRunningItems.length - 1 || hiddenRunningCount > 0) && (
@@ -254,7 +254,7 @@ export default function JobProgressBanner({
         ) : null}
         {waitingSummary ? (
           <p className="min-w-0 text-slate-500 lg:shrink-0">
-            <span className="font-semibold">Waiting:</span>{" "}
+            <span>Waiting:</span>{" "}
             <span className="text-slate-600">{waitingSummary}</span>
           </p>
         ) : null}
