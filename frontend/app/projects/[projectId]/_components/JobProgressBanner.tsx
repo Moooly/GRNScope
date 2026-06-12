@@ -61,19 +61,16 @@ export default function JobProgressBanner({
   }, 0);
   const overall = total === 0 ? 0 : Math.round(((finished + runningProgress) / total) * 100);
 
-  const statusSummary = [
-    `${completed.length} completed`,
-    `${running.length} running`,
-    stopping.length > 0 ? `${stopping.length} stopping` : null,
-    queued.length > 0 ? `${queued.length} waiting` : null,
-    stopped.length > 0 ? `${stopped.length} stopped` : null,
+  const completionSummary = [
+    `${completed.length} of ${total} methods complete`,
     failed.length > 0 ? `${failed.length} failed` : null,
+    stopped.length > 0 ? `${stopped.length} stopped` : null,
   ].filter(Boolean);
 
   const hasNotificationEmail = Boolean(notificationEmail);
   const getAlgorithmName = (algorithmId: string) =>
     algorithmMetaMap?.get(algorithmId)?.name ?? algorithmId;
-  const runningItems = running.slice(0, 2).map((task) => {
+  const runningItems = running.map((task) => {
     const algorithmName = getAlgorithmName(task.algorithm_id);
     const remainingSeconds = Number(task.estimated_remaining_seconds);
 
@@ -81,6 +78,7 @@ export default function JobProgressBanner({
       return {
         name: algorithmName,
         detail: `${formatAlgorithmRuntime(remainingSeconds)} left`,
+        remainingSeconds,
       };
     }
 
@@ -88,29 +86,40 @@ export default function JobProgressBanner({
       return {
         name: algorithmName,
         detail: "finishing up",
+        remainingSeconds,
       };
     }
 
     return {
       name: algorithmName,
       detail: "estimating time",
+      remainingSeconds: null,
     };
   });
-  const hiddenRunningCount = Math.max(0, running.length - runningItems.length);
-  if (hiddenRunningCount > 0) {
-    runningItems.push({
-      name: `${hiddenRunningCount} more`,
-      detail: "running",
-    });
-  }
-  const queuedNames = queued.slice(0, 3).map((task) => getAlgorithmName(task.algorithm_id));
-  const hiddenQueuedCount = Math.max(0, queued.length - queuedNames.length);
-  const queuedMessage =
-    queuedNames.length > 0
-      ? `Waiting: ${formatNameList(queuedNames)}${
-          hiddenQueuedCount > 0 ? `, plus ${hiddenQueuedCount} more` : ""
+  const nextResult = runningItems
+    .filter((item) => item.remainingSeconds !== null)
+    .sort((a, b) => Number(a.remainingSeconds) - Number(b.remainingSeconds))[0];
+  const nextResultMessage = nextResult
+    ? nextResult.remainingSeconds === 0
+      ? `${nextResult.name} is finishing up.`
+      : `Next result: ${nextResult.name} in about ${formatAlgorithmRuntime(
+          Number(nextResult.remainingSeconds)
+        )}.`
+    : runningItems.length > 0
+      ? "Estimating time for the next result."
+      : "";
+  const runningNames = runningItems.slice(0, 2).map((item) => item.name);
+  const hiddenRunningCount = Math.max(0, runningItems.length - runningNames.length);
+  const runningMessage =
+    runningNames.length > 0
+      ? `Running now: ${formatNameList(runningNames)}${
+          hiddenRunningCount > 0 ? `, plus ${hiddenRunningCount} more` : ""
         }`
       : "";
+  const queueMessage = queued.length > 0 ? `${queued.length} waiting` : "";
+  const activitySummary = [runningMessage, queueMessage, stopping.length > 0 ? `${stopping.length} stopping` : null]
+    .filter(Boolean)
+    .join(" · ");
 
   const saveNotificationEmail = async () => {
     if (!onSaveNotificationEmail || isSavingEmail) return;
@@ -152,7 +161,7 @@ export default function JobProgressBanner({
             <h2 className="text-lg font-bold text-slate-950">Analysis running</h2>
             <span className="hidden text-slate-300 sm:inline">·</span>
             <p className="text-sm font-semibold text-slate-500">
-              {statusSummary.join(" · ")}
+              {completionSummary.join(" · ")}
             </p>
           </div>
         </div>
@@ -232,22 +241,12 @@ export default function JobProgressBanner({
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-600">
-        {runningItems.length > 0 ? (
-          runningItems.map((item) => (
-            <span
-              key={item.name}
-              className="inline-flex max-w-full items-center gap-2 rounded-full bg-[#f2f9fc] px-3 py-1.5 text-[#1b75a6]"
-            >
-              <span className="font-bold text-slate-900">{item.name}</span>
-              <span className="text-xs font-bold text-slate-500">{item.detail}</span>
-            </span>
-          ))
+      <div className="mt-3 flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
+        {nextResultMessage ? (
+          <p className="font-semibold text-slate-800">{nextResultMessage}</p>
         ) : null}
-        {queuedMessage ? (
-          <span className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
-            {queuedMessage}
-          </span>
+        {activitySummary ? (
+          <p className="text-slate-500">{activitySummary}</p>
         ) : null}
       </div>
     </section>
