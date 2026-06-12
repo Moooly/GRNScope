@@ -96,28 +96,9 @@ export default function JobProgressBanner({
       remainingSeconds: null,
     };
   });
-  const nextResult = runningItems
-    .filter((item) => item.remainingSeconds !== null)
-    .sort((a, b) => Number(a.remainingSeconds) - Number(b.remainingSeconds))[0];
-  const nextResultMessage = nextResult
-    ? nextResult.remainingSeconds === 0
-      ? `${nextResult.name} is finishing up.`
-      : `Next result: ${nextResult.name} in about ${formatAlgorithmRuntime(
-          Number(nextResult.remainingSeconds)
-        )}.`
-    : runningItems.length > 0
-      ? "Estimating time for the next result."
-      : "";
-  const runningNames = runningItems.slice(0, 2).map((item) => item.name);
-  const hiddenRunningCount = Math.max(0, runningItems.length - runningNames.length);
-  const runningMessage =
-    runningNames.length > 0
-      ? `Running now: ${formatNameList(runningNames)}${
-          hiddenRunningCount > 0 ? `, plus ${hiddenRunningCount} more` : ""
-        }`
-      : "";
-  const queueMessage = queued.length > 0 ? `${queued.length} waiting` : "";
-  const activitySummary = [runningMessage, queueMessage, stopping.length > 0 ? `${stopping.length} stopping` : null]
+  const visibleRunningItems = runningItems.slice(0, 2);
+  const hiddenRunningCount = Math.max(0, runningItems.length - visibleRunningItems.length);
+  const waitingSummary = [queued.length > 0 ? `${queued.length} waiting` : null, stopping.length > 0 ? `${stopping.length} stopping` : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -241,13 +222,28 @@ export default function JobProgressBanner({
         />
       </div>
 
-      <div className="mt-3 flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
-        {nextResultMessage ? (
-          <p className="font-semibold text-slate-800">{nextResultMessage}</p>
+      <div className="mt-3 flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+        {visibleRunningItems.length > 0 ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-semibold text-slate-500">Running:</span>
+            {visibleRunningItems.map((item, index) => (
+              <span key={item.name} className="flex min-w-0 items-center gap-3">
+                <span className="min-w-0 truncate font-bold text-slate-900">
+                  {item.name} <span className="font-semibold text-slate-500">{item.detail}</span>
+                </span>
+                {(index < visibleRunningItems.length - 1 || hiddenRunningCount > 0) && (
+                  <span className="text-slate-300">·</span>
+                )}
+              </span>
+            ))}
+            {hiddenRunningCount > 0 && (
+              <span className="font-semibold text-slate-500">
+                {hiddenRunningCount} more running
+              </span>
+            )}
+          </div>
         ) : null}
-        {activitySummary ? (
-          <p className="text-slate-500">{activitySummary}</p>
-        ) : null}
+        {waitingSummary ? <p className="shrink-0 text-slate-500">{waitingSummary}</p> : null}
       </div>
     </section>
   );
@@ -257,10 +253,4 @@ function clampPercent(value: number | null | undefined): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.min(100, Math.round(numeric)));
-}
-
-function formatNameList(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
