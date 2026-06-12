@@ -389,21 +389,21 @@ function HomeProjectCard({ project }: { project: Project }) {
         </span>
       </div>
 
-      <div className="mt-auto grid grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+      <div className="mt-auto grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-3 border-t border-slate-100 pt-3">
         <div>
-          <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
             Genes
           </p>
           <p className="mt-1 text-sm font-bold text-slate-800">{geneSummary}</p>
         </div>
         <div>
-          <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
             Cells
           </p>
           <p className="mt-1 text-sm font-bold text-slate-800">{cellSummary}</p>
         </div>
         <div>
-          <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
             Algorithms
           </p>
           <p className="mt-1 text-sm font-bold text-slate-800">{algorithmSummary}</p>
