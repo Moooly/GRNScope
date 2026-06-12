@@ -138,7 +138,7 @@ export default function RootLayout({
               onClick={openContactModal}
               className="ml-auto cursor-pointer rounded-full bg-transparent px-4 py-2.5 text-base font-bold text-white/90 transition hover:text-white"
             >
-              Contact
+              Contact us
             </button>
           </div>
         </header>
