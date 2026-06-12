@@ -286,13 +286,11 @@ function HomeProjectCard({ project }: { project: Project }) {
     tasks.length > 0
       ? `${completedCount}/${tasks.length} methods complete`
       : "No algorithm run yet";
-  const completionPercent =
-    tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex w-[18rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
+      className="group flex w-[18.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -310,22 +308,12 @@ function HomeProjectCard({ project }: { project: Project }) {
         </span>
       </div>
 
-      <div className="mt-4">
-        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-          <div
-            className="h-full rounded-full bg-[#1b75a6]"
-            style={{ width: `${completionPercent}%` }}
-          />
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-sm font-bold text-slate-800">{methodSummary}</p>
-          <span className="shrink-0 text-xs font-bold text-slate-400">
-            {project.jobCount} run{project.jobCount === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
+      <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
+        <p className="text-sm font-bold text-slate-800">{methodSummary}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
+          <span>{project.jobCount} run{project.jobCount === 1 ? "" : "s"}</span>
           {runningCount > 0 && <span>{runningCount} active</span>}
-          {failedCount > 0 && <span>{failedCount} failed</span>}
+          {failedCount > 0 && <span className="text-rose-500">{failedCount} failed</span>}
         </div>
       </div>
     </Link>
