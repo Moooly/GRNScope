@@ -25,7 +25,6 @@ type BackendAlgorithmEntry = {
   supports_expression_matrix: boolean;
   active: boolean;
   recommended: boolean;
-  estimated_runtime: string;
   strengths: string[];
   limitations: string[];
   recommended_use_cases: string[];
@@ -235,11 +234,6 @@ export default function CreateProjectFlow({
     () => compatibleAlgorithms.filter((algorithm) => selectedIds.includes(algorithm.id)),
     [compatibleAlgorithms, selectedIds],
   );
-
-  const estimatedTotalRuntime = useMemo(() => {
-    if (selectedAlgorithms.length === 0) return "No algorithms selected";
-    return `${selectedAlgorithms.length} selected algorithm${selectedAlgorithms.length === 1 ? "" : "s"}`;
-  }, [selectedAlgorithms]);
 
   // Auto-fill project name from the uploaded filename, but only when the user
   // hasn't typed something custom.
@@ -555,7 +549,6 @@ export default function CreateProjectFlow({
       selectedIds={selectedIds}
       compatibleAlgorithms={compatibleAlgorithms}
       selectedAlgorithms={selectedAlgorithms}
-      estimatedTotalRuntime={estimatedTotalRuntime}
       ensembleEnabled={ensembleEnabled}
       datasetSummary={datasetSummary}
       errors={errors}

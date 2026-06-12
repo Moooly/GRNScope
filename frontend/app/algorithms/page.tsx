@@ -34,7 +34,6 @@ type BackendAlgorithmEntry = {
   supports_expression_matrix: boolean;
   active: boolean;
   recommended: boolean;
-  estimated_runtime: string;
   strengths: string[];
   limitations: string[];
   recommended_use_cases: string[];

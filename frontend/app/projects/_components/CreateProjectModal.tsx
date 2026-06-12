@@ -30,7 +30,6 @@ interface CreateProjectModalProps {
   selectedIds: string[];
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
-  estimatedTotalRuntime: string;
   ensembleEnabled: boolean;
   datasetSummary: DatasetSummary;
   errors: string[];
