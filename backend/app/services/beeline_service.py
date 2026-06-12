@@ -73,6 +73,14 @@ ERROR_NOISE_MARKERS = (
 )
 
 
+def looks_like_progress_only_message(message: str) -> bool:
+    lowered = message.lower()
+    has_progress_bar = bool(re.search(r"\d+%\|", message)) or "s/it" in lowered or "it/s" in lowered
+    has_run_counter = bool(re.search(r"\b\d+\s*/\s*\d+\b", message))
+    has_real_error_marker = any(marker in lowered for marker in ERROR_PRIORITY_MARKERS)
+    return has_progress_bar and has_run_counter and not has_real_error_marker
+
+
 def resolve_beeline_root() -> Path:
     for candidate in BEELINE_ROOT_CANDIDATES:
         if not candidate:
@@ -531,6 +539,8 @@ def extract_useful_error_message(log_text: str, algorithm_id: str) -> str | None
             continue
 
         lowered = line.lower()
+        if looks_like_progress_only_message(line):
+            continue
         if lowered.startswith(ERROR_NOISE_MARKERS):
             continue
         if lowered.startswith("line ") and " in " in lowered:
@@ -550,6 +560,8 @@ def extract_useful_error_message(log_text: str, algorithm_id: str) -> str | None
         return None
 
     message = sanitize_error_message(message)
+    if looks_like_progress_only_message(message):
+        return None
     if len(message) > 500:
         message = message[:497].rstrip() + "..."
     return message or None
@@ -559,7 +571,11 @@ def extract_user_friendly_beeline_error(log_text: str, algorithm_id: str) -> str
     message = extract_useful_error_message(log_text, algorithm_id)
     if message:
         return message
-    return f"{algorithm_id} failed during execution, but BEELINE did not return a clear error message."
+    return (
+        f"{algorithm_id} stopped before producing a usable result. "
+        "The available logs only contain progress updates, so no specific error message was returned. "
+        "Try rerunning this algorithm; if it fails again, check the server Docker logs for the underlying runtime error."
+    )
 
 
 def read_recent_log_text(path: Path, max_bytes: int = 20000) -> str:

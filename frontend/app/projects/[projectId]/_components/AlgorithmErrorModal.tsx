@@ -62,6 +62,10 @@ function normalizeAlgorithmErrorMessage(message: string, algorithmId: string): s
   const trimmedMessage = message.trim();
   const lowered = trimmedMessage.toLowerCase();
 
+  if (looksLikeProgressOnlyMessage(trimmedMessage)) {
+    return `${algorithmId} stopped before producing a usable result. The available logs only contain progress updates, so no specific error message was returned. Try rerunning this algorithm; if it fails again, check the server Docker logs for the underlying runtime error.`;
+  }
+
   if (
     lowered.includes("rankededges.csv not found") ||
     (lowered.includes("rankededges.csv") && lowered.includes("no such file"))
@@ -72,4 +76,20 @@ function normalizeAlgorithmErrorMessage(message: string, algorithmId: string): s
   return trimmedMessage
     .replace(/\/home\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file")
     .replace(/\/Users\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file");
+}
+
+function looksLikeProgressOnlyMessage(message: string): boolean {
+  const lowered = message.toLowerCase();
+  const hasProgressBar = /\d+%\|/.test(message) || lowered.includes("s/it") || lowered.includes("it/s");
+  const hasRunCounter = /\b\d+\s*\/\s*\d+\b/.test(message);
+  const hasRealErrorMarker =
+    lowered.includes("error") ||
+    lowered.includes("exception") ||
+    lowered.includes("failed") ||
+    lowered.includes("no such file") ||
+    lowered.includes("not found") ||
+    lowered.includes("killed") ||
+    lowered.includes("out of memory");
+
+  return hasProgressBar && hasRunCounter && !hasRealErrorMarker;
 }
