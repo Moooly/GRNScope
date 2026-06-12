@@ -305,7 +305,7 @@ export default function HomePage() {
 
           {visibleProjectHistory.length > 0 ? (
             <div className="group/history relative mt-5">
-              <div className="flex snap-x items-start gap-4 overflow-x-auto pb-4">
+              <div className="flex snap-x items-start gap-4 overflow-x-auto pb-4 pt-1">
                 {visibleProjectHistory.map((project) => (
                   <HomeProjectCard key={project.id} project={project} />
                 ))}
@@ -371,7 +371,7 @@ function HomeProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
+      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[2px] hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
