@@ -36,7 +36,7 @@ export default function HomePage() {
         if (isCancelled) return;
 
         if (data.ok && Array.isArray(data.projects)) {
-          setProjectHistory(data.projects as Project[]);
+          setProjectHistory(data.projects.map(normalizeProjectDimensions) as Project[]);
         } else {
           setProjectHistory([]);
         }
@@ -154,15 +154,19 @@ export default function HomePage() {
         projectIds.map(async (projectId) => {
           try {
             const response = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
-            if (!response.ok) return null;
+            if (!response.ok) {
+              metadataRequestIds.current.delete(projectId);
+              return null;
+            }
             const data = await response.json();
             const metadata = data.metadata ?? {};
             return {
               projectId,
-              geneCount: toOptionalNumber(metadata.gene_count),
-              cellCount: toOptionalNumber(metadata.cell_count),
+              geneCount: readOptionalDimension(metadata, "gene"),
+              cellCount: readOptionalDimension(metadata, "cell"),
             };
           } catch {
+            metadataRequestIds.current.delete(projectId);
             return null;
           }
         }),
@@ -416,6 +420,20 @@ function HomeProjectCard({ project }: { project: Project }) {
 function toOptionalNumber(value: unknown): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function readOptionalDimension(source: Record<string, unknown>, type: "gene" | "cell") {
+  const camelKey = type === "gene" ? "geneCount" : "cellCount";
+  const snakeKey = type === "gene" ? "gene_count" : "cell_count";
+  return toOptionalNumber(source[camelKey] ?? source[snakeKey]);
+}
+
+function normalizeProjectDimensions(project: Project & Record<string, unknown>): Project {
+  return {
+    ...project,
+    geneCount: project.geneCount ?? readOptionalDimension(project, "gene"),
+    cellCount: project.cellCount ?? readOptionalDimension(project, "cell"),
+  };
 }
 
 function getProjectStatus(project: Project) {
