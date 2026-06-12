@@ -73,31 +73,43 @@ export default function JobProgressBanner({
   const hasNotificationEmail = Boolean(notificationEmail);
   const getAlgorithmName = (algorithmId: string) =>
     algorithmMetaMap?.get(algorithmId)?.name ?? algorithmId;
-  const runningMessages = running.slice(0, 2).map((task) => {
+  const runningItems = running.slice(0, 2).map((task) => {
     const algorithmName = getAlgorithmName(task.algorithm_id);
     const remainingSeconds = Number(task.estimated_remaining_seconds);
 
     if (Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
-      return `${algorithmName} is running · about ${formatAlgorithmRuntime(remainingSeconds)} remaining`;
+      return {
+        name: algorithmName,
+        detail: `about ${formatAlgorithmRuntime(remainingSeconds)} left`,
+      };
     }
 
     if (Number.isFinite(remainingSeconds) && remainingSeconds === 0) {
-      return `${algorithmName} is running · finishing up`;
+      return {
+        name: algorithmName,
+        detail: "finishing up",
+      };
     }
 
-    return `${algorithmName} is running · estimating time`;
+    return {
+      name: algorithmName,
+      detail: "estimating time",
+    };
   });
-  const hiddenRunningCount = Math.max(0, running.length - runningMessages.length);
+  const hiddenRunningCount = Math.max(0, running.length - runningItems.length);
   if (hiddenRunningCount > 0) {
-    runningMessages.push(`${hiddenRunningCount} more running`);
+    runningItems.push({
+      name: `${hiddenRunningCount} more`,
+      detail: "running",
+    });
   }
   const queuedNames = queued.slice(0, 3).map((task) => getAlgorithmName(task.algorithm_id));
   const hiddenQueuedCount = Math.max(0, queued.length - queuedNames.length);
   const queuedMessage =
     queuedNames.length > 0
-      ? `${formatNameList(queuedNames)} ${
-          queuedNames.length === 1 ? "is" : "are"
-        } waiting for a compute slot${hiddenQueuedCount > 0 ? `, plus ${hiddenQueuedCount} more` : ""}.`
+      ? `Waiting: ${formatNameList(queuedNames)}${
+          hiddenQueuedCount > 0 ? `, plus ${hiddenQueuedCount} more` : ""
+        }`
       : "";
 
   const saveNotificationEmail = async () => {
@@ -219,12 +231,34 @@ export default function JobProgressBanner({
         />
       </div>
 
-      <div className="mt-3 space-y-1.5 text-sm font-medium leading-6 text-slate-600">
-        {runningMessages.length > 0 ? (
-          <p className="text-slate-700">{runningMessages.join(" · ")}</p>
+      <div className="mt-3 space-y-2 text-sm font-medium leading-6 text-slate-600">
+        {runningItems.length > 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <p className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-[#1b75a6]">
+              Running now
+            </p>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {runningItems.map((item) => (
+                <div
+                  key={item.name}
+                  className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-slate-700 ring-1 ring-slate-200"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#1b75a6]"
+                    />
+                    <span className="truncate font-bold text-slate-900">{item.name}</span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs font-bold text-slate-500">
+                    {item.detail}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
         {queuedMessage ? <p>{queuedMessage}</p> : null}
-        <p>Results appear as each method finishes. Long-running methods may continue in the background.</p>
       </div>
     </section>
   );
