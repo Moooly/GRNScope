@@ -49,7 +49,7 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
             {task.algorithmId} failed
           </h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            GRNScope could not finish this algorithm. The message below shows the most likely reason. If it is still unclear, contact us and we can inspect the runtime logs.
+            GRNScope could not finish this algorithm. The message below explains what happened. If it is still unclear, contact us with this project.
           </p>
         </div>
 
@@ -85,19 +85,25 @@ function normalizeAlgorithmErrorMessage(message: string, algorithmId: string): s
   const lowered = trimmedMessage.toLowerCase();
 
   if (looksLikeProgressOnlyMessage(trimmedMessage)) {
-    return `${algorithmId} stopped before writing an edge result. The captured logs only contain progress updates, so BEELINE did not return the real runtime error. Try rerunning this algorithm once. If it fails again, contact us so we can check the server logs.`;
+    return `${algorithmId} stopped before creating a network result. GRNScope could not identify a specific reason from the captured output. Try running the algorithm again. If it fails again, contact us with this project.`;
   }
 
   if (
     lowered.includes("rankededges.csv not found") ||
     (lowered.includes("rankededges.csv") && lowered.includes("no such file"))
   ) {
-    return `${algorithmId} finished without producing an edge result file. This usually means the Docker container stopped before exporting the algorithm output. If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm. If the problem continues, contact us with this project.`;
+    return `${algorithmId} did not return a network result. This can happen when the algorithm stops early or cannot save its output. Try running the algorithm again. If it fails again, contact us with this project.`;
   }
 
-  return trimmedMessage
+  const cleanedMessage = trimmedMessage
     .replace(/\/home\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file")
     .replace(/\/Users\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file");
+
+  if (containsInternalDetails(cleanedMessage)) {
+    return `${algorithmId} could not complete the analysis. GRNScope received an internal execution error instead of a usable network result. Try running the algorithm again. If it fails again, contact us with this project.`;
+  }
+
+  return cleanedMessage;
 }
 
 function looksLikeProgressOnlyMessage(message: string): boolean {
@@ -114,4 +120,20 @@ function looksLikeProgressOnlyMessage(message: string): boolean {
     lowered.includes("out of memory");
 
   return hasProgressBar && hasRunCounter && !hasRealErrorMarker;
+}
+
+function containsInternalDetails(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return (
+    lowered.includes("beeline") ||
+    lowered.includes("docker") ||
+    lowered.includes("container") ||
+    lowered.includes("server log") ||
+    lowered.includes("runtime log") ||
+    lowered.includes("runtime file") ||
+    lowered.includes("rankededges.csv") ||
+    lowered.includes("/home/") ||
+    lowered.includes("/users/") ||
+    lowered.includes("/private/var/")
+  );
 }

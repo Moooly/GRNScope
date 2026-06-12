@@ -572,9 +572,9 @@ def extract_user_friendly_beeline_error(log_text: str, algorithm_id: str) -> str
     if message:
         return message
     return (
-        f"{algorithm_id} stopped before producing a usable result. "
-        "The available logs only contain progress updates, so no specific error message was returned. "
-        "Try rerunning this algorithm once. If it fails again, contact support so the server logs can be checked."
+        f"{algorithm_id} stopped before creating a network result. "
+        "GRNScope could not identify a specific reason from the captured output. "
+        "Try running the algorithm again. If it fails again, contact support with this project."
     )
 
 
@@ -627,15 +627,14 @@ def build_missing_ranked_edges_error(
     )
     log_message = extract_useful_error_message(log_text, algorithm_id)
     base_message = (
-        f"{algorithm_id} finished without producing an edge result. "
-        "This usually means the algorithm container stopped before exporting its output."
+        f"{algorithm_id} did not return a network result. "
+        "This can happen when the algorithm stops early or cannot save its output."
     )
     if log_message:
         return f"{base_message} The most relevant log message was: {log_message}"
     return (
-        f"{base_message} No clear error message was found in the BEELINE logs. "
-        "If this happened after changing a Docker image, restore or rebuild that image and rerun the algorithm. "
-        "If the problem continues, contact support with this project."
+        f"{base_message} Try running the algorithm again. "
+        "If it fails again, contact support with this project."
     )
 
 
