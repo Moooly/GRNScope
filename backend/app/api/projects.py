@@ -315,6 +315,15 @@ async def list_projects(request: Request, response: Response):
                     continue
                 jobs_manifest = read_jobs_manifest(project_dir)
                 latest_job = jobs_manifest[-1] if jobs_manifest else None
+                metadata_manifest = {}
+                metadata_path = project_dir / "metadata.json"
+                if metadata_path.exists():
+                    try:
+                        metadata_manifest = json.loads(
+                            metadata_path.read_text(encoding="utf-8")
+                        )
+                    except Exception:
+                        metadata_manifest = {}
 
                 created_at = project_manifest.get("created_at")
                 if not created_at:
@@ -336,6 +345,8 @@ async def list_projects(request: Request, response: Response):
                         ),
                         "createdAtTimestamp": created_at,
                         "datasetCount": 1,
+                        "geneCount": metadata_manifest.get("gene_count"),
+                        "cellCount": metadata_manifest.get("cell_count"),
                         "jobCount": len(jobs_manifest) if jobs_manifest else 0,
                         "latestJob": latest_job,
                         "created_at_sort": created_at,

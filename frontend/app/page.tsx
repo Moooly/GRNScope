@@ -278,19 +278,16 @@ function HomeProjectCard({ project }: { project: Project }) {
   const status = getProjectStatus(project);
   const tasks = project.latestJob?.tasks ?? [];
   const completedCount = tasks.filter((task) => task.status === "Completed").length;
-  const failedCount = tasks.filter((task) => task.status === "Failed").length;
-  const runningCount = tasks.filter(
-    (task) => task.status === "Running" || task.status === "Queued",
-  ).length;
-  const methodSummary =
-    tasks.length > 0
-      ? `${completedCount}/${tasks.length} algorithms complete`
-      : "No algorithm run yet";
+  const algorithmSummary = tasks.length > 0 ? `${completedCount}/${tasks.length}` : "-";
+  const geneSummary =
+    typeof project.geneCount === "number"
+      ? project.geneCount.toLocaleString()
+      : "-";
 
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
+      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -308,11 +305,18 @@ function HomeProjectCard({ project }: { project: Project }) {
         </span>
       </div>
 
-      <div className="mt-4 border-t border-slate-100 pt-3">
-        <p className="text-sm font-bold text-slate-800">{methodSummary}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
-          {runningCount > 0 && <span>{runningCount} active</span>}
-          {failedCount > 0 && <span className="text-rose-500">{failedCount} failed</span>}
+      <div className="mt-auto grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+        <div>
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Genes
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-800">{geneSummary}</p>
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Algorithms
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-800">{algorithmSummary}</p>
         </div>
       </div>
     </Link>

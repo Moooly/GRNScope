@@ -27,6 +27,8 @@ export type Project = {
   createdAt: string;
   createdAtTimestamp?: number | string | null;
   datasetCount: number;
+  geneCount?: number | null;
+  cellCount?: number | null;
   jobCount: number;
   latestJob?: ProjectJob | null;
 };

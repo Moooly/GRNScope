@@ -502,6 +502,8 @@ export default function CreateProjectFlow({
           .replace(",", ""),
         createdAtTimestamp: now.getTime() / 1000,
         datasetCount: 1,
+        geneCount,
+        cellCount,
         jobCount: 1,
         latestJob: {
           job_id: data.job_id || "pending",
