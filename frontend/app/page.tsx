@@ -213,11 +213,6 @@ export default function HomePage() {
               </svg>
             </Link>
             <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-              {visibleProjectHistory.length > 0 && (
-                <p className="text-sm font-semibold text-slate-500">
-                  Slide to browse history
-                </p>
-              )}
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(true)}
@@ -229,10 +224,28 @@ export default function HomePage() {
           </div>
 
           {visibleProjectHistory.length > 0 ? (
-            <div className="mt-5 flex snap-x gap-4 overflow-x-auto pb-4">
-              {visibleProjectHistory.map((project) => (
-                <HomeProjectCard key={project.id} project={project} />
-              ))}
+            <div className="group/history relative mt-5">
+              <div className="flex snap-x gap-4 overflow-x-auto pb-4">
+                {visibleProjectHistory.map((project) => (
+                  <HomeProjectCard key={project.id} project={project} />
+                ))}
+              </div>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 hidden w-24 items-center justify-end bg-gradient-to-l from-[#f7fbff] via-[#f7fbff]/85 to-transparent opacity-0 transition-opacity duration-200 group-hover/history:flex group-hover/history:opacity-100 lg:flex"
+              >
+                <span className="mr-1 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm ring-1 ring-slate-200">
+                  <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">
+                    <path
+                      d="M2.5 3.5 12.5 14 2.5 24.5"
+                      stroke="currentColor"
+                      strokeWidth="3.25"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              </div>
             </div>
           ) : (
             <Link
@@ -273,34 +286,46 @@ function HomeProjectCard({ project }: { project: Project }) {
     tasks.length > 0
       ? `${completedCount}/${tasks.length} methods complete`
       : "No algorithm run yet";
+  const completionPercent =
+    tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex min-h-[11rem] w-[20rem] shrink-0 snap-start flex-col justify-between rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
+      className="group flex w-[18rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
     >
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="line-clamp-2 text-lg font-bold leading-6 tracking-tight text-slate-950">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-bold leading-6 tracking-tight text-slate-950">
             {project.name}
           </h3>
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold ring-1 ${status.className}`}
-          >
-            {status.label}
-          </span>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            Created {createdAtLabel}
+          </p>
         </div>
-        <p className="mt-3 text-sm font-semibold text-slate-500">
-          Created {createdAtLabel}
-        </p>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold ring-1 ${status.className}`}
+        >
+          {status.label}
+        </span>
       </div>
 
-      <div className="mt-5 border-t border-slate-100 pt-4">
-        <p className="text-sm font-semibold text-slate-700">{methodSummary}</p>
-        <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
+      <div className="mt-4">
+        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+          <div
+            className="h-full rounded-full bg-[#1b75a6]"
+            style={{ width: `${completionPercent}%` }}
+          />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-sm font-bold text-slate-800">{methodSummary}</p>
+          <span className="shrink-0 text-xs font-bold text-slate-400">
+            {project.jobCount} run{project.jobCount === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
           {runningCount > 0 && <span>{runningCount} active</span>}
           {failedCount > 0 && <span>{failedCount} failed</span>}
-          <span>{project.jobCount} run{project.jobCount === 1 ? "" : "s"}</span>
         </div>
       </div>
     </Link>
