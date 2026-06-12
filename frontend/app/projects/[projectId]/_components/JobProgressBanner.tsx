@@ -80,7 +80,7 @@ export default function JobProgressBanner({
     if (Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
       return {
         name: algorithmName,
-        detail: `about ${formatAlgorithmRuntime(remainingSeconds)} left`,
+        detail: `${formatAlgorithmRuntime(remainingSeconds)} left`,
       };
     }
 
@@ -141,19 +141,20 @@ export default function JobProgressBanner({
   };
 
   return (
-    <section className="mt-8 rounded-2xl border border-slate-200 bg-white px-5 py-5 text-slate-900 shadow-sm sm:px-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <section className="mt-8 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4 text-slate-900 shadow-sm sm:px-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <span
               aria-hidden="true"
               className="inline-flex h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]"
             />
             <h2 className="text-lg font-bold text-slate-950">Analysis running</h2>
+            <span className="hidden text-slate-300 sm:inline">·</span>
+            <p className="text-sm font-semibold text-slate-500">
+              {statusSummary.join(" · ")}
+            </p>
           </div>
-          <p className="mt-1 text-sm font-semibold text-slate-500">
-            {statusSummary.join(" · ")}
-          </p>
         </div>
 
         {onSaveNotificationEmail && (
@@ -224,41 +225,30 @@ export default function JobProgressBanner({
         )}
       </div>
 
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full bg-[#1b75a6] transition-[width] duration-500 ease-out"
           style={{ width: `${overall}%` }}
         />
       </div>
 
-      <div className="mt-3 space-y-2 text-sm font-medium leading-6 text-slate-600">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-600">
         {runningItems.length > 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-            <p className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-[#1b75a6]">
-              Running now
-            </p>
-            <div className="mt-2 grid gap-2 md:grid-cols-2">
-              {runningItems.map((item) => (
-                <div
-                  key={item.name}
-                  className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-slate-700 ring-1 ring-slate-200"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#1b75a6]"
-                    />
-                    <span className="truncate font-bold text-slate-900">{item.name}</span>
-                  </span>
-                  <span className="shrink-0 text-right text-xs font-bold text-slate-500">
-                    {item.detail}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          runningItems.map((item) => (
+            <span
+              key={item.name}
+              className="inline-flex max-w-full items-center gap-2 rounded-full bg-[#f2f9fc] px-3 py-1.5 text-[#1b75a6]"
+            >
+              <span className="font-bold text-slate-900">{item.name}</span>
+              <span className="text-xs font-bold text-slate-500">{item.detail}</span>
+            </span>
+          ))
         ) : null}
-        {queuedMessage ? <p>{queuedMessage}</p> : null}
+        {queuedMessage ? (
+          <span className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
+            {queuedMessage}
+          </span>
+        ) : null}
       </div>
     </section>
   );
