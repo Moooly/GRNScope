@@ -40,6 +40,7 @@ backend/__pycache__/
 backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
+backend/projects/
 backend/uploads/
 backend/outputs/
 
