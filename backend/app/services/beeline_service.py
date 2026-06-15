@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -10,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from math import fsum, log2
 from pathlib import Path
@@ -22,6 +24,10 @@ from ..repositories.project_repository import read_project_manifest
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 30
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
+DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
+DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
+BEELINE_MIRROR_ENTRIES = ("BLRunner.py", "BLRun", "Algorithms", "utils")
+_BEELINE_MIRROR_LOCK = threading.Lock()
 
 
 class AlgorithmStoppedError(RuntimeError):
@@ -81,13 +87,119 @@ def looks_like_progress_only_message(message: str) -> bool:
     return has_progress_bar and has_run_counter and not has_real_error_marker
 
 
+def path_contains_shell_sensitive_whitespace(path: Path) -> bool:
+    return any(character.isspace() for character in str(path))
+
+
+def stable_path_digest(path: Path) -> str:
+    return hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:12]
+
+
+def beeline_source_signature(beeline_root: Path) -> str:
+    latest_mtime_ns = 0
+    total_size = 0
+
+    for entry_name in BEELINE_MIRROR_ENTRIES:
+        entry_path = beeline_root / entry_name
+        if not entry_path.exists():
+            continue
+        paths = entry_path.rglob("*") if entry_path.is_dir() else [entry_path]
+        for path in paths:
+            if not path.is_file():
+                continue
+            if path.name == ".DS_Store" or "__pycache__" in path.parts:
+                continue
+            stat_result = path.stat()
+            latest_mtime_ns = max(latest_mtime_ns, stat_result.st_mtime_ns)
+            total_size += stat_result.st_size
+
+    return f"{beeline_root.resolve()}\n{latest_mtime_ns}\n{total_size}\n"
+
+
+def copy_beeline_execution_mirror(source_root: Path, mirror_root: Path) -> Path:
+    source_root = source_root.resolve()
+    signature = beeline_source_signature(source_root)
+    marker_path = mirror_root / ".grnscope_mirror_signature"
+
+    with _BEELINE_MIRROR_LOCK:
+        if mirror_root.is_dir() and marker_path.is_file():
+            try:
+                if marker_path.read_text(encoding="utf-8") == signature:
+                    return mirror_root
+            except OSError:
+                pass
+
+        temporary_root = mirror_root.with_name(
+            f"{mirror_root.name}.tmp-{os.getpid()}-{int(time.time() * 1000)}"
+        )
+        if temporary_root.exists() or temporary_root.is_symlink():
+            if temporary_root.is_dir() and not temporary_root.is_symlink():
+                shutil.rmtree(temporary_root)
+            else:
+                temporary_root.unlink()
+        temporary_root.mkdir(parents=True, exist_ok=True)
+
+        ignore_patterns = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
+        for entry_name in BEELINE_MIRROR_ENTRIES:
+            source_entry = source_root / entry_name
+            destination_entry = temporary_root / entry_name
+            if source_entry.is_dir():
+                shutil.copytree(source_entry, destination_entry, ignore=ignore_patterns)
+            elif source_entry.is_file():
+                shutil.copy2(source_entry, destination_entry)
+
+        (temporary_root / ".grnscope_mirror_signature").write_text(
+            signature,
+            encoding="utf-8",
+        )
+
+        if mirror_root.exists() or mirror_root.is_symlink():
+            if mirror_root.is_dir() and not mirror_root.is_symlink():
+                shutil.rmtree(mirror_root)
+            else:
+                mirror_root.unlink()
+        temporary_root.rename(mirror_root)
+        return mirror_root
+
+
+def remove_path_if_present(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def space_free_beeline_root(beeline_root: Path) -> Path:
+    beeline_root = beeline_root.resolve()
+    if not path_contains_shell_sensitive_whitespace(beeline_root):
+        return beeline_root
+
+    link_root = Path(
+        os.environ.get("GRNSCOPE_SPACE_FREE_LINK_ROOT", DEFAULT_SPACE_FREE_LINK_ROOT)
+    ).expanduser()
+    return copy_beeline_execution_mirror(
+        beeline_root,
+        link_root / f"beeline-{stable_path_digest(beeline_root.resolve())}",
+    )
+
+
+def space_free_runtime_root(runtime_root: Path, project_id: str, algorithm_id: str) -> Path:
+    if not path_contains_shell_sensitive_whitespace(runtime_root):
+        return runtime_root
+
+    link_root = Path(
+        os.environ.get("GRNSCOPE_SPACE_FREE_RUNTIME_ROOT", DEFAULT_SPACE_FREE_RUNTIME_ROOT)
+    ).expanduser()
+    return link_root / project_id / algorithm_id.upper()
+
+
 def resolve_beeline_root() -> Path:
     for candidate in BEELINE_ROOT_CANDIDATES:
         if not candidate:
             continue
         blrunner_path = candidate / "BLRunner.py"
         if candidate.exists() and blrunner_path.exists():
-            return candidate
+            return space_free_beeline_root(candidate)
     raise FileNotFoundError(
         "BEELINE repository not found. Set BEELINE_ROOT to the local Beeline repo path."
     )
@@ -643,9 +755,12 @@ def prepare_beeline_runtime(
     algorithm_id: str,
     project_manifest: dict,
 ) -> tuple[Path, Path, Path, str, list[str], dict[str, dict], dict]:
-    runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
-    if runtime_root.exists():
-        shutil.rmtree(runtime_root)
+    project_runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
+    runtime_root = space_free_runtime_root(project_runtime_root, project_id, algorithm_id)
+
+    remove_path_if_present(project_runtime_root)
+    if runtime_root != project_runtime_root:
+        remove_path_if_present(runtime_root)
     runtime_root.mkdir(parents=True, exist_ok=True)
 
     input_dir = runtime_root / "inputs"
