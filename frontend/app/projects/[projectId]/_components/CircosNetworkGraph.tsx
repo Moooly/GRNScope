@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type Ref } from "react";
+import { useId, useMemo, type Ref } from "react";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
 
 type CircosNetworkGraphProps = {
@@ -79,6 +79,7 @@ const CIRCOS_UNKNOWN_SIGN_COLOR = "#94a3b8";
 const CIRCOS_CHROMOSOME_COLORS = ["#f3f5f7", "#e5e9ee"];
 const UNMAPPED_CHROMOSOME = "unmapped";
 const UNMAPPED_VISUAL_LENGTH = 90000000;
+const UNMAPPED_LABEL_RADIUS = CHROMOSOME_LABEL_RADIUS + 4;
 
 function normalizeChromosome(value?: string | null): string {
   if (!value) return "";
@@ -187,6 +188,23 @@ function getAnnularArcPath(
   ].join(" ");
 }
 
+function getArcLabelPath(startAngle: number, endAngle: number, radius: number) {
+  const span = Math.max(0, endAngle - startAngle);
+  const inset = Math.min(0.04, span * 0.16);
+  const paddedStart = startAngle + inset;
+  const paddedEnd = endAngle - inset;
+  const midpoint = (paddedStart + paddedEnd) / 2;
+  const reverseForReadability = Math.sin(midpoint) > 0;
+  const pathStartAngle = reverseForReadability ? paddedEnd : paddedStart;
+  const pathEndAngle = reverseForReadability ? paddedStart : paddedEnd;
+  const start = polarToCartesian(pathStartAngle, radius);
+  const end = polarToCartesian(pathEndAngle, radius);
+  const largeArc = Math.abs(pathEndAngle - pathStartAngle) > Math.PI ? 1 : 0;
+  const sweep = reverseForReadability ? 0 : 1;
+
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} ${sweep} ${end.x} ${end.y}`;
+}
+
 /**
  * Bezier ribbon that connects two arc segments through the center. Standard
  * d3-style chord rendering: the source and target spans become the two arcs
@@ -263,6 +281,9 @@ export default function CircosNetworkGraph({
   onSelectEdge,
   svgRef,
 }: CircosNetworkGraphProps) {
+  const componentId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const unmappedArcLabelId = `${componentId || "circos"}-unmapped-arc-label`;
+
   const layout = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
 
@@ -442,10 +463,12 @@ export default function CircosNetworkGraph({
       >
         {/* Neutral chromosome bands keep edge color reserved for regulation sign. */}
         {layout.chromosomeLayout.map((chr) => {
+          const isUnmapped = chr.chromosome === UNMAPPED_CHROMOSOME;
           const sectorAngle = chr.endAngle - chr.startAngle;
           // Hide the chromosome number when its sector is too narrow for the
           // glyph to fit cleanly; the colour band still carries the identity.
-          const showLabel = sectorAngle * CHROMOSOME_LABEL_RADIUS > 14;
+          const showLabel =
+            !isUnmapped && sectorAngle * CHROMOSOME_LABEL_RADIUS > 14;
           return (
             <g key={`chr-${chr.chromosome}`}>
               <path
@@ -460,11 +483,37 @@ export default function CircosNetworkGraph({
                 strokeWidth="1.4"
               >
                 <title>
-                  {chr.chromosome === UNMAPPED_CHROMOSOME
+                  {isUnmapped
                     ? "Unmapped genes without chromosome coordinates"
                     : `${chr.chromosome} · ${(chr.length / 1e6).toFixed(1)} Mb`}
                 </title>
               </path>
+              {isUnmapped && (
+                <>
+                  <defs>
+                    <path
+                      id={unmappedArcLabelId}
+                      d={getArcLabelPath(
+                        chr.startAngle,
+                        chr.endAngle,
+                        UNMAPPED_LABEL_RADIUS,
+                      )}
+                    />
+                  </defs>
+                  <text
+                    dominantBaseline="central"
+                    className="pointer-events-none select-none fill-slate-500 text-[10px] font-semibold"
+                  >
+                    <textPath
+                      href={`#${unmappedArcLabelId}`}
+                      startOffset="50%"
+                      textAnchor="middle"
+                    >
+                      unmapped
+                    </textPath>
+                  </text>
+                </>
+              )}
               {showLabel && (
                 <text
                   x={chr.labelX}
@@ -473,9 +522,7 @@ export default function CircosNetworkGraph({
                   dominantBaseline="central"
                   className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
                 >
-                  {chr.chromosome === UNMAPPED_CHROMOSOME
-                    ? "Unmapped"
-                    : chr.chromosome.replace("chr", "")}
+                  {chr.chromosome.replace("chr", "")}
                 </text>
               )}
             </g>
@@ -539,6 +586,12 @@ export default function CircosNetworkGraph({
 
             const ribbonColor = getConsensusEdgeColor(edge);
             const ribbonOpacity = getConsensusEdgeOpacity(edge, score);
+            const sourcePosition = sourceGene.isUnmapped
+              ? "unmapped"
+              : `${sourceGene.chromosome}:${sourceGene.start.toLocaleString()}`;
+            const targetPosition = targetGene.isUnmapped
+              ? "unmapped"
+              : `${targetGene.chromosome}:${targetGene.start.toLocaleString()}`;
 
             return (
               <path
@@ -556,15 +609,7 @@ export default function CircosNetworkGraph({
                 }}
               >
                 <title>
-                  {sourceId} (
-                  {sourceGene.isUnmapped
-                    ? "unmapped"
-                    : `${sourceGene.chromosome}:${sourceGene.start.toLocaleString()}`}
-                  ) → {targetId} (
-                  {targetGene.isUnmapped
-                    ? "unmapped"
-                    : `${targetGene.chromosome}:${targetGene.start.toLocaleString()}`}
-                  )
+                  {`${sourceId} (${sourcePosition}) → ${targetId} (${targetPosition})`}
                 </title>
               </path>
             );
