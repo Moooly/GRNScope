@@ -187,15 +187,21 @@ function getAnnularArcPath(
   ].join(" ");
 }
 
-function getReadableArcTextPath(
+function getCenteredArcTextPath(
   startAngle: number,
   endAngle: number,
   radius: number,
 ) {
-  const midpoint = (startAngle + endAngle) / 2;
+  const sectorSpan = Math.max(0, endAngle - startAngle);
+  const midpoint = startAngle + sectorSpan / 2;
+  const labelSpan = Math.min(sectorSpan * 0.82, 0.58);
+  const labelStartAngle = midpoint - labelSpan / 2;
+  const labelEndAngle = midpoint + labelSpan / 2;
   const reverseForReadability = Math.sin(midpoint) > 0;
-  const pathStartAngle = reverseForReadability ? endAngle : startAngle;
-  const pathEndAngle = reverseForReadability ? startAngle : endAngle;
+  const pathStartAngle = reverseForReadability
+    ? labelEndAngle
+    : labelStartAngle;
+  const pathEndAngle = reverseForReadability ? labelStartAngle : labelEndAngle;
   const start = polarToCartesian(pathStartAngle, radius);
   const end = polarToCartesian(pathEndAngle, radius);
   const largeArc = Math.abs(pathEndAngle - pathStartAngle) > Math.PI ? 1 : 0;
@@ -491,7 +497,7 @@ export default function CircosNetworkGraph({
                 <defs>
                   <path
                     id={unmappedArcLabelId}
-                    d={getReadableArcTextPath(
+                    d={getCenteredArcTextPath(
                       chr.startAngle,
                       chr.endAngle,
                       CHROMOSOME_LABEL_RADIUS,
@@ -502,6 +508,7 @@ export default function CircosNetworkGraph({
               {isUnmapped ? (
                 <text
                   dominantBaseline="central"
+                  dy="0.25em"
                   className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
                 >
                   <textPath
