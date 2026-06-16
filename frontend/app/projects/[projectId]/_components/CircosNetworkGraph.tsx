@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type Ref } from "react";
+import { useId, useMemo, type Ref } from "react";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
 
 type CircosNetworkGraphProps = {
@@ -187,6 +187,23 @@ function getAnnularArcPath(
   ].join(" ");
 }
 
+function getReadableArcTextPath(
+  startAngle: number,
+  endAngle: number,
+  radius: number,
+) {
+  const midpoint = (startAngle + endAngle) / 2;
+  const reverseForReadability = Math.sin(midpoint) > 0;
+  const pathStartAngle = reverseForReadability ? endAngle : startAngle;
+  const pathEndAngle = reverseForReadability ? startAngle : endAngle;
+  const start = polarToCartesian(pathStartAngle, radius);
+  const end = polarToCartesian(pathEndAngle, radius);
+  const largeArc = Math.abs(pathEndAngle - pathStartAngle) > Math.PI ? 1 : 0;
+  const sweep = reverseForReadability ? 0 : 1;
+
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} ${sweep} ${end.x} ${end.y}`;
+}
+
 /**
  * Bezier ribbon that connects two arc segments through the center. Standard
  * d3-style chord rendering: the source and target spans become the two arcs
@@ -263,6 +280,9 @@ export default function CircosNetworkGraph({
   onSelectEdge,
   svgRef,
 }: CircosNetworkGraphProps) {
+  const componentId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const unmappedArcLabelId = `${componentId || "circos"}-unmapped-arc-label`;
+
   const layout = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
 
@@ -467,7 +487,32 @@ export default function CircosNetworkGraph({
                     : `${chr.chromosome} · ${(chr.length / 1e6).toFixed(1)} Mb`}
                 </title>
               </path>
-              {showLabel && (
+              {isUnmapped && (
+                <defs>
+                  <path
+                    id={unmappedArcLabelId}
+                    d={getReadableArcTextPath(
+                      chr.startAngle,
+                      chr.endAngle,
+                      CHROMOSOME_LABEL_RADIUS,
+                    )}
+                  />
+                </defs>
+              )}
+              {isUnmapped ? (
+                <text
+                  dominantBaseline="central"
+                  className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
+                >
+                  <textPath
+                    href={`#${unmappedArcLabelId}`}
+                    startOffset="50%"
+                    textAnchor="middle"
+                  >
+                    unmapped
+                  </textPath>
+                </text>
+              ) : showLabel ? (
                 <text
                   x={chr.labelX}
                   y={chr.labelY}
@@ -475,9 +520,9 @@ export default function CircosNetworkGraph({
                   dominantBaseline="central"
                   className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
                 >
-                  {isUnmapped ? "unmapped" : chr.chromosome.replace("chr", "")}
+                  {chr.chromosome.replace("chr", "")}
                 </text>
-              )}
+              ) : null}
             </g>
           );
         })}
