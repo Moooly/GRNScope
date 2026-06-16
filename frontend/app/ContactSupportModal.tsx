@@ -143,14 +143,6 @@ export default function ContactSupportModal({
               Describe the question or error you encountered. The current page will be included automatically.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
-            aria-label="Close contact form"
-          >
-            ×
-          </button>
         </div>
 
         {status === "sent" ? (
