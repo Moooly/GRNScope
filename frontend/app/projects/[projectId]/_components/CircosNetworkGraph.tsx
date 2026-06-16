@@ -77,6 +77,8 @@ const CIRCOS_ACTIVATION_COLOR = "#0072B2";
 const CIRCOS_REPRESSION_COLOR = "#D55E00";
 const CIRCOS_UNKNOWN_SIGN_COLOR = "#94a3b8";
 const CIRCOS_CHROMOSOME_COLORS = ["#f3f5f7", "#e5e9ee"];
+const UNMAPPED_CHROMOSOME = "unmapped";
+const UNMAPPED_VISUAL_LENGTH = 90000000;
 
 function normalizeChromosome(value?: string | null): string {
   if (!value) return "";
@@ -87,6 +89,29 @@ function normalizeChromosome(value?: string | null): string {
 
 function getNodeId(node: NodeInfo) {
   return String(node.id);
+}
+
+function hasGenomicCoordinate(node?: NodeInfo) {
+  if (!node) return false;
+  const chromosome = normalizeChromosome(node.chromosome);
+  return (
+    chromosome !== "" &&
+    HG38_CHROMOSOME_LENGTHS[chromosome] !== undefined &&
+    typeof node.start === "number" &&
+    Number.isFinite(node.start)
+  );
+}
+
+function getDisplayChromosomeLength(chromosome: string) {
+  return chromosome === UNMAPPED_CHROMOSOME
+    ? UNMAPPED_VISUAL_LENGTH
+    : HG38_CHROMOSOME_LENGTHS[chromosome];
+}
+
+function getChromosomeSortValue(chromosome: string) {
+  return chromosome === UNMAPPED_CHROMOSOME
+    ? 25
+    : CHROMOSOME_ORDER[chromosome] ?? 999;
 }
 
 function getEdgeKey(edge: AggregatedEdge) {
@@ -226,6 +251,7 @@ type GenePlacement = {
   labelAnchor: "start" | "end";
   labelRotation: number;
   color: string;
+  isUnmapped: boolean;
 };
 
 export default function CircosNetworkGraph({
@@ -240,9 +266,9 @@ export default function CircosNetworkGraph({
   const layout = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
 
-    // Keep edges that connect two genes whose coordinates we know. Sort by
-    // edge score and cap to MAX_CIRCOS_EDGES so the visualisation stays
-    // readable on dense networks.
+    // Keep visible edges even when one endpoint has no genome coordinate.
+    // Unmapped endpoints are placed in a dedicated sector instead of causing
+    // the whole component to disappear from Circos.
     const annotatedEdges = edges
       .filter((edge) => {
         const sourceId = String(edge.source);
@@ -250,14 +276,7 @@ export default function CircosNetworkGraph({
         if (sourceId === targetId) return false;
         const sourceNode = nodeMap.get(sourceId);
         const targetNode = nodeMap.get(targetId);
-        return (
-          !!sourceNode &&
-          !!targetNode &&
-          !!normalizeChromosome(sourceNode.chromosome) &&
-          !!normalizeChromosome(targetNode.chromosome) &&
-          typeof sourceNode.start === "number" &&
-          typeof targetNode.start === "number"
-        );
+        return !!sourceNode && !!targetNode;
       })
       .sort((a, b) => getRawEdgeScore(b) - getRawEdgeScore(a))
       .slice(0, MAX_CIRCOS_EDGES);
@@ -271,21 +290,25 @@ export default function CircosNetworkGraph({
 
     // Group genes by chromosome and figure out which chromosomes appear.
     const chromosomesInUse = new Set<string>();
+    const unmappedGeneIds: string[] = [];
     geneIds.forEach((id) => {
       const node = nodeMap.get(id);
-      const chromosome = normalizeChromosome(node?.chromosome);
-      if (chromosome && HG38_CHROMOSOME_LENGTHS[chromosome] !== undefined) {
-        chromosomesInUse.add(chromosome);
+      if (hasGenomicCoordinate(node)) {
+        chromosomesInUse.add(normalizeChromosome(node?.chromosome));
+      } else {
+        unmappedGeneIds.push(id);
       }
     });
+    if (unmappedGeneIds.length > 0) {
+      chromosomesInUse.add(UNMAPPED_CHROMOSOME);
+    }
 
     const chromosomeList = [...chromosomesInUse].sort(
-      (a, b) =>
-        (CHROMOSOME_ORDER[a] ?? 999) - (CHROMOSOME_ORDER[b] ?? 999),
+      (a, b) => getChromosomeSortValue(a) - getChromosomeSortValue(b),
     );
 
     const totalLength = chromosomeList.reduce(
-      (sum, chr) => sum + HG38_CHROMOSOME_LENGTHS[chr],
+      (sum, chr) => sum + getDisplayChromosomeLength(chr),
       0,
     );
     const totalGapAngle = chromosomeList.length * CHROMOSOME_GAP_RADIANS;
@@ -295,7 +318,7 @@ export default function CircosNetworkGraph({
     let cursor = -Math.PI / 2; // start at 12 o'clock
 
     chromosomeList.forEach((chromosome) => {
-      const length = HG38_CHROMOSOME_LENGTHS[chromosome];
+      const length = getDisplayChromosomeLength(chromosome);
       const sectorAngle = totalLength === 0 ? 0 : (usableAngle * length) / totalLength;
       const startAngle = cursor;
       const endAngle = cursor + sectorAngle;
@@ -318,19 +341,33 @@ export default function CircosNetworkGraph({
       cursor = endAngle + CHROMOSOME_GAP_RADIANS;
     });
 
-    // Place each gene at its true genomic position inside its chromosome's
-    // sector. position = sectorStart + (geneStart / chromosomeLength) * sector
+    const sortedUnmappedGeneIds = [...unmappedGeneIds].sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const unmappedGeneIndex = new Map(
+      sortedUnmappedGeneIds.map((id, index) => [id, index]),
+    );
+
+    // Place mapped genes at their true genomic position inside their chromosome
+    // sector. Unmapped genes are evenly distributed in the synthetic sector.
     const genePlacements = new Map<string, GenePlacement>();
     geneIds.forEach((id) => {
       const node = nodeMap.get(id);
       if (!node) return;
-      const chromosome = normalizeChromosome(node.chromosome);
+      const isUnmapped = !hasGenomicCoordinate(node);
+      const chromosome = isUnmapped
+        ? UNMAPPED_CHROMOSOME
+        : normalizeChromosome(node.chromosome);
       const chrLayout = chromosomeLayout.get(chromosome);
       if (!chrLayout) return;
       const start = typeof node.start === "number" ? node.start : 0;
       const end = typeof node.end === "number" ? node.end : start;
-      const fraction =
-        chrLayout.length === 0 ? 0 : Math.min(1, Math.max(0, start / chrLayout.length));
+      const unmappedIndex = unmappedGeneIndex.get(id) ?? 0;
+      const fraction = isUnmapped
+        ? (unmappedIndex + 1) / (sortedUnmappedGeneIds.length + 1)
+        : chrLayout.length === 0
+          ? 0
+          : Math.min(1, Math.max(0, start / chrLayout.length));
       const angle =
         chrLayout.startAngle + fraction * (chrLayout.endAngle - chrLayout.startAngle);
 
@@ -347,6 +384,7 @@ export default function CircosNetworkGraph({
         labelAnchor: Math.cos(angle) >= 0 ? "start" : "end",
         labelRotation: getReadableLabelRotation(angle),
         color: chrLayout.color,
+        isUnmapped,
       });
     });
 
@@ -422,7 +460,9 @@ export default function CircosNetworkGraph({
                 strokeWidth="1.4"
               >
                 <title>
-                  {chr.chromosome} · {(chr.length / 1e6).toFixed(1)} Mb
+                  {chr.chromosome === UNMAPPED_CHROMOSOME
+                    ? "Unmapped genes without chromosome coordinates"
+                    : `${chr.chromosome} · ${(chr.length / 1e6).toFixed(1)} Mb`}
                 </title>
               </path>
               {showLabel && (
@@ -433,7 +473,9 @@ export default function CircosNetworkGraph({
                   dominantBaseline="central"
                   className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
                 >
-                  {chr.chromosome.replace("chr", "")}
+                  {chr.chromosome === UNMAPPED_CHROMOSOME
+                    ? "Unmapped"
+                    : chr.chromosome.replace("chr", "")}
                 </text>
               )}
             </g>
@@ -464,8 +506,9 @@ export default function CircosNetworkGraph({
               }}
             >
               <title>
-                {gene.id} · {gene.chromosome}:
-                {gene.start.toLocaleString()}-{gene.end.toLocaleString()}
+                {gene.isUnmapped
+                  ? `${gene.id} · unmapped`
+                  : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()}`}
               </title>
             </line>
           );
@@ -513,9 +556,15 @@ export default function CircosNetworkGraph({
                 }}
               >
                 <title>
-                  {sourceId} ({sourceGene.chromosome}:
-                  {sourceGene.start.toLocaleString()}) → {targetId} (
-                  {targetGene.chromosome}:{targetGene.start.toLocaleString()})
+                  {sourceId} (
+                  {sourceGene.isUnmapped
+                    ? "unmapped"
+                    : `${sourceGene.chromosome}:${sourceGene.start.toLocaleString()}`}
+                  ) → {targetId} (
+                  {targetGene.isUnmapped
+                    ? "unmapped"
+                    : `${targetGene.chromosome}:${targetGene.start.toLocaleString()}`}
+                  )
                 </title>
               </path>
             );
@@ -542,8 +591,9 @@ export default function CircosNetworkGraph({
               }}
             >
               <title>
-                {gene.id} · {gene.chromosome}:{gene.start.toLocaleString()}-
-                {gene.end.toLocaleString()}
+                {gene.isUnmapped
+                  ? `${gene.id} · unmapped`
+                  : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()}`}
               </title>
               {gene.id}
             </text>

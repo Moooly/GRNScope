@@ -29,6 +29,12 @@ TRANSCRIPT_SUFFIX_PATTERNS = (
     re.compile(r"^(.+)[._-](?:isoform|transcript)[._-]?\d+$", re.IGNORECASE),
     re.compile(r"^(.+)-R[A-Z]$"),
 )
+CURATED_GENE_ALIASES = {
+    # Dataset-level WT1 isoform labels used in the sex-determination demo.
+    # They are not GENCODE gene symbols, but both represent WT1 isoforms.
+    "wt1pkts": "WT1",
+    "wt1mkts": "WT1",
+}
 
 
 class GeneCoordinateIndex(TypedDict):
@@ -223,6 +229,12 @@ def _resolve_gene_name(gene_name: str) -> tuple[str, str] | None:
 
     if query in exact_aliases:
         return exact_aliases[query], "exact"
+
+    curated_alias = CURATED_GENE_ALIASES.get(query.casefold())
+    if curated_alias:
+        target = exact_aliases.get(curated_alias)
+        if target:
+            return target, "curated_alias"
 
     version_match = VERSIONED_ENSEMBL_ID_PATTERN.match(query)
     if version_match:
