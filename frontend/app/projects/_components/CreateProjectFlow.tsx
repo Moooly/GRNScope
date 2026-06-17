@@ -30,6 +30,66 @@ type BackendAlgorithmEntry = {
   recommended_use_cases: string[];
 };
 
+type ApiPayload = Record<string, unknown>;
+
+function isApiPayload(value: unknown): value is ApiPayload {
+  return typeof value === "object" && value !== null;
+}
+
+function extractApiErrors(payload: ApiPayload | null): string[] {
+  if (!payload || !Array.isArray(payload.errors)) return [];
+  return payload.errors.filter(
+    (error): error is string => typeof error === "string" && error.trim().length > 0,
+  );
+}
+
+async function readApiPayload(response: Response): Promise<ApiPayload | null> {
+  const responseText = await response.text();
+  if (!responseText.trim()) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(responseText);
+    return isApiPayload(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatTemporaryUploadError(response: Response, payload: ApiPayload | null) {
+  const serverErrors = extractApiErrors(payload);
+  if (serverErrors.length > 0) return serverErrors;
+
+  if (response.status === 413) {
+    return [
+      "Upload was rejected because the request is larger than the server limit. Increase nginx client_max_body_size to 500M, restart nginx, and try again.",
+    ];
+  }
+
+  if (response.status === 504) {
+    return [
+      "The server timed out while validating this matrix. Check nginx timeout settings and backend logs, then try again.",
+    ];
+  }
+
+  if (response.status >= 500) {
+    return [
+      `Temporary dataset upload failed with HTTP ${response.status}. Check the backend or nginx logs for the detailed error.`,
+    ];
+  }
+
+  return [`Temporary dataset upload failed with HTTP ${response.status}.`];
+}
+
+function getPayloadString(payload: ApiPayload, key: string) {
+  const value = payload[key];
+  return typeof value === "string" ? value : "";
+}
+
+function getPayloadNumber(payload: ApiPayload, key: string) {
+  const value = payload[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function getApiRoot(apiBase: string) {
   return apiBase.replace(/\/api\/?$/, "");
 }
@@ -307,21 +367,31 @@ export default function CreateProjectFlow({
           body: formData,
           signal: controller.signal,
         });
-        const data = await response.json();
+        const data = await readApiPayload(response);
         if (isCancelled) return;
 
-        if (!data.ok) {
-          setErrors(data.errors || ["Temporary dataset upload failed."]);
+        if (!response.ok) {
+          setErrors(formatTemporaryUploadError(response, data));
           return;
         }
 
-        setTempUploadId(data.temp_upload_id || "");
-        setGeneCount(data.gene_count ?? null);
-        setCellCount(data.cell_count ?? null);
+        if (!data || data.ok !== true) {
+          const serverErrors = extractApiErrors(data);
+          setErrors(serverErrors.length ? serverErrors : ["Temporary dataset upload failed."]);
+          return;
+        }
+
+        setTempUploadId(getPayloadString(data, "temp_upload_id"));
+        setGeneCount(getPayloadNumber(data, "gene_count"));
+        setCellCount(getPayloadNumber(data, "cell_count"));
       } catch (err) {
         if ((err as Error)?.name === "AbortError") return;
         if (!isCancelled) {
-          setErrors(["Could not connect to the server for temporary upload."]);
+          setErrors([
+            err instanceof Error && err.message
+              ? err.message
+              : "Could not connect to the server for temporary upload.",
+          ]);
         }
       } finally {
         if (!isCancelled) setIsUploadingTempDataset(false);

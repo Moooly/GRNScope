@@ -20,6 +20,13 @@ from ..validators import (
 )
 router = APIRouter()
 
+METADATA_NAME_PREVIEW_LIMIT = 1000
+
+
+def preview_names(names: list[str]) -> list[str]:
+    return names[:METADATA_NAME_PREVIEW_LIMIT]
+
+
 @router.post("/api/uploads/temp-dataset", response_model=TempUploadResponse)
 async def temp_dataset_upload(
     expression_matrix: UploadFile = File(...),
@@ -69,8 +76,14 @@ async def temp_dataset_upload(
             "pseudotime_filename": pseudotime.filename if pseudotime else None,
             "gene_count": expression_info["gene_count"],
             "cell_count": expression_info["cell_count"],
-            "gene_names": expression_info["gene_names"],
-            "cell_names": expression_info["cell_names"],
+            "gene_names": preview_names(expression_info["gene_names"]),
+            "cell_names": preview_names(expression_info["cell_names"]),
+            "gene_names_truncated": (
+                expression_info["gene_count"] > METADATA_NAME_PREVIEW_LIMIT
+            ),
+            "cell_names_truncated": (
+                expression_info["cell_count"] > METADATA_NAME_PREVIEW_LIMIT
+            ),
             "has_pseudotime": pseudotime is not None,
             "pseudotime_count": (
                 pseudotime_info["pseudotime_count"] if pseudotime_info else None

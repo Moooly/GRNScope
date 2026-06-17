@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 TEMP_UPLOAD_DIR = BASE_DIR / "temp_uploads"
 TEMP_UPLOAD_ROOT = TEMP_UPLOAD_DIR
 PROJECTS_DIR = BASE_DIR / "projects"
+UPLOAD_COPY_BUFFER_SIZE = 16 * 1024 * 1024
 
 TEMP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,7 +37,7 @@ def temp_metadata_path(temp_upload_id: str) -> Path:
 def save_upload_file(upload_file, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("wb") as output:
-        shutil.copyfileobj(upload_file.file, output)
+        shutil.copyfileobj(upload_file.file, output, UPLOAD_COPY_BUFFER_SIZE)
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:

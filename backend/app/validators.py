@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,28 @@ from typing import Any
 MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
 CSV_SNIFF_SAMPLE_BYTES = 65536
 MISSING_TOKENS = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
+DEFAULT_EXPRESSION_FULL_NUMERIC_CHECK_ROWS = 5
+DEFAULT_EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS = 4
+
+
+def get_non_negative_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        return default
+
+
+EXPRESSION_FULL_NUMERIC_CHECK_ROWS = get_non_negative_int_env(
+    "GRNSCOPE_UPLOAD_FULL_NUMERIC_CHECK_ROWS",
+    DEFAULT_EXPRESSION_FULL_NUMERIC_CHECK_ROWS,
+)
+EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS = get_non_negative_int_env(
+    "GRNSCOPE_UPLOAD_EDGE_NUMERIC_CHECK_COLUMNS",
+    DEFAULT_EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS,
+)
 
 
 def validate_csv_extension(filename: str) -> str | None:
@@ -83,6 +106,19 @@ def parse_optional_finite_float(value: object) -> bool:
     return True
 
 
+def expression_numeric_values_to_check(row: list[str], data_row_index: int) -> list[str]:
+    values = row[1:]
+    if data_row_index <= EXPRESSION_FULL_NUMERIC_CHECK_ROWS:
+        return values
+
+    edge_count = EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS
+    if edge_count <= 0:
+        return []
+    if len(values) <= edge_count * 2:
+        return values
+    return [*values[:edge_count], *values[-edge_count:]]
+
+
 def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
     dialect = detect_csv_dialect_from_file(csv_path)
     rows = iter_non_empty_csv_rows(csv_path, dialect)
@@ -131,7 +167,7 @@ def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
             if gene_name in seen_gene_names:
                 raise ValueError("Gene names must be unique.")
 
-            for value in row[1:]:
+            for value in expression_numeric_values_to_check(row, row_number - 1):
                 parse_required_finite_float(
                     value,
                     "Expression matrix contains missing or non-numeric interior values.",
