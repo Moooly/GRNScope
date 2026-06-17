@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import csv
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
 
 MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
+CSV_SNIFF_SAMPLE_BYTES = 65536
+MISSING_TOKENS = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
 
 
 def validate_csv_extension(filename: str) -> str | None:
@@ -21,36 +23,88 @@ def validate_file_size(size_bytes: int) -> str | None:
     return None
 
 
-def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
+def detect_csv_dialect_from_file(csv_path: Path) -> csv.Dialect | type[csv.Dialect]:
     try:
-        df = pd.read_csv(csv_path)
+        with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+            sample = csv_file.read(CSV_SNIFF_SAMPLE_BYTES)
     except Exception as exc:
-        raise ValueError(f"Expression matrix could not be parsed as CSV: {exc}") from exc
+        raise ValueError(f"CSV file could not be opened: {exc}") from exc
 
-    if df.empty:
+    if not sample.strip():
+        raise ValueError("CSV file is empty.")
+
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",\t;")
+    except csv.Error:
+        first_line = sample.splitlines()[0] if sample.splitlines() else ""
+        if "\t" in first_line:
+            return csv.excel_tab
+        if ";" in first_line:
+            class SemicolonDialect(csv.excel):
+                delimiter = ";"
+            return SemicolonDialect
+        return csv.excel
+
+
+def iter_non_empty_csv_rows(
+    csv_path: Path,
+    dialect: csv.Dialect | type[csv.Dialect],
+):
+    with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.reader(csv_file, dialect=dialect)
+        for row in reader:
+            if not row or all(str(value).strip() == "" for value in row):
+                continue
+            yield row
+
+
+def parse_required_finite_float(value: object, error_message: str) -> None:
+    text = str(value).strip()
+    if text in MISSING_TOKENS:
+        raise ValueError(error_message)
+    try:
+        parsed = float(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(error_message) from exc
+    if not isfinite(parsed):
+        raise ValueError(error_message)
+
+
+def parse_optional_finite_float(value: object) -> bool:
+    text = str(value).strip()
+    if text in MISSING_TOKENS:
+        return False
+    try:
+        parsed = float(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Pseudotime file contains non-numeric values outside blank/NA cells.") from exc
+    if not isfinite(parsed):
+        raise ValueError("Pseudotime file contains non-numeric values outside blank/NA cells.")
+    return True
+
+
+def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
+    dialect = detect_csv_dialect_from_file(csv_path)
+    rows = iter_non_empty_csv_rows(csv_path, dialect)
+
+    try:
+        header = next(rows)
+    except StopIteration as exc:
         raise ValueError("Expression matrix is empty.")
 
-    if df.shape[1] < 2:
+    if len(header) < 2:
         raise ValueError(
             "Expression matrix must contain a first column of gene names and at least one cell column."
         )
 
-    if df.shape[0] < 1:
-        raise ValueError("Expression matrix must contain at least one gene row.")
-
-    if df.columns.isna().any():
-        raise ValueError("Header row contains missing identifiers.")
-
-    raw_headers = [str(col).strip() for col in df.columns.tolist()]
+    raw_headers = [str(column).strip() for column in header]
     if any(header == "" for header in raw_headers):
         raise ValueError("Header row contains blank identifiers.")
 
-    first_col_name = df.columns[0]
-    first_col_label = str(first_col_name).strip()
-    if first_col_label == "":
+    if raw_headers[0] == "":
         raise ValueError("The first column header is missing.")
 
-    cell_names = [str(col).strip() for col in df.columns[1:].tolist()]
+    cell_names = raw_headers[1:]
     if not cell_names:
         raise ValueError("Expression matrix must include at least one cell identifier.")
 
@@ -60,21 +114,36 @@ def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
     if len(set(cell_names)) != len(cell_names):
         raise ValueError("Cell identifiers must be unique.")
 
-    gene_names = df[first_col_name].astype(str).str.strip().tolist()
+    expected_column_count = len(header)
+    gene_names: list[str] = []
+    seen_gene_names: set[str] = set()
+
+    try:
+        for row_number, row in enumerate(rows, start=2):
+            if len(row) != expected_column_count:
+                raise ValueError(
+                    f"Expression matrix row {row_number} has {len(row)} columns; expected {expected_column_count}."
+                )
+
+            gene_name = str(row[0]).strip()
+            if gene_name == "":
+                raise ValueError("First column contains blank gene names.")
+            if gene_name in seen_gene_names:
+                raise ValueError("Gene names must be unique.")
+
+            for value in row[1:]:
+                parse_required_finite_float(
+                    value,
+                    "Expression matrix contains missing or non-numeric interior values.",
+                )
+
+            seen_gene_names.add(gene_name)
+            gene_names.append(gene_name)
+    except csv.Error as exc:
+        raise ValueError(f"Expression matrix could not be parsed as CSV: {exc}") from exc
+
     if not gene_names:
         raise ValueError("Expression matrix must include gene names in the first column.")
-
-    if any(name == "" for name in gene_names):
-        raise ValueError("First column contains blank gene names.")
-
-    if len(set(gene_names)) != len(gene_names):
-        raise ValueError("Gene names must be unique.")
-
-    numeric_df = df.iloc[:, 1:].apply(pd.to_numeric, errors="coerce")
-    if numeric_df.isna().any().any():
-        raise ValueError(
-            "Expression matrix contains missing or non-numeric interior values."
-        )
 
     return {
         "gene_count": len(gene_names),
@@ -95,85 +164,103 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
        belong to only one branch.
     """
 
-    try:
-        raw_df = pd.read_csv(csv_path, header=None, dtype=str, keep_default_na=False)
-    except Exception as exc:
-        raise ValueError(f"Pseudotime file could not be parsed as CSV: {exc}") from exc
+    dialect = detect_csv_dialect_from_file(csv_path)
+    rows = iter_non_empty_csv_rows(csv_path, dialect)
 
-    if raw_df.empty:
+    try:
+        first_row = next(rows)
+    except StopIteration as exc:
         raise ValueError("Pseudotime file is empty.")
 
-    missing_tokens = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
+    if len(first_row) == 1:
+        value_count = 0
 
-    if raw_df.shape[1] == 1:
-        raw_values = raw_df.iloc[:, 0].astype(str).str.strip()
+        first_value = str(first_row[0]).strip()
+        try:
+            parse_required_finite_float(
+                first_value,
+                "Pseudotime file contains missing or non-numeric values.",
+            )
+            value_count += 1
+        except ValueError:
+            pass
 
-        # Allow either a headerless one-column file or a one-column file with a
-        # header such as "pseudotime".
-        first_value = raw_values.iloc[0] if len(raw_values) > 0 else ""
-        first_numeric = pd.to_numeric(pd.Series([first_value]), errors="coerce").iloc[0]
-        if pd.isna(first_numeric):
-            raw_values = raw_values.iloc[1:]
+        try:
+            for row_number, row in enumerate(rows, start=2):
+                if len(row) != 1:
+                    raise ValueError(
+                        "Pseudotime file must contain either one pseudotime column or a first column of cell IDs followed by one or more pseudotime columns."
+                    )
+                parse_required_finite_float(
+                    row[0],
+                    "Pseudotime file contains missing or non-numeric values.",
+                )
+                value_count += 1
+        except csv.Error as exc:
+            raise ValueError(f"Pseudotime file could not be parsed as CSV: {exc}") from exc
 
-        values = pd.to_numeric(raw_values, errors="coerce")
-        if values.isna().any():
-            raise ValueError("Pseudotime file contains missing or non-numeric values.")
-
-        if len(values) != expected_cell_count:
+        if value_count != expected_cell_count:
             raise ValueError(
-                f"Pseudotime row count ({len(values)}) does not match cell count ({expected_cell_count})."
+                f"Pseudotime row count ({value_count}) does not match cell count ({expected_cell_count})."
             )
 
         return {
-            "pseudotime_count": int(len(values)),
+            "pseudotime_count": int(value_count),
             "pseudotime_trajectory_count": 1,
             "pseudotime_format": "single_column",
         }
 
-    try:
-        df = pd.read_csv(csv_path, header=0, dtype=str, keep_default_na=False)
-    except Exception as exc:
-        raise ValueError(f"Pseudotime file could not be parsed as CSV: {exc}") from exc
-
-    if df.empty:
-        raise ValueError("Pseudotime file is empty.")
-
-    if df.shape[1] < 2:
+    if len(first_row) < 2:
         raise ValueError(
             "Pseudotime file must contain either one pseudotime column or a first column of cell IDs followed by one or more pseudotime columns."
         )
 
-    raw_headers = [str(col).strip() for col in df.columns.tolist()]
+    raw_headers = [str(column).strip() for column in first_row]
     if any(header == "" for header in raw_headers[1:]):
         raise ValueError("Pseudotime file contains blank trajectory column names.")
 
-    cell_ids = df.iloc[:, 0].astype(str).str.strip().tolist()
-    if any(cell_id == "" for cell_id in cell_ids):
-        raise ValueError("Pseudotime file contains blank cell identifiers.")
+    trajectory_count = len(raw_headers) - 1
+    trajectory_numeric_counts = [0] * trajectory_count
+    total_numeric_values = 0
+    cell_count = 0
+    seen_cell_ids: set[str] = set()
 
-    if len(set(cell_ids)) != len(cell_ids):
-        raise ValueError("Pseudotime file cell identifiers must be unique.")
+    try:
+        for row_number, row in enumerate(rows, start=2):
+            if len(row) > len(first_row):
+                raise ValueError(
+                    f"Pseudotime row {row_number} has {len(row)} columns; expected {len(first_row)}."
+                )
 
-    if len(cell_ids) != expected_cell_count:
+            padded_row = [*row, *([""] * (len(first_row) - len(row)))]
+            cell_id = str(padded_row[0]).strip()
+            if cell_id == "":
+                raise ValueError("Pseudotime file contains blank cell identifiers.")
+            if cell_id in seen_cell_ids:
+                raise ValueError("Pseudotime file cell identifiers must be unique.")
+
+            seen_cell_ids.add(cell_id)
+            cell_count += 1
+
+            for index, value in enumerate(padded_row[1:]):
+                if parse_optional_finite_float(value):
+                    trajectory_numeric_counts[index] += 1
+                    total_numeric_values += 1
+    except csv.Error as exc:
+        raise ValueError(f"Pseudotime file could not be parsed as CSV: {exc}") from exc
+
+    if cell_count != expected_cell_count:
         raise ValueError(
-            f"Pseudotime row count ({len(cell_ids)}) does not match cell count ({expected_cell_count})."
+            f"Pseudotime row count ({cell_count}) does not match cell count ({expected_cell_count})."
         )
 
-    trajectory_df = df.iloc[:, 1:].apply(lambda col: col.astype(str).str.strip())
-    cleaned_trajectory_df = trajectory_df.mask(trajectory_df.isin(missing_tokens))
-
-    if cleaned_trajectory_df.notna().sum().sum() == 0:
+    if total_numeric_values == 0:
         raise ValueError("Pseudotime file must contain at least one numeric pseudotime value.")
 
-    numeric_trajectory_df = cleaned_trajectory_df.apply(pd.to_numeric, errors="coerce")
-    invalid_mask = cleaned_trajectory_df.notna() & numeric_trajectory_df.isna()
-    if invalid_mask.any().any():
-        raise ValueError("Pseudotime file contains non-numeric values outside blank/NA cells.")
-
     empty_trajectory_columns = [
-        str(column)
-        for column in numeric_trajectory_df.columns
-        if numeric_trajectory_df[column].notna().sum() == 0
+        raw_headers[index + 1]
+        for index, numeric_count in enumerate(trajectory_numeric_counts)
+        if numeric_count == 0
     ]
     if empty_trajectory_columns:
         raise ValueError(
@@ -182,7 +269,7 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
         )
 
     return {
-        "pseudotime_count": int(len(cell_ids)),
-        "pseudotime_trajectory_count": int(numeric_trajectory_df.shape[1]),
+        "pseudotime_count": int(cell_count),
+        "pseudotime_trajectory_count": int(trajectory_count),
         "pseudotime_format": "cell_id_trajectory_columns",
     }

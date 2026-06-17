@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
-from math import fsum, log2
+from math import fsum, isfinite, log2
 from pathlib import Path
 
 from ..algorithm_registry import get_algorithm_by_id
@@ -33,6 +33,7 @@ PROJECT_PREPROCESSED_DIRNAME = "preprocessed"
 PROJECT_PREPROCESSED_EXPRESSION_FILENAME = "ExpressionData.csv"
 PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
 PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
+CSV_SNIFF_SAMPLE_BYTES = 65536
 
 
 class AlgorithmStoppedError(RuntimeError):
@@ -310,6 +311,16 @@ def detect_csv_dialect(raw_text: str) -> csv.Dialect | type[csv.Dialect]:
         return csv.excel
 
 
+def detect_csv_dialect_from_file(source_path: Path) -> csv.Dialect | type[csv.Dialect]:
+    with source_path.open("r", encoding="utf-8", newline="") as source_file:
+        sample = source_file.read(CSV_SNIFF_SAMPLE_BYTES)
+
+    if not sample.strip():
+        raise ValueError(f"{source_path.name} is empty.")
+
+    return detect_csv_dialect(sample)
+
+
 def resolve_known_tf_list_path(project_manifest: dict) -> Path | None:
     explicit_path = project_manifest.get("known_tf_list_path") or os.environ.get("KNOWN_TF_LIST_PATH")
     candidate_paths: list[Path] = []
@@ -351,37 +362,6 @@ def compute_row_variance(values: list[float]) -> float:
         return 0.0
     mean_value = fsum(values) / len(values)
     return fsum((value - mean_value) ** 2 for value in values) / len(values)
-
-
-def normalize_expression_rows(matrix_rows: list[list[float]]) -> list[list[float]]:
-    if not matrix_rows:
-        return []
-
-    column_count = max(len(row) for row in matrix_rows)
-    if column_count == 0:
-        return [list(row) for row in matrix_rows]
-
-    column_sums = [0.0] * column_count
-    for row in matrix_rows:
-        for column_index, value in enumerate(row):
-            column_sums[column_index] += value
-
-    normalized_rows: list[list[float]] = []
-    for row in matrix_rows:
-        normalized_row: list[float] = []
-        for column_index, value in enumerate(row):
-            column_sum = column_sums[column_index]
-            if column_sum <= 0:
-                normalized_row.append(value)
-            else:
-                normalized_row.append((value / column_sum) * 10000.0)
-        normalized_rows.append(normalized_row)
-
-    return normalized_rows
-
-
-def log_transform_expression_rows(matrix_rows: list[list[float]]) -> list[list[float]]:
-    return [[log2(value + 1.0) for value in row] for row in matrix_rows]
 
 
 def default_project_preprocessed_expression_path(project_id: str) -> Path:
@@ -585,26 +565,76 @@ def ensure_project_preprocessed_expression(
     return preprocessed_expression
 
 
+def parse_expression_numeric_values(row: list[str], cell_count: int) -> list[float]:
+    numeric_values: list[float] = []
+    for column_index in range(cell_count):
+        raw_value = row[column_index + 1] if column_index + 1 < len(row) else ""
+        try:
+            value = float(str(raw_value).strip())
+        except (TypeError, ValueError):
+            value = 0.0
+        if not isfinite(value):
+            value = 0.0
+        numeric_values.append(value)
+    return numeric_values
+
+
+def transform_expression_values(
+    values: list[float],
+    *,
+    column_sums: list[float] | None,
+    normalize_enabled: bool,
+    log_transform_enabled: bool,
+) -> list[float]:
+    transformed_values: list[float] = []
+    for column_index, value in enumerate(values):
+        transformed_value = value
+        if normalize_enabled and column_sums is not None:
+            column_sum = column_sums[column_index] if column_index < len(column_sums) else 0.0
+            if column_sum > 0:
+                transformed_value = (value / column_sum) * 10000.0
+        if log_transform_enabled:
+            transformed_value = log2(max(transformed_value, 0.0) + 1.0)
+        transformed_values.append(transformed_value)
+    return transformed_values
+
+
+def iter_expression_data_rows(
+    source_expression: Path,
+    dialect: csv.Dialect | type[csv.Dialect],
+):
+    with source_expression.open("r", encoding="utf-8", newline="") as source_file:
+        reader = csv.reader(source_file, dialect=dialect)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return
+
+        for index, row in enumerate(reader):
+            if not row or all(str(value).strip() == "" for value in row):
+                continue
+            yield index, row
+
+
 def preprocess_expression_matrix(
     source_expression: Path,
     destination_expression: Path,
     project_manifest: dict,
 ) -> None:
-    raw_text = source_expression.read_text(encoding="utf-8")
-    if not raw_text.strip():
-        raise ValueError("Expression matrix file is empty.")
+    dialect = detect_csv_dialect_from_file(source_expression)
 
-    dialect = detect_csv_dialect(raw_text)
-    rows = list(csv.reader(io.StringIO(raw_text), dialect=dialect))
-    if not rows:
-        raise ValueError("Expression matrix file has no rows.")
+    with source_expression.open("r", encoding="utf-8", newline="") as source_file:
+        reader = csv.reader(source_file, dialect=dialect)
+        try:
+            header = next(reader)
+        except StopIteration as exc:
+            raise ValueError("Expression matrix file is empty.") from exc
 
-    header = rows[0]
-    data_rows = rows[1:]
-    if not data_rows:
-        destination_expression.write_text(raw_text, encoding="utf-8")
+    if len(header) < 2:
+        shutil.copy2(source_expression, destination_expression)
         return
 
+    cell_count = len(header) - 1
     top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
     include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
     normalize_enabled = parse_bool(project_manifest.get("normalize_enabled"))
@@ -612,82 +642,77 @@ def preprocess_expression_matrix(
 
     tf_genes = load_known_tf_genes(project_manifest) if include_all_tfs else set()
 
-    parsed_rows: list[tuple[int, str, list[str], list[float]]] = []
-    for index, row in enumerate(data_rows):
-        if not row:
-            continue
+    column_sums: list[float] | None = None
+    parsed_row_count = 0
+    if normalize_enabled:
+        column_sums = [0.0] * cell_count
+        for _index, row in iter_expression_data_rows(source_expression, dialect):
+            numeric_values = parse_expression_numeric_values(row, cell_count)
+            for column_index, value in enumerate(numeric_values):
+                column_sums[column_index] += value
+            parsed_row_count += 1
+    else:
+        for _index, _row in iter_expression_data_rows(source_expression, dialect):
+            parsed_row_count += 1
 
-        gene_name = str(row[0]).strip()
-        raw_numeric_values: list[float] = []
-        for value in row[1:]:
-            try:
-                raw_numeric_values.append(float(str(value).strip()))
-            except (TypeError, ValueError):
-                raw_numeric_values.append(0.0)
-
-        parsed_rows.append((index, gene_name, row, raw_numeric_values))
-
-    if not parsed_rows:
-        destination_expression.write_text(raw_text, encoding="utf-8")
+    if parsed_row_count == 0:
+        shutil.copy2(source_expression, destination_expression)
         return
 
-    transformed_numeric_rows = [list(values) for _, _, _, values in parsed_rows]
-    if normalize_enabled:
-        transformed_numeric_rows = normalize_expression_rows(transformed_numeric_rows)
-    if log_transform_enabled:
-        transformed_numeric_rows = log_transform_expression_rows(transformed_numeric_rows)
-
-    scored_rows: list[tuple[float, int, str, list[str], list[float]]] = []
-    for (index, gene_name, row, _), transformed_values in zip(parsed_rows, transformed_numeric_rows):
+    scored_rows: list[tuple[float, int, str]] = []
+    for index, row in iter_expression_data_rows(source_expression, dialect):
+        gene_name = str(row[0]).strip() if row else ""
+        numeric_values = parse_expression_numeric_values(row, cell_count)
+        transformed_values = transform_expression_values(
+            numeric_values,
+            column_sums=column_sums,
+            normalize_enabled=normalize_enabled,
+            log_transform_enabled=log_transform_enabled,
+        )
         variance = compute_row_variance(transformed_values)
-        scored_rows.append((variance, index, gene_name, row, transformed_values))
+        scored_rows.append((variance, index, gene_name))
+
+    if not scored_rows:
+        shutil.copy2(source_expression, destination_expression)
+        return
 
     retained_indices: set[int]
     if top_variable_genes is None or top_variable_genes >= len(scored_rows):
-        retained_indices = {index for _, index, _, _, _ in scored_rows}
+        retained_indices = {index for _, index, _ in scored_rows}
     else:
         sorted_rows = sorted(scored_rows, key=lambda item: (-item[0], item[1]))
-        retained_indices = {index for _, index, _, _, _ in sorted_rows[:top_variable_genes]}
+        retained_indices = {index for _, index, _ in sorted_rows[:top_variable_genes]}
 
     if include_all_tfs and tf_genes:
-        for _, index, gene_name, _, _ in scored_rows:
+        for _, index, gene_name in scored_rows:
             if gene_name in tf_genes:
                 retained_indices.add(index)
 
-    transformed_row_by_index = {
-        index: (original_row, transformed_values)
-        for _, index, _, original_row, transformed_values in scored_rows
-    }
-
-    filtered_rows = [header]
-    for index, _row in enumerate(data_rows):
-        if index not in retained_indices:
-            continue
-
-        original_row, transformed_values = transformed_row_by_index[index]
-        filtered_rows.append(
-            [original_row[0], *[f"{value:.10f}" for value in transformed_values]]
+    destination_expression.parent.mkdir(parents=True, exist_ok=True)
+    with destination_expression.open("w", encoding="utf-8", newline="") as output_file:
+        writer = csv.writer(
+            output_file,
+            delimiter=getattr(dialect, "delimiter", ","),
+            quotechar=getattr(dialect, "quotechar", '"'),
+            lineterminator="\n",
         )
+        writer.writerow(header)
 
-    output_buffer = io.StringIO()
-    writer = csv.writer(
-        output_buffer,
-        delimiter=getattr(dialect, "delimiter", ","),
-        quotechar=getattr(dialect, "quotechar", '"'),
-        lineterminator="\n",
-    )
-    writer.writerows(filtered_rows)
-    destination_expression.write_text(output_buffer.getvalue(), encoding="utf-8")
+        for index, row in iter_expression_data_rows(source_expression, dialect):
+            if index not in retained_indices:
+                continue
 
-
-def read_delimited_rows(
-    source_path: Path,
-) -> tuple[list[list[str]], csv.Dialect | type[csv.Dialect]]:
-    raw_text = source_path.read_text(encoding="utf-8")
-    if not raw_text.strip():
-        raise ValueError(f"{source_path.name} is empty.")
-    dialect = detect_csv_dialect(raw_text)
-    return list(csv.reader(io.StringIO(raw_text), dialect=dialect)), dialect
+            gene_name = str(row[0]).strip() if row else ""
+            numeric_values = parse_expression_numeric_values(row, cell_count)
+            transformed_values = transform_expression_values(
+                numeric_values,
+                column_sums=column_sums,
+                normalize_enabled=normalize_enabled,
+                log_transform_enabled=log_transform_enabled,
+            )
+            writer.writerow(
+                [gene_name, *[f"{value:.10f}" for value in transformed_values]]
+            )
 
 
 def read_delimited_header(
@@ -700,27 +725,12 @@ def read_delimited_header(
         raise ValueError(f"{source_path.name} is empty.")
 
     dialect = detect_csv_dialect(first_line)
-    rows = list(csv.reader(io.StringIO(first_line), dialect=dialect))
-    if not rows:
+    try:
+        header = next(csv.reader(io.StringIO(first_line), dialect=dialect))
+    except StopIteration as exc:
         raise ValueError(f"{source_path.name} has no header row.")
 
-    return rows[0], dialect
-
-
-def write_delimited_rows(
-    destination_path: Path,
-    rows: list[list[str]],
-    dialect: csv.Dialect | type[csv.Dialect],
-) -> None:
-    output_buffer = io.StringIO()
-    writer = csv.writer(
-        output_buffer,
-        delimiter=getattr(dialect, "delimiter", ","),
-        quotechar=getattr(dialect, "quotechar", '"'),
-        lineterminator="\n",
-    )
-    writer.writerows(rows)
-    destination_path.write_text(output_buffer.getvalue(), encoding="utf-8")
+    return header, dialect
 
 
 def link_or_copy_file(source_path: Path, destination_path: Path) -> None:
@@ -766,50 +776,64 @@ def write_expression_subset_by_cells(
                 )
 
 
-def subset_expression_rows_by_cells(
-    rows: list[list[str]],
-    selected_column_indices: list[int],
-) -> list[list[str]]:
-    if not rows:
-        return []
-
-    retained_indices = [0, *selected_column_indices]
-    subset_rows: list[list[str]] = []
-    for row in rows:
-        subset_rows.append(
-            [row[index] if index < len(row) else "" for index in retained_indices]
-        )
-    return subset_rows
-
-
 def subset_pseudotime_rows_by_cells(
     source_pseudotime: Path,
     destination_pseudotime: Path,
     selected_cell_names: set[str],
 ) -> None:
+    if not selected_cell_names:
+        shutil.copy2(source_pseudotime, destination_pseudotime)
+        return
+
     try:
-        rows, dialect = read_delimited_rows(source_pseudotime)
+        dialect = detect_csv_dialect_from_file(source_pseudotime)
     except Exception:
         shutil.copy2(source_pseudotime, destination_pseudotime)
         return
 
-    if len(rows) <= 1 or not selected_cell_names:
-        shutil.copy2(source_pseudotime, destination_pseudotime)
-        return
-
-    header = rows[0]
-    retained_rows = [header]
+    temporary_path = destination_pseudotime.with_name(
+        f".{destination_pseudotime.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
     matched = 0
-    for row in rows[1:]:
-        if row and row[0] in selected_cell_names:
-            retained_rows.append(row)
-            matched += 1
+    data_rows = 0
 
-    if matched == 0:
+    try:
+        with source_pseudotime.open("r", encoding="utf-8", newline="") as source_file, (
+            temporary_path.open("w", encoding="utf-8", newline="")
+        ) as destination_file:
+            reader = csv.reader(source_file, dialect=dialect)
+            writer = csv.writer(
+                destination_file,
+                delimiter=getattr(dialect, "delimiter", ","),
+                quotechar=getattr(dialect, "quotechar", '"'),
+                lineterminator="\n",
+            )
+
+            try:
+                header = next(reader)
+            except StopIteration:
+                shutil.copy2(source_pseudotime, destination_pseudotime)
+                return
+
+            writer.writerow(header)
+            for row in reader:
+                if not row or all(str(value).strip() == "" for value in row):
+                    continue
+                data_rows += 1
+                if row[0] in selected_cell_names:
+                    writer.writerow(row)
+                    matched += 1
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
         shutil.copy2(source_pseudotime, destination_pseudotime)
         return
 
-    write_delimited_rows(destination_pseudotime, retained_rows, dialect)
+    if data_rows == 0 or matched == 0:
+        temporary_path.unlink(missing_ok=True)
+        shutil.copy2(source_pseudotime, destination_pseudotime)
+        return
+
+    temporary_path.replace(destination_pseudotime)
 
 
 def plan_confidence_run_inputs(
@@ -1216,25 +1240,11 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
     if not ranked_edges_path.exists():
         raise FileNotFoundError(f"rankedEdges.csv not found at {ranked_edges_path}")
 
-    raw_text = ranked_edges_path.read_text(encoding="utf-8")
-    if not raw_text.strip():
-        raise ValueError("rankedEdges.csv is empty.")
+    dialect = detect_csv_dialect_from_file(ranked_edges_path)
 
-    sample = raw_text[:4096]
-    delimiter = ","
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
-        delimiter = dialect.delimiter
-    except csv.Error:
-        first_line = raw_text.splitlines()[0] if raw_text.splitlines() else ""
-        if "\t" in first_line:
-            delimiter = "\t"
-        elif ";" in first_line:
-            delimiter = ";"
-
-    reader = csv.DictReader(io.StringIO(raw_text), delimiter=delimiter)
-    fieldnames = reader.fieldnames or []
-    rows = list(reader)
+    with ranked_edges_path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.DictReader(csv_file, dialect=dialect)
+        fieldnames = reader.fieldnames or []
 
     if not fieldnames:
         raise ValueError("rankedEdges.csv has no header row.")
@@ -1253,28 +1263,32 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
     target_key = find_field(["Gene2", "Target", "target", "TargetGene"])
     score_key = find_field(["EdgeWeight", "weight", "score", "Score"])
 
+    if score_key is None:
+        numeric_candidates = list(fieldnames)
+        seen_numeric_values: set[str] = set()
+        with ranked_edges_path.open("r", encoding="utf-8", newline="") as csv_file:
+            reader = csv.DictReader(csv_file, dialect=dialect)
+            for row in reader:
+                for key in list(numeric_candidates):
+                    value = row.get(key)
+                    if value in (None, ""):
+                        continue
+                    try:
+                        float(str(value).strip())
+                    except (TypeError, ValueError):
+                        numeric_candidates.remove(key)
+                    else:
+                        seen_numeric_values.add(key)
+
+        ordered_numeric_candidates = [
+            key for key in fieldnames if key in numeric_candidates and key in seen_numeric_values
+        ]
+        score_key = ordered_numeric_candidates[-1] if ordered_numeric_candidates else None
+
     if source_key is None or target_key is None:
         raise ValueError(
             f"Could not identify source/target columns in rankedEdges.csv. Found columns: {fieldnames}"
         )
-
-    if score_key is None:
-        numeric_candidates: list[str] = []
-        for key in fieldnames:
-            sample_value = None
-            for row in rows:
-                value = row.get(key)
-                if value not in (None, ""):
-                    sample_value = str(value).strip()
-                    break
-            if sample_value is None:
-                continue
-            try:
-                float(sample_value)
-                numeric_candidates.append(key)
-            except (TypeError, ValueError):
-                continue
-        score_key = numeric_candidates[-1] if numeric_candidates else None
 
     if score_key is None:
         raise ValueError(
@@ -1284,28 +1298,30 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
     parsed_edges: list[dict] = []
     node_names: set[str] = set()
 
-    for row in rows:
-        source = str(row.get(source_key, "")).strip()
-        target = str(row.get(target_key, "")).strip()
-        score_raw = str(row.get(score_key, "")).strip()
+    with ranked_edges_path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.DictReader(csv_file, dialect=dialect)
+        for row in reader:
+            source = str(row.get(source_key, "")).strip()
+            target = str(row.get(target_key, "")).strip()
+            score_raw = str(row.get(score_key, "")).strip()
 
-        if not source or not target:
-            continue
+            if not source or not target:
+                continue
 
-        try:
-            score = float(score_raw)
-        except (TypeError, ValueError):
-            continue
+            try:
+                score = float(score_raw)
+            except (TypeError, ValueError):
+                continue
 
-        parsed_edges.append(
-            {
-                "source": source,
-                "target": target,
-                "score": score,
-            }
-        )
-        node_names.add(source)
-        node_names.add(target)
+            parsed_edges.append(
+                {
+                    "source": source,
+                    "target": target,
+                    "score": score,
+                }
+            )
+            node_names.add(source)
+            node_names.add(target)
 
     if not parsed_edges:
         raise ValueError("rankedEdges.csv did not contain any valid edges.")
