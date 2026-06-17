@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from math import fsum, log2
 from pathlib import Path
 
@@ -28,6 +29,10 @@ DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
 DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
 BEELINE_MIRROR_ENTRIES = ("BLRunner.py", "BLRun", "Algorithms", "utils")
 _BEELINE_MIRROR_LOCK = threading.Lock()
+PROJECT_PREPROCESSED_DIRNAME = "preprocessed"
+PROJECT_PREPROCESSED_EXPRESSION_FILENAME = "ExpressionData.csv"
+PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
+PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
 
 
 class AlgorithmStoppedError(RuntimeError):
@@ -379,6 +384,207 @@ def log_transform_expression_rows(matrix_rows: list[list[float]]) -> list[list[f
     return [[log2(value + 1.0) for value in row] for row in matrix_rows]
 
 
+def default_project_preprocessed_expression_path(project_id: str) -> Path:
+    return (
+        PROJECTS_ROOT
+        / project_id
+        / PROJECT_PREPROCESSED_DIRNAME
+        / PROJECT_PREPROCESSED_EXPRESSION_FILENAME
+    )
+
+
+def resolve_project_preprocessed_expression_path(
+    project_id: str,
+    project_manifest: dict,
+) -> Path:
+    configured_path = project_manifest.get("preprocessed_expression_path")
+    if configured_path:
+        return Path(str(configured_path))
+    return default_project_preprocessed_expression_path(project_id)
+
+
+def build_preprocessing_signature(
+    source_expression: Path,
+    project_manifest: dict,
+) -> dict:
+    source_stat = source_expression.stat()
+    include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
+    known_tf_path = (
+        resolve_known_tf_list_path(project_manifest) if include_all_tfs else None
+    )
+
+    signature = {
+        "source_expression_path": str(source_expression.resolve()),
+        "source_expression_size": source_stat.st_size,
+        "source_expression_mtime_ns": source_stat.st_mtime_ns,
+        "top_variable_genes": project_manifest.get("top_variable_genes"),
+        "include_all_tfs": project_manifest.get("include_all_tfs"),
+        "normalize_enabled": project_manifest.get("normalize_enabled"),
+        "log_transform_enabled": project_manifest.get("log_transform_enabled"),
+    }
+
+    if known_tf_path:
+        known_tf_stat = known_tf_path.stat()
+        signature.update(
+            {
+                "known_tf_path": str(known_tf_path.resolve()),
+                "known_tf_size": known_tf_stat.st_size,
+                "known_tf_mtime_ns": known_tf_stat.st_mtime_ns,
+            }
+        )
+    else:
+        signature["known_tf_path"] = None
+
+    return signature
+
+
+def read_preprocessed_manifest(manifest_path: Path) -> dict | None:
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def preprocessed_cache_is_valid(
+    preprocessed_expression: Path,
+    manifest_path: Path,
+    expected_signature: dict,
+) -> bool:
+    if (
+        not preprocessed_expression.exists()
+        or preprocessed_expression.stat().st_size <= 0
+    ):
+        return False
+
+    manifest = read_preprocessed_manifest(manifest_path)
+    if not isinstance(manifest, dict):
+        return False
+
+    return manifest.get("signature") == expected_signature
+
+
+def read_positive_float_env(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
+@contextmanager
+def project_preprocessing_lock(preprocessed_dir: Path):
+    lock_dir = preprocessed_dir / PROJECT_PREPROCESSED_LOCK_DIRNAME
+    timeout_seconds = read_positive_float_env(
+        "GRNSCOPE_PREPROCESS_LOCK_TIMEOUT",
+        900.0,
+    )
+    stale_seconds = read_positive_float_env(
+        "GRNSCOPE_PREPROCESS_LOCK_STALE_SECONDS",
+        21600.0,
+    )
+    deadline = time.time() + timeout_seconds
+
+    while True:
+        try:
+            lock_dir.mkdir(parents=True, exist_ok=False)
+            (lock_dir / "owner.json").write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "created_at": time.time(),
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            break
+        except FileExistsError:
+            try:
+                lock_age = time.time() - lock_dir.stat().st_mtime
+            except OSError:
+                lock_age = 0
+
+            if stale_seconds and lock_age > stale_seconds:
+                shutil.rmtree(lock_dir, ignore_errors=True)
+                continue
+
+            if time.time() >= deadline:
+                raise TimeoutError("Timed out waiting for project preprocessing lock.")
+            time.sleep(0.5)
+
+    try:
+        yield
+    finally:
+        shutil.rmtree(lock_dir, ignore_errors=True)
+
+
+def ensure_project_preprocessed_expression(
+    project_id: str,
+    source_expression: Path,
+    project_manifest: dict,
+) -> Path:
+    preprocessed_expression = resolve_project_preprocessed_expression_path(
+        project_id,
+        project_manifest,
+    )
+    preprocessed_dir = preprocessed_expression.parent
+    preprocessed_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = preprocessed_dir / PROJECT_PREPROCESSED_MANIFEST_FILENAME
+    expected_signature = build_preprocessing_signature(
+        source_expression,
+        project_manifest,
+    )
+
+    if preprocessed_cache_is_valid(
+        preprocessed_expression,
+        manifest_path,
+        expected_signature,
+    ):
+        return preprocessed_expression
+
+    with project_preprocessing_lock(preprocessed_dir):
+        if preprocessed_cache_is_valid(
+            preprocessed_expression,
+            manifest_path,
+            expected_signature,
+        ):
+            return preprocessed_expression
+
+        temporary_expression = preprocessed_expression.with_name(
+            (
+                f".{preprocessed_expression.name}."
+                f"{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+        )
+        temporary_manifest = manifest_path.with_name(
+            f".{manifest_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+
+        try:
+            preprocess_expression_matrix(
+                source_expression=source_expression,
+                destination_expression=temporary_expression,
+                project_manifest=project_manifest,
+            )
+            temporary_manifest.write_text(
+                json.dumps(
+                    {
+                        "signature": expected_signature,
+                        "created_at": time.time(),
+                        "preprocessed_expression_path": str(preprocessed_expression),
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            temporary_expression.replace(preprocessed_expression)
+            temporary_manifest.replace(manifest_path)
+        finally:
+            temporary_expression.unlink(missing_ok=True)
+            temporary_manifest.unlink(missing_ok=True)
+
+    return preprocessed_expression
+
+
 def preprocess_expression_matrix(
     source_expression: Path,
     destination_expression: Path,
@@ -474,12 +680,31 @@ def preprocess_expression_matrix(
     destination_expression.write_text(output_buffer.getvalue(), encoding="utf-8")
 
 
-def read_delimited_rows(source_path: Path) -> tuple[list[list[str]], csv.Dialect | type[csv.Dialect]]:
+def read_delimited_rows(
+    source_path: Path,
+) -> tuple[list[list[str]], csv.Dialect | type[csv.Dialect]]:
     raw_text = source_path.read_text(encoding="utf-8")
     if not raw_text.strip():
         raise ValueError(f"{source_path.name} is empty.")
     dialect = detect_csv_dialect(raw_text)
     return list(csv.reader(io.StringIO(raw_text), dialect=dialect)), dialect
+
+
+def read_delimited_header(
+    source_path: Path,
+) -> tuple[list[str], csv.Dialect | type[csv.Dialect]]:
+    with source_path.open("r", encoding="utf-8", newline="") as file:
+        first_line = file.readline()
+
+    if not first_line.strip():
+        raise ValueError(f"{source_path.name} is empty.")
+
+    dialect = detect_csv_dialect(first_line)
+    rows = list(csv.reader(io.StringIO(first_line), dialect=dialect))
+    if not rows:
+        raise ValueError(f"{source_path.name} has no header row.")
+
+    return rows[0], dialect
 
 
 def write_delimited_rows(
@@ -496,6 +721,14 @@ def write_delimited_rows(
     )
     writer.writerows(rows)
     destination_path.write_text(output_buffer.getvalue(), encoding="utf-8")
+
+
+def link_or_copy_file(source_path: Path, destination_path: Path) -> None:
+    destination_path.unlink(missing_ok=True)
+    try:
+        os.link(source_path, destination_path)
+    except OSError:
+        shutil.copy2(source_path, destination_path)
 
 
 def subset_expression_rows_by_cells(
@@ -546,26 +779,46 @@ def subset_pseudotime_rows_by_cells(
 
 def create_confidence_run_inputs(
     *,
-    runtime_root: Path,
     input_dir: Path,
     dataset_id: str,
     algorithm_id: str,
     project_manifest: dict,
-    source_expression: Path,
+    preprocessed_expression: Path,
     source_pseudotime: Path | None,
 ) -> tuple[list[str], dict[str, dict], dict]:
     settings = resolve_confidence_settings(project_manifest)
     bootstrap_runs = int(settings["bootstrap_runs"])
     subsample_fraction = float(settings["subsample_fraction"])
 
-    preprocessed_dir = runtime_root / "_preprocessed"
-    preprocessed_dir.mkdir(parents=True, exist_ok=True)
-    preprocessed_expression = preprocessed_dir / "ExpressionData.csv"
-    preprocess_expression_matrix(
-        source_expression=source_expression,
-        destination_expression=preprocessed_expression,
-        project_manifest=project_manifest,
-    )
+    header, _expression_dialect = read_delimited_header(preprocessed_expression)
+    cell_column_indices = list(range(1, len(header)))
+    if not cell_column_indices:
+        cell_column_indices = []
+
+    if bootstrap_runs <= 1 or not cell_column_indices:
+        run_id = "run-1"
+        run_dir = input_dir / dataset_id / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        link_or_copy_file(preprocessed_expression, run_dir / "ExpressionData.csv")
+
+        if source_pseudotime and source_pseudotime.exists():
+            shutil.copy2(source_pseudotime, run_dir / "PseudoTime.csv")
+
+        return (
+            [run_id],
+            {
+                run_id: {
+                    "seed": stable_seed_for(
+                        project_id=dataset_id,
+                        algorithm_id=algorithm_id,
+                    ),
+                    "cell_count": len(cell_column_indices),
+                    "total_cell_count": len(cell_column_indices),
+                    "subsample_fraction": 1.0,
+                }
+            },
+            settings,
+        )
 
     expression_rows, expression_dialect = read_delimited_rows(preprocessed_expression)
     if not expression_rows:
@@ -573,12 +826,9 @@ def create_confidence_run_inputs(
 
     header = expression_rows[0]
     cell_column_indices = list(range(1, len(header)))
-    if not cell_column_indices:
-        cell_column_indices = []
 
     sample_size = len(cell_column_indices)
-    if bootstrap_runs > 1 and cell_column_indices:
-        sample_size = max(1, int(round(len(cell_column_indices) * subsample_fraction)))
+    sample_size = max(1, int(round(len(cell_column_indices) * subsample_fraction)))
 
     seed_base = stable_seed_for(project_id=dataset_id, algorithm_id=algorithm_id)
     run_ids: list[str] = []
@@ -593,7 +843,9 @@ def create_confidence_run_inputs(
         seed = seed_base + run_index
         if bootstrap_runs > 1 and cell_column_indices:
             rng = random.Random(seed)
-            selected_column_indices = sorted(rng.sample(cell_column_indices, sample_size))
+            selected_column_indices = sorted(
+                rng.sample(cell_column_indices, sample_size)
+            )
         else:
             selected_column_indices = cell_column_indices
 
@@ -783,13 +1035,18 @@ def prepare_beeline_runtime(
         if candidate_pseudotime.exists():
             source_pseudotime = candidate_pseudotime
 
+    preprocessed_expression = ensure_project_preprocessed_expression(
+        project_id=project_id,
+        source_expression=source_expression,
+        project_manifest=project_manifest,
+    )
+
     run_ids, run_metadata, confidence_settings = create_confidence_run_inputs(
-        runtime_root=runtime_root,
         input_dir=input_dir,
         dataset_id=dataset_id,
         algorithm_id=algorithm_id,
         project_manifest=project_manifest,
-        source_expression=source_expression,
+        preprocessed_expression=preprocessed_expression,
         source_pseudotime=source_pseudotime,
     )
 

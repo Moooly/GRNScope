@@ -139,6 +139,9 @@ async def create_project_from_temp(
             "ensemble_enabled": ensemble_enabled,
             "expression_path": move_result["expression_path"],
             "pseudotime_path": move_result.get("pseudotime_path"),
+            "preprocessed_expression_path": str(
+                project_dir / "preprocessed" / "ExpressionData.csv"
+            ),
             "latest_job_id": job_id,
         }
 
