@@ -1,4 +1,5 @@
 import type { DragEvent } from "react";
+import FileNameDisplay from "./FileNameDisplay";
 
 interface UploadStepProps {
   pseudotimeFileName: string;
@@ -62,9 +63,10 @@ export default function UploadStep({
               selectPseudotimeFile(file);
             }}
           />
-          <span className="text-base font-bold text-slate-950">
-            {pseudotimeFileName || "Drop pseudotime CSV here"}
-          </span>
+          <FileNameDisplay
+            fileName={pseudotimeFileName}
+            placeholder="Drop pseudotime CSV here"
+          />
           <span className="mt-2 text-sm text-slate-500">
             {pseudotimeFileName ? "Click to replace" : "or click to browse"}
           </span>

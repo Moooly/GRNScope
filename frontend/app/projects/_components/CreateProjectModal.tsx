@@ -3,6 +3,7 @@ import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmDetailModal from "./AlgorithmDetailModal";
 import AlgorithmStep from "./AlgorithmStep";
+import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 import UploadStep from "./UploadStep";
 
 interface DatasetSummary {
@@ -112,6 +113,7 @@ export default function CreateProjectModal({
   const algorithmDetailCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
+  const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
   const datasetReady = hasExpressionFile && tempUploadId.length > 0 && !isUploadingTempDataset;
 
   const selectExpressionFile = (file: File | null) => {
@@ -325,9 +327,10 @@ export default function CreateProjectModal({
                       selectExpressionFile(file);
                     }}
                   />
-                  <span className="text-base font-bold text-slate-950">
-                    {expressionFileName || "Drop expression matrix CSV here"}
-                  </span>
+                  <FileNameDisplay
+                    fileName={expressionFileName}
+                    placeholder="Drop expression matrix CSV here"
+                  />
                   <span className="mt-2 text-sm text-slate-500">
                     {expressionFileName ? "Click to replace" : "or click to browse"}
                   </span>
@@ -343,9 +346,14 @@ export default function CreateProjectModal({
                     </span>
                   ) : datasetReady ? (
                     <>
-                      <span className="inline-flex items-center gap-2 font-bold text-[#178a62]">
+                      <span className="inline-flex min-w-0 max-w-full items-center gap-2 font-bold text-[#178a62]">
                         <span className="h-2 w-2 rounded-full bg-[#20b779]" />
-                        {expressionFileName}
+                        <span
+                          className="min-w-0 max-w-full truncate"
+                          title={expressionFileName}
+                        >
+                          {compactExpressionFileName}
+                        </span>
                       </span>
                       {geneCount !== null && cellCount !== null && (
                         <span className="font-medium text-slate-700">
@@ -355,7 +363,12 @@ export default function CreateProjectModal({
                       )}
                     </>
                   ) : (
-                    <span className="font-medium text-slate-600">{expressionFileName}</span>
+                    <span
+                      className="min-w-0 max-w-full truncate font-medium text-slate-600"
+                      title={expressionFileName}
+                    >
+                      {compactExpressionFileName}
+                    </span>
                   )}
                 </div>
               )}
