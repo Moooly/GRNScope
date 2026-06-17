@@ -24,8 +24,36 @@ from ..services.result_service import algorithm_result_path, write_algorithm_res
 
 @dataclass
 class TaskControl:
-    stop_event: threading.Event
+    stop_event: "TaskStopSignal"
     process: subprocess.Popen | None = None
+
+
+class TaskStopSignal:
+    def __init__(self, project_id: str, job_id: str, algorithm_id: str) -> None:
+        self.project_id = project_id
+        self.job_id = job_id
+        self.algorithm_id = algorithm_id
+        self.local_event = threading.Event()
+
+    def set(self) -> None:
+        self.local_event.set()
+
+    def is_set(self) -> bool:
+        if self.local_event.is_set():
+            return True
+
+        project_dir = PROJECTS_ROOT / self.project_id
+        if not project_dir.exists():
+            return False
+
+        try:
+            task = get_task_state(project_dir, self.job_id, self.algorithm_id)
+        except Exception:
+            return False
+
+        if task is None:
+            return False
+        return task.get("status") in {"Stopping", "Stopped"}
 
 
 TASK_CONTROLS_LOCK = threading.Lock()
@@ -66,7 +94,9 @@ def get_or_create_task_control(
     with TASK_CONTROLS_LOCK:
         control = TASK_CONTROLS.get(key)
         if control is None:
-            control = TaskControl(stop_event=threading.Event())
+            control = TaskControl(
+                stop_event=TaskStopSignal(project_id, job_id, algorithm_id)
+            )
             TASK_CONTROLS[key] = control
         return control
 
@@ -584,6 +614,33 @@ def launch_independent_algorithm_tasks(
         worker.start()
 
 
+def run_algorithm_job_worker(
+    project_id: str,
+    job_id: str,
+    selected_algorithms_list: list[str],
+) -> None:
+    project_dir = PROJECTS_ROOT / project_id
+
+    if not project_dir.exists():
+        return
+
+    update_job_state(project_dir, job_id, overall_status="Running")
+
+    for algorithm_id in sort_algorithm_ids_by_difficulty(selected_algorithms_list):
+        task = get_task_state(project_dir, job_id, algorithm_id)
+        if task is None:
+            continue
+        if task.get("status") in TERMINAL_JOB_STATUSES:
+            continue
+        if task.get("status") == "Stopping":
+            continue
+
+        get_or_create_task_control(project_id, job_id, algorithm_id)
+        run_single_algorithm_task(project_id, job_id, algorithm_id)
+
+    recompute_overall_status(project_dir, job_id)
+
+
 def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict:
     project_dir = PROJECTS_ROOT / project_id
     if not project_dir.exists():
@@ -632,7 +689,11 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
     return get_task_state(project_dir, job_id, algorithm_id) or task
 
 
-def rerun_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict:
+def prepare_algorithm_task_for_rerun(
+    project_id: str,
+    job_id: str,
+    algorithm_id: str,
+) -> dict:
     project_dir = PROJECTS_ROOT / project_id
     if not project_dir.exists():
         raise FileNotFoundError("Project not found.")
@@ -647,7 +708,16 @@ def rerun_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dic
     clear_task_control(project_id, job_id, algorithm_id)
     get_or_create_task_control(project_id, job_id, algorithm_id)
     reset_task_for_rerun(project_dir, job_id, algorithm_id)
+    recompute_overall_status(project_dir, job_id)
 
+    return get_task_state(project_dir, job_id, algorithm_id) or task
+
+
+def launch_algorithm_rerun_thread(
+    project_id: str,
+    job_id: str,
+    algorithm_id: str,
+) -> None:
     worker = threading.Thread(
         target=run_single_algorithm_task,
         args=(project_id, job_id, algorithm_id),
@@ -655,5 +725,8 @@ def rerun_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dic
     )
     worker.start()
 
-    recompute_overall_status(project_dir, job_id)
-    return get_task_state(project_dir, job_id, algorithm_id) or task
+
+def rerun_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict:
+    task = prepare_algorithm_task_for_rerun(project_id, job_id, algorithm_id)
+    launch_algorithm_rerun_thread(project_id, job_id, algorithm_id)
+    return task

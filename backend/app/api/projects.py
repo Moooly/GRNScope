@@ -33,6 +33,7 @@ from ..services.job_service import (
     launch_independent_algorithm_tasks,
     send_job_completion_notification_if_needed,
 )
+from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
 
 router = APIRouter()
@@ -186,12 +187,15 @@ async def create_project_from_temp(
         if upload_metadata_path.exists():
             upload_metadata_path.unlink()
 
-        background_tasks.add_task(
-            launch_independent_algorithm_tasks,
-            project_id,
-            job_id,
-            selected_algorithms_list,
-        )
+        if queue_enabled():
+            enqueue_algorithm_job(project_id, job_id, selected_algorithms_list)
+        else:
+            background_tasks.add_task(
+                launch_independent_algorithm_tasks,
+                project_id,
+                job_id,
+                selected_algorithms_list,
+            )
 
         return CreateProjectResponse(
             ok=True,
