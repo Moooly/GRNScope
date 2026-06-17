@@ -134,12 +134,6 @@ def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
         )
 
     raw_headers = [str(column).strip() for column in header]
-    if any(header == "" for header in raw_headers):
-        raise ValueError("Header row contains blank identifiers.")
-
-    if raw_headers[0] == "":
-        raise ValueError("The first column header is missing.")
-
     cell_names = raw_headers[1:]
     if not cell_names:
         raise ValueError("Expression matrix must include at least one cell identifier.")
