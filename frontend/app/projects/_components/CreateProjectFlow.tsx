@@ -352,6 +352,9 @@ export default function CreateProjectFlow({
       try {
         setIsUploadingTempDataset(true);
         setErrors([]);
+        setTempUploadId("");
+        setGeneCount(null);
+        setCellCount(null);
 
         const formData = new FormData();
         formData.append("expression_matrix", expressionFile);
@@ -369,12 +372,14 @@ export default function CreateProjectFlow({
 
         if (!response.ok) {
           setErrors(formatTemporaryUploadError(response, data));
+          setTempUploadId("");
           return;
         }
 
         if (!data || data.ok !== true) {
           const serverErrors = extractApiErrors(data);
           setErrors(serverErrors.length ? serverErrors : ["Temporary dataset upload failed."]);
+          setTempUploadId("");
           return;
         }
 
@@ -384,6 +389,7 @@ export default function CreateProjectFlow({
       } catch (err) {
         if ((err as Error)?.name === "AbortError") return;
         if (!isCancelled) {
+          setTempUploadId("");
           setErrors([
             err instanceof Error && err.message
               ? err.message
@@ -548,6 +554,16 @@ export default function CreateProjectFlow({
 
       if (!data.ok) {
         setErrors(data.errors || ["Project creation failed."]);
+        if (
+          Array.isArray(data.errors) &&
+          data.errors.some(
+            (error: unknown) =>
+              typeof error === "string" &&
+              error.toLowerCase().includes("temporary upload")
+          )
+        ) {
+          setTempUploadId("");
+        }
         return;
       }
 

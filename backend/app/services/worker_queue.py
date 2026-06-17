@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Any
 
@@ -8,6 +9,7 @@ from typing import Any
 DEFAULT_QUEUE_NAME = "grnscope"
 DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
 DEFAULT_JOB_TIMEOUT_SECONDS = 7 * 24 * 60 * 60
+RQ_JOB_ID_UNSAFE_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
 
 
 def queue_backend() -> str:
@@ -41,6 +43,16 @@ def worker_job_timeout_seconds() -> int:
         return max(60, int(raw_value))
     except ValueError:
         return DEFAULT_JOB_TIMEOUT_SECONDS
+
+
+def safe_rq_job_id(*parts: object) -> str:
+    safe_parts: list[str] = []
+    for part in parts:
+        text = str(part).strip()
+        text = RQ_JOB_ID_UNSAFE_PATTERN.sub("-", text).strip("-")
+        if text:
+            safe_parts.append(text)
+    return "-".join(safe_parts)
 
 
 def get_redis_connection() -> Any:
@@ -83,7 +95,7 @@ def enqueue_algorithm_job(
         project_id,
         job_id,
         selected_algorithms_list,
-        job_id=f"project:{project_id}:job:{job_id}",
+        job_id=safe_rq_job_id("project", project_id, "job", job_id),
         job_timeout=worker_job_timeout_seconds(),
         result_ttl=24 * 60 * 60,
         failure_ttl=7 * 24 * 60 * 60,
@@ -103,9 +115,14 @@ def enqueue_algorithm_rerun(
         project_id,
         job_id,
         algorithm_id,
-        job_id=(
-            f"project:{project_id}:job:{job_id}:"
-            f"rerun:{algorithm_id}:{int(time.time() * 1000)}"
+        job_id=safe_rq_job_id(
+            "project",
+            project_id,
+            "job",
+            job_id,
+            "rerun",
+            algorithm_id,
+            int(time.time() * 1000),
         ),
         job_timeout=worker_job_timeout_seconds(),
         result_ttl=24 * 60 * 60,
