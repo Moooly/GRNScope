@@ -731,6 +731,41 @@ def link_or_copy_file(source_path: Path, destination_path: Path) -> None:
         shutil.copy2(source_path, destination_path)
 
 
+def write_expression_subset_by_cells(
+    source_expression: Path,
+    destination_expression: Path,
+    selected_column_indices: list[int],
+) -> None:
+    with source_expression.open("r", encoding="utf-8", newline="") as source_file:
+        first_line = source_file.readline()
+        if not first_line.strip():
+            raise ValueError(f"{source_expression.name} is empty.")
+        dialect = detect_csv_dialect(first_line)
+        source_file.seek(0)
+
+        destination_expression.parent.mkdir(parents=True, exist_ok=True)
+        with destination_expression.open(
+            "w",
+            encoding="utf-8",
+            newline="",
+        ) as destination_file:
+            reader = csv.reader(source_file, dialect=dialect)
+            writer = csv.writer(
+                destination_file,
+                delimiter=getattr(dialect, "delimiter", ","),
+                quotechar=getattr(dialect, "quotechar", '"'),
+                lineterminator="\n",
+            )
+            retained_indices = [0, *selected_column_indices]
+            for row in reader:
+                writer.writerow(
+                    [
+                        row[index] if index < len(row) else ""
+                        for index in retained_indices
+                    ]
+                )
+
+
 def subset_expression_rows_by_cells(
     rows: list[list[str]],
     selected_column_indices: list[int],
@@ -777,15 +812,13 @@ def subset_pseudotime_rows_by_cells(
     write_delimited_rows(destination_pseudotime, retained_rows, dialect)
 
 
-def create_confidence_run_inputs(
+def plan_confidence_run_inputs(
     *,
-    input_dir: Path,
     dataset_id: str,
     algorithm_id: str,
     project_manifest: dict,
     preprocessed_expression: Path,
-    source_pseudotime: Path | None,
-) -> tuple[list[str], dict[str, dict], dict]:
+) -> tuple[list[str], dict[str, dict], dict, dict[str, list[int]], list[str]]:
     settings = resolve_confidence_settings(project_manifest)
     bootstrap_runs = int(settings["bootstrap_runs"])
     subsample_fraction = float(settings["subsample_fraction"])
@@ -795,50 +828,18 @@ def create_confidence_run_inputs(
     if not cell_column_indices:
         cell_column_indices = []
 
-    if bootstrap_runs <= 1 or not cell_column_indices:
-        run_id = "run-1"
-        run_dir = input_dir / dataset_id / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        link_or_copy_file(preprocessed_expression, run_dir / "ExpressionData.csv")
-
-        if source_pseudotime and source_pseudotime.exists():
-            shutil.copy2(source_pseudotime, run_dir / "PseudoTime.csv")
-
-        return (
-            [run_id],
-            {
-                run_id: {
-                    "seed": stable_seed_for(
-                        project_id=dataset_id,
-                        algorithm_id=algorithm_id,
-                    ),
-                    "cell_count": len(cell_column_indices),
-                    "total_cell_count": len(cell_column_indices),
-                    "subsample_fraction": 1.0,
-                }
-            },
-            settings,
-        )
-
-    expression_rows, expression_dialect = read_delimited_rows(preprocessed_expression)
-    if not expression_rows:
-        raise ValueError("Expression matrix file has no rows after preprocessing.")
-
-    header = expression_rows[0]
-    cell_column_indices = list(range(1, len(header)))
-
     sample_size = len(cell_column_indices)
-    sample_size = max(1, int(round(len(cell_column_indices) * subsample_fraction)))
+    if bootstrap_runs > 1 and cell_column_indices:
+        sample_size = max(1, int(round(len(cell_column_indices) * subsample_fraction)))
 
     seed_base = stable_seed_for(project_id=dataset_id, algorithm_id=algorithm_id)
     run_ids: list[str] = []
     run_metadata: dict[str, dict] = {}
+    run_column_indices: dict[str, list[int]] = {}
 
     for run_index in range(bootstrap_runs):
         run_id = f"run-{run_index + 1}"
         run_ids.append(run_id)
-        run_dir = input_dir / dataset_id / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
 
         seed = seed_base + run_index
         if bootstrap_runs > 1 and cell_column_indices:
@@ -849,24 +850,7 @@ def create_confidence_run_inputs(
         else:
             selected_column_indices = cell_column_indices
 
-        selected_cell_names = {
-            header[index]
-            for index in selected_column_indices
-            if index < len(header) and str(header[index]).strip()
-        }
-        expression_subset = subset_expression_rows_by_cells(
-            expression_rows,
-            selected_column_indices,
-        )
-        write_delimited_rows(run_dir / "ExpressionData.csv", expression_subset, expression_dialect)
-
-        if source_pseudotime and source_pseudotime.exists():
-            subset_pseudotime_rows_by_cells(
-                source_pseudotime,
-                run_dir / "PseudoTime.csv",
-                selected_cell_names,
-            )
-
+        run_column_indices[run_id] = selected_column_indices
         run_metadata[run_id] = {
             "seed": seed,
             "cell_count": len(selected_column_indices),
@@ -877,6 +861,84 @@ def create_confidence_run_inputs(
                 else 1.0
             ),
         }
+
+    return run_ids, run_metadata, settings, run_column_indices, header
+
+
+def materialize_confidence_run_input(
+    *,
+    input_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    preprocessed_expression: Path,
+    header: list[str],
+    selected_column_indices: list[int],
+    source_pseudotime: Path | None,
+) -> Path:
+    run_dir = input_dir / dataset_id / run_id
+    shutil.rmtree(run_dir, ignore_errors=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    all_cell_column_indices = list(range(1, len(header)))
+    if selected_column_indices == all_cell_column_indices:
+        link_or_copy_file(preprocessed_expression, run_dir / "ExpressionData.csv")
+    else:
+        write_expression_subset_by_cells(
+            preprocessed_expression,
+            run_dir / "ExpressionData.csv",
+            selected_column_indices,
+        )
+
+    if source_pseudotime and source_pseudotime.exists():
+        if selected_column_indices == all_cell_column_indices:
+            shutil.copy2(source_pseudotime, run_dir / "PseudoTime.csv")
+        else:
+            selected_cell_names = {
+                header[index]
+                for index in selected_column_indices
+                if index < len(header) and str(header[index]).strip()
+            }
+            subset_pseudotime_rows_by_cells(
+                source_pseudotime,
+                run_dir / "PseudoTime.csv",
+                selected_cell_names,
+            )
+
+    return run_dir
+
+
+def create_confidence_run_inputs(
+    *,
+    input_dir: Path,
+    dataset_id: str,
+    algorithm_id: str,
+    project_manifest: dict,
+    preprocessed_expression: Path,
+    source_pseudotime: Path | None,
+) -> tuple[list[str], dict[str, dict], dict]:
+    (
+        run_ids,
+        run_metadata,
+        settings,
+        run_column_indices,
+        header,
+    ) = plan_confidence_run_inputs(
+        dataset_id=dataset_id,
+        algorithm_id=algorithm_id,
+        project_manifest=project_manifest,
+        preprocessed_expression=preprocessed_expression,
+    )
+
+    for run_id in run_ids:
+        materialize_confidence_run_input(
+            input_dir=input_dir,
+            dataset_id=dataset_id,
+            run_id=run_id,
+            preprocessed_expression=preprocessed_expression,
+            header=header,
+            selected_column_indices=run_column_indices[run_id],
+            source_pseudotime=source_pseudotime,
+        )
 
     return run_ids, run_metadata, settings
 
@@ -955,6 +1017,17 @@ def read_recent_log_text(path: Path, max_bytes: int = 20000) -> str:
         return ""
 
 
+def combine_run_log_files(log_paths: list[tuple[str, Path]]) -> str:
+    parts: list[str] = []
+    for run_id, log_path in log_paths:
+        try:
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        parts.append(f"===== {run_id} =====\n{text}")
+    return "\n".join(parts)
+
+
 def collect_algorithm_error_log_text(
     *,
     runtime_root: Path,
@@ -1002,11 +1075,11 @@ def build_missing_ranked_edges_error(
     )
 
 
-def prepare_beeline_runtime(
+def initialize_beeline_runtime(
     project_id: str,
     algorithm_id: str,
     project_manifest: dict,
-) -> tuple[Path, Path, Path, str, list[str], dict[str, dict], dict]:
+) -> tuple[Path, Path, Path, str, Path, Path | None]:
     project_runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
     runtime_root = space_free_runtime_root(project_runtime_root, project_id, algorithm_id)
 
@@ -1040,6 +1113,30 @@ def prepare_beeline_runtime(
         source_expression=source_expression,
         project_manifest=project_manifest,
     )
+
+    return (
+        runtime_root,
+        input_dir,
+        output_dir,
+        dataset_id,
+        preprocessed_expression,
+        source_pseudotime,
+    )
+
+
+def prepare_beeline_runtime(
+    project_id: str,
+    algorithm_id: str,
+    project_manifest: dict,
+) -> tuple[Path, Path, Path, str, list[str], dict[str, dict], dict]:
+    (
+        runtime_root,
+        input_dir,
+        output_dir,
+        dataset_id,
+        preprocessed_expression,
+        source_pseudotime,
+    ) = initialize_beeline_runtime(project_id, algorithm_id, project_manifest)
 
     run_ids, run_metadata, confidence_settings = create_confidence_run_inputs(
         input_dir=input_dir,
@@ -1610,25 +1707,26 @@ def run_beeline_with_progress(
         input_dir,
         output_dir,
         dataset_id,
-        run_ids,
-        run_metadata,
-        confidence_settings,
-    ) = prepare_beeline_runtime(
+        preprocessed_expression,
+        source_pseudotime,
+    ) = initialize_beeline_runtime(
         project_id,
         algorithm_id,
         project_manifest,
     )
 
-    config_path = runtime_root / "config.yaml"
-    config_text = build_beeline_config(
-        input_dir=input_dir,
-        output_dir=output_dir,
+    (
+        run_ids,
+        run_metadata,
+        confidence_settings,
+        run_column_indices,
+        header,
+    ) = plan_confidence_run_inputs(
         dataset_id=dataset_id,
-        run_ids=run_ids,
         algorithm_id=algorithm_id,
-        include_pseudotime=bool(project_manifest.get("pseudotime_path")),
+        project_manifest=project_manifest,
+        preprocessed_expression=preprocessed_expression,
     )
-    config_path.write_text(config_text, encoding="utf-8")
 
     update_job_state_fn(
         project_dir,
@@ -1642,85 +1740,158 @@ def run_beeline_with_progress(
         raise AlgorithmStoppedError("Algorithm run was stopped.")
 
     python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
-    command = [python_executable, "BLRunner.py", "-c", str(config_path)]
-
     started_at = elapsed_started_at or time.time()
-    process = subprocess.Popen(
-        command,
-        cwd=beeline_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
-    if on_process_start is not None:
-        on_process_start(process)
+    stdout_log_paths: list[tuple[str, Path]] = []
+    stderr_log_paths: list[tuple[str, Path]] = []
+    total_run_count = max(1, len(run_ids))
 
-    while process.poll() is None:
+    for run_index, run_id in enumerate(run_ids, start=1):
         if stop_event is not None and stop_event.is_set():
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            break
+            raise AlgorithmStoppedError("Algorithm run was stopped.")
 
-        elapsed = int(time.time() - started_at)
-        completed_run_count = count_completed_confidence_run_outputs(
-            output_dir,
-            dataset_id,
-            run_ids,
-            algorithm_id,
+        run_dir = materialize_confidence_run_input(
+            input_dir=input_dir,
+            dataset_id=dataset_id,
+            run_id=run_id,
+            preprocessed_expression=preprocessed_expression,
+            header=header,
+            selected_column_indices=run_column_indices[run_id],
+            source_pseudotime=source_pseudotime,
         )
-        estimated_remaining_seconds = None
-        if completed_run_count > 0:
-            average_seconds_per_completed_run = elapsed / completed_run_count
-            estimated_remaining_seconds = int(
-                round(
-                    average_seconds_per_completed_run
-                    * max(0, len(run_ids) - completed_run_count)
-                )
-            )
-            progress_percent = min(
-                85,
-                20 + round((completed_run_count / max(1, len(run_ids))) * 65),
-            )
-            progress_label = "Running analysis"
-        else:
-            progress_percent = min(25, 20 + elapsed // 10)
-            progress_label = "Starting analysis"
 
-        update_job_state_fn(
-            project_dir,
-            job_id,
+        config_path = runtime_root / f"config.{run_id}.yaml"
+        config_text = build_beeline_config(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            dataset_id=dataset_id,
+            run_ids=[run_id],
             algorithm_id=algorithm_id,
-            elapsed_seconds=elapsed,
-            progress_percent=progress_percent,
-            progress_label=progress_label,
-            estimated_remaining_seconds=estimated_remaining_seconds,
+            include_pseudotime=source_pseudotime is not None,
         )
-        time.sleep(1)
+        config_path.write_text(config_text, encoding="utf-8")
 
-    stdout_text, stderr_text = process.communicate()
+        stdout_log_path = runtime_root / f"stdout.{run_id}.log"
+        stderr_log_path = runtime_root / f"stderr.{run_id}.log"
+        stdout_log_paths.append((run_id, stdout_log_path))
+        stderr_log_paths.append((run_id, stderr_log_path))
 
-    (runtime_root / "stdout.log").write_text(stdout_text or "", encoding="utf-8")
-    (runtime_root / "stderr.log").write_text(stderr_text or "", encoding="utf-8")
+        command = [python_executable, "BLRunner.py", "-c", str(config_path)]
+        process: subprocess.Popen | None = None
 
-    if stop_event is not None and stop_event.is_set():
-        raise AlgorithmStoppedError("Algorithm run was stopped.")
+        try:
+            with stdout_log_path.open("w", encoding="utf-8") as stdout_file, (
+                stderr_log_path.open("w", encoding="utf-8")
+            ) as stderr_file:
+                process = subprocess.Popen(
+                    command,
+                    cwd=beeline_root,
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                    text=True,
+                    start_new_session=True,
+                )
 
-    if process.returncode != 0:
-        friendly_error = extract_user_friendly_beeline_error(
-            "\n".join([stderr_text or "", stdout_text or ""]),
-            algorithm_id,
-        )
-        raise RuntimeError(friendly_error)
+                if on_process_start is not None:
+                    on_process_start(process)
+
+                while process.poll() is None:
+                    if stop_event is not None and stop_event.is_set():
+                        try:
+                            os.killpg(process.pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                        break
+
+                    elapsed = int(time.time() - started_at)
+                    completed_run_count = count_completed_confidence_run_outputs(
+                        output_dir,
+                        dataset_id,
+                        run_ids,
+                        algorithm_id,
+                    )
+                    estimated_remaining_seconds = None
+                    if completed_run_count > 0:
+                        average_seconds_per_completed_run = elapsed / completed_run_count
+                        estimated_remaining_seconds = int(
+                            round(
+                                average_seconds_per_completed_run
+                                * max(0, len(run_ids) - completed_run_count)
+                            )
+                        )
+                    progress_percent = min(
+                        85,
+                        20 + round((completed_run_count / total_run_count) * 65),
+                    )
+                    if completed_run_count == 0:
+                        progress_percent = min(25, 20 + elapsed // 10)
+                    progress_label = (
+                        f"Running confidence run {run_index} of {total_run_count}"
+                        if total_run_count > 1
+                        else "Starting analysis"
+                    )
+
+                    update_job_state_fn(
+                        project_dir,
+                        job_id,
+                        algorithm_id=algorithm_id,
+                        elapsed_seconds=elapsed,
+                        progress_percent=progress_percent,
+                        progress_label=progress_label,
+                        estimated_remaining_seconds=estimated_remaining_seconds,
+                    )
+                    time.sleep(1)
+
+                if process.returncode is None:
+                    process.wait()
+
+            update_job_state_fn(
+                project_dir,
+                job_id,
+                algorithm_id=algorithm_id,
+                process_pid=0,
+            )
+
+            if stop_event is not None and stop_event.is_set():
+                raise AlgorithmStoppedError("Algorithm run was stopped.")
+
+            if process.returncode != 0:
+                (runtime_root / "stdout.log").write_text(
+                    combine_run_log_files(stdout_log_paths),
+                    encoding="utf-8",
+                )
+                (runtime_root / "stderr.log").write_text(
+                    combine_run_log_files(stderr_log_paths),
+                    encoding="utf-8",
+                )
+                log_text = "\n".join(
+                    [
+                        read_recent_log_text(stderr_log_path),
+                        read_recent_log_text(stdout_log_path),
+                    ]
+                )
+                friendly_error = extract_user_friendly_beeline_error(
+                    log_text,
+                    algorithm_id,
+                )
+                raise RuntimeError(friendly_error)
+        finally:
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+    (runtime_root / "stdout.log").write_text(
+        combine_run_log_files(stdout_log_paths),
+        encoding="utf-8",
+    )
+    (runtime_root / "stderr.log").write_text(
+        combine_run_log_files(stderr_log_paths),
+        encoding="utf-8",
+    )
 
     update_job_state_fn(
         project_dir,
