@@ -7,6 +7,7 @@ import ProjectCard from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
 import EmptyProjectHistory from "./_components/EmptyProjectHistory";
+import { API_BASE } from "../_lib/apiConfig";
 import { apiFetch } from "../_lib/clientIdentity";
 
 export type ProjectAlgorithm = {
@@ -32,8 +33,6 @@ export type ProjectAlgorithm = {
 };
 
 function ProjectsPageContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-
   const router = useRouter();
   const searchParams = useSearchParams();
 

@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { API_ROOT } from "../_lib/apiConfig";
 
 type MethodologyCategory =
   | "Random forest"
@@ -70,8 +71,7 @@ type AlgorithmEntry = {
   runner: string;
 };
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+const API_BASE_URL = API_ROOT;
 
 function getDockerVersion(dockerImage: string) {
   const parts = dockerImage.split(":");

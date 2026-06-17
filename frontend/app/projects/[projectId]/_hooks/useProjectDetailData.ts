@@ -8,10 +8,9 @@ import type {
   ProjectJob,
   ProjectManifest,
 } from "../_lib/types";
+import { API_BASE, API_ROOT } from "../../../_lib/apiConfig";
 import { apiFetch } from "../../../_lib/clientIdentity";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-const API_ROOT = API_BASE.replace(/\/api\/?$/, "");
 const POLL_INTERVAL_MS = 5000;
 
 type BackendAlgorithmEntry = {

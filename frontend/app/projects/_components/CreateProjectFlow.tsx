@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CreateProjectModal from "./CreateProjectModal";
 import type { ProjectAlgorithm } from "../page";
 import type { Project } from "../_types/project";
+import { getApiBase, getApiRoot } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
 
 type BackendAlgorithmEntry = {
@@ -90,10 +91,6 @@ function getPayloadNumber(payload: ApiPayload, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function getApiRoot(apiBase: string) {
-  return apiBase.replace(/\/api\/?$/, "");
-}
-
 function getDockerVersion(dockerImage: string) {
   const parts = dockerImage.split(":");
   return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
@@ -150,7 +147,7 @@ export default function CreateProjectFlow({
   onClose,
   onProjectCreated,
 }: CreateProjectFlowProps) {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+  const API_BASE = getApiBase();
   const API_ROOT = getApiRoot(API_BASE);
 
   const [isClosing, setIsClosing] = useState(false);

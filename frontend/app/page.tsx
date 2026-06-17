@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { API_BASE } from "./_lib/apiConfig";
 import { apiFetch } from "./_lib/clientIdentity";
 import CreateProjectFlow from "./projects/_components/CreateProjectFlow";
 import { formatProjectCreatedAt } from "./projects/_lib/time";
 import { Project, ProjectJob } from "./projects/_types/project";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export default function HomePage() {
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);

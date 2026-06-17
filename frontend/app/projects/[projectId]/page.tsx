@@ -19,6 +19,7 @@ import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSecti
 import JobProgressBanner from "./_components/JobProgressBanner";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
+import { API_BASE } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
 
 import {
@@ -31,7 +32,6 @@ import {
 } from "./_lib/types";
 import { boolText, clamp } from "./_lib/utils";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const CONFIDENCE_STABILITY_TOP_K = 10;
 const DEFAULT_NETWORK_EDGE_TARGET = 3;
 const MODAL_ANIMATION_MS = 480;

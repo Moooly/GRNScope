@@ -2,9 +2,8 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { API_BASE } from "./_lib/apiConfig";
 import { apiFetch } from "./_lib/clientIdentity";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export type ContactSupportContext = {
   question?: string;
