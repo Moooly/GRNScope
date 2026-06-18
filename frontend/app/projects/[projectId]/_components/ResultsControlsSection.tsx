@@ -382,7 +382,7 @@ export default function ResultsControlsSection({
       </div>
 
       {isSettingsMenuOpen && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-40 max-h-[calc(100vh-120px)] w-[min(92vw,540px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-2xl shadow-slate-900/20">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-40 max-h-[78vh] w-[min(92vw,540px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-300 bg-white p-3 pb-5 shadow-2xl shadow-slate-900/20">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-2 py-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
