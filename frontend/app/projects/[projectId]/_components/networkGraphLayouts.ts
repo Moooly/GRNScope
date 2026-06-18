@@ -448,11 +448,20 @@ export function buildHierarchicalPositions(
   const positions: PositionMap = {};
 
   const maxLevelWidth = Math.max(...sortedLevels.map((levelNodes) => levelNodes.length), 1);
-  const maxColumnsPerLevel = nodes.length > 80 ? 18 : 28;
-  const rowGap = Math.max(175, Math.min(245, 158 + Math.sqrt(nodes.length) * 10));
+  const crowdedLevelColumnCap =
+    nodes.length > 120 ? 12 : nodes.length > 70 ? 14 : 16;
+  const adaptiveLevelColumns =
+    maxLevelWidth <= 14
+      ? maxLevelWidth
+      : Math.ceil(Math.sqrt(maxLevelWidth) * 2.1);
+  const maxColumnsPerLevel = Math.max(
+    8,
+    Math.min(crowdedLevelColumnCap, adaptiveLevelColumns)
+  );
+  const rowGap = Math.max(190, Math.min(270, 168 + Math.sqrt(nodes.length) * 10));
   const wrappedRowGap = Math.max(
-    118,
-    Math.min(152, 108 + Math.sqrt(nodes.length) * 3)
+    134,
+    Math.min(176, 120 + Math.sqrt(nodes.length) * 4)
   );
   const minColumnGap = Math.max(
     nodes.length > 80 ? 128 : 142,
