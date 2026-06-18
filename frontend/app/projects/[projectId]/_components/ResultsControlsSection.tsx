@@ -171,6 +171,7 @@ export default function ResultsControlsSection({
   const adjustEdgeDisplayLimit = (delta: number) => {
     updateEdgeDisplayLimit(safeEdgeDisplayLimit + delta);
   };
+  const matchingEdgesLabel = safeFilteredEdgeCount.toLocaleString();
 
   const inlinePercentControl = (
     value: number,
@@ -293,20 +294,6 @@ export default function ResultsControlsSection({
     </div>
   );
 
-  const edgeDisplayRow = (
-    <div className="mt-3 border-t border-slate-200 pt-3">
-      <div className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#1b75a6]/15 bg-[#f5f9fc] px-3 py-2 text-left text-slate-800">
-        <span className="shrink-0 whitespace-nowrap text-sm font-bold">
-          Showing top
-        </span>
-        {edgeDisplayControl()}
-        <span className="min-w-0 shrink-0 whitespace-nowrap text-sm font-bold">
-          of {safeFilteredEdgeCount.toLocaleString()} edges
-        </span>
-      </div>
-    </div>
-  );
-
   const inlineRow = (
     title: string,
     control: ReactNode,
@@ -324,6 +311,37 @@ export default function ResultsControlsSection({
         </span>
       </span>
       {control}
+    </div>
+  );
+
+  const sectionLabel = (title: string, accessory?: ReactNode) => (
+    <div className="flex items-center justify-between gap-2 px-1 pb-0.5 pt-1">
+      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+        {title}
+      </span>
+      {accessory}
+    </div>
+  );
+
+  const matchingEdgesBadge = (
+    <span className="shrink-0 rounded-full border border-[#1b75a6]/20 bg-white px-2.5 py-1 text-[11px] font-bold tabular-nums text-[#1b75a6]">
+      {matchingEdgesLabel} matching edges
+    </span>
+  );
+
+  const edgeDisplayRow = (
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      {sectionLabel(
+        "Display limit",
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          Network and table
+        </span>
+      )}
+      {inlineRow(
+        "Shown edges",
+        edgeDisplayControl(),
+        `of ${matchingEdgesLabel} matching edges`
+      )}
     </div>
   );
 
@@ -421,6 +439,7 @@ export default function ResultsControlsSection({
               </div>
             )}
 
+            {sectionLabel("Filters", matchingEdgesBadge)}
             {inlineRow(
               "Evidence",
               inlinePercentControl(
