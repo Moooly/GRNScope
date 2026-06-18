@@ -5,6 +5,7 @@
 type AlgorithmErrorTask = {
   algorithmId: string;
   errorMessage: string;
+  errorType?: string | null;
 };
 
 type AlgorithmErrorModalProps = {
@@ -15,10 +16,23 @@ type AlgorithmErrorModalProps = {
 export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorModalProps) {
   if (!task) return null;
 
-  const errorMessage = normalizeAlgorithmErrorMessage(task.errorMessage, task.algorithmId);
+  const isMatrixValidationError = task.errorType === "matrix_validation";
+  const errorMessage = isMatrixValidationError
+    ? normalizeMatrixErrorMessage(task.errorMessage)
+    : normalizeAlgorithmErrorMessage(task.errorMessage, task.algorithmId);
+  const eyebrow = isMatrixValidationError ? "Matrix upload error" : "Algorithm error";
+  const title = isMatrixValidationError
+    ? "Uploaded matrix could not be prepared"
+    : `${task.algorithmId} failed`;
+  const description = isMatrixValidationError
+    ? "GRNScope accepted the quick upload check, but found this matrix issue while preparing the project for algorithms. Fix the CSV and start a new project with the corrected file."
+    : "GRNScope could not finish this algorithm. The message below explains what happened. If it is still unclear, contact us with this project.";
   const openContactSupport = () => {
     const pageUrl = typeof window !== "undefined" ? window.location.href : "";
     const projectId = pageUrl.match(/\/projects\/([^/?#]+)/)?.[1];
+    const question = isMatrixValidationError
+      ? `Uploaded matrix validation failed after project start.\n\nReason shown by GRNScope:\n${errorMessage}`
+      : `Algorithm ${task.algorithmId} failed.\n\nReason shown by GRNScope:\n${errorMessage}`;
 
     window.dispatchEvent(
       new CustomEvent("grnscope:open-contact", {
@@ -26,7 +40,7 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
           algorithmId: task.algorithmId,
           projectId,
           pageUrl,
-          question: `Algorithm ${task.algorithmId} failed.\n\nReason shown by GRNScope:\n${errorMessage}`,
+          question,
         },
       }),
     );
@@ -43,13 +57,13 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
       >
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-rose-600">
-            Algorithm error
+            {eyebrow}
           </p>
           <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-            {task.algorithmId} failed
+            {title}
           </h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            GRNScope could not finish this algorithm. The message below explains what happened. If it is still unclear, contact us with this project.
+            {description}
           </p>
         </div>
 
@@ -78,6 +92,18 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
       </div>
     </div>
   );
+}
+
+function normalizeMatrixErrorMessage(message: string): string {
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage) {
+    return "GRNScope found a problem in the uploaded expression matrix while preparing the project.";
+  }
+
+  return trimmedMessage
+    .replace(/\/home\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file")
+    .replace(/\/Users\/[^ ]+\/GRNScope\/backend\/projects\/[^\s'"]+/g, "project runtime file")
+    .replace(/\/private\/var\/[^\s'"]+/g, "temporary runtime file");
 }
 
 function normalizeAlgorithmErrorMessage(message: string, algorithmId: string): string {

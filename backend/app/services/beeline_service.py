@@ -39,9 +39,14 @@ PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
 PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
 RUN_TIMINGS_FILENAME = "run_timings.json"
 CSV_SNIFF_SAMPLE_BYTES = 65536
+MISSING_MATRIX_VALUE_TOKENS = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
 
 
 class AlgorithmStoppedError(RuntimeError):
+    pass
+
+
+class MatrixValidationRuntimeError(ValueError):
     pass
 
 
@@ -606,15 +611,101 @@ def ensure_project_preprocessed_expression(
     return preprocessed_expression
 
 
-def parse_expression_numeric_values(row: list[str], cell_count: int) -> Iterator[float]:
+def preview_matrix_identifier(value: object, fallback: str) -> str:
+    text = str(value).strip()
+    if not text:
+        return fallback
+    if len(text) <= 80:
+        return text
+    return f"{text[:77]}..."
+
+
+def validate_preprocessing_header(header: list[str]) -> list[str]:
+    if len(header) < 2:
+        raise MatrixValidationRuntimeError(
+            "Expression matrix must contain a first column of gene names and at least one cell column."
+        )
+
+    cell_names = [str(column).strip() for column in header[1:]]
+    blank_columns = [
+        str(column_index)
+        for column_index, cell_name in enumerate(cell_names, start=2)
+        if cell_name == ""
+    ]
+    if blank_columns:
+        preview = ", ".join(blank_columns[:5])
+        suffix = "..." if len(blank_columns) > 5 else ""
+        raise MatrixValidationRuntimeError(
+            f"Header row contains blank cell identifiers at column {preview}{suffix}."
+        )
+
+    seen_cell_names: set[str] = set()
+    for column_index, cell_name in enumerate(cell_names, start=2):
+        if cell_name in seen_cell_names:
+            raise MatrixValidationRuntimeError(
+                f"Cell identifier '{preview_matrix_identifier(cell_name, 'unnamed cell')}' "
+                f"is duplicated in the header at column {column_index}."
+            )
+        seen_cell_names.add(cell_name)
+
+    return cell_names
+
+
+def validate_preprocessing_gene_name(row: list[str], row_number: int) -> str:
+    gene_name = str(row[0]).strip() if row else ""
+    if gene_name == "":
+        raise MatrixValidationRuntimeError(
+            f"First column contains a blank gene name at row {row_number}."
+        )
+    return gene_name
+
+
+def parse_expression_numeric_values(
+    row: list[str],
+    cell_count: int,
+    *,
+    row_number: int,
+    gene_name: str,
+    cell_names: list[str],
+) -> Iterator[float]:
+    expected_column_count = cell_count + 1
+    if len(row) != expected_column_count:
+        raise MatrixValidationRuntimeError(
+            f"Expression matrix row {row_number} has {len(row)} columns; "
+            f"expected {expected_column_count} from the header."
+        )
+
     for column_index in range(cell_count):
-        raw_value = row[column_index + 1] if column_index + 1 < len(row) else ""
+        raw_value = row[column_index + 1]
+        raw_text = str(raw_value).strip()
+        cell_name = preview_matrix_identifier(
+            cell_names[column_index] if column_index < len(cell_names) else "",
+            f"column {column_index + 2}",
+        )
+        gene_label = preview_matrix_identifier(gene_name, "unnamed gene")
+        error_location = (
+            f"row {row_number}, gene '{gene_label}', cell '{cell_name}' "
+            f"(column {column_index + 2})"
+        )
+
+        if raw_text in MISSING_MATRIX_VALUE_TOKENS:
+            raise MatrixValidationRuntimeError(
+                f"Expression matrix has a missing value at {error_location}."
+            )
+
         try:
-            value = float(str(raw_value).strip())
-        except (TypeError, ValueError):
-            value = 0.0
+            value = float(raw_text)
+        except (TypeError, ValueError) as exc:
+            raise MatrixValidationRuntimeError(
+                f"Expression matrix has a non-numeric value at {error_location}: "
+                f"'{preview_matrix_identifier(raw_value, 'blank')}'."
+            ) from exc
+
         if not isfinite(value):
-            value = 0.0
+            raise MatrixValidationRuntimeError(
+                f"Expression matrix has a non-finite value at {error_location}: "
+                f"'{preview_matrix_identifier(raw_value, 'blank')}'."
+            )
         yield value
 
 
@@ -647,10 +738,17 @@ def iter_expression_data_rows(
         except StopIteration:
             return
 
-        for index, row in enumerate(reader):
-            if not row or all(str(value).strip() == "" for value in row):
-                continue
-            yield index, row
+        try:
+            for index, row in enumerate(reader):
+                if not row or all(str(value).strip() == "" for value in row):
+                    continue
+                yield index, row
+        except csv.Error as exc:
+            line_number = getattr(reader, "line_num", 0) or 0
+            location = f" near row {line_number}" if line_number else ""
+            raise MatrixValidationRuntimeError(
+                f"Expression matrix could not be parsed as CSV{location}: {exc}."
+            ) from exc
 
 
 def preprocess_expression_matrix(
@@ -665,13 +763,10 @@ def preprocess_expression_matrix(
         try:
             header = next(reader)
         except StopIteration as exc:
-            raise ValueError("Expression matrix file is empty.") from exc
+            raise MatrixValidationRuntimeError("Expression matrix file is empty.") from exc
 
-    if len(header) < 2:
-        shutil.copy2(source_expression, destination_expression)
-        return
-
-    cell_count = len(header) - 1
+    cell_names = validate_preprocessing_header(header)
+    cell_count = len(cell_names)
     top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
     include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
     normalize_enabled = parse_bool(project_manifest.get("normalize_enabled"))
@@ -683,9 +778,17 @@ def preprocess_expression_matrix(
     parsed_row_count = 0
     if normalize_enabled:
         column_sums = [0.0] * cell_count
-        for _index, row in iter_expression_data_rows(source_expression, dialect):
+        for index, row in iter_expression_data_rows(source_expression, dialect):
+            row_number = index + 2
+            gene_name = validate_preprocessing_gene_name(row, row_number)
             for column_index, value in enumerate(
-                parse_expression_numeric_values(row, cell_count)
+                parse_expression_numeric_values(
+                    row,
+                    cell_count,
+                    row_number=row_number,
+                    gene_name=gene_name,
+                    cell_names=cell_names,
+                )
             ):
                 column_sums[column_index] += value
             parsed_row_count += 1
@@ -694,15 +797,30 @@ def preprocess_expression_matrix(
             parsed_row_count += 1
 
     if parsed_row_count == 0:
-        shutil.copy2(source_expression, destination_expression)
-        return
+        raise MatrixValidationRuntimeError(
+            "Expression matrix must include gene rows below the header."
+        )
 
     scored_rows: list[tuple[float, int, str]] = []
+    seen_gene_names: set[str] = set()
     for index, row in iter_expression_data_rows(source_expression, dialect):
-        gene_name = str(row[0]).strip() if row else ""
+        row_number = index + 2
+        gene_name = validate_preprocessing_gene_name(row, row_number)
+        if gene_name in seen_gene_names:
+            raise MatrixValidationRuntimeError(
+                f"Gene name '{preview_matrix_identifier(gene_name, 'unnamed gene')}' "
+                f"is duplicated at row {row_number}."
+            )
+        seen_gene_names.add(gene_name)
         variance = compute_row_variance(
             transform_expression_values(
-                parse_expression_numeric_values(row, cell_count),
+                parse_expression_numeric_values(
+                    row,
+                    cell_count,
+                    row_number=row_number,
+                    gene_name=gene_name,
+                    cell_names=cell_names,
+                ),
                 column_sums=column_sums,
                 normalize_enabled=normalize_enabled,
                 log_transform_enabled=log_transform_enabled,
@@ -740,9 +858,16 @@ def preprocess_expression_matrix(
             if index not in retained_indices:
                 continue
 
-            gene_name = str(row[0]).strip() if row else ""
+            row_number = index + 2
+            gene_name = validate_preprocessing_gene_name(row, row_number)
             transformed_values = transform_expression_values(
-                parse_expression_numeric_values(row, cell_count),
+                parse_expression_numeric_values(
+                    row,
+                    cell_count,
+                    row_number=row_number,
+                    gene_name=gene_name,
+                    cell_names=cell_names,
+                ),
                 column_sums=column_sums,
                 normalize_enabled=normalize_enabled,
                 log_transform_enabled=log_transform_enabled,

@@ -17,7 +17,11 @@ from ..repositories.job_repository import (
     write_jobs_manifest,
 )
 from ..repositories.project_repository import read_project_manifest
-from ..services.beeline_service import AlgorithmStoppedError, run_beeline_with_progress
+from ..services.beeline_service import (
+    AlgorithmStoppedError,
+    MatrixValidationRuntimeError,
+    run_beeline_with_progress,
+)
 from ..services.email_service import (
     normalize_notification_email,
     send_job_completion_email,
@@ -200,6 +204,7 @@ def update_job_state(
     task_status: str | None = None,
     elapsed_seconds: int | None = None,
     error_message: str | None = None,
+    error_type: str | None = None,
     result_path: str | None = None,
     progress_percent: int | None = None,
     progress_label: str | None = None,
@@ -232,6 +237,10 @@ def update_job_state(
                         task["elapsed_seconds"] = elapsed_seconds
                     if error_message is not None or task_status == "Failed":
                         task["error_message"] = error_message
+                    if error_type is not None:
+                        task["error_type"] = error_type
+                    elif task_status in {"Queued", "Running", "Completed", "Stopped"}:
+                        task["error_type"] = None
                     if result_path is not None:
                         task["result_path"] = result_path
                     if progress_percent is not None:
@@ -286,6 +295,7 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["status"] = "Queued"
                 task["elapsed_seconds"] = 0
                 task["error_message"] = None
+                task["error_type"] = None
                 task["result_path"] = None
                 task["started_at"] = None
                 task["started_at_timestamp"] = None
@@ -561,6 +571,24 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
+    except MatrixValidationRuntimeError as exc:
+        completed_at_timestamp = time.time()
+        elapsed = int(completed_at_timestamp - started_at_timestamp)
+        update_job_state(
+            project_dir,
+            job_id,
+            algorithm_id=algorithm_id,
+            task_status="Failed",
+            elapsed_seconds=elapsed,
+            progress_percent=0,
+            progress_label="Matrix validation failed",
+            error_message=str(exc),
+            error_type="matrix_validation",
+            estimated_remaining_seconds=0,
+            completed_at=format_runtime_timestamp(completed_at_timestamp),
+            completed_at_timestamp=completed_at_timestamp,
+            process_pid=0,
+        )
     except Exception as exc:
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
@@ -573,6 +601,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             progress_percent=0,
             progress_label="Failed",
             error_message=str(exc),
+            error_type="algorithm",
             estimated_remaining_seconds=0,
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,

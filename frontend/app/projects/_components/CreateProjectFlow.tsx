@@ -597,6 +597,7 @@ export default function CreateProjectFlow({
             status: "Queued",
             elapsed_seconds: 0,
             error_message: null,
+            error_type: null,
             started_at: null,
             started_at_timestamp: null,
             completed_at: null,

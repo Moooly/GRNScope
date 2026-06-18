@@ -281,6 +281,8 @@ async def get_project_results(project_id: str, request: Request, response: Respo
                     "algorithm_id": task.get("algorithm_id"),
                     "status": task.get("status"),
                     "result_path": task.get("result_path"),
+                    "error_message": task.get("error_message"),
+                    "error_type": task.get("error_type"),
                     "started_at": task.get("started_at"),
                     "started_at_timestamp": task.get("started_at_timestamp"),
                     "completed_at": task.get("completed_at"),

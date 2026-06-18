@@ -7,6 +7,7 @@ type AlgorithmTask = {
   status: string;
   elapsed_seconds?: number | null;
   error_message?: string | null;
+  error_type?: string | null;
   progress_percent?: number | null;
   progress_label?: string | null;
   started_at?: string | null;
@@ -20,6 +21,7 @@ type AlgorithmMeta = {
 type AlgorithmErrorTask = {
   algorithmId: string;
   errorMessage: string;
+  errorType?: string | null;
 };
 
 type AlgorithmCardsSectionProps = {
@@ -84,9 +86,12 @@ export default function AlgorithmCardsSection({
                       ? () =>
                           onOpenAlgorithmError({
                             algorithmId: task.algorithm_id,
+                            errorType: task.error_type,
                             errorMessage:
                               task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
-                              "This algorithm failed. The server did not return a detailed message.",
+                              (task.error_type === "matrix_validation"
+                                ? "GRNScope found a problem in the uploaded matrix while preparing the project."
+                                : "This algorithm failed. The server did not return a detailed message."),
                           })
                       : canStop
                         ? () =>

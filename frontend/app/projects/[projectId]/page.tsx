@@ -226,7 +226,11 @@ export default function ProjectDetailPage() {
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
   const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
-  const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{ algorithmId: string; errorMessage: string } | null>(null);
+  const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{
+    algorithmId: string;
+    errorMessage: string;
+    errorType?: string | null;
+  } | null>(null);
   const [pendingAlgorithmAction, setPendingAlgorithmAction] = useState<{
     type: "stop" | "rerun";
     algorithmId: string;
