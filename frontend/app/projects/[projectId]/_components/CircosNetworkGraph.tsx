@@ -68,6 +68,7 @@ const GENE_TICK_INNER_RADIUS = 234;
 const GENE_TICK_OUTER_RADIUS = 248;
 const RIBBON_RADIUS = GENE_TICK_INNER_RADIUS - 4;
 const GENE_LABEL_RADIUS = 296;
+const GENE_LABEL_LANE_STEP = 14;
 
 const CHROMOSOME_GAP_RADIANS = 0.014; // small gap between adjacent chromosomes
 const RIBBON_HALF_WIDTH = 0.005; // angular half-width of each ribbon endpoint
@@ -272,9 +273,120 @@ type GenePlacement = {
   labelY: number;
   labelAnchor: "start" | "end";
   labelRotation: number;
+  labelLane: number;
+  labelFontSize: number;
   color: string;
   isUnmapped: boolean;
 };
+
+type LabelBox = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
+function getNormalizedAngle(angle: number) {
+  return ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+}
+
+function estimateLabelWidth(label: string, fontSize: number) {
+  return Math.max(18, label.length * fontSize * 0.64);
+}
+
+function getLabelBox(
+  label: string,
+  angle: number,
+  radius: number,
+  anchor: "start" | "end",
+  rotation: number,
+  fontSize: number,
+) {
+  const point = polarToCartesian(angle, radius);
+  const width = estimateLabelWidth(label, fontSize);
+  const height = fontSize + 4;
+  const minX = anchor === "end" ? -width : 0;
+  const maxX = anchor === "end" ? 0 : width;
+  const minY = -height / 2;
+  const maxY = height / 2;
+  const rotationRadians = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rotationRadians);
+  const sin = Math.sin(rotationRadians);
+  const corners = [
+    [minX, minY],
+    [maxX, minY],
+    [maxX, maxY],
+    [minX, maxY],
+  ].map(([x, y]) => ({
+    x: point.x + x * cos - y * sin,
+    y: point.y + x * sin + y * cos,
+  }));
+
+  const xs = corners.map((corner) => corner.x);
+  const ys = corners.map((corner) => corner.y);
+  const padding = 3;
+
+  return {
+    left: Math.min(...xs) - padding,
+    right: Math.max(...xs) + padding,
+    top: Math.min(...ys) - padding,
+    bottom: Math.max(...ys) + padding,
+  };
+}
+
+function getOverlapArea(a: LabelBox, b: LabelBox) {
+  const overlapX = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+  const overlapY = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  return overlapX * overlapY;
+}
+
+function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) {
+  const genes = Array.from(genePlacements.values()).sort(
+    (a, b) => getNormalizedAngle(a.angle) - getNormalizedAngle(b.angle),
+  );
+  const geneCount = genes.length;
+  const labelFontSize = geneCount > 120 ? 8.8 : geneCount > 70 ? 9.6 : 10.8;
+  const maxLabelLanes = geneCount > 120 ? 5 : geneCount > 70 ? 4 : 3;
+  const placedBoxes: LabelBox[] = [];
+
+  genes.forEach((gene) => {
+    let bestLane = 0;
+    let bestBox: LabelBox | null = null;
+    let bestOverlap = Number.POSITIVE_INFINITY;
+
+    for (let lane = 0; lane < maxLabelLanes; lane += 1) {
+      const radius = GENE_LABEL_RADIUS + lane * GENE_LABEL_LANE_STEP;
+      const box = getLabelBox(
+        gene.id,
+        gene.angle,
+        radius,
+        gene.labelAnchor,
+        gene.labelRotation,
+        labelFontSize,
+      );
+      const overlap = placedBoxes.reduce(
+        (sum, placedBox) => sum + getOverlapArea(box, placedBox),
+        0,
+      );
+
+      if (overlap < bestOverlap) {
+        bestLane = lane;
+        bestBox = box;
+        bestOverlap = overlap;
+      }
+
+      if (overlap === 0) break;
+    }
+
+    const labelRadius = GENE_LABEL_RADIUS + bestLane * GENE_LABEL_LANE_STEP;
+    const labelPoint = polarToCartesian(gene.angle, labelRadius);
+    gene.labelX = labelPoint.x;
+    gene.labelY = labelPoint.y;
+    gene.labelLane = bestLane;
+    gene.labelFontSize = labelFontSize;
+    if (bestBox) placedBoxes.push(bestBox);
+  });
+}
 
 export default function CircosNetworkGraph({
   nodes,
@@ -407,10 +519,13 @@ export default function CircosNetworkGraph({
         labelY: labelPt.y,
         labelAnchor: Math.cos(angle) >= 0 ? "start" : "end",
         labelRotation: getReadableLabelRotation(angle),
+        labelLane: 0,
+        labelFontSize: 10.8,
         color: chrLayout.color,
         isUnmapped,
       });
     });
+    resolveGeneLabelCollisions(genePlacements);
 
     // Edge score normalisation drives ribbon opacity / stroke weight.
     const scores = annotatedEdges.map(getRawEdgeScore);
@@ -635,7 +750,8 @@ export default function CircosNetworkGraph({
               textAnchor={gene.labelAnchor}
               dominantBaseline="middle"
               transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
-              className="cursor-pointer select-none fill-slate-950 text-[11px] font-semibold"
+              className="cursor-pointer select-none fill-slate-950 font-semibold"
+              style={{ fontSize: gene.labelFontSize }}
               opacity={isDimmed ? 0.3 : 1}
               onClick={(event) => {
                 event.stopPropagation();
