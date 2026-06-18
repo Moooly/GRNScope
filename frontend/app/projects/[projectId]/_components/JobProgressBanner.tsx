@@ -73,6 +73,10 @@ export default function JobProgressBanner({
   const runningItems = running.map((task) => {
     const algorithmName = getAlgorithmName(task.algorithm_id);
     const remainingSeconds = Number(task.estimated_remaining_seconds);
+    const fallbackRemainingSeconds = estimateRemainingSecondsFromProgress(
+      task.elapsed_seconds,
+      task.progress_percent,
+    );
 
     if (Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
       return {
@@ -87,6 +91,14 @@ export default function JobProgressBanner({
         name: algorithmName,
         detail: "finishing up",
         remainingSeconds,
+      };
+    }
+
+    if (fallbackRemainingSeconds !== null) {
+      return {
+        name: algorithmName,
+        detail: `about ${formatAlgorithmRuntime(fallbackRemainingSeconds)} left`,
+        remainingSeconds: fallbackRemainingSeconds,
       };
     }
 
@@ -267,6 +279,21 @@ function clampPercent(value: number | null | undefined): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function estimateRemainingSecondsFromProgress(
+  elapsedSeconds: number | null | undefined,
+  progressPercent: number | null | undefined,
+): number | null {
+  const elapsed = Number(elapsedSeconds ?? 0);
+  const progress = Number(progressPercent ?? 0);
+
+  if (!Number.isFinite(elapsed) || elapsed < 10) return null;
+  if (!Number.isFinite(progress) || progress <= 0 || progress >= 100) return null;
+
+  const estimatedTotalSeconds = elapsed / (progress / 100);
+  const remainingSeconds = Math.round(estimatedTotalSeconds - elapsed);
+  return remainingSeconds > 0 ? remainingSeconds : null;
 }
 
 function formatNameList(names: string[]): string {

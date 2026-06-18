@@ -1561,6 +1561,26 @@ def count_completed_confidence_run_outputs(
     return completed
 
 
+def estimate_remaining_seconds_from_progress(
+    elapsed_seconds: int,
+    progress_percent: int | float | None,
+) -> int | None:
+    if elapsed_seconds < 10:
+        return None
+
+    try:
+        progress = float(progress_percent or 0)
+    except (TypeError, ValueError):
+        return None
+
+    if progress <= 0 or progress >= 100:
+        return None
+
+    estimated_total_seconds = elapsed_seconds / (progress / 100)
+    remaining_seconds = round(estimated_total_seconds - elapsed_seconds)
+    return max(1, int(remaining_seconds))
+
+
 def write_confidence_ranked_edges_csv(destination_path: Path, edges: list[dict]) -> None:
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
@@ -1847,6 +1867,13 @@ def run_beeline_with_progress(
                     )
                     if completed_run_count == 0:
                         progress_percent = min(25, 20 + elapsed // 10)
+                    if estimated_remaining_seconds is None:
+                        estimated_remaining_seconds = (
+                            estimate_remaining_seconds_from_progress(
+                                elapsed,
+                                progress_percent,
+                            )
+                        )
                     progress_label = (
                         f"Running confidence run {run_index} of {total_run_count}"
                         if total_run_count > 1
