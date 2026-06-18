@@ -11,6 +11,7 @@ export type ProjectTask = {
   started_at_timestamp?: number | null;
   completed_at?: string | null;
   completed_at_timestamp?: number | null;
+  run_metadata?: Record<string, Record<string, unknown>> | null;
 };
 
 export type ProjectJob = {

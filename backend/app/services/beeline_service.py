@@ -35,6 +35,7 @@ PROJECT_PREPROCESSED_DIRNAME = "preprocessed"
 PROJECT_PREPROCESSED_EXPRESSION_FILENAME = "ExpressionData.csv"
 PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
 PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
+RUN_TIMINGS_FILENAME = "run_timings.json"
 CSV_SNIFF_SAMPLE_BYTES = 65536
 
 
@@ -267,6 +268,10 @@ def parse_positive_float(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def format_run_timestamp(timestamp: float | None = None) -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp or time.time()))
 
 
 def resolve_confidence_settings(project_manifest: dict) -> dict:
@@ -897,6 +902,64 @@ def plan_confidence_run_inputs(
         }
 
     return run_ids, run_metadata, settings, run_column_indices, header
+
+
+def write_run_timings(runtime_root: Path, run_metadata: dict[str, dict]) -> None:
+    timing_payload = {
+        run_id: {
+            key: value
+            for key, value in metadata.items()
+            if key
+            in {
+                "status",
+                "started_at",
+                "started_at_timestamp",
+                "completed_at",
+                "completed_at_timestamp",
+                "elapsed_seconds",
+                "seed",
+                "cell_count",
+                "total_cell_count",
+                "subsample_fraction",
+            }
+        }
+        for run_id, metadata in run_metadata.items()
+    }
+    (runtime_root / RUN_TIMINGS_FILENAME).write_text(
+        json.dumps(timing_payload, indent=2),
+        encoding="utf-8",
+    )
+
+
+def completed_run_durations(run_metadata: dict[str, dict]) -> list[int]:
+    durations: list[int] = []
+    for metadata in run_metadata.values():
+        if metadata.get("status") != "Completed":
+            continue
+        elapsed_seconds = parse_positive_int(metadata.get("elapsed_seconds"))
+        if elapsed_seconds is not None:
+            durations.append(elapsed_seconds)
+    return durations
+
+
+def estimate_remaining_seconds_from_run_timings(
+    run_metadata: dict[str, dict],
+    *,
+    total_run_count: int,
+    current_run_elapsed_seconds: int = 0,
+) -> int | None:
+    completed_durations = completed_run_durations(run_metadata)
+    completed_count = len(completed_durations)
+    if completed_count == 0:
+        return None
+
+    average_completed_run_seconds = fsum(completed_durations) / completed_count
+    unfinished_run_count = max(0, total_run_count - completed_count)
+    remaining_seconds = round(
+        average_completed_run_seconds * unfinished_run_count
+        - max(0, current_run_elapsed_seconds)
+    )
+    return max(0, int(remaining_seconds))
 
 
 def materialize_confidence_run_input(
@@ -1823,6 +1886,18 @@ def run_beeline_with_progress(
 
         command = [python_executable, "BLRunner.py", "-c", str(config_path)]
         process: subprocess.Popen | None = None
+        run_started_at_timestamp = time.time()
+        run_metadata[run_id].update(
+            {
+                "status": "Running",
+                "started_at": format_run_timestamp(run_started_at_timestamp),
+                "started_at_timestamp": run_started_at_timestamp,
+                "completed_at": None,
+                "completed_at_timestamp": None,
+                "elapsed_seconds": 0,
+            }
+        )
+        write_run_timings(runtime_root, run_metadata)
 
         try:
             with stdout_log_path.open("w", encoding="utf-8") as stdout_file, (
@@ -1856,21 +1931,19 @@ def run_beeline_with_progress(
                         break
 
                     elapsed = int(time.time() - started_at)
+                    current_run_elapsed = int(time.time() - run_started_at_timestamp)
+                    run_metadata[run_id]["elapsed_seconds"] = current_run_elapsed
                     completed_run_count = count_completed_confidence_run_outputs(
                         output_dir,
                         dataset_id,
                         run_ids,
                         algorithm_id,
                     )
-                    estimated_remaining_seconds = None
-                    if completed_run_count > 0:
-                        average_seconds_per_completed_run = elapsed / completed_run_count
-                        estimated_remaining_seconds = int(
-                            round(
-                                average_seconds_per_completed_run
-                                * max(0, len(run_ids) - completed_run_count)
-                            )
-                        )
+                    estimated_remaining_seconds = estimate_remaining_seconds_from_run_timings(
+                        run_metadata,
+                        total_run_count=total_run_count,
+                        current_run_elapsed_seconds=current_run_elapsed,
+                    )
                     progress_percent = min(
                         85,
                         20 + round((completed_run_count / total_run_count) * 65),
@@ -1898,17 +1971,34 @@ def run_beeline_with_progress(
                         progress_percent=progress_percent,
                         progress_label=progress_label,
                         estimated_remaining_seconds=estimated_remaining_seconds,
+                        run_metadata=run_metadata,
                     )
                     time.sleep(1)
 
                 if process.returncode is None:
                     process.wait()
 
+            run_completed_at_timestamp = time.time()
+            run_elapsed = int(run_completed_at_timestamp - run_started_at_timestamp)
+            run_status = "Completed" if process.returncode == 0 else "Failed"
+            if stop_event is not None and stop_event.is_set():
+                run_status = "Stopped"
+            run_metadata[run_id].update(
+                {
+                    "status": run_status,
+                    "completed_at": format_run_timestamp(run_completed_at_timestamp),
+                    "completed_at_timestamp": run_completed_at_timestamp,
+                    "elapsed_seconds": run_elapsed,
+                }
+            )
+            write_run_timings(runtime_root, run_metadata)
+
             update_job_state_fn(
                 project_dir,
                 job_id,
                 algorithm_id=algorithm_id,
                 process_pid=0,
+                run_metadata=run_metadata,
             )
 
             if stop_event is not None and stop_event.is_set():

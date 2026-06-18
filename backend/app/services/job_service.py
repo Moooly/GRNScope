@@ -209,6 +209,7 @@ def update_job_state(
     completed_at: str | None = None,
     completed_at_timestamp: float | None = None,
     process_pid: int | None = None,
+    run_metadata: dict[str, dict] | None = None,
 ) -> None:
     with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
@@ -247,6 +248,8 @@ def update_job_state(
                         task["completed_at"] = completed_at
                     if completed_at_timestamp is not None:
                         task["completed_at_timestamp"] = completed_at_timestamp
+                    if run_metadata is not None:
+                        task["run_metadata"] = run_metadata
                     if process_pid is not None:
                         if process_pid > 0:
                             task["process_pid"] = process_pid
