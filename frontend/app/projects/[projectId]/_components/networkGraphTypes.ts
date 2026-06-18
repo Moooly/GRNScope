@@ -6,6 +6,7 @@ export type NetworkNode = {
   outDegree: number;
   degree: number;
   isTF: boolean;
+  showLabel?: boolean;
 };
 
 export type NetworkEdge = {

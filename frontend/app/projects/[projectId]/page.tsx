@@ -1852,7 +1852,6 @@ useEffect(() => {
                 ) : (
                   <>
                     <NetworkVisualizationSection
-                      selectedView={activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus"}
                       networkLayout={networkLayout}
                       setNetworkLayout={setNetworkLayout}
                       onExportNetwork={handleExportNetwork}

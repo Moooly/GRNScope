@@ -11,6 +11,7 @@ type CircosNetworkGraphProps = {
   onSelectGene?: (geneId: string | null) => void;
   onSelectEdge?: (edgeKey: string | null) => void;
   svgRef?: Ref<SVGSVGElement>;
+  labeledGeneIds?: string[];
 };
 
 /**
@@ -285,9 +286,14 @@ export default function CircosNetworkGraph({
   onSelectGene,
   onSelectEdge,
   svgRef,
+  labeledGeneIds,
 }: CircosNetworkGraphProps) {
   const componentId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const unmappedArcLabelId = `${componentId || "circos"}-unmapped-arc-label`;
+  const labeledGeneSet = useMemo(
+    () => new Set(labeledGeneIds ?? []),
+    [labeledGeneIds],
+  );
 
   const layout = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
@@ -628,6 +634,10 @@ export default function CircosNetworkGraph({
         {Array.from(layout.genePlacements.values()).map((gene) => {
           const isSelected = gene.id === selectedGene;
           const isDimmed = Boolean(selectedGene && !isSelected);
+          const shouldShowLabel =
+            labeledGeneSet.size === 0 || labeledGeneSet.has(gene.id) || isSelected;
+
+          if (!shouldShowLabel) return null;
 
           return (
             <text

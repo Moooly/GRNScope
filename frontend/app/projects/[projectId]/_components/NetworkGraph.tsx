@@ -2,7 +2,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import cytoscape, { type Core } from "cytoscape";
+import cytoscape, {
+  type Core,
+  type LayoutOptions,
+  type StylesheetJson,
+} from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import {
   buildCircularPositions,
@@ -14,6 +18,7 @@ import {
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
 import type {
   EdgeTooltipState,
+  NetworkNode,
   NetworkGraphProps,
   NetworkLayoutMode,
   PositionMap,
@@ -22,6 +27,11 @@ import type {
 coseBilkent(cytoscape);
 
 let hasRegisteredCytoscapeSvg = false;
+
+function getNodeDisplayLabel(node: NetworkNode) {
+  if (node.showLabel === false) return "";
+  return node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
+}
 
 export default function NetworkGraph({
   nodes,
@@ -281,6 +291,15 @@ export default function NetworkGraph({
     [nodes, edges]
   );
 
+  const labelSignature = useMemo(
+    () =>
+      nodes
+        .map((node) => `${node.id}:${node.showLabel === false ? 0 : 1}`)
+        .sort()
+        .join("|"),
+    [nodes]
+  );
+
   const layoutCacheSignature = useMemo(() => {
     const nodePart = nodes
       .map((node) => node.id)
@@ -370,6 +389,18 @@ export default function NetworkGraph({
   }, [onGraphReady, onSelectEdge, onSelectGene]);
 
   useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || cy.destroyed()) return;
+
+    nodes.forEach((node) => {
+      const graphNode = cy.getElementById(node.id);
+      if (graphNode.nonempty()) {
+        graphNode.data("label", getNodeDisplayLabel(node));
+      }
+    });
+  }, [labelSignature, nodes]);
+
+  useEffect(() => {
     if (!containerRef.current || cyRef.current) {
       return;
     }
@@ -395,7 +426,7 @@ export default function NetworkGraph({
       const graph = cytoscape({
         container: containerRef.current,
         elements,
-        style: getNetworkGraphStylesheet() as any,
+        style: getNetworkGraphStylesheet() as StylesheetJson,
         wheelSensitivity: 0.14,
         minZoom: 0.3,
         maxZoom: 2.4,
@@ -508,7 +539,7 @@ export default function NetworkGraph({
             ...getLayoutOptions(layout, layoutCacheSignature, true),
             fit: true,
             padding: 56,
-          } as any);
+          } as unknown as LayoutOptions);
 
           activeLayoutRef.current = initialLayout;
 
@@ -686,7 +717,7 @@ export default function NetworkGraph({
     cy.startBatch();
     cy.elements().remove();
     cy.add(elementsWithPositions);
-    cy.style(getNetworkGraphStylesheet() as any);
+    cy.style(getNetworkGraphStylesheet() as StylesheetJson);
     cy.resize();
 
     if (shouldRerunLayout) {
@@ -736,7 +767,7 @@ export default function NetworkGraph({
           layoutCacheSignature,
           !hasAnyPriorPositions,
           layout === "force" && (layoutChanged || signatureChanged)
-        ) as any
+        ) as unknown as LayoutOptions
       );
 
       activeLayoutRef.current = rerunLayout;

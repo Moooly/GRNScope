@@ -210,6 +210,31 @@ export function buildCircularPositions(
   }
 
   const positions: PositionMap = {};
+
+  if (nodes.length > 90) {
+    const ringCount = Math.min(4, Math.max(2, Math.ceil(nodes.length / 48)));
+    const perRing = Math.ceil(order.length / ringCount);
+    const baseRadius = 185;
+    const radiusStep = 132;
+
+    for (let ringIndex = 0; ringIndex < ringCount; ringIndex += 1) {
+      const ringIds = order.slice(ringIndex * perRing, (ringIndex + 1) * perRing);
+      const radius = baseRadius + ringIndex * radiusStep;
+      const ringOffset =
+        ringIndex % 2 === 0 ? 0 : Math.PI / Math.max(ringIds.length, 2);
+
+      ringIds.forEach((id, idx) => {
+        const angle =
+          -Math.PI / 2 +
+          ringOffset +
+          (idx / Math.max(ringIds.length, 1)) * Math.PI * 2;
+        positions[id] = polarPosition(angle, radius);
+      });
+    }
+
+    return positions;
+  }
+
   let gapOffset = 0;
   order.forEach((id, idx) => {
     if (componentBreaks.has(id)) gapOffset += 0.85;
@@ -423,12 +448,58 @@ export function buildHierarchicalPositions(
   const positions: PositionMap = {};
 
   const maxLevelWidth = Math.max(...sortedLevels.map((levelNodes) => levelNodes.length), 1);
+  const maxColumnsPerLevel = nodes.length > 80 ? 18 : 28;
   const rowGap = Math.max(175, Math.min(245, 158 + Math.sqrt(nodes.length) * 10));
-  const minColumnGap = Math.max(
-    142,
-    Math.min(205, 122 + Math.sqrt(edges.length + maxLevelWidth) * 9)
+  const wrappedRowGap = Math.max(
+    118,
+    Math.min(152, 108 + Math.sqrt(nodes.length) * 3)
   );
-  const totalHeight = maxLevel * rowGap;
+  const minColumnGap = Math.max(
+    nodes.length > 80 ? 128 : 142,
+    Math.min(
+      nodes.length > 80 ? 168 : 205,
+      122 + Math.sqrt(edges.length + maxLevelWidth) * 9
+    )
+  );
+  const rowsPerLevel = sortedLevels.map((levelNodes) =>
+    Math.max(1, Math.ceil(levelNodes.length / maxColumnsPerLevel))
+  );
+  const levelCenters: number[] = [];
+  let levelCursorY = 0;
+
+  rowsPerLevel.forEach((rowCount, lvl) => {
+    const levelHeight = Math.max(0, (rowCount - 1) * wrappedRowGap);
+    levelCenters[lvl] = levelCursorY + levelHeight / 2;
+    levelCursorY += levelHeight + rowGap;
+  });
+
+  const totalHeight = Math.max(0, levelCursorY - rowGap);
+
+  const placeOrderedLevel = (
+    ordered: NetworkNode[],
+    lvl: number,
+    resolveX?: (node: NetworkNode, orderedX: number) => number
+  ) => {
+    const rowCount = Math.max(1, Math.ceil(ordered.length / maxColumnsPerLevel));
+    const centerY = (levelCenters[lvl] ?? 0) - totalHeight / 2;
+
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const rowNodes = ordered.slice(
+        rowIndex * maxColumnsPerLevel,
+        (rowIndex + 1) * maxColumnsPerLevel
+      );
+      const rowWidth = Math.max(0, (rowNodes.length - 1) * minColumnGap);
+      const startX = -rowWidth / 2;
+      const y = centerY + (rowIndex - (rowCount - 1) / 2) * wrappedRowGap;
+
+      rowNodes.forEach((node, idx) => {
+        const orderedX = startX + idx * minColumnGap;
+        const x = resolveX ? resolveX(node, orderedX) : orderedX;
+        positions[node.id] = { x, y };
+        xPositionById.set(node.id, x);
+      });
+    }
+  };
 
   sortedLevels.forEach((levelNodes, lvl) => {
     let ordered: NetworkNode[];
@@ -457,16 +528,7 @@ export function buildHierarchicalPositions(
       });
     }
 
-    const columnGap = minColumnGap;
-    const rowWidth = Math.max(0, (ordered.length - 1) * columnGap);
-    const startX = -rowWidth / 2;
-    const y = lvl * rowGap - totalHeight / 2;
-
-    ordered.forEach((node, idx) => {
-      const x = startX + idx * columnGap;
-      positions[node.id] = { x, y };
-      xPositionById.set(node.id, x);
-    });
+    placeOrderedLevel(ordered, lvl);
   });
 
   // A second downward pass pulls children toward their parents' centers.
@@ -488,16 +550,7 @@ export function buildHierarchicalPositions(
       return baryA - baryB;
     });
 
-    const columnGap = minColumnGap;
-    const rowWidth = Math.max(0, (sortedByBary.length - 1) * columnGap);
-    const startX = -rowWidth / 2;
-    const y = lvl * rowGap - totalHeight / 2;
-
-    sortedByBary.forEach((node, idx) => {
-      const x = startX + idx * columnGap;
-      positions[node.id] = { x, y };
-      xPositionById.set(node.id, x);
-    });
+    placeOrderedLevel(sortedByBary, lvl);
   }
 
   // Upward pass: pull regulators toward the center of their placed targets.
@@ -520,17 +573,11 @@ export function buildHierarchicalPositions(
       return baryA - baryB;
     });
 
-    const rowWidth = Math.max(0, (sortedByChildren.length - 1) * minColumnGap);
-    const startX = -rowWidth / 2;
-    const y = lvl * rowGap - totalHeight / 2;
-
-    sortedByChildren.forEach((node, idx) => {
+    placeOrderedLevel(sortedByChildren, lvl, (node, orderedX) => {
       const childBarycenter = computeBarycenter(node.id, outMap, xPositionById);
-      const orderedX = startX + idx * minColumnGap;
-      const x =
-        childBarycenter === null ? orderedX : orderedX * 0.55 + childBarycenter * 0.45;
-      positions[node.id] = { x, y };
-      xPositionById.set(node.id, x);
+      return childBarycenter === null
+        ? orderedX
+        : orderedX * 0.55 + childBarycenter * 0.45;
     });
   }
 
@@ -735,7 +782,12 @@ export function buildGraphElements(
     ...nodes.map((node) => ({
       data: {
         id: node.id,
-        label: node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id,
+        label:
+          node.showLabel === false
+            ? ""
+            : node.id.length > 10
+              ? `${node.id.slice(0, 9)}…`
+              : node.id,
         degree: node.degree,
         inDegree: node.inDegree,
         outDegree: node.outDegree,
