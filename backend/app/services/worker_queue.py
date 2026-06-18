@@ -9,6 +9,7 @@ from typing import Any
 DEFAULT_QUEUE_NAME = "grnscope"
 DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
 DEFAULT_JOB_TIMEOUT_SECONDS = 7 * 24 * 60 * 60
+DEFAULT_WORKER_PROCESS_COUNT = 2
 RQ_JOB_ID_UNSAFE_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
 
 
@@ -43,6 +44,17 @@ def worker_job_timeout_seconds() -> int:
         return max(60, int(raw_value))
     except ValueError:
         return DEFAULT_JOB_TIMEOUT_SECONDS
+
+
+def worker_process_count() -> int:
+    raw_value = os.environ.get(
+        "GRNSCOPE_WORKER_COUNT",
+        str(DEFAULT_WORKER_PROCESS_COUNT),
+    )
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return DEFAULT_WORKER_PROCESS_COUNT
 
 
 def safe_rq_job_id(*parts: object) -> str:
@@ -87,20 +99,33 @@ def enqueue_algorithm_job(
     project_id: str,
     job_id: str,
     selected_algorithms_list: list[str],
-) -> str:
-    from .job_service import run_algorithm_job_worker
+) -> list[str]:
+    from ..algorithm_registry import sort_algorithm_ids_by_difficulty
+    from .job_service import run_single_algorithm_task
 
-    queued_job = get_rq_queue().enqueue(
-        run_algorithm_job_worker,
-        project_id,
-        job_id,
-        selected_algorithms_list,
-        job_id=safe_rq_job_id("project", project_id, "job", job_id),
-        job_timeout=worker_job_timeout_seconds(),
-        result_ttl=24 * 60 * 60,
-        failure_ttl=7 * 24 * 60 * 60,
-    )
-    return str(queued_job.id)
+    queue = get_rq_queue()
+    queued_job_ids: list[str] = []
+    for algorithm_id in sort_algorithm_ids_by_difficulty(selected_algorithms_list):
+        queued_job = queue.enqueue(
+            run_single_algorithm_task,
+            project_id,
+            job_id,
+            algorithm_id,
+            job_id=safe_rq_job_id(
+                "project",
+                project_id,
+                "job",
+                job_id,
+                "algorithm",
+                algorithm_id,
+            ),
+            job_timeout=worker_job_timeout_seconds(),
+            result_ttl=24 * 60 * 60,
+            failure_ttl=7 * 24 * 60 * 60,
+        )
+        queued_job_ids.append(str(queued_job.id))
+
+    return queued_job_ids
 
 
 def enqueue_algorithm_rerun(

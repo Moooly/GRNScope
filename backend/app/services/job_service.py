@@ -11,7 +11,11 @@ from pathlib import Path
 
 from ..algorithm_registry import sort_algorithm_ids_by_difficulty
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
-from ..repositories.job_repository import read_jobs_manifest, write_jobs_manifest
+from ..repositories.job_repository import (
+    jobs_manifest_lock,
+    read_jobs_manifest,
+    write_jobs_manifest,
+)
 from ..repositories.project_repository import read_project_manifest
 from ..services.beeline_service import AlgorithmStoppedError, run_beeline_with_progress
 from ..services.email_service import (
@@ -206,7 +210,7 @@ def update_job_state(
     completed_at_timestamp: float | None = None,
     process_pid: int | None = None,
 ) -> None:
-    with JOB_FILE_LOCK:
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
 
         for job in jobs_manifest:
@@ -266,7 +270,7 @@ def get_task_state(project_dir: Path, job_id: str, algorithm_id: str) -> dict | 
 
 
 def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> None:
-    with JOB_FILE_LOCK:
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
         for job in jobs_manifest:
             if job.get("job_id") != job_id:
@@ -317,7 +321,7 @@ def send_job_completion_notification_if_needed(project_dir: Path, job_id: str) -
     now_display = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     job_snapshot: dict | None = None
 
-    with JOB_FILE_LOCK:
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
 
         for job in jobs_manifest:
@@ -365,7 +369,7 @@ def send_job_completion_notification_if_needed(project_dir: Path, job_id: str) -
             total_count=len(tasks),
         )
     except Exception as exc:
-        with JOB_FILE_LOCK:
+        with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
             jobs_manifest = read_jobs_manifest(project_dir)
             for job in jobs_manifest:
                 if job.get("job_id") != job_id:
@@ -380,7 +384,7 @@ def send_job_completion_notification_if_needed(project_dir: Path, job_id: str) -
                 return
         return
 
-    with JOB_FILE_LOCK:
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
         for job in jobs_manifest:
             if job.get("job_id") != job_id:
@@ -398,7 +402,7 @@ def send_job_completion_notification_if_needed(project_dir: Path, job_id: str) -
 def recompute_overall_status(project_dir: Path, job_id: str) -> None:
     should_check_notification = False
 
-    with JOB_FILE_LOCK:
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
 
         for job in jobs_manifest:

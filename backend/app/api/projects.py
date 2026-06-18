@@ -15,7 +15,11 @@ from .client_identity import (
     project_belongs_to_client,
     require_project_owner,
 )
-from ..repositories.job_repository import read_jobs_manifest, write_jobs_manifest
+from ..repositories.job_repository import (
+    jobs_manifest_lock,
+    read_jobs_manifest,
+    write_jobs_manifest,
+)
 from ..repositories.project_repository import (
     list_project_directories,
     read_project_manifest,
@@ -233,7 +237,7 @@ async def update_project_notification_email(
         write_project_manifest(project_dir, project_manifest)
 
         latest_job = None
-        with JOB_FILE_LOCK:
+        with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
             jobs_manifest = read_jobs_manifest(project_dir)
             if jobs_manifest:
                 latest_job = jobs_manifest[-1]
