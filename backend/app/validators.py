@@ -12,6 +12,9 @@ CSV_SNIFF_SAMPLE_BYTES = 65536
 MISSING_TOKENS = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
 DEFAULT_EXPRESSION_FULL_NUMERIC_CHECK_ROWS = 5
 DEFAULT_EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS = 4
+DEFAULT_EXPRESSION_FAST_SAMPLE_ROWS = 20
+DEFAULT_UPLOAD_NAME_PREVIEW_LIMIT = 1000
+STRICT_UPLOAD_VALIDATION_MODE = "strict"
 
 
 def get_non_negative_int_env(name: str, default: int) -> int:
@@ -32,6 +35,18 @@ EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS = get_non_negative_int_env(
     "GRNSCOPE_UPLOAD_EDGE_NUMERIC_CHECK_COLUMNS",
     DEFAULT_EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS,
 )
+EXPRESSION_FAST_SAMPLE_ROWS = get_non_negative_int_env(
+    "GRNSCOPE_UPLOAD_FAST_SAMPLE_ROWS",
+    DEFAULT_EXPRESSION_FAST_SAMPLE_ROWS,
+)
+UPLOAD_NAME_PREVIEW_LIMIT = get_non_negative_int_env(
+    "GRNSCOPE_UPLOAD_NAME_PREVIEW_LIMIT",
+    DEFAULT_UPLOAD_NAME_PREVIEW_LIMIT,
+)
+
+
+def upload_validation_mode() -> str:
+    return os.getenv("GRNSCOPE_UPLOAD_VALIDATION_MODE", "fast").strip().lower()
 
 
 def validate_csv_extension(filename: str) -> str | None:
@@ -81,6 +96,21 @@ def iter_non_empty_csv_rows(
             yield row
 
 
+def count_non_empty_text_lines(csv_path: Path) -> int:
+    line_count = 0
+    with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+        for line in csv_file:
+            if line.strip():
+                line_count += 1
+    return line_count
+
+
+def preview_items(items: list[str]) -> list[str]:
+    if UPLOAD_NAME_PREVIEW_LIMIT <= 0:
+        return []
+    return items[:UPLOAD_NAME_PREVIEW_LIMIT]
+
+
 def parse_required_finite_float(value: object, error_message: str) -> None:
     text = str(value).strip()
     if text in MISSING_TOKENS:
@@ -119,15 +149,7 @@ def expression_numeric_values_to_check(row: list[str], data_row_index: int) -> l
     return [*values[:edge_count], *values[-edge_count:]]
 
 
-def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
-    dialect = detect_csv_dialect_from_file(csv_path)
-    rows = iter_non_empty_csv_rows(csv_path, dialect)
-
-    try:
-        header = next(rows)
-    except StopIteration as exc:
-        raise ValueError("Expression matrix is empty.")
-
+def validate_expression_header(header: list[str]) -> tuple[list[str], int]:
     if len(header) < 2:
         raise ValueError(
             "Expression matrix must contain a first column of gene names and at least one cell column."
@@ -144,7 +166,19 @@ def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
     if len(set(cell_names)) != len(cell_names):
         raise ValueError("Cell identifiers must be unique.")
 
-    expected_column_count = len(header)
+    return cell_names, len(header)
+
+
+def parse_expression_matrix_strict(csv_path: Path) -> dict[str, Any]:
+    dialect = detect_csv_dialect_from_file(csv_path)
+    rows = iter_non_empty_csv_rows(csv_path, dialect)
+
+    try:
+        header = next(rows)
+    except StopIteration as exc:
+        raise ValueError("Expression matrix is empty.")
+
+    cell_names, expected_column_count = validate_expression_header(header)
     gene_names: list[str] = []
     seen_gene_names: set[str] = set()
 
@@ -178,9 +212,71 @@ def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
     return {
         "gene_count": len(gene_names),
         "cell_count": len(cell_names),
-        "gene_names": gene_names,
-        "cell_names": cell_names,
+        "gene_names": preview_items(gene_names),
+        "cell_names": preview_items(cell_names),
     }
+
+
+def parse_expression_matrix_fast(csv_path: Path) -> dict[str, Any]:
+    dialect = detect_csv_dialect_from_file(csv_path)
+    rows = iter_non_empty_csv_rows(csv_path, dialect)
+
+    try:
+        header = next(rows)
+    except StopIteration as exc:
+        raise ValueError("Expression matrix is empty.") from exc
+
+    cell_names, expected_column_count = validate_expression_header(header)
+
+    sampled_gene_names: list[str] = []
+    seen_sampled_gene_names: set[str] = set()
+    sampled_row_count = 0
+
+    try:
+        for row_number, row in enumerate(rows, start=2):
+            if sampled_row_count >= EXPRESSION_FAST_SAMPLE_ROWS:
+                break
+
+            if len(row) != expected_column_count:
+                raise ValueError(
+                    f"Expression matrix row {row_number} has {len(row)} columns; expected {expected_column_count}."
+                )
+
+            gene_name = str(row[0]).strip()
+            if gene_name == "":
+                raise ValueError("First column contains blank gene names.")
+            if gene_name in seen_sampled_gene_names:
+                raise ValueError("Gene names must be unique in the sampled validation rows.")
+
+            for value in expression_numeric_values_to_check(row, sampled_row_count + 1):
+                parse_required_finite_float(
+                    value,
+                    "Expression matrix contains missing or non-numeric interior values in sampled validation rows.",
+                )
+
+            seen_sampled_gene_names.add(gene_name)
+            if len(sampled_gene_names) < UPLOAD_NAME_PREVIEW_LIMIT:
+                sampled_gene_names.append(gene_name)
+            sampled_row_count += 1
+    except csv.Error as exc:
+        raise ValueError(f"Expression matrix could not be parsed as CSV: {exc}") from exc
+
+    gene_count = max(0, count_non_empty_text_lines(csv_path) - 1)
+    if gene_count <= 0 or sampled_row_count == 0:
+        raise ValueError("Expression matrix must include gene names in the first column.")
+
+    return {
+        "gene_count": gene_count,
+        "cell_count": len(cell_names),
+        "gene_names": sampled_gene_names,
+        "cell_names": preview_items(cell_names),
+    }
+
+
+def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
+    if upload_validation_mode() == STRICT_UPLOAD_VALIDATION_MODE:
+        return parse_expression_matrix_strict(csv_path)
+    return parse_expression_matrix_fast(csv_path)
 
 
 def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]:
