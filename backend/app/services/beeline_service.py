@@ -1114,17 +1114,6 @@ def read_recent_log_text(path: Path, max_bytes: int = 20000) -> str:
         return ""
 
 
-def combine_run_log_files(log_paths: list[tuple[str, Path]]) -> str:
-    parts: list[str] = []
-    for run_id, log_path in log_paths:
-        try:
-            text = log_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        parts.append(f"===== {run_id} =====\n{text}")
-    return "\n".join(parts)
-
-
 def collect_algorithm_error_log_text(
     *,
     runtime_root: Path,
@@ -1850,8 +1839,9 @@ def run_beeline_with_progress(
 
     python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
     started_at = elapsed_started_at or time.time()
-    stdout_log_paths: list[tuple[str, Path]] = []
-    stderr_log_paths: list[tuple[str, Path]] = []
+    config_path = runtime_root / "config.yaml"
+    stdout_log_path = runtime_root / "stdout.log"
+    stderr_log_path = runtime_root / "stderr.log"
     total_run_count = max(1, len(run_ids))
 
     for run_index, run_id in enumerate(run_ids, start=1):
@@ -1868,7 +1858,6 @@ def run_beeline_with_progress(
             source_pseudotime=source_pseudotime,
         )
 
-        config_path = runtime_root / f"config.{run_id}.yaml"
         config_text = build_beeline_config(
             input_dir=input_dir,
             output_dir=output_dir,
@@ -1878,11 +1867,6 @@ def run_beeline_with_progress(
             include_pseudotime=source_pseudotime is not None,
         )
         config_path.write_text(config_text, encoding="utf-8")
-
-        stdout_log_path = runtime_root / f"stdout.{run_id}.log"
-        stderr_log_path = runtime_root / f"stderr.{run_id}.log"
-        stdout_log_paths.append((run_id, stdout_log_path))
-        stderr_log_paths.append((run_id, stderr_log_path))
 
         command = [python_executable, "BLRunner.py", "-c", str(config_path)]
         process: subprocess.Popen | None = None
@@ -1900,9 +1884,13 @@ def run_beeline_with_progress(
         write_run_timings(runtime_root, run_metadata)
 
         try:
-            with stdout_log_path.open("w", encoding="utf-8") as stdout_file, (
-                stderr_log_path.open("w", encoding="utf-8")
+            with stdout_log_path.open("a", encoding="utf-8") as stdout_file, (
+                stderr_log_path.open("a", encoding="utf-8")
             ) as stderr_file:
+                stdout_file.write(f"\n===== {run_id} =====\n")
+                stderr_file.write(f"\n===== {run_id} =====\n")
+                stdout_file.flush()
+                stderr_file.flush()
                 process = subprocess.Popen(
                     command,
                     cwd=beeline_root,
@@ -2005,14 +1993,6 @@ def run_beeline_with_progress(
                 raise AlgorithmStoppedError("Algorithm run was stopped.")
 
             if process.returncode != 0:
-                (runtime_root / "stdout.log").write_text(
-                    combine_run_log_files(stdout_log_paths),
-                    encoding="utf-8",
-                )
-                (runtime_root / "stderr.log").write_text(
-                    combine_run_log_files(stderr_log_paths),
-                    encoding="utf-8",
-                )
                 log_text = "\n".join(
                     [
                         read_recent_log_text(stderr_log_path),
@@ -2026,15 +2006,6 @@ def run_beeline_with_progress(
                 raise RuntimeError(friendly_error)
         finally:
             shutil.rmtree(run_dir, ignore_errors=True)
-
-    (runtime_root / "stdout.log").write_text(
-        combine_run_log_files(stdout_log_paths),
-        encoding="utf-8",
-    )
-    (runtime_root / "stderr.log").write_text(
-        combine_run_log_files(stderr_log_paths),
-        encoding="utf-8",
-    )
 
     update_job_state_fn(
         project_dir,
