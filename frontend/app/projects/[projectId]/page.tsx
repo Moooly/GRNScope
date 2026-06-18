@@ -1572,7 +1572,7 @@ useEffect(() => {
         onChange={(event) => setTableSearch(event.target.value)}
         placeholder="Search gene name"
         aria-label="Search gene name"
-        className="h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white/95 px-3.5 text-sm font-semibold text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:w-[260px] lg:w-[320px]"
+        className="h-10 w-full min-w-0 rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:w-[260px] lg:w-[320px]"
       />
       <ResultsControlsSection
         compact

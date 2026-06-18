@@ -358,14 +358,14 @@ export default function ResultsControlsSection({
         <button
           type="button"
           onClick={() => setIsSettingsMenuOpen((value) => !value)}
-          className={`inline-flex h-10 items-center gap-2 rounded-xl border bg-white/95 px-3.5 text-sm font-bold shadow-sm transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 ${
+          className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 ${
             isSettingsMenuOpen
-              ? "border-[#1b75a6]/35 text-[#1b75a6] shadow-md shadow-slate-200/70"
-              : "border-slate-200 text-slate-900 hover:border-[#1b75a6]/35 hover:bg-[#f8fbfd] hover:text-[#1b75a6]"
+              ? "border-[#1b75a6]/40 bg-[#f2f9fc] text-[#1b75a6]"
+              : "border-slate-200 text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
           }`}
         >
           <span
-            className="inline-flex w-5 items-center justify-center text-[21px] leading-none text-[#1b75a6]"
+            className="inline-flex w-5 items-center justify-center text-[19px] leading-none text-[#1b75a6]"
             aria-hidden="true"
           >
             ⚙
@@ -398,6 +398,7 @@ export default function ResultsControlsSection({
                 ?
               </button>
             </div>
+            {sectionLabel("Filters", matchingEdgesBadge)}
             {panelHeader("algorithms", "Algorithms")}
             {openPanel === "algorithms" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-2">
@@ -439,7 +440,6 @@ export default function ResultsControlsSection({
               </div>
             )}
 
-            {sectionLabel("Filters", matchingEdgesBadge)}
             {inlineRow(
               "Evidence",
               inlinePercentControl(
