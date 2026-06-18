@@ -338,9 +338,9 @@ export default function ResultsControlsSection({
         </span>
       )}
       {inlineRow(
-        "Shown edges",
+        "Top-ranked edges",
         edgeDisplayControl(),
-        `of ${matchingEdgesLabel} matching edges`
+        `Showing top ${safeEdgeDisplayLimit.toLocaleString()} of ${matchingEdgesLabel} matching edges`
       )}
     </div>
   );
