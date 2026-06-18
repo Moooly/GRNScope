@@ -178,7 +178,7 @@ export default function ResultsControlsSection({
     label: string
   ) => (
     <div
-      className="grid h-9 w-[160px] shrink-0 grid-cols-[36px_56px_32px_36px] overflow-hidden rounded-lg border border-slate-200 bg-white"
+      className="grid h-9 w-[146px] shrink-0 grid-cols-[32px_52px_30px_32px] overflow-hidden rounded-lg border border-slate-200 bg-white"
       onClick={(event) => event.stopPropagation()}
     >
       <button
@@ -214,7 +214,7 @@ export default function ResultsControlsSection({
 
   const inlineMethodsControl = () => (
     <div
-      className="grid h-9 w-[160px] shrink-0 grid-cols-[36px_88px_36px] overflow-hidden rounded-lg border border-slate-200 bg-white"
+      className="grid h-9 w-[146px] shrink-0 grid-cols-[32px_82px_32px] overflow-hidden rounded-lg border border-slate-200 bg-white"
       onClick={(event) => event.stopPropagation()}
     >
       <button
@@ -258,7 +258,7 @@ export default function ResultsControlsSection({
 
   const edgeDisplayControl = () => (
     <div
-      className="grid h-9 w-[160px] shrink-0 grid-cols-[36px_88px_36px] overflow-hidden rounded-lg border border-slate-200 bg-white"
+      className="grid h-9 w-[128px] shrink-0 grid-cols-[30px_68px_30px] overflow-hidden rounded-lg border border-slate-200 bg-white"
       onClick={(event) => event.stopPropagation()}
     >
       <button
@@ -294,12 +294,16 @@ export default function ResultsControlsSection({
   );
 
   const edgeDisplayRow = (
-    <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-slate-200 bg-[#eef3f7] px-3 py-2 text-left text-slate-800">
-      <span className="text-sm font-bold">Showing top</span>
-      {edgeDisplayControl()}
-      <span className="min-w-0 text-sm font-bold">
-        of {safeFilteredEdgeCount.toLocaleString()} edges
-      </span>
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      <div className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#1b75a6]/15 bg-[#f5f9fc] px-3 py-2 text-left text-slate-800">
+        <span className="shrink-0 whitespace-nowrap text-sm font-bold">
+          Showing top
+        </span>
+        {edgeDisplayControl()}
+        <span className="min-w-0 shrink-0 whitespace-nowrap text-sm font-bold">
+          of {safeFilteredEdgeCount.toLocaleString()} edges
+        </span>
+      </div>
     </div>
   );
 
@@ -311,7 +315,7 @@ export default function ResultsControlsSection({
     <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-[#eef3f7] px-3 py-2 text-left text-slate-800">
       <span className="flex min-w-0 items-center">
         <span className="min-w-0">
-          <span className="block truncate text-sm font-bold">{title}</span>
+          <span className="block text-sm font-bold leading-tight">{title}</span>
           {subtitle && (
             <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
               {subtitle}
@@ -360,7 +364,7 @@ export default function ResultsControlsSection({
       </div>
 
       {isSettingsMenuOpen && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[min(90vw,400px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[min(92vw,470px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-2 py-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
@@ -417,7 +421,6 @@ export default function ResultsControlsSection({
               </div>
             )}
 
-            {edgeDisplayRow}
             {inlineRow(
               "Evidence",
               inlinePercentControl(
@@ -450,6 +453,7 @@ export default function ResultsControlsSection({
               "Minimum supporting methods",
               inlineMethodsControl()
             )}
+            {edgeDisplayRow}
           </div>
         </div>
       )}
