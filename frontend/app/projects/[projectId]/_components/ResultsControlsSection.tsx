@@ -149,13 +149,13 @@ export default function ResultsControlsSection({
     label: string
   ) => (
     <div
-      className="flex h-9 w-[132px] shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white"
+      className="grid h-9 w-[160px] shrink-0 grid-cols-[36px_56px_32px_36px] overflow-hidden rounded-lg border border-slate-200 bg-white"
       onClick={(event) => event.stopPropagation()}
     >
       <button
         type="button"
         onClick={() => adjustPercent(value, -5, onChange)}
-        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
         aria-label={`Decrease ${label}`}
       >
         -
@@ -166,14 +166,16 @@ export default function ResultsControlsSection({
         pattern="[0-9]*"
         value={Math.round(value * 100)}
         onChange={(e) => updatePercent(Number(e.target.value), onChange)}
-        className="h-full min-w-0 flex-1 border-x border-slate-200 bg-white px-1 text-center text-sm font-bold text-slate-900 outline-none"
+        className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none"
         aria-label={label}
       />
-      <span className="px-1 text-xs font-bold text-slate-500">%</span>
+      <span className="flex h-full items-center justify-center border-r border-slate-200 text-xs font-bold text-slate-500">
+        %
+      </span>
       <button
         type="button"
         onClick={() => adjustPercent(value, 5, onChange)}
-        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
         aria-label={`Increase ${label}`}
       >
         +
@@ -183,14 +185,14 @@ export default function ResultsControlsSection({
 
   const inlineMethodsControl = () => (
     <div
-      className="flex h-9 w-[132px] shrink-0 items-center overflow-hidden rounded-lg border border-slate-200 bg-white"
+      className="grid h-9 w-[160px] shrink-0 grid-cols-[36px_88px_36px] overflow-hidden rounded-lg border border-slate-200 bg-white"
       onClick={(event) => event.stopPropagation()}
     >
       <button
         type="button"
         onClick={() => adjustSupportingMethods(-1)}
         disabled={!isConsensusView || safeConsensusThreshold <= 1}
-        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Decrease supporting methods"
       >
         -
@@ -210,14 +212,14 @@ export default function ResultsControlsSection({
           onChangeConsensusThreshold(nextValue);
         }}
         disabled={!isConsensusView}
-        className="h-full min-w-0 flex-1 border-x border-slate-200 bg-white px-1 text-center text-sm font-bold text-slate-900 outline-none disabled:opacity-50"
+        className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none disabled:opacity-50"
         aria-label="Minimum supporting methods"
       />
       <button
         type="button"
         onClick={() => adjustSupportingMethods(1)}
         disabled={!isConsensusView || safeConsensusThreshold >= effectiveMaxConsensusThreshold}
-        className="h-full w-8 shrink-0 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Increase supporting methods"
       >
         +
