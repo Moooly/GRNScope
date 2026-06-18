@@ -128,7 +128,7 @@ export default function ResultsControlsSection({
       <button
         type="button"
         onClick={() => setOpenPanel((currentPanel) => (currentPanel === panel ? null : panel))}
-        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+        className={`flex min-h-[54px] w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
           isOpen
             ? "border-[#1b75a6] bg-[#1b75a6] text-white shadow-sm"
             : "border-slate-200 bg-[#eef3f7] text-slate-800 hover:border-[#1b75a6]/30 hover:bg-[#e7f2f7]"
@@ -264,7 +264,7 @@ export default function ResultsControlsSection({
     >
       <button
         type="button"
-        onClick={() => adjustEdgeDisplayLimit(-50)}
+        onClick={() => adjustEdgeDisplayLimit(-10)}
         disabled={safeEdgeDisplayLimit <= minEdgeDisplayLimit}
         className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Decrease shown edges"
@@ -284,7 +284,7 @@ export default function ResultsControlsSection({
       />
       <button
         type="button"
-        onClick={() => adjustEdgeDisplayLimit(50)}
+        onClick={() => adjustEdgeDisplayLimit(10)}
         disabled={safeEdgeDisplayLimit >= safeFilteredEdgeCount}
         className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
         aria-label="Increase shown edges"
@@ -382,7 +382,7 @@ export default function ResultsControlsSection({
       </div>
 
       {isSettingsMenuOpen && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[min(92vw,470px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-40 max-h-[calc(100vh-120px)] w-[min(92vw,540px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-2xl shadow-slate-900/20">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-2 py-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
