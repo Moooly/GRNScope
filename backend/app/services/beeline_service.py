@@ -13,7 +13,9 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+from itertools import chain
 from math import fsum, isfinite, log2
 from pathlib import Path
 
@@ -357,11 +359,20 @@ def load_known_tf_genes(project_manifest: dict) -> set[str]:
 
 
 
-def compute_row_variance(values: list[float]) -> float:
-    if len(values) <= 1:
+def compute_row_variance(values: Iterable[float]) -> float:
+    count = 0
+    mean_value = 0.0
+    sum_squared_delta = 0.0
+
+    for value in values:
+        count += 1
+        delta = value - mean_value
+        mean_value += delta / count
+        sum_squared_delta += delta * (value - mean_value)
+
+    if count <= 1:
         return 0.0
-    mean_value = fsum(values) / len(values)
-    return fsum((value - mean_value) ** 2 for value in values) / len(values)
+    return sum_squared_delta / count
 
 
 def default_project_preprocessed_expression_path(project_id: str) -> Path:
@@ -565,8 +576,7 @@ def ensure_project_preprocessed_expression(
     return preprocessed_expression
 
 
-def parse_expression_numeric_values(row: list[str], cell_count: int) -> list[float]:
-    numeric_values: list[float] = []
+def parse_expression_numeric_values(row: list[str], cell_count: int) -> Iterator[float]:
     for column_index in range(cell_count):
         raw_value = row[column_index + 1] if column_index + 1 < len(row) else ""
         try:
@@ -575,18 +585,16 @@ def parse_expression_numeric_values(row: list[str], cell_count: int) -> list[flo
             value = 0.0
         if not isfinite(value):
             value = 0.0
-        numeric_values.append(value)
-    return numeric_values
+        yield value
 
 
 def transform_expression_values(
-    values: list[float],
+    values: Iterable[float],
     *,
     column_sums: list[float] | None,
     normalize_enabled: bool,
     log_transform_enabled: bool,
-) -> list[float]:
-    transformed_values: list[float] = []
+) -> Iterator[float]:
     for column_index, value in enumerate(values):
         transformed_value = value
         if normalize_enabled and column_sums is not None:
@@ -595,8 +603,7 @@ def transform_expression_values(
                 transformed_value = (value / column_sum) * 10000.0
         if log_transform_enabled:
             transformed_value = log2(max(transformed_value, 0.0) + 1.0)
-        transformed_values.append(transformed_value)
-    return transformed_values
+        yield transformed_value
 
 
 def iter_expression_data_rows(
@@ -647,8 +654,9 @@ def preprocess_expression_matrix(
     if normalize_enabled:
         column_sums = [0.0] * cell_count
         for _index, row in iter_expression_data_rows(source_expression, dialect):
-            numeric_values = parse_expression_numeric_values(row, cell_count)
-            for column_index, value in enumerate(numeric_values):
+            for column_index, value in enumerate(
+                parse_expression_numeric_values(row, cell_count)
+            ):
                 column_sums[column_index] += value
             parsed_row_count += 1
     else:
@@ -662,14 +670,14 @@ def preprocess_expression_matrix(
     scored_rows: list[tuple[float, int, str]] = []
     for index, row in iter_expression_data_rows(source_expression, dialect):
         gene_name = str(row[0]).strip() if row else ""
-        numeric_values = parse_expression_numeric_values(row, cell_count)
-        transformed_values = transform_expression_values(
-            numeric_values,
-            column_sums=column_sums,
-            normalize_enabled=normalize_enabled,
-            log_transform_enabled=log_transform_enabled,
+        variance = compute_row_variance(
+            transform_expression_values(
+                parse_expression_numeric_values(row, cell_count),
+                column_sums=column_sums,
+                normalize_enabled=normalize_enabled,
+                log_transform_enabled=log_transform_enabled,
+            )
         )
-        variance = compute_row_variance(transformed_values)
         scored_rows.append((variance, index, gene_name))
 
     if not scored_rows:
@@ -703,15 +711,17 @@ def preprocess_expression_matrix(
                 continue
 
             gene_name = str(row[0]).strip() if row else ""
-            numeric_values = parse_expression_numeric_values(row, cell_count)
             transformed_values = transform_expression_values(
-                numeric_values,
+                parse_expression_numeric_values(row, cell_count),
                 column_sums=column_sums,
                 normalize_enabled=normalize_enabled,
                 log_transform_enabled=log_transform_enabled,
             )
             writer.writerow(
-                [gene_name, *[f"{value:.10f}" for value in transformed_values]]
+                chain(
+                    [gene_name],
+                    (f"{value:.10f}" for value in transformed_values),
+                )
             )
 
 
@@ -769,10 +779,10 @@ def write_expression_subset_by_cells(
             retained_indices = [0, *selected_column_indices]
             for row in reader:
                 writer.writerow(
-                    [
+                    (
                         row[index] if index < len(row) else ""
                         for index in retained_indices
-                    ]
+                    )
                 )
 
 

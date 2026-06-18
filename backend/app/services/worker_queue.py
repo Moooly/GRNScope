@@ -10,6 +10,7 @@ DEFAULT_QUEUE_NAME = "grnscope"
 DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
 DEFAULT_JOB_TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_WORKER_PROCESS_COUNT = 2
+DEFAULT_WORKER_MAX_JOBS = 1
 RQ_JOB_ID_UNSAFE_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
 
 
@@ -55,6 +56,19 @@ def worker_process_count() -> int:
         return max(1, int(raw_value))
     except ValueError:
         return DEFAULT_WORKER_PROCESS_COUNT
+
+
+def worker_max_jobs() -> int | None:
+    raw_value = os.environ.get(
+        "GRNSCOPE_WORKER_MAX_JOBS",
+        str(DEFAULT_WORKER_MAX_JOBS),
+    ).strip().lower()
+    if raw_value in {"0", "none", "unlimited", "false", "off"}:
+        return None
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return DEFAULT_WORKER_MAX_JOBS
 
 
 def safe_rq_job_id(*parts: object) -> str:
