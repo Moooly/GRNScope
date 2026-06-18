@@ -257,7 +257,16 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Quick baseline comparison.",
             "Testing the pipeline with a lightweight local method.",
         ],
-        "parameters": [],
+        "parameters": [
+            {
+                "name": "topK",
+                "label": "Top edges per target",
+                "description": "Maximum number of strongest Pearson edges to keep for each target gene.",
+                "default": 10,
+                "required": False,
+                "value_type": "integer",
+            }
+        ],
     },
     {
         "id": "SCODE",

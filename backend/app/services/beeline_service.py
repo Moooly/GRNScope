@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import heapq
 import hashlib
 import io
 import json
@@ -27,6 +28,7 @@ from ..repositories.project_repository import read_project_manifest
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 30
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
+DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 10
 DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
 DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
 BEELINE_MIRROR_ENTRIES = ("BLRunner.py", "BLRun", "Algorithms", "utils")
@@ -296,6 +298,29 @@ def resolve_confidence_settings(project_manifest: dict) -> dict:
         "subsample_fraction": min(max(subsample_fraction, 0.01), 1.0),
         "stability_top_k": max(1, stability_top_k),
     }
+
+
+def resolve_ranked_edges_per_target_limit(
+    algorithm_id: str,
+    confidence_settings: dict | None = None,
+) -> int | None:
+    normalized_algorithm_id = algorithm_id.upper()
+    configured_limit = (
+        parse_positive_int(
+            os.environ.get(f"GRNSCOPE_{normalized_algorithm_id}_MAX_EDGES_PER_TARGET")
+        )
+        or parse_positive_int(os.environ.get("GRNSCOPE_RANKED_EDGES_PER_TARGET_LIMIT"))
+    )
+    if configured_limit is not None:
+        return configured_limit
+
+    if normalized_algorithm_id != "PEARSON":
+        return None
+
+    stability_top_k = None
+    if confidence_settings:
+        stability_top_k = parse_positive_int(confidence_settings.get("stability_top_k"))
+    return max(DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT, stability_top_k or 0)
 
 
 def stable_seed_for(project_id: str, algorithm_id: str) -> int:
@@ -1298,7 +1323,11 @@ def build_beeline_config(
     return "\n".join(config_lines) + "\n"
 
 
-def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
+def parse_ranked_edges_csv(
+    ranked_edges_path: Path,
+    *,
+    max_edges_per_target: int | None = None,
+) -> tuple[list[dict], dict]:
     if not ranked_edges_path.exists():
         raise FileNotFoundError(f"rankedEdges.csv not found at {ranked_edges_path}")
 
@@ -1359,6 +1388,11 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
 
     parsed_edges: list[dict] = []
     node_names: set[str] = set()
+    max_edges_per_target = (
+        max(1, max_edges_per_target) if max_edges_per_target is not None else None
+    )
+    target_heaps: dict[str, list[tuple[float, int, str, float]]] = {}
+    sequence = 0
 
     with ranked_edges_path.open("r", encoding="utf-8", newline="") as csv_file:
         reader = csv.DictReader(csv_file, dialect=dialect)
@@ -1374,16 +1408,44 @@ def parse_ranked_edges_csv(ranked_edges_path: Path) -> tuple[list[dict], dict]:
                 score = float(score_raw)
             except (TypeError, ValueError):
                 continue
+            if not isfinite(score):
+                continue
 
-            parsed_edges.append(
-                {
-                    "source": source,
-                    "target": target,
-                    "score": score,
-                }
-            )
-            node_names.add(source)
-            node_names.add(target)
+            if max_edges_per_target is None:
+                parsed_edges.append(
+                    {
+                        "source": source,
+                        "target": target,
+                        "score": score,
+                    }
+                )
+                node_names.add(source)
+                node_names.add(target)
+                continue
+
+            heap = target_heaps.setdefault(target, [])
+            heap_item = (abs(score), sequence, source, score)
+            sequence += 1
+            if len(heap) < max_edges_per_target:
+                heapq.heappush(heap, heap_item)
+            elif heap_item[0] > heap[0][0]:
+                heapq.heapreplace(heap, heap_item)
+
+    if max_edges_per_target is not None:
+        for target, heap in target_heaps.items():
+            for _abs_score, _sequence, source, score in sorted(
+                heap,
+                key=lambda item: (-item[0], str(item[2])),
+            ):
+                parsed_edges.append(
+                    {
+                        "source": source,
+                        "target": target,
+                        "score": score,
+                    }
+                )
+                node_names.add(source)
+                node_names.add(target)
 
     if not parsed_edges:
         raise ValueError("rankedEdges.csv did not contain any valid edges.")
@@ -1562,6 +1624,7 @@ def parse_confidence_run_outputs(
     algorithm_id: str,
     *,
     runtime_root: Path,
+    max_edges_per_target: int | None = None,
 ) -> tuple[dict[str, list[dict]], dict[str, str]]:
     normalized_algorithm_id = algorithm_id.upper()
     run_edges_by_id: dict[str, list[dict]] = {}
@@ -1576,7 +1639,10 @@ def parse_confidence_run_outputs(
             / "rankedEdges.csv"
         )
         try:
-            run_edges, _ = parse_ranked_edges_csv(ranked_edges_path)
+            run_edges, _ = parse_ranked_edges_csv(
+                ranked_edges_path,
+                max_edges_per_target=max_edges_per_target,
+            )
         except FileNotFoundError as exc:
             raise RuntimeError(
                 build_missing_ranked_edges_error(
@@ -1745,12 +1811,17 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         )
         raise RuntimeError(friendly_error)
 
+    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
+        algorithm_id,
+        confidence_settings,
+    )
     run_edges_by_id, ranked_edge_paths = parse_confidence_run_outputs(
         output_dir,
         dataset_id,
         run_ids,
         algorithm_id,
         runtime_root=runtime_root,
+        max_edges_per_target=ranked_edges_per_target_limit,
     )
     top_edges, network_summary = aggregate_confidence_edges(
         run_edges_by_id,
@@ -2015,12 +2086,17 @@ def run_beeline_with_progress(
         progress_label="Aggregating confidence scores",
     )
 
+    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
+        algorithm_id,
+        confidence_settings,
+    )
     run_edges_by_id, ranked_edge_paths = parse_confidence_run_outputs(
         output_dir,
         dataset_id,
         run_ids,
         algorithm_id,
         runtime_root=runtime_root,
+        max_edges_per_target=ranked_edges_per_target_limit,
     )
     top_edges, network_summary = aggregate_confidence_edges(
         run_edges_by_id,
