@@ -35,6 +35,16 @@ import { boolText, clamp } from "./_lib/utils";
 const CONFIDENCE_STABILITY_TOP_K = 10;
 const DEFAULT_NETWORK_EDGE_TARGET = 3;
 const MODAL_ANIMATION_MS = 480;
+const FILTER_MATCH_EPSILON = 0.000001;
+
+type ResultFilterSnapshot = {
+  algorithmKey: string;
+  evidenceThreshold: number;
+  confidenceThreshold: number;
+  directionConfidenceThreshold: number;
+  signConfidenceThreshold: number;
+  consensusThreshold: number;
+};
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -46,6 +56,28 @@ type GeneCoordinateInfo = {
 };
 
 const edgeKeyFor = (source: string, target: string) => `${source}|||${target}`;
+
+function thresholdMatches(value: number, target: number) {
+  return Math.abs(value - target) <= FILTER_MATCH_EPSILON;
+}
+
+function filtersMatchSnapshot(
+  snapshot: ResultFilterSnapshot | null,
+  values: ResultFilterSnapshot
+) {
+  if (!snapshot || snapshot.algorithmKey !== values.algorithmKey) return false;
+
+  return (
+    thresholdMatches(values.evidenceThreshold, snapshot.evidenceThreshold) &&
+    thresholdMatches(values.confidenceThreshold, snapshot.confidenceThreshold) &&
+    thresholdMatches(
+      values.directionConfidenceThreshold,
+      snapshot.directionConfidenceThreshold
+    ) &&
+    thresholdMatches(values.signConfidenceThreshold, snapshot.signConfidenceThreshold) &&
+    values.consensusThreshold === snapshot.consensusThreshold
+  );
+}
 
 function numericEdgeScore(edge: AlgorithmResultEdge) {
   const rawScore = Number(edge.score ?? edge.weight ?? edge.edge_weight ?? 0);
@@ -210,6 +242,8 @@ export default function ProjectDetailPage() {
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [hasTouchedResultFilters, setHasTouchedResultFilters] = useState(false);
+  const [autoPreviewFilters, setAutoPreviewFilters] =
+    useState<ResultFilterSnapshot | null>(null);
   const [geneSearch, setGeneSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
@@ -337,6 +371,10 @@ export default function ProjectDetailPage() {
   const activeAlgorithmIds = useMemo(() => {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
   }, [completedAlgorithmIds, selectedAlgorithmIds]);
+  const activeAlgorithmKey = useMemo(
+    () => activeAlgorithmIds.join("|"),
+    [activeAlgorithmIds]
+  );
 
   useEffect(() => {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
@@ -945,10 +983,33 @@ export default function ProjectDetailPage() {
     return [];
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
+  const matchesAutoPreviewFilters = useMemo(
+    () =>
+      filtersMatchSnapshot(autoPreviewFilters, {
+        algorithmKey: activeAlgorithmKey,
+        evidenceThreshold,
+        confidenceThreshold,
+        directionConfidenceThreshold,
+        signConfidenceThreshold,
+        consensusThreshold,
+      }),
+    [
+      activeAlgorithmKey,
+      autoPreviewFilters,
+      confidenceThreshold,
+      consensusThreshold,
+      directionConfidenceThreshold,
+      evidenceThreshold,
+      signConfidenceThreshold,
+    ]
+  );
+
   const activeEdges = useMemo(() => {
-    if (hasTouchedResultFilters) return uncappedActiveEdges;
-    return uncappedActiveEdges.slice(0, DEFAULT_NETWORK_EDGE_TARGET);
-  }, [hasTouchedResultFilters, uncappedActiveEdges]);
+    const shouldUsePreviewCap = !hasTouchedResultFilters || matchesAutoPreviewFilters;
+    return shouldUsePreviewCap
+      ? uncappedActiveEdges.slice(0, DEFAULT_NETWORK_EDGE_TARGET)
+      : uncappedActiveEdges;
+  }, [hasTouchedResultFilters, matchesAutoPreviewFilters, uncappedActiveEdges]);
 
   useEffect(() => {
     if (activeAlgorithmIds.length === 0 || hasTouchedResultFilters) return;
@@ -987,38 +1048,65 @@ export default function ProjectDetailPage() {
 
     if (!fallbackEdge) return;
 
-    setEvidenceThreshold((current) =>
-      tuneThreshold(current, snapThreshold(fallbackEdge.score))
+    const nextEvidenceThreshold = tuneThreshold(
+      evidenceThreshold,
+      snapThreshold(fallbackEdge.score)
     );
-    setConfidenceThreshold((current) =>
-      tuneThreshold(current, snapThreshold(fallbackEdge.confidence))
+    const nextConfidenceThreshold = tuneThreshold(
+      confidenceThreshold,
+      snapThreshold(fallbackEdge.confidence)
     );
-    setDirectionConfidenceThreshold((current) => {
-      const edgeThreshold =
-        fallbackEdge.directionConfidence === null
-          ? 0
-          : snapThreshold(fallbackEdge.directionConfidence);
-      return tuneThreshold(current, edgeThreshold);
-    });
-    setSignConfidenceThreshold((current) => {
-      const edgeThreshold =
-        fallbackEdge.signConfidence === null
-          ? 0
-          : snapThreshold(fallbackEdge.signConfidence);
-      return tuneThreshold(current, edgeThreshold);
-    });
+    const fallbackDirectionThreshold =
+      fallbackEdge.directionConfidence === null
+        ? 0
+        : snapThreshold(fallbackEdge.directionConfidence);
+    const nextDirectionConfidenceThreshold = tuneThreshold(
+      directionConfidenceThreshold,
+      fallbackDirectionThreshold
+    );
+    const fallbackSignThreshold =
+      fallbackEdge.signConfidence === null
+        ? 0
+        : snapThreshold(fallbackEdge.signConfidence);
+    const nextSignConfidenceThreshold = tuneThreshold(
+      signConfidenceThreshold,
+      fallbackSignThreshold
+    );
+    let nextConsensusThreshold = consensusThreshold;
 
     if (activeAlgorithmIds.length >= 2) {
       const supportingMethodCount = Math.max(1, fallbackEdge.count);
-      setConsensusThreshold((current) =>
-        tuneCount(current, supportingMethodCount)
-      );
+      nextConsensusThreshold = tuneCount(consensusThreshold, supportingMethodCount);
+    }
+
+    setAutoPreviewFilters({
+      algorithmKey: activeAlgorithmKey,
+      evidenceThreshold: nextEvidenceThreshold,
+      confidenceThreshold: nextConfidenceThreshold,
+      directionConfidenceThreshold: nextDirectionConfidenceThreshold,
+      signConfidenceThreshold: nextSignConfidenceThreshold,
+      consensusThreshold: nextConsensusThreshold,
+    });
+
+    setEvidenceThreshold(nextEvidenceThreshold);
+    setConfidenceThreshold(nextConfidenceThreshold);
+    setDirectionConfidenceThreshold(nextDirectionConfidenceThreshold);
+    setSignConfidenceThreshold(nextSignConfidenceThreshold);
+
+    if (activeAlgorithmIds.length >= 2) {
+      setConsensusThreshold(nextConsensusThreshold);
       setHasTouchedConsensusThreshold(true);
     }
   }, [
     activeAlgorithmIds,
+    activeAlgorithmKey,
+    confidenceThreshold,
     consensusCandidateRows,
+    consensusThreshold,
+    directionConfidenceThreshold,
+    evidenceThreshold,
     hasTouchedResultFilters,
+    signConfidenceThreshold,
     standardizedAlgorithmEdgeRows,
     uncappedActiveEdges.length,
   ]);
