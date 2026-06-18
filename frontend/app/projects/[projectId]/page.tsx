@@ -33,18 +33,7 @@ import {
 import { boolText, clamp } from "./_lib/utils";
 
 const CONFIDENCE_STABILITY_TOP_K = 10;
-const DEFAULT_NETWORK_EDGE_TARGET = 3;
 const MODAL_ANIMATION_MS = 480;
-const FILTER_MATCH_EPSILON = 0.000001;
-
-type ResultFilterSnapshot = {
-  algorithmKey: string;
-  evidenceThreshold: number;
-  confidenceThreshold: number;
-  directionConfidenceThreshold: number;
-  signConfidenceThreshold: number;
-  consensusThreshold: number;
-};
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -56,28 +45,6 @@ type GeneCoordinateInfo = {
 };
 
 const edgeKeyFor = (source: string, target: string) => `${source}|||${target}`;
-
-function thresholdMatches(value: number, target: number) {
-  return Math.abs(value - target) <= FILTER_MATCH_EPSILON;
-}
-
-function filtersMatchSnapshot(
-  snapshot: ResultFilterSnapshot | null,
-  values: ResultFilterSnapshot
-) {
-  if (!snapshot || snapshot.algorithmKey !== values.algorithmKey) return false;
-
-  return (
-    thresholdMatches(values.evidenceThreshold, snapshot.evidenceThreshold) &&
-    thresholdMatches(values.confidenceThreshold, snapshot.confidenceThreshold) &&
-    thresholdMatches(
-      values.directionConfidenceThreshold,
-      snapshot.directionConfidenceThreshold
-    ) &&
-    thresholdMatches(values.signConfidenceThreshold, snapshot.signConfidenceThreshold) &&
-    values.consensusThreshold === snapshot.consensusThreshold
-  );
-}
 
 function numericEdgeScore(edge: AlgorithmResultEdge) {
   const rawScore = Number(edge.score ?? edge.weight ?? edge.edge_weight ?? 0);
@@ -241,11 +208,8 @@ export default function ProjectDetailPage() {
   const [signConfidenceThreshold, setSignConfidenceThreshold] = useState(0);
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
-  const [hasTouchedResultFilters, setHasTouchedResultFilters] = useState(false);
-  const [autoPreviewFilters, setAutoPreviewFilters] =
-    useState<ResultFilterSnapshot | null>(null);
-  const [geneSearch, setGeneSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
+  const [edgeDisplayLimit, setEdgeDisplayLimit] = useState(50);
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
@@ -371,10 +335,6 @@ export default function ProjectDetailPage() {
   const activeAlgorithmIds = useMemo(() => {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
   }, [completedAlgorithmIds, selectedAlgorithmIds]);
-  const activeAlgorithmKey = useMemo(
-    () => activeAlgorithmIds.join("|"),
-    [activeAlgorithmIds]
-  );
 
   useEffect(() => {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
@@ -983,133 +943,7 @@ export default function ProjectDetailPage() {
     return [];
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
-  const matchesAutoPreviewFilters = useMemo(
-    () =>
-      filtersMatchSnapshot(autoPreviewFilters, {
-        algorithmKey: activeAlgorithmKey,
-        evidenceThreshold,
-        confidenceThreshold,
-        directionConfidenceThreshold,
-        signConfidenceThreshold,
-        consensusThreshold,
-      }),
-    [
-      activeAlgorithmKey,
-      autoPreviewFilters,
-      confidenceThreshold,
-      consensusThreshold,
-      directionConfidenceThreshold,
-      evidenceThreshold,
-      signConfidenceThreshold,
-    ]
-  );
-
-  const activeEdges = useMemo(() => {
-    const shouldUsePreviewCap = !hasTouchedResultFilters || matchesAutoPreviewFilters;
-    return shouldUsePreviewCap
-      ? uncappedActiveEdges.slice(0, DEFAULT_NETWORK_EDGE_TARGET)
-      : uncappedActiveEdges;
-  }, [hasTouchedResultFilters, matchesAutoPreviewFilters, uncappedActiveEdges]);
-
-  useEffect(() => {
-    if (activeAlgorithmIds.length === 0 || hasTouchedResultFilters) return;
-
-    const shouldAutoTune =
-      uncappedActiveEdges.length === 0 ||
-      uncappedActiveEdges.length > DEFAULT_NETWORK_EDGE_TARGET;
-    if (!shouldAutoTune) return;
-
-    const snapThreshold = (value: number | null | undefined) => {
-      if (value === null || value === undefined || !Number.isFinite(value)) return 0;
-      return clamp(Math.floor(clamp(value, 0, 1) * 20) / 20, 0, 1);
-    };
-
-    const tuneThreshold = (current: number, target: number) => {
-      return uncappedActiveEdges.length === 0
-        ? Math.min(current, target)
-        : Math.max(current, target);
-    };
-
-    const tuneCount = (current: number, target: number) => {
-      return uncappedActiveEdges.length === 0
-        ? Math.min(current, target)
-        : Math.max(current, target);
-    };
-
-    const candidateEdges =
-      activeAlgorithmIds.length >= 2
-        ? consensusCandidateRows.filter((edge) => edge.count > 0)
-        : standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
-    const finiteCandidateEdges = candidateEdges.filter(
-      (edge) => Number.isFinite(edge.score) && Number.isFinite(edge.confidence)
-    );
-    const targetIndex = Math.min(DEFAULT_NETWORK_EDGE_TARGET, finiteCandidateEdges.length) - 1;
-    const fallbackEdge = finiteCandidateEdges[Math.max(0, targetIndex)];
-
-    if (!fallbackEdge) return;
-
-    const nextEvidenceThreshold = tuneThreshold(
-      evidenceThreshold,
-      snapThreshold(fallbackEdge.score)
-    );
-    const nextConfidenceThreshold = tuneThreshold(
-      confidenceThreshold,
-      snapThreshold(fallbackEdge.confidence)
-    );
-    const fallbackDirectionThreshold =
-      fallbackEdge.directionConfidence === null
-        ? 0
-        : snapThreshold(fallbackEdge.directionConfidence);
-    const nextDirectionConfidenceThreshold = tuneThreshold(
-      directionConfidenceThreshold,
-      fallbackDirectionThreshold
-    );
-    const fallbackSignThreshold =
-      fallbackEdge.signConfidence === null
-        ? 0
-        : snapThreshold(fallbackEdge.signConfidence);
-    const nextSignConfidenceThreshold = tuneThreshold(
-      signConfidenceThreshold,
-      fallbackSignThreshold
-    );
-    let nextConsensusThreshold = consensusThreshold;
-
-    if (activeAlgorithmIds.length >= 2) {
-      const supportingMethodCount = Math.max(1, fallbackEdge.count);
-      nextConsensusThreshold = tuneCount(consensusThreshold, supportingMethodCount);
-    }
-
-    setAutoPreviewFilters({
-      algorithmKey: activeAlgorithmKey,
-      evidenceThreshold: nextEvidenceThreshold,
-      confidenceThreshold: nextConfidenceThreshold,
-      directionConfidenceThreshold: nextDirectionConfidenceThreshold,
-      signConfidenceThreshold: nextSignConfidenceThreshold,
-      consensusThreshold: nextConsensusThreshold,
-    });
-
-    setEvidenceThreshold(nextEvidenceThreshold);
-    setConfidenceThreshold(nextConfidenceThreshold);
-    setDirectionConfidenceThreshold(nextDirectionConfidenceThreshold);
-    setSignConfidenceThreshold(nextSignConfidenceThreshold);
-
-    if (activeAlgorithmIds.length >= 2) {
-      setConsensusThreshold(nextConsensusThreshold);
-      setHasTouchedConsensusThreshold(true);
-    }
-  }, [
-    activeAlgorithmIds,
-    activeAlgorithmKey,
-    confidenceThreshold,
-    consensusCandidateRows,
-    consensusThreshold,
-    directionConfidenceThreshold,
-    evidenceThreshold,
-    hasTouchedResultFilters,
-    signConfidenceThreshold,
-    standardizedAlgorithmEdgeRows,
-    uncappedActiveEdges.length,
-  ]);
+  const activeEdges = uncappedActiveEdges;
 
   const geneCoordinateMap = useMemo(() => {
     const coordinates = new Map<string, GeneCoordinateInfo>();
@@ -1128,7 +962,7 @@ export default function ProjectDetailPage() {
   }, [activeAlgorithmIds, algorithmResults]);
 
   const filteredNetworkEdges = useMemo(() => {
-    const query = geneSearch.trim().toLowerCase();
+    const query = tableSearch.trim().toLowerCase();
 
     return activeEdges.filter((edge) => {
       const matchesSearch =
@@ -1141,7 +975,7 @@ export default function ProjectDetailPage() {
 
       return matchesSearch && matchesIsolation;
     });
-  }, [activeEdges, geneSearch, isolatedGene]);
+  }, [activeEdges, isolatedGene, tableSearch]);
 
   const networkNodes = useMemo(() => {
     const nodes = new Map<string, NodeInfo>();
@@ -1298,19 +1132,20 @@ export default function ProjectDetailPage() {
     isPreparingFinishedResults,
   ]);
 
+  const safeEdgeDisplayLimit = useMemo(() => {
+    if (filteredNetworkEdges.length === 0) return 0;
+
+    const requestedLimit =
+      Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit > 0
+        ? Math.floor(edgeDisplayLimit)
+        : 1;
+
+    return Math.min(filteredNetworkEdges.length, requestedLimit);
+  }, [edgeDisplayLimit, filteredNetworkEdges.length]);
+
   const visibleTableRows = useMemo(() => {
-    if (!tableSearch.trim()) {
-      return filteredNetworkEdges;
-    }
-
-    const query = tableSearch.trim().toLowerCase();
-
-    return filteredNetworkEdges.filter(
-      (edge) =>
-        edge.source.toLowerCase().includes(query) ||
-        edge.target.toLowerCase().includes(query)
-    );
-  }, [filteredNetworkEdges, tableSearch]);
+    return filteredNetworkEdges.slice(0, safeEdgeDisplayLimit);
+  }, [filteredNetworkEdges, safeEdgeDisplayLimit]);
 
   const sortedTableRows = useMemo(() => {
     const rows = [...visibleTableRows];
@@ -1722,7 +1557,7 @@ useEffect(() => {
     signConfidenceThreshold,
     consensusThreshold,
     isolatedGene,
-    geneSearch,
+    edgeDisplayLimit,
   ]);
 
   useEffect(() => {
@@ -1731,48 +1566,55 @@ useEffect(() => {
 
 
   const renderResultsControls = () => (
-    <ResultsControlsSection
-      compact
-      projectId={projectId}
-      completedAlgorithmIds={completedAlgorithmIds}
-      selectedAlgorithmIds={selectedAlgorithmIds}
-      onChangeSelectedAlgorithmIds={(value) => {
-        setSelectedAlgorithmIds(value);
-        setSelectedGene(null);
-        setSelectedEdgeKey(null);
-        setIsolatedGene(null);
-      }}
-      evidenceThreshold={evidenceThreshold}
-      onChangeEvidenceThreshold={(value) => {
-        setHasTouchedResultFilters(true);
-        setEvidenceThreshold(value);
-      }}
-      confidenceThreshold={confidenceThreshold}
-      onChangeConfidenceThreshold={(value) => {
-        setHasTouchedResultFilters(true);
-        setConfidenceThreshold(value);
-      }}
-      directionConfidenceThreshold={directionConfidenceThreshold}
-      onChangeDirectionConfidenceThreshold={(value) => {
-        setHasTouchedResultFilters(true);
-        setDirectionConfidenceThreshold(value);
-      }}
-      signConfidenceThreshold={signConfidenceThreshold}
-      onChangeSignConfidenceThreshold={(value) => {
-        setHasTouchedResultFilters(true);
-        setSignConfidenceThreshold(value);
-      }}
-      consensusThreshold={consensusThreshold}
-      maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
-      onChangeConsensusThreshold={(value) => {
-        setHasTouchedResultFilters(true);
-        setHasTouchedConsensusThreshold(true);
-        setConsensusThreshold(value);
-      }}
-      isConsensusView={activeAlgorithmIds.length >= 2}
-      isGuideOpen={isResultsGuideOpen}
-      onOpenGuide={() => setIsResultsGuideOpen(true)}
-    />
+    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+      <input
+        value={tableSearch}
+        onChange={(event) => setTableSearch(event.target.value)}
+        placeholder="Search gene name"
+        aria-label="Search gene name"
+        className="h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white/95 px-3.5 text-sm font-semibold text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:w-[260px] lg:w-[320px]"
+      />
+      <ResultsControlsSection
+        compact
+        projectId={projectId}
+        completedAlgorithmIds={completedAlgorithmIds}
+        selectedAlgorithmIds={selectedAlgorithmIds}
+        onChangeSelectedAlgorithmIds={(value) => {
+          setSelectedAlgorithmIds(value);
+          setSelectedGene(null);
+          setSelectedEdgeKey(null);
+          setIsolatedGene(null);
+        }}
+        evidenceThreshold={evidenceThreshold}
+        onChangeEvidenceThreshold={(value) => {
+          setEvidenceThreshold(value);
+        }}
+        confidenceThreshold={confidenceThreshold}
+        onChangeConfidenceThreshold={(value) => {
+          setConfidenceThreshold(value);
+        }}
+        directionConfidenceThreshold={directionConfidenceThreshold}
+        onChangeDirectionConfidenceThreshold={(value) => {
+          setDirectionConfidenceThreshold(value);
+        }}
+        signConfidenceThreshold={signConfidenceThreshold}
+        onChangeSignConfidenceThreshold={(value) => {
+          setSignConfidenceThreshold(value);
+        }}
+        consensusThreshold={consensusThreshold}
+        maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
+        onChangeConsensusThreshold={(value) => {
+          setHasTouchedConsensusThreshold(true);
+          setConsensusThreshold(value);
+        }}
+        isConsensusView={activeAlgorithmIds.length >= 2}
+        edgeDisplayLimit={edgeDisplayLimit}
+        onChangeEdgeDisplayLimit={setEdgeDisplayLimit}
+        filteredEdgeCount={filteredNetworkEdges.length}
+        isGuideOpen={isResultsGuideOpen}
+        onOpenGuide={() => setIsResultsGuideOpen(true)}
+      />
+    </div>
   );
 
 
@@ -1868,11 +1710,10 @@ useEffect(() => {
                       selectedNode={selectedNode}
                       isolatedGene={isolatedGene}
                       setIsolatedGene={setIsolatedGene}
+                      edgeDisplayLimit={edgeDisplayLimit}
                     />
 
                     <EdgeAnalysisTableSection
-                      tableSearch={tableSearch}
-                      setTableSearch={setTableSearch}
                       onExportEdgeList={handleExportEdgeList}
                       columnMenuRef={columnMenuRef}
                       isColumnMenuOpen={isColumnMenuOpen}

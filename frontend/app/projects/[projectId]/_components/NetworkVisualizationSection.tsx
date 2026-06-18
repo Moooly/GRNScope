@@ -48,10 +48,8 @@ type NetworkVisualizationSectionProps = {
   selectedNode: NodeInfo | null;
   isolatedGene: string | null;
   setIsolatedGene: (value: string | null) => void;
+  edgeDisplayLimit: number;
 };
-
-type EdgeBudget = "auto" | 50 | 100 | 250 | "all";
-type LabelMode = "auto" | "neighborhood" | "all";
 
 const layoutOptions = [
   { value: "force", label: "Force" },
@@ -60,29 +58,6 @@ const layoutOptions = [
   { value: "circular", label: "Circular" },
   { value: "circos", label: "Circos" },
 ] as const;
-
-const edgeBudgetOptions: Array<{ value: EdgeBudget; label: string }> = [
-  { value: "auto", label: "Auto" },
-  { value: 50, label: "50" },
-  { value: 100, label: "100" },
-  { value: 250, label: "250" },
-  { value: "all", label: "All" },
-];
-
-const labelModeOptions: Array<{ value: LabelMode; label: string }> = [
-  { value: "auto", label: "Auto" },
-  { value: "neighborhood", label: "Nearby" },
-  { value: "all", label: "All" },
-];
-
-const DENSE_NODE_THRESHOLD = 80;
-const DENSE_EDGE_THRESHOLD = 120;
-const AUTO_DENSE_EDGE_LIMIT = 120;
-const SELECTED_GENE_EDGE_LIMIT = 40;
-
-function nodeVisualPriority(node: NodeInfo) {
-  return (node.isTF ? 1000 : 0) + node.outDegree * 4 + node.degree;
-}
 
 export default function NetworkVisualizationSection({
   networkLayout,
@@ -99,6 +74,7 @@ export default function NetworkVisualizationSection({
   selectedNode,
   isolatedGene,
   setIsolatedGene,
+  edgeDisplayLimit,
 }: NetworkVisualizationSectionProps) {
   const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
   const [isExportConfirmClosing, setIsExportConfirmClosing] = useState(false);
@@ -106,51 +82,24 @@ export default function NetworkVisualizationSection({
   const [isVisualGuideClosing, setIsVisualGuideClosing] = useState(false);
   const [isInspectionGuideOpen, setIsInspectionGuideOpen] = useState(false);
   const [isInspectionGuideClosing, setIsInspectionGuideClosing] = useState(false);
-  const [edgeBudget, setEdgeBudget] = useState<EdgeBudget>("auto");
-  const [labelMode, setLabelMode] = useState<LabelMode>("auto");
   const circosSvgRef = useRef<SVGSVGElement | null>(null);
   const portalRoot = typeof document === "undefined" ? null : document.body;
 
   const selectedEdge =
     filteredNetworkEdges.find((edge) => edge.key === selectedEdgeKey) ?? null;
-
-  const isDenseGraph =
-    networkNodes.length > DENSE_NODE_THRESHOLD ||
-    filteredNetworkEdges.length > DENSE_EDGE_THRESHOLD;
-
   const effectiveEdgeLimit =
-    edgeBudget === "all"
-      ? Number.POSITIVE_INFINITY
-      : edgeBudget === "auto"
-        ? isDenseGraph
-          ? AUTO_DENSE_EDGE_LIMIT
-          : Number.POSITIVE_INFINITY
-        : edgeBudget;
+    filteredNetworkEdges.length === 0
+      ? 0
+      : Math.min(
+          filteredNetworkEdges.length,
+          Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit > 0
+            ? Math.floor(edgeDisplayLimit)
+            : 1
+        );
 
   const visualEdges = useMemo(() => {
-    const edgeByKey = new Map<string, AggregatedEdge>();
-    const baseEdges = Number.isFinite(effectiveEdgeLimit)
-      ? filteredNetworkEdges.slice(0, effectiveEdgeLimit)
-      : filteredNetworkEdges;
-
-    baseEdges.forEach((edge) => edgeByKey.set(edge.key, edge));
-
-    if (selectedEdge) {
-      edgeByKey.set(selectedEdge.key, selectedEdge);
-    }
-
-    if (selectedGene) {
-      filteredNetworkEdges
-        .filter((edge) => edge.source === selectedGene || edge.target === selectedGene)
-        .slice(0, SELECTED_GENE_EDGE_LIMIT)
-        .forEach((edge) => edgeByKey.set(edge.key, edge));
-    }
-
-    return Array.from(edgeByKey.values()).sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank;
-      return b.score - a.score;
-    });
-  }, [effectiveEdgeLimit, filteredNetworkEdges, selectedEdge, selectedGene]);
+    return filteredNetworkEdges.slice(0, effectiveEdgeLimit);
+  }, [effectiveEdgeLimit, filteredNetworkEdges]);
 
   const visualNodes = useMemo(() => {
     const visibleNodeIds = new Set<string>();
@@ -161,62 +110,6 @@ export default function NetworkVisualizationSection({
 
     return networkNodes.filter((node) => visibleNodeIds.has(node.id));
   }, [networkNodes, visualEdges]);
-
-  const effectiveLabelMode =
-    labelMode === "auto" ? (isDenseGraph ? "important" : "all") : labelMode;
-
-  const labeledGeneIds = useMemo(() => {
-    const ids = new Set<string>();
-
-    const addSelectedEdgeEndpoints = () => {
-      if (!selectedEdge) return;
-      ids.add(selectedEdge.source);
-      ids.add(selectedEdge.target);
-    };
-
-    if (effectiveLabelMode === "all") {
-      visualNodes.forEach((node) => ids.add(node.id));
-      addSelectedEdgeEndpoints();
-      if (selectedGene) ids.add(selectedGene);
-      return Array.from(ids);
-    }
-
-    if (selectedGene) {
-      ids.add(selectedGene);
-      visualEdges.forEach((edge) => {
-        if (edge.source === selectedGene) ids.add(edge.target);
-        if (edge.target === selectedGene) ids.add(edge.source);
-      });
-    }
-
-    addSelectedEdgeEndpoints();
-
-    if (effectiveLabelMode === "important" || ids.size === 0) {
-      const importantLabelCount = networkLayout === "circos" ? 42 : 56;
-      [...visualNodes]
-        .sort((a, b) => {
-          const priorityDelta = nodeVisualPriority(b) - nodeVisualPriority(a);
-          if (priorityDelta !== 0) return priorityDelta;
-          return a.id.localeCompare(b.id);
-        })
-        .slice(0, importantLabelCount)
-        .forEach((node) => ids.add(node.id));
-    }
-
-    return Array.from(ids);
-  }, [
-    effectiveLabelMode,
-    networkLayout,
-    selectedEdge,
-    selectedGene,
-    visualEdges,
-    visualNodes,
-  ]);
-
-  const labeledGeneIdSet = useMemo(
-    () => new Set(labeledGeneIds),
-    [labeledGeneIds]
-  );
 
   // Memoize the projections passed into NetworkGraph so identity stays stable
   // across renders that don't actually change the graph. NetworkGraph compares
@@ -229,9 +122,8 @@ export default function NetworkVisualizationSection({
         outDegree: node.outDegree,
         degree: node.degree,
         isTF: node.isTF,
-        showLabel: labeledGeneIdSet.has(node.id),
       })),
-    [labeledGeneIdSet, visualNodes]
+    [visualNodes]
   );
 
   const graphEdges = useMemo(
@@ -335,59 +227,6 @@ export default function NetworkVisualizationSection({
               </button>
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-x-4 top-[4.65rem] z-20 flex flex-wrap items-center gap-2">
-            <div className="pointer-events-auto inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/90 p-1 text-xs font-bold text-slate-500 shadow-sm backdrop-blur">
-              <span className="px-2 text-[10px] uppercase tracking-[0.14em]">
-                Edges
-              </span>
-              {edgeBudgetOptions.map((option) => {
-                const isActive = edgeBudget === option.value;
-
-                return (
-                  <button
-                    key={String(option.value)}
-                    type="button"
-                    onClick={() => setEdgeBudget(option.value)}
-                    className={`rounded-xl px-2.5 py-1.5 transition ${
-                      isActive
-                        ? "bg-[#1b75a6] text-white shadow-sm"
-                        : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="pointer-events-auto inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/90 p-1 text-xs font-bold text-slate-500 shadow-sm backdrop-blur">
-              <span className="px-2 text-[10px] uppercase tracking-[0.14em]">
-                Labels
-              </span>
-              {labelModeOptions.map((option) => {
-                const isActive = labelMode === option.value;
-
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setLabelMode(option.value)}
-                    className={`rounded-xl px-2.5 py-1.5 transition ${
-                      isActive
-                        ? "bg-[#1b75a6] text-white shadow-sm"
-                        : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            {isDenseGraph && (
-              <span className="pointer-events-auto rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-bold text-slate-500 shadow-sm backdrop-blur">
-                {visualEdges.length}/{filteredNetworkEdges.length} edges
-              </span>
-            )}
-          </div>
           {networkLayout === "circos" ? (
             <CircosNetworkGraph
               nodes={visualNodes}
@@ -403,7 +242,6 @@ export default function NetworkVisualizationSection({
                 setSelectedGene(null);
               }}
               svgRef={circosSvgRef}
-              labeledGeneIds={labeledGeneIds}
             />
           ) : (
             <NetworkGraph

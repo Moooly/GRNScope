@@ -17,6 +17,9 @@ type ResultsControlsSectionProps = {
   maxConsensusThreshold: number;
   onChangeConsensusThreshold: (value: number) => void;
   isConsensusView: boolean;
+  edgeDisplayLimit: number;
+  onChangeEdgeDisplayLimit: (value: number) => void;
+  filteredEdgeCount: number;
   compact?: boolean;
   projectId?: string;
   isGuideOpen?: boolean;
@@ -40,6 +43,9 @@ export default function ResultsControlsSection({
   consensusThreshold,
   onChangeConsensusThreshold,
   isConsensusView,
+  edgeDisplayLimit,
+  onChangeEdgeDisplayLimit,
+  filteredEdgeCount,
   compact = false,
   isGuideOpen = false,
   onOpenGuide,
@@ -143,6 +149,29 @@ export default function ResultsControlsSection({
       ? "All selected"
       : `${selectedAlgorithmIds.length}/${completedAlgorithmIds.length} selected`;
 
+  const safeFilteredEdgeCount = Math.max(0, filteredEdgeCount);
+  const minEdgeDisplayLimit = safeFilteredEdgeCount > 0 ? 1 : 0;
+  const safeEdgeDisplayLimit =
+    safeFilteredEdgeCount === 0
+      ? 0
+      : Math.min(
+          safeFilteredEdgeCount,
+          Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit > 0
+            ? Math.floor(edgeDisplayLimit)
+            : 1
+        );
+  const updateEdgeDisplayLimit = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    const nextValue = Math.max(
+      minEdgeDisplayLimit,
+      Math.min(safeFilteredEdgeCount, Math.floor(value))
+    );
+    onChangeEdgeDisplayLimit(nextValue);
+  };
+  const adjustEdgeDisplayLimit = (delta: number) => {
+    updateEdgeDisplayLimit(safeEdgeDisplayLimit + delta);
+  };
+
   const inlinePercentControl = (
     value: number,
     onChange: (value: number) => void,
@@ -227,14 +256,67 @@ export default function ResultsControlsSection({
     </div>
   );
 
+  const edgeDisplayControl = () => (
+    <div
+      className="grid h-9 w-[160px] shrink-0 grid-cols-[36px_88px_36px] overflow-hidden rounded-lg border border-slate-200 bg-white"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => adjustEdgeDisplayLimit(-50)}
+        disabled={safeEdgeDisplayLimit <= minEdgeDisplayLimit}
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Decrease shown edges"
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        max={safeFilteredEdgeCount}
+        min={minEdgeDisplayLimit}
+        value={safeEdgeDisplayLimit}
+        onChange={(e) => updateEdgeDisplayLimit(Number(e.target.value))}
+        className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none"
+        aria-label="Shown edges"
+      />
+      <button
+        type="button"
+        onClick={() => adjustEdgeDisplayLimit(50)}
+        disabled={safeEdgeDisplayLimit >= safeFilteredEdgeCount}
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+        aria-label="Increase shown edges"
+      >
+        +
+      </button>
+    </div>
+  );
+
+  const edgeDisplayRow = (
+    <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-slate-200 bg-[#eef3f7] px-3 py-2 text-left text-slate-800">
+      <span className="text-sm font-bold">Showing top</span>
+      {edgeDisplayControl()}
+      <span className="min-w-0 text-sm font-bold">
+        of {safeFilteredEdgeCount.toLocaleString()} edges
+      </span>
+    </div>
+  );
+
   const inlineRow = (
     title: string,
-    control: ReactNode
+    control: ReactNode,
+    subtitle?: string
   ) => (
     <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-[#eef3f7] px-3 py-2 text-left text-slate-800">
       <span className="flex min-w-0 items-center">
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold">{title}</span>
+          {subtitle && (
+            <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
+              {subtitle}
+            </span>
+          )}
         </span>
       </span>
       {control}
@@ -335,6 +417,7 @@ export default function ResultsControlsSection({
               </div>
             )}
 
+            {edgeDisplayRow}
             {inlineRow(
               "Evidence",
               inlinePercentControl(

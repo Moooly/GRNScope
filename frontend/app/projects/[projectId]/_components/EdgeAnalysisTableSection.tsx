@@ -19,8 +19,6 @@ type AggregatedEdge = {
 };
 
 type EdgeAnalysisTableSectionProps = {
-  tableSearch: string;
-  setTableSearch: (value: string) => void;
   onExportEdgeList: () => void;
   columnMenuRef?: React.RefObject<HTMLDivElement | null>;
   isColumnMenuOpen?: boolean;
@@ -46,8 +44,6 @@ type EdgeAnalysisTableSectionProps = {
 };
 
 export default function EdgeAnalysisTableSection({
-  tableSearch,
-  setTableSearch,
   onExportEdgeList,
   columnMenuRef,
   isColumnMenuOpen,
@@ -97,14 +93,6 @@ export default function EdgeAnalysisTableSection({
         </h3>
 
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center lg:w-auto lg:justify-end">
-          <input
-            value={tableSearch}
-            onChange={(e) => setTableSearch(e.target.value)}
-            placeholder="Search gene name"
-            aria-label="Search gene name"
-            className="w-full min-w-0 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:min-w-[260px] lg:w-[320px]"
-          />
-
           <button
             type="button"
             onClick={onExportEdgeList}
