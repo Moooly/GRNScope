@@ -275,6 +275,8 @@ type GenePlacement = {
   labelRotation: number;
   labelLane: number;
   labelFontSize: number;
+  labelPriority: number;
+  labelVisible: boolean;
   color: string;
   isUnmapped: boolean;
 };
@@ -349,9 +351,16 @@ function buildAlternatingOffsets(maxSteps: number) {
 }
 
 function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) {
-  const genes = Array.from(genePlacements.values()).sort(
-    (a, b) => getNormalizedAngle(a.angle) - getNormalizedAngle(b.angle),
-  );
+  const genes = Array.from(genePlacements.values()).sort((a, b) => {
+    if (b.labelPriority !== a.labelPriority) {
+      return b.labelPriority - a.labelPriority;
+    }
+
+    return (
+      getNormalizedAngle(a.angle) - getNormalizedAngle(b.angle) ||
+      a.id.localeCompare(b.id)
+    );
+  });
   const geneCount = genes.length;
   const labelFontSize = geneCount > 120 ? 8.8 : geneCount > 70 ? 9.6 : 10.8;
   const maxLabelLanes = geneCount > 120 ? 5 : geneCount > 70 ? 4 : 3;
@@ -362,10 +371,12 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
   const placedBoxes: LabelBox[] = [];
 
   genes.forEach((gene) => {
+    gene.labelFontSize = labelFontSize;
+    gene.labelVisible = false;
+
     let bestLane = 0;
     let bestAngle = gene.angle;
     let bestBox: LabelBox | null = null;
-    let bestOverlap = Number.POSITIVE_INFINITY;
     let bestCost = Number.POSITIVE_INFINITY;
 
     for (let lane = 0; lane < maxLabelLanes; lane += 1) {
@@ -386,23 +397,26 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
           (sum, placedBox) => sum + getOverlapArea(box, placedBox),
           0,
         );
+        if (overlap > 0) continue;
+
         const offsetCost = Math.abs(offset) * 3.5;
         const laneCost = lane * 2.5;
-        const cost = overlap * 100 + offsetCost + laneCost;
+        const cost = offsetCost + laneCost;
 
         if (cost < bestCost) {
           bestLane = lane;
           bestAngle = candidateAngle;
           bestBox = box;
-          bestOverlap = overlap;
           bestCost = cost;
         }
 
-        if (overlap === 0 && offset === 0) break;
+        if (offset === 0) break;
       }
 
-      if (bestOverlap === 0) break;
+      if (bestBox) break;
     }
+
+    if (!bestBox) return;
 
     const labelRadius = GENE_LABEL_RADIUS + bestLane * GENE_LABEL_LANE_STEP;
     const labelPoint = polarToCartesian(bestAngle, labelRadius);
@@ -411,8 +425,8 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
     gene.labelAnchor = Math.cos(bestAngle) >= 0 ? "start" : "end";
     gene.labelRotation = getReadableLabelRotation(bestAngle);
     gene.labelLane = bestLane;
-    gene.labelFontSize = labelFontSize;
-    if (bestBox) placedBoxes.push(bestBox);
+    gene.labelVisible = true;
+    placedBoxes.push(bestBox);
   });
 }
 
@@ -450,6 +464,21 @@ export default function CircosNetworkGraph({
     annotatedEdges.forEach((edge) => {
       geneIds.add(String(edge.source));
       geneIds.add(String(edge.target));
+    });
+
+    const strongestIncidentEdgeScore = new Map<string, number>();
+    annotatedEdges.forEach((edge) => {
+      const score = getRawEdgeScore(edge);
+      const sourceId = String(edge.source);
+      const targetId = String(edge.target);
+      strongestIncidentEdgeScore.set(
+        sourceId,
+        Math.max(strongestIncidentEdgeScore.get(sourceId) ?? 0, score),
+      );
+      strongestIncidentEdgeScore.set(
+        targetId,
+        Math.max(strongestIncidentEdgeScore.get(targetId) ?? 0, score),
+      );
     });
 
     // Group genes by chromosome and figure out which chromosomes appear.
@@ -536,6 +565,13 @@ export default function CircosNetworkGraph({
         chrLayout.startAngle + fraction * (chrLayout.endAngle - chrLayout.startAngle);
 
       const labelPt = polarToCartesian(angle, GENE_LABEL_RADIUS);
+      const strongestEdgeScore = strongestIncidentEdgeScore.get(id) ?? 0;
+      const labelPriority =
+        strongestEdgeScore * 10 +
+        node.degree * 0.08 +
+        node.outDegree * 0.05 +
+        node.inDegree * 0.03 +
+        (node.isTF ? 0.35 : 0);
 
       genePlacements.set(id, {
         id,
@@ -549,6 +585,8 @@ export default function CircosNetworkGraph({
         labelRotation: getReadableLabelRotation(angle),
         labelLane: 0,
         labelFontSize: 10.8,
+        labelPriority,
+        labelVisible: true,
         color: chrLayout.color,
         isUnmapped,
       });
@@ -766,35 +804,37 @@ export default function CircosNetworkGraph({
           })}
 
         {/* Gene labels */}
-        {Array.from(layout.genePlacements.values()).map((gene) => {
-          const isSelected = gene.id === selectedGene;
-          const isDimmed = Boolean(selectedGene && !isSelected);
+        {Array.from(layout.genePlacements.values())
+          .filter((gene) => gene.labelVisible || gene.id === selectedGene)
+          .map((gene) => {
+            const isSelected = gene.id === selectedGene;
+            const isDimmed = Boolean(selectedGene && !isSelected);
 
-          return (
-            <text
-              key={`label-${gene.id}`}
-              x={gene.labelX}
-              y={gene.labelY}
-              textAnchor={gene.labelAnchor}
-              dominantBaseline="middle"
-              transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
-              className="cursor-pointer select-none fill-slate-950 font-semibold"
-              style={{ fontSize: gene.labelFontSize }}
-              opacity={isDimmed ? 0.3 : 1}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectGene?.(isSelected ? null : gene.id);
-              }}
-            >
-              <title>
-                {gene.isUnmapped
-                  ? `${gene.id} · unmapped`
-                  : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()}`}
-              </title>
-              {gene.id}
-            </text>
-          );
-        })}
+            return (
+              <text
+                key={`label-${gene.id}`}
+                x={gene.labelX}
+                y={gene.labelY}
+                textAnchor={gene.labelAnchor}
+                dominantBaseline="middle"
+                transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
+                className="cursor-pointer select-none fill-slate-950 font-semibold"
+                style={{ fontSize: gene.labelFontSize }}
+                opacity={isDimmed ? 0.3 : 1}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectGene?.(isSelected ? null : gene.id);
+                }}
+              >
+                <title>
+                  {gene.isUnmapped
+                    ? `${gene.id} · unmapped`
+                    : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()}`}
+                </title>
+                {gene.id}
+              </text>
+            );
+          })}
       </svg>
     </div>
   );
