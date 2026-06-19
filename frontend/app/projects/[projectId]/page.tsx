@@ -1646,6 +1646,7 @@ useEffect(() => {
         <div className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10">
           <ProjectHeader
             projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
+            projectId={projectId}
           />
 
           <JobProgressBanner

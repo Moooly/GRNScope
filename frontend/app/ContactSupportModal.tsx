@@ -18,12 +18,33 @@ type ContactSupportModalProps = {
   onClose: () => void;
 };
 
+function projectIdFromPageUrl(pageUrl?: string | null) {
+  const fallbackUrl =
+    typeof window !== "undefined" ? window.location.href : "";
+  const candidate = pageUrl || fallbackUrl;
+  if (!candidate) return "";
+
+  try {
+    const pathname = new URL(candidate, fallbackUrl || "http://localhost").pathname;
+    const match = pathname.match(/^\/projects\/([^/?#]+)/);
+    if (!match?.[1]) return "";
+    const projectId = decodeURIComponent(match[1]);
+    return projectId === "sample" ? "demo" : projectId;
+  } catch {
+    const match = candidate.match(/\/projects\/([^/?#]+)/);
+    if (!match?.[1]) return "";
+    const projectId = decodeURIComponent(match[1]);
+    return projectId === "sample" ? "demo" : projectId;
+  }
+}
+
 export default function ContactSupportModal({
   open,
   context,
   onClose,
 }: ContactSupportModalProps) {
   const [question, setQuestion] = useState("");
+  const [projectIdInput, setProjectIdInput] = useState("");
   const [replyToEmail, setReplyToEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -40,6 +61,7 @@ export default function ContactSupportModal({
 
     setIsClosing(false);
     setQuestion(context.question || "");
+    setProjectIdInput(context.projectId || projectIdFromPageUrl(context.pageUrl));
     setReplyToEmail("");
     setStatus("idle");
     setErrorMessage("");
@@ -77,6 +99,7 @@ export default function ContactSupportModal({
 
     setStatus("sending");
     setErrorMessage("");
+    const trimmedProjectId = projectIdInput.trim();
 
     try {
       const response = await apiFetch(`${API_BASE}/contact`, {
@@ -90,7 +113,7 @@ export default function ContactSupportModal({
           page_url:
             context.pageUrl ||
             (typeof window !== "undefined" ? window.location.href : null),
-          project_id: context.projectId || null,
+          project_id: trimmedProjectId || null,
           algorithm_id: context.algorithmId || null,
         }),
       });
@@ -110,6 +133,7 @@ export default function ContactSupportModal({
 
       setStatus("sent");
       setQuestion("");
+      setProjectIdInput("");
       setReplyToEmail("");
     } catch (error) {
       setStatus("error");
@@ -150,6 +174,22 @@ export default function ContactSupportModal({
           </div>
         ) : (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                Project ID (optional)
+              </span>
+              <input
+                value={projectIdInput}
+                onChange={(event) => setProjectIdInput(event.target.value)}
+                type="text"
+                maxLength={120}
+                autoCapitalize="none"
+                spellCheck={false}
+                className="mt-2 w-full rounded-[1.1rem] border border-slate-200 bg-white px-4 py-3 font-mono text-sm font-semibold text-slate-900 outline-none transition placeholder:font-sans placeholder:text-slate-400 focus:border-[#1b75a6] focus:ring-4 focus:ring-sky-100"
+                placeholder="Project ID"
+              />
+            </label>
+
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                 Your question
