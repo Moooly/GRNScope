@@ -291,7 +291,7 @@ function getNormalizedAngle(angle: number) {
 }
 
 function estimateLabelWidth(label: string, fontSize: number) {
-  return Math.max(18, label.length * fontSize * 0.64);
+  return Math.max(18, label.length * fontSize * 0.72);
 }
 
 function getLabelBox(
@@ -304,7 +304,7 @@ function getLabelBox(
 ) {
   const point = polarToCartesian(angle, radius);
   const width = estimateLabelWidth(label, fontSize);
-  const height = fontSize + 4;
+  const height = fontSize + 6;
   const minX = anchor === "end" ? -width : 0;
   const maxX = anchor === "end" ? 0 : width;
   const minY = -height / 2;
@@ -324,7 +324,7 @@ function getLabelBox(
 
   const xs = corners.map((corner) => corner.x);
   const ys = corners.map((corner) => corner.y);
-  const padding = 3;
+  const padding = 4;
 
   return {
     left: Math.min(...xs) - padding,
@@ -340,6 +340,14 @@ function getOverlapArea(a: LabelBox, b: LabelBox) {
   return overlapX * overlapY;
 }
 
+function buildAlternatingOffsets(maxSteps: number) {
+  const offsets = [0];
+  for (let step = 1; step <= maxSteps; step += 1) {
+    offsets.push(-step, step);
+  }
+  return offsets;
+}
+
 function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) {
   const genes = Array.from(genePlacements.values()).sort(
     (a, b) => getNormalizedAngle(a.angle) - getNormalizedAngle(b.angle),
@@ -347,41 +355,61 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
   const geneCount = genes.length;
   const labelFontSize = geneCount > 120 ? 8.8 : geneCount > 70 ? 9.6 : 10.8;
   const maxLabelLanes = geneCount > 120 ? 5 : geneCount > 70 ? 4 : 3;
+  const angularNudgeStep = geneCount > 120 ? 0.018 : geneCount > 70 ? 0.015 : 0.012;
+  const angularNudgeOffsets = buildAlternatingOffsets(
+    geneCount > 120 ? 8 : geneCount > 70 ? 6 : 4,
+  );
   const placedBoxes: LabelBox[] = [];
 
   genes.forEach((gene) => {
     let bestLane = 0;
+    let bestAngle = gene.angle;
     let bestBox: LabelBox | null = null;
     let bestOverlap = Number.POSITIVE_INFINITY;
+    let bestCost = Number.POSITIVE_INFINITY;
 
     for (let lane = 0; lane < maxLabelLanes; lane += 1) {
       const radius = GENE_LABEL_RADIUS + lane * GENE_LABEL_LANE_STEP;
-      const box = getLabelBox(
-        gene.id,
-        gene.angle,
-        radius,
-        gene.labelAnchor,
-        gene.labelRotation,
-        labelFontSize,
-      );
-      const overlap = placedBoxes.reduce(
-        (sum, placedBox) => sum + getOverlapArea(box, placedBox),
-        0,
-      );
+      for (const offset of angularNudgeOffsets) {
+        const candidateAngle = gene.angle + offset * angularNudgeStep;
+        const anchor = Math.cos(candidateAngle) >= 0 ? "start" : "end";
+        const rotation = getReadableLabelRotation(candidateAngle);
+        const box = getLabelBox(
+          gene.id,
+          candidateAngle,
+          radius,
+          anchor,
+          rotation,
+          labelFontSize,
+        );
+        const overlap = placedBoxes.reduce(
+          (sum, placedBox) => sum + getOverlapArea(box, placedBox),
+          0,
+        );
+        const offsetCost = Math.abs(offset) * 3.5;
+        const laneCost = lane * 2.5;
+        const cost = overlap * 100 + offsetCost + laneCost;
 
-      if (overlap < bestOverlap) {
-        bestLane = lane;
-        bestBox = box;
-        bestOverlap = overlap;
+        if (cost < bestCost) {
+          bestLane = lane;
+          bestAngle = candidateAngle;
+          bestBox = box;
+          bestOverlap = overlap;
+          bestCost = cost;
+        }
+
+        if (overlap === 0 && offset === 0) break;
       }
 
-      if (overlap === 0) break;
+      if (bestOverlap === 0) break;
     }
 
     const labelRadius = GENE_LABEL_RADIUS + bestLane * GENE_LABEL_LANE_STEP;
-    const labelPoint = polarToCartesian(gene.angle, labelRadius);
+    const labelPoint = polarToCartesian(bestAngle, labelRadius);
     gene.labelX = labelPoint.x;
     gene.labelY = labelPoint.y;
+    gene.labelAnchor = Math.cos(bestAngle) >= 0 ? "start" : "end";
+    gene.labelRotation = getReadableLabelRotation(bestAngle);
     gene.labelLane = bestLane;
     gene.labelFontSize = labelFontSize;
     if (bestBox) placedBoxes.push(bestBox);
