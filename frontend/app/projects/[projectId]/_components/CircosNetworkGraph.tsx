@@ -68,7 +68,6 @@ const GENE_TICK_INNER_RADIUS = 234;
 const GENE_TICK_OUTER_RADIUS = 248;
 const RIBBON_RADIUS = GENE_TICK_INNER_RADIUS - 4;
 const GENE_LABEL_RADIUS = 296;
-const GENE_LABEL_LANE_STEP = 14;
 
 const CHROMOSOME_GAP_RADIANS = 0.014; // small gap between adjacent chromosomes
 const RIBBON_HALF_WIDTH = 0.005; // angular half-width of each ribbon endpoint
@@ -273,7 +272,6 @@ type GenePlacement = {
   labelY: number;
   labelAnchor: "start" | "end";
   labelRotation: number;
-  labelLane: number;
   labelFontSize: number;
   labelPriority: number;
   labelVisible: boolean;
@@ -363,7 +361,6 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
   });
   const geneCount = genes.length;
   const labelFontSize = geneCount > 120 ? 8.8 : geneCount > 70 ? 9.6 : 10.8;
-  const maxLabelLanes = geneCount > 120 ? 5 : geneCount > 70 ? 4 : 3;
   const angularNudgeStep = geneCount > 120 ? 0.018 : geneCount > 70 ? 0.015 : 0.012;
   const angularNudgeOffsets = buildAlternatingOffsets(
     geneCount > 120 ? 8 : geneCount > 70 ? 6 : 4,
@@ -374,57 +371,46 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
     gene.labelFontSize = labelFontSize;
     gene.labelVisible = false;
 
-    let bestLane = 0;
     let bestAngle = gene.angle;
     let bestBox: LabelBox | null = null;
     let bestCost = Number.POSITIVE_INFINITY;
 
-    for (let lane = 0; lane < maxLabelLanes; lane += 1) {
-      const radius = GENE_LABEL_RADIUS + lane * GENE_LABEL_LANE_STEP;
-      for (const offset of angularNudgeOffsets) {
-        const candidateAngle = gene.angle + offset * angularNudgeStep;
-        const anchor = Math.cos(candidateAngle) >= 0 ? "start" : "end";
-        const rotation = getReadableLabelRotation(candidateAngle);
-        const box = getLabelBox(
-          gene.id,
-          candidateAngle,
-          radius,
-          anchor,
-          rotation,
-          labelFontSize,
-        );
-        const overlap = placedBoxes.reduce(
-          (sum, placedBox) => sum + getOverlapArea(box, placedBox),
-          0,
-        );
-        if (overlap > 0) continue;
+    for (const offset of angularNudgeOffsets) {
+      const candidateAngle = gene.angle + offset * angularNudgeStep;
+      const anchor = Math.cos(candidateAngle) >= 0 ? "start" : "end";
+      const rotation = getReadableLabelRotation(candidateAngle);
+      const box = getLabelBox(
+        gene.id,
+        candidateAngle,
+        GENE_LABEL_RADIUS,
+        anchor,
+        rotation,
+        labelFontSize,
+      );
+      const overlap = placedBoxes.reduce(
+        (sum, placedBox) => sum + getOverlapArea(box, placedBox),
+        0,
+      );
+      if (overlap > 0) continue;
 
-        const offsetCost = Math.abs(offset) * 3.5;
-        const laneCost = lane * 2.5;
-        const cost = offsetCost + laneCost;
+      const cost = Math.abs(offset);
 
-        if (cost < bestCost) {
-          bestLane = lane;
-          bestAngle = candidateAngle;
-          bestBox = box;
-          bestCost = cost;
-        }
-
-        if (offset === 0) break;
+      if (cost < bestCost) {
+        bestAngle = candidateAngle;
+        bestBox = box;
+        bestCost = cost;
       }
 
-      if (bestBox) break;
+      if (offset === 0) break;
     }
 
     if (!bestBox) return;
 
-    const labelRadius = GENE_LABEL_RADIUS + bestLane * GENE_LABEL_LANE_STEP;
-    const labelPoint = polarToCartesian(bestAngle, labelRadius);
+    const labelPoint = polarToCartesian(bestAngle, GENE_LABEL_RADIUS);
     gene.labelX = labelPoint.x;
     gene.labelY = labelPoint.y;
     gene.labelAnchor = Math.cos(bestAngle) >= 0 ? "start" : "end";
     gene.labelRotation = getReadableLabelRotation(bestAngle);
-    gene.labelLane = bestLane;
     gene.labelVisible = true;
     placedBoxes.push(bestBox);
   });
@@ -583,7 +569,6 @@ export default function CircosNetworkGraph({
         labelY: labelPt.y,
         labelAnchor: Math.cos(angle) >= 0 ? "start" : "end",
         labelRotation: getReadableLabelRotation(angle),
-        labelLane: 0,
         labelFontSize: 10.8,
         labelPriority,
         labelVisible: true,
