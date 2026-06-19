@@ -52,6 +52,7 @@ export default function ResultsControlsSection({
 }: ResultsControlsSectionProps) {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
+  const [edgeDisplayDraft, setEdgeDisplayDraft] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
@@ -150,16 +151,13 @@ export default function ResultsControlsSection({
       : `${selectedAlgorithmIds.length}/${completedAlgorithmIds.length} selected`;
 
   const safeFilteredEdgeCount = Math.max(0, filteredEdgeCount);
-  const minEdgeDisplayLimit = safeFilteredEdgeCount > 0 ? 1 : 0;
-  const safeEdgeDisplayLimit =
-    safeFilteredEdgeCount === 0
-      ? 0
-      : Math.min(
-          safeFilteredEdgeCount,
-          Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit > 0
-            ? Math.floor(edgeDisplayLimit)
-            : 1
-        );
+  const minEdgeDisplayLimit = 0;
+  const safeEdgeDisplayLimit = Math.min(
+    safeFilteredEdgeCount,
+    Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit >= 0
+      ? Math.floor(edgeDisplayLimit)
+      : 0
+  );
   const updateEdgeDisplayLimit = (value: number) => {
     if (!Number.isFinite(value)) return;
     const nextValue = Math.max(
@@ -167,9 +165,23 @@ export default function ResultsControlsSection({
       Math.min(safeFilteredEdgeCount, Math.floor(value))
     );
     onChangeEdgeDisplayLimit(nextValue);
+    return nextValue;
   };
   const adjustEdgeDisplayLimit = (delta: number) => {
+    setEdgeDisplayDraft(null);
     updateEdgeDisplayLimit(safeEdgeDisplayLimit + delta);
+  };
+  const handleEdgeDisplayInputChange = (value: string) => {
+    if (value.trim() === "") {
+      setEdgeDisplayDraft("");
+      onChangeEdgeDisplayLimit(0);
+      return;
+    }
+
+    const nextValue = updateEdgeDisplayLimit(Number(value));
+    if (nextValue !== undefined) {
+      setEdgeDisplayDraft(String(nextValue));
+    }
   };
   const matchingEdgesLabel = safeFilteredEdgeCount.toLocaleString();
 
@@ -277,8 +289,10 @@ export default function ResultsControlsSection({
         pattern="[0-9]*"
         max={safeFilteredEdgeCount}
         min={minEdgeDisplayLimit}
-        value={safeEdgeDisplayLimit}
-        onChange={(e) => updateEdgeDisplayLimit(Number(e.target.value))}
+        value={edgeDisplayDraft ?? safeEdgeDisplayLimit}
+        onChange={(e) => handleEdgeDisplayInputChange(e.target.value)}
+        onFocus={() => setEdgeDisplayDraft(String(safeEdgeDisplayLimit))}
+        onBlur={() => setEdgeDisplayDraft(null)}
         className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none"
         aria-label="Shown edges"
       />

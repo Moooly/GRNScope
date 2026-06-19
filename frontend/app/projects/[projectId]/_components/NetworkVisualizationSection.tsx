@@ -92,9 +92,9 @@ export default function NetworkVisualizationSection({
       ? 0
       : Math.min(
           filteredNetworkEdges.length,
-          Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit > 0
+          Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit >= 0
             ? Math.floor(edgeDisplayLimit)
-            : 1
+            : 0
         );
 
   const visualEdges = useMemo(() => {

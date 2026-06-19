@@ -209,7 +209,7 @@ export default function ProjectDetailPage() {
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
-  const [edgeDisplayLimit, setEdgeDisplayLimit] = useState(50);
+  const [edgeDisplayLimit, setEdgeDisplayLimit] = useState(20);
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
@@ -1136,9 +1136,9 @@ export default function ProjectDetailPage() {
     if (filteredNetworkEdges.length === 0) return 0;
 
     const requestedLimit =
-      Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit > 0
+      Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit >= 0
         ? Math.floor(edgeDisplayLimit)
-        : 1;
+        : 0;
 
     return Math.min(filteredNetworkEdges.length, requestedLimit);
   }, [edgeDisplayLimit, filteredNetworkEdges.length]);
