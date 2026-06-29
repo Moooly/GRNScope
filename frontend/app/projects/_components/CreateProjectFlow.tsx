@@ -32,6 +32,8 @@ type BackendAlgorithmEntry = {
 };
 
 type ApiPayload = Record<string, unknown>;
+const DEFAULT_TOP_VARIABLE_GENES = 2000;
+const MAX_PREPROCESSED_GENES = 8000;
 
 function isApiPayload(value: unknown): value is ApiPayload {
   return typeof value === "object" && value !== null;
@@ -165,7 +167,7 @@ export default function CreateProjectFlow({
   const [cellCount, setCellCount] = useState<number | null>(null);
   const [isUploadingTempDataset, setIsUploadingTempDataset] = useState(false);
 
-  const [topVariableGenes, setTopVariableGenes] = useState("2000");
+  const [topVariableGenes, setTopVariableGenes] = useState(String(DEFAULT_TOP_VARIABLE_GENES));
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
@@ -198,7 +200,7 @@ export default function CreateProjectFlow({
     setGeneCount(null);
     setCellCount(null);
     setIsUploadingTempDataset(false);
-    setTopVariableGenes("2000");
+    setTopVariableGenes(String(DEFAULT_TOP_VARIABLE_GENES));
     setIncludeAllTFs(true);
     setNormalizeEnabled(true);
     setLogTransformEnabled(true);
@@ -258,7 +260,7 @@ export default function CreateProjectFlow({
       hasPseudotime: Boolean(pseudotimeFile),
       hasGroundTruth: false,
       preprocessingSummary: [
-        `Top variable genes retained: ${topVariableGenes || "2000"}`,
+        `Top variable genes retained: ${topVariableGenes || String(DEFAULT_TOP_VARIABLE_GENES)}`,
         `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
         `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
         `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
@@ -309,10 +311,12 @@ export default function CreateProjectFlow({
     });
   }, [expressionFileName]);
 
-  // Sync top-variable-genes default to the gene count of every fresh dataset.
+  // Sync top-variable-genes default to a safe cap for every fresh dataset.
   useEffect(() => {
     if (geneCount === null) return;
-    setTopVariableGenes(String(geneCount));
+    setTopVariableGenes(
+      String(Math.min(geneCount, DEFAULT_TOP_VARIABLE_GENES, MAX_PREPROCESSED_GENES)),
+    );
   }, [geneCount]);
 
   // Auto-upload to /uploads/temp-dataset whenever the chosen files change.
@@ -507,6 +511,10 @@ export default function CreateProjectFlow({
       validationErrors.push("Top variable genes must be a positive integer.");
     } else if (geneCount !== null && parsedTopGenes > geneCount) {
       validationErrors.push("Top variable genes cannot be larger than the uploaded gene count.");
+    } else if (parsedTopGenes > MAX_PREPROCESSED_GENES) {
+      validationErrors.push(
+        `Top variable genes cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()}.`,
+      );
     }
 
     if (isLoadingAlgorithms) {

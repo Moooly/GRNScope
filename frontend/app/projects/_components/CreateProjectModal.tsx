@@ -6,6 +6,8 @@ import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 import UploadStep from "./UploadStep";
 
+const MAX_PREPROCESSED_GENES = 8000;
+
 interface DatasetSummary {
   dimensions: string;
   hasPseudotime: boolean;
@@ -115,6 +117,8 @@ export default function CreateProjectModal({
   const hasExpressionFile = Boolean(expressionFileName);
   const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
   const datasetReady = hasExpressionFile && tempUploadId.length > 0 && !isUploadingTempDataset;
+  const maxTopVariableGenes =
+    geneCount === null ? MAX_PREPROCESSED_GENES : Math.min(geneCount, MAX_PREPROCESSED_GENES);
 
   const selectExpressionFile = (file: File | null) => {
     setExpressionFile(file);
@@ -130,12 +134,14 @@ export default function CreateProjectModal({
 
   useEffect(() => {
     if (isCreateVisible) {
+      /* eslint-disable react-hooks/set-state-in-effect -- reset modal-local state on open */
       setIsOutsideClosing(false);
       setIsCustomizeOpen(false);
       setIsPreprocessingHelpOpen(false);
       setIsPreprocessingHelpClosing(false);
       setAlgorithmDetailToShow(null);
       setIsAlgorithmDetailClosing(false);
+      /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
     }
   }, [isCreateVisible]);
@@ -477,7 +483,7 @@ export default function CreateProjectModal({
                       <input
                         type="number"
                         min="1"
-                        max={geneCount ?? undefined}
+                        max={maxTopVariableGenes}
                         step="1"
                         value={topVariableGenes}
                         onChange={(e) => {
@@ -488,8 +494,8 @@ export default function CreateProjectModal({
                           }
                           const parsedValue = Number(nextValue);
                           if (Number.isNaN(parsedValue)) return;
-                          if (geneCount !== null && parsedValue > geneCount) {
-                            setTopVariableGenes(String(geneCount));
+                          if (parsedValue > maxTopVariableGenes) {
+                            setTopVariableGenes(String(maxTopVariableGenes));
                             return;
                           }
                           setTopVariableGenes(nextValue);

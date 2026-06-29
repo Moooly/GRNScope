@@ -28,7 +28,8 @@ from ..repositories.project_repository import read_project_manifest
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 30
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
-DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 10
+DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 50
+DEFAULT_MAX_PREPROCESSED_GENES = 8000
 DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
 DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
 BEELINE_MIRROR_ENTRIES = ("BLRunner.py", "BLRun", "Algorithms", "utils")
@@ -281,11 +282,58 @@ def format_run_timestamp(timestamp: float | None = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp or time.time()))
 
 
-def resolve_confidence_settings(project_manifest: dict) -> dict:
-    run_count = (
+def resolve_adaptive_max_regulators_per_target(gene_count: int | None) -> int:
+    if gene_count is None or gene_count <= 0:
+        return DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT
+    if gene_count <= 500:
+        return 100
+    if gene_count <= 3000:
+        return 50
+    if gene_count <= 8000:
+        return 25
+    return 10
+
+
+def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
+    if gene_count is None or gene_count <= 0:
+        return DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
+    if gene_count <= 500:
+        return 30
+    if gene_count <= 2000:
+        return 20
+    if gene_count <= 8000:
+        return 10
+    return 10
+
+
+def resolve_max_preprocessed_genes() -> int:
+    return (
+        parse_positive_int(os.environ.get("GRNSCOPE_MAX_PREPROCESSED_GENES"))
+        or DEFAULT_MAX_PREPROCESSED_GENES
+    )
+
+
+def count_expression_gene_rows(expression_path: Path) -> int:
+    dialect = detect_csv_dialect_from_file(expression_path)
+    row_count = 0
+    for _index, _row in iter_expression_data_rows(expression_path, dialect):
+        row_count += 1
+    return row_count
+
+
+def resolve_confidence_settings(
+    project_manifest: dict,
+    *,
+    gene_count: int | None = None,
+) -> dict:
+    configured_run_count = (
         parse_positive_int(project_manifest.get("confidence_bootstrap_runs"))
         or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_BOOTSTRAP_RUNS"))
-        or DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
+    )
+    run_count = (
+        configured_run_count
+        if configured_run_count is not None
+        else resolve_adaptive_confidence_bootstrap_runs(gene_count)
     )
     stability_top_k = (
         parse_positive_int(project_manifest.get("confidence_stability_top_k"))
@@ -302,12 +350,15 @@ def resolve_confidence_settings(project_manifest: dict) -> dict:
         "bootstrap_runs": max(1, run_count),
         "subsample_fraction": min(max(subsample_fraction, 0.01), 1.0),
         "stability_top_k": max(1, stability_top_k),
+        "gene_count": gene_count,
     }
 
 
 def resolve_ranked_edges_per_target_limit(
     algorithm_id: str,
     confidence_settings: dict | None = None,
+    *,
+    gene_count: int | None = None,
 ) -> int | None:
     normalized_algorithm_id = algorithm_id.upper()
     configured_limit = (
@@ -319,13 +370,14 @@ def resolve_ranked_edges_per_target_limit(
     if configured_limit is not None:
         return configured_limit
 
-    if normalized_algorithm_id != "PEARSON":
-        return None
-
+    resolved_gene_count = gene_count
+    if resolved_gene_count is None and confidence_settings:
+        resolved_gene_count = parse_positive_int(confidence_settings.get("gene_count"))
+    adaptive_limit = resolve_adaptive_max_regulators_per_target(resolved_gene_count)
     stability_top_k = None
     if confidence_settings:
         stability_top_k = parse_positive_int(confidence_settings.get("stability_top_k"))
-    return max(DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT, stability_top_k or 0)
+    return max(adaptive_limit, stability_top_k or 0)
 
 
 def stable_seed_for(project_id: str, algorithm_id: str) -> int:
@@ -444,6 +496,7 @@ def build_preprocessing_signature(
         "source_expression_size": source_stat.st_size,
         "source_expression_mtime_ns": source_stat.st_mtime_ns,
         "top_variable_genes": project_manifest.get("top_variable_genes"),
+        "max_preprocessed_genes": resolve_max_preprocessed_genes(),
         "include_all_tfs": project_manifest.get("include_all_tfs"),
         "normalize_enabled": project_manifest.get("normalize_enabled"),
         "log_transform_enabled": project_manifest.get("log_transform_enabled"),
@@ -767,7 +820,13 @@ def preprocess_expression_matrix(
 
     cell_names = validate_preprocessing_header(header)
     cell_count = len(cell_names)
-    top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
+    requested_top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
+    max_preprocessed_genes = resolve_max_preprocessed_genes()
+    top_variable_genes = (
+        min(requested_top_variable_genes, max_preprocessed_genes)
+        if requested_top_variable_genes is not None
+        else max_preprocessed_genes
+    )
     include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
     normalize_enabled = parse_bool(project_manifest.get("normalize_enabled"))
     log_transform_enabled = parse_bool(project_manifest.get("log_transform_enabled"))
@@ -832,17 +891,34 @@ def preprocess_expression_matrix(
         shutil.copy2(source_expression, destination_expression)
         return
 
+    sorted_rows = sorted(scored_rows, key=lambda item: (-item[0], item[1]))
     retained_indices: set[int]
     if top_variable_genes is None or top_variable_genes >= len(scored_rows):
         retained_indices = {index for _, index, _ in scored_rows}
     else:
-        sorted_rows = sorted(scored_rows, key=lambda item: (-item[0], item[1]))
         retained_indices = {index for _, index, _ in sorted_rows[:top_variable_genes]}
 
     if include_all_tfs and tf_genes:
         for _, index, gene_name in scored_rows:
             if gene_name in tf_genes:
                 retained_indices.add(index)
+
+    if len(retained_indices) > max_preprocessed_genes:
+        prioritized_rows = sorted(
+            (
+                (variance, index, gene_name)
+                for variance, index, gene_name in scored_rows
+                if index in retained_indices
+            ),
+            key=lambda item: (
+                0 if item[2] in tf_genes else 1,
+                -item[0],
+                item[1],
+            ),
+        )
+        retained_indices = {
+            index for _variance, index, _gene_name in prioritized_rows[:max_preprocessed_genes]
+        }
 
     destination_expression.parent.mkdir(parents=True, exist_ok=True)
     with destination_expression.open("w", encoding="utf-8", newline="") as output_file:
@@ -1008,11 +1084,17 @@ def plan_confidence_run_inputs(
     project_manifest: dict,
     preprocessed_expression: Path,
 ) -> tuple[list[str], dict[str, dict], dict, dict[str, list[int]], list[str]]:
-    settings = resolve_confidence_settings(project_manifest)
+    header, _expression_dialect = read_delimited_header(preprocessed_expression)
+    gene_count = count_expression_gene_rows(preprocessed_expression)
+    settings = resolve_confidence_settings(project_manifest, gene_count=gene_count)
     bootstrap_runs = int(settings["bootstrap_runs"])
     subsample_fraction = float(settings["subsample_fraction"])
-
-    header, _expression_dialect = read_delimited_header(preprocessed_expression)
+    max_regulators_per_target = resolve_ranked_edges_per_target_limit(
+        algorithm_id,
+        settings,
+        gene_count=gene_count,
+    )
+    settings["max_regulators_per_target"] = max_regulators_per_target
     cell_column_indices = list(range(1, len(header)))
     if not cell_column_indices:
         cell_column_indices = []
@@ -1044,6 +1126,8 @@ def plan_confidence_run_inputs(
             "seed": seed,
             "cell_count": len(selected_column_indices),
             "total_cell_count": len(cell_column_indices),
+            "gene_count": gene_count,
+            "max_regulators_per_target": max_regulators_per_target,
             "subsample_fraction": (
                 len(selected_column_indices) / len(cell_column_indices)
                 if cell_column_indices
@@ -1068,6 +1152,8 @@ def write_run_timings(runtime_root: Path, run_metadata: dict[str, dict]) -> None
                 "completed_at_timestamp",
                 "elapsed_seconds",
                 "seed",
+                "gene_count",
+                "max_regulators_per_target",
                 "cell_count",
                 "total_cell_count",
                 "subsample_fraction",
@@ -1401,6 +1487,7 @@ def build_beeline_config(
     run_ids: list[str],
     algorithm_id: str,
     include_pseudotime: bool,
+    max_regulators_per_target: int | None = None,
 ) -> str:
     normalized_algorithm_id = algorithm_id.upper()
     image_name = resolve_algorithm_image(algorithm_id)
@@ -1417,6 +1504,8 @@ def build_beeline_config(
             run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
 
     params = resolve_algorithm_default_params(normalized_algorithm_id)
+    if max_regulators_per_target is not None:
+        params["maxRegulatorsPerTarget"] = [int(max_regulators_per_target)]
 
     config_lines = [
         "input_settings:",
@@ -1591,19 +1680,6 @@ def parse_ranked_edges_csv(
     }
 
 
-def quantile(values: list[float], q: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    if len(ordered) == 1:
-        return ordered[0]
-    position = (len(ordered) - 1) * q
-    lower_index = int(position)
-    upper_index = min(lower_index + 1, len(ordered) - 1)
-    fraction = position - lower_index
-    return ordered[lower_index] * (1 - fraction) + ordered[upper_index] * fraction
-
-
 def compute_population_sd(values: list[float]) -> float:
     if len(values) <= 1:
         return 0.0
@@ -1612,96 +1688,116 @@ def compute_population_sd(values: list[float]) -> float:
     return variance ** 0.5
 
 
-def aggregate_confidence_edges(
-    run_edges_by_id: dict[str, list[dict]],
+def create_confidence_accumulator() -> dict:
+    return {
+        "edges": {},
+        "node_names": set(),
+        "processed_runs": 0,
+    }
+
+
+def update_confidence_accumulator(
+    accumulator: dict,
+    run_edges: list[dict],
     *,
     stability_top_k: int,
-) -> tuple[list[dict], dict]:
-    run_ids = list(run_edges_by_id.keys())
-    run_count = max(1, len(run_ids))
-    accumulator: dict[tuple[str, str], dict] = {}
-    all_node_names: set[str] = set()
+) -> None:
+    edge_accumulator: dict[tuple[str, str], dict] = accumulator["edges"]
+    all_node_names: set[str] = accumulator["node_names"]
+    entries_by_target: dict[str, list[dict]] = {}
 
-    for run_id, run_edges in run_edges_by_id.items():
-        entries_by_target: dict[str, list[dict]] = {}
-        for edge in run_edges:
+    for edge in run_edges:
+        source = str(edge.get("source", "")).strip()
+        target = str(edge.get("target", "")).strip()
+        if not source or not target:
+            continue
+        entries_by_target.setdefault(target, []).append(edge)
+        all_node_names.add(source)
+        all_node_names.add(target)
+
+    for target, target_edges in entries_by_target.items():
+        ranked_edges_with_duplicates = sorted(
+            target_edges,
+            key=lambda item: (
+                -abs(float(item.get("score", 0) or 0)),
+                str(item.get("source", "")),
+            ),
+        )
+        ranked_edges: list[dict] = []
+        seen_sources: set[str] = set()
+        for edge in ranked_edges_with_duplicates:
             source = str(edge.get("source", "")).strip()
-            target = str(edge.get("target", "")).strip()
-            if not source or not target:
+            if not source or source in seen_sources:
                 continue
-            entries_by_target.setdefault(target, []).append(edge)
-            all_node_names.add(source)
-            all_node_names.add(target)
+            seen_sources.add(source)
+            ranked_edges.append(edge)
 
-        for target, target_edges in entries_by_target.items():
-            ranked_edges_with_duplicates = sorted(
-                target_edges,
-                key=lambda item: (
-                    -abs(float(item.get("score", 0) or 0)),
-                    str(item.get("source", "")),
-                ),
+        weights = [abs(float(item.get("score", 0) or 0)) for item in ranked_edges]
+        mean_weight = fsum(weights) / len(weights) if weights else 0.0
+        sd_weight = compute_population_sd(weights)
+        denominator = max(len(ranked_edges) - 1, 1)
+
+        for index, edge in enumerate(ranked_edges):
+            source = str(edge.get("source", "")).strip()
+            raw_score = float(edge.get("score", 0) or 0)
+            weight = abs(raw_score)
+            rank = index + 1
+            percentile = 1.0 if len(ranked_edges) <= 1 else 1 - ((rank - 1) / denominator)
+            z_score = 0.0 if sd_weight <= 0 else (weight - mean_weight) / sd_weight
+            key = (source, target)
+            current = edge_accumulator.setdefault(
+                key,
+                {
+                    "source": source,
+                    "target": target,
+                    "raw_score_sum": 0.0,
+                    "raw_score_max_abs": 0.0,
+                    "z_score_sum": 0.0,
+                    "percentile_sum": 0.0,
+                    "rank_sum": 0,
+                    "selected_runs": 0,
+                    "observed_runs": 0,
+                    "best_rank": None,
+                },
             )
-            ranked_edges: list[dict] = []
-            seen_sources: set[str] = set()
-            for edge in ranked_edges_with_duplicates:
-                source = str(edge.get("source", "")).strip()
-                if not source or source in seen_sources:
-                    continue
-                seen_sources.add(source)
-                ranked_edges.append(edge)
 
-            weights = [abs(float(item.get("score", 0) or 0)) for item in ranked_edges]
-            mean_weight = fsum(weights) / len(weights) if weights else 0.0
-            sd_weight = compute_population_sd(weights)
-            denominator = max(len(ranked_edges) - 1, 1)
+            current["raw_score_sum"] += raw_score
+            current["raw_score_max_abs"] = max(current["raw_score_max_abs"], weight)
+            current["z_score_sum"] += z_score
+            current["percentile_sum"] += percentile
+            current["rank_sum"] += rank
+            current["observed_runs"] += 1
+            current["best_rank"] = (
+                rank
+                if current["best_rank"] is None
+                else min(current["best_rank"], rank)
+            )
+            if rank <= stability_top_k:
+                current["selected_runs"] += 1
 
-            for index, edge in enumerate(ranked_edges):
-                source = str(edge.get("source", "")).strip()
-                raw_score = float(edge.get("score", 0) or 0)
-                weight = abs(raw_score)
-                rank = index + 1
-                percentile = 1.0 if len(ranked_edges) <= 1 else 1 - ((rank - 1) / denominator)
-                z_score = 0.0 if sd_weight <= 0 else (weight - mean_weight) / sd_weight
-                key = (source, target)
-                current = accumulator.setdefault(
-                    key,
-                    {
-                        "source": source,
-                        "target": target,
-                        "raw_scores": [],
-                        "z_scores": [],
-                        "percentiles": [],
-                        "selected_runs": 0,
-                        "observed_runs": 0,
-                        "best_rank": None,
-                        "run_ranks": {},
-                    },
-                )
+    accumulator["processed_runs"] = int(accumulator.get("processed_runs", 0)) + 1
 
-                current["raw_scores"].append(raw_score)
-                current["z_scores"].append(z_score)
-                current["percentiles"].append(percentile)
-                current["observed_runs"] += 1
-                current["run_ranks"][run_id] = rank
-                current["best_rank"] = (
-                    rank
-                    if current["best_rank"] is None
-                    else min(current["best_rank"], rank)
-                )
-                if rank <= stability_top_k:
-                    current["selected_runs"] += 1
+
+def finalize_confidence_accumulator(
+    accumulator: dict,
+    *,
+    run_count: int,
+    stability_top_k: int,
+) -> tuple[list[dict], dict]:
+    edge_accumulator: dict[tuple[str, str], dict] = accumulator["edges"]
+    all_node_names: set[str] = accumulator["node_names"]
+    run_count = max(1, run_count)
 
     aggregated_edges: list[dict] = []
-    for current in accumulator.values():
-        missing_runs = run_count - int(current["observed_runs"])
-        z_values = [*current["z_scores"], *([0.0] * max(0, missing_runs))]
-        percentile_sum = fsum(current["percentiles"])
-        mean_percentile = percentile_sum / run_count
-        mean_z = fsum(z_values) / run_count
+    for current in edge_accumulator.values():
+        observed_runs = int(current["observed_runs"])
+        mean_percentile = float(current["percentile_sum"]) / run_count
+        mean_z = float(current["z_score_sum"]) / run_count
         stability = int(current["selected_runs"]) / run_count
         confidence = max(0.0, min(1.0, stability * mean_percentile))
-        raw_scores = current["raw_scores"]
-        mean_raw_score = fsum(raw_scores) / len(raw_scores) if raw_scores else 0.0
+        mean_raw_score = (
+            float(current["raw_score_sum"]) / observed_runs if observed_runs else 0.0
+        )
 
         aggregated_edges.append(
             {
@@ -1712,13 +1808,17 @@ def aggregate_confidence_edges(
                 "stability": stability,
                 "mean_percentile": mean_percentile,
                 "mean_z": mean_z,
-                "z_ci_lower": quantile(z_values, 0.025),
-                "z_ci_upper": quantile(z_values, 0.975),
+                "z_ci_lower": None,
+                "z_ci_upper": None,
                 "mean_raw_score": mean_raw_score,
                 "selected_runs": int(current["selected_runs"]),
-                "observed_runs": int(current["observed_runs"]),
+                "observed_runs": observed_runs,
                 "run_count": run_count,
                 "best_rank": current["best_rank"],
+                "mean_rank": (
+                    float(current["rank_sum"]) / observed_runs if observed_runs else None
+                ),
+                "max_abs_raw_score": current["raw_score_max_abs"],
             }
         )
 
@@ -1738,11 +1838,59 @@ def aggregate_confidence_edges(
         "node_count": len(all_node_names),
         "confidence_scored": True,
         "bootstrap_runs": run_count,
+        "processed_runs": int(accumulator.get("processed_runs", 0)),
         "stability_top_k": stability_top_k,
+        "aggregation_mode": "streaming",
     }
 
 
-def parse_confidence_run_outputs(
+def confidence_ranked_edges_path(
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+) -> Path:
+    return output_dir / dataset_id / run_id / algorithm_id.upper() / "rankedEdges.csv"
+
+
+def parse_confidence_run_output(
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+    *,
+    runtime_root: Path,
+    max_edges_per_target: int | None = None,
+) -> tuple[list[dict], Path]:
+    ranked_edges_path = confidence_ranked_edges_path(
+        output_dir,
+        dataset_id,
+        run_id,
+        algorithm_id,
+    )
+    try:
+        run_edges, _ = parse_ranked_edges_csv(
+            ranked_edges_path,
+            max_edges_per_target=max_edges_per_target,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            build_missing_ranked_edges_error(
+                runtime_root=runtime_root,
+                output_dir=output_dir,
+                dataset_id=dataset_id,
+                run_id=run_id,
+                algorithm_id=algorithm_id,
+            )
+        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{algorithm_id} produced an edge result, but GRNScope could not read it: {sanitize_error_message(str(exc))}"
+        ) from exc
+    return run_edges, ranked_edges_path
+
+
+def aggregate_confidence_run_outputs(
     output_dir: Path,
     dataset_id: str,
     run_ids: list[str],
@@ -1750,42 +1898,34 @@ def parse_confidence_run_outputs(
     *,
     runtime_root: Path,
     max_edges_per_target: int | None = None,
-) -> tuple[dict[str, list[dict]], dict[str, str]]:
-    normalized_algorithm_id = algorithm_id.upper()
-    run_edges_by_id: dict[str, list[dict]] = {}
+    stability_top_k: int,
+) -> tuple[list[dict], dict, dict[str, str]]:
+    accumulator = create_confidence_accumulator()
     ranked_edge_paths: dict[str, str] = {}
 
     for run_id in run_ids:
-        ranked_edges_path = (
-            output_dir
-            / dataset_id
-            / run_id
-            / normalized_algorithm_id
-            / "rankedEdges.csv"
+        run_edges, ranked_edges_path = parse_confidence_run_output(
+            output_dir,
+            dataset_id,
+            run_id,
+            algorithm_id,
+            runtime_root=runtime_root,
+            max_edges_per_target=max_edges_per_target,
         )
-        try:
-            run_edges, _ = parse_ranked_edges_csv(
-                ranked_edges_path,
-                max_edges_per_target=max_edges_per_target,
-            )
-        except FileNotFoundError as exc:
-            raise RuntimeError(
-                build_missing_ranked_edges_error(
-                    runtime_root=runtime_root,
-                    output_dir=output_dir,
-                    dataset_id=dataset_id,
-                    run_id=run_id,
-                    algorithm_id=algorithm_id,
-                )
-            ) from exc
-        except ValueError as exc:
-            raise RuntimeError(
-                f"{algorithm_id} produced an edge result, but GRNScope could not read it: {sanitize_error_message(str(exc))}"
-            ) from exc
-        run_edges_by_id[run_id] = run_edges
+        update_confidence_accumulator(
+            accumulator,
+            run_edges,
+            stability_top_k=stability_top_k,
+        )
         ranked_edge_paths[run_id] = str(ranked_edges_path)
+        del run_edges
 
-    return run_edges_by_id, ranked_edge_paths
+    top_edges, network_summary = finalize_confidence_accumulator(
+        accumulator,
+        run_count=len(run_ids),
+        stability_top_k=stability_top_k,
+    )
+    return top_edges, network_summary, ranked_edge_paths
 
 
 def count_completed_confidence_run_outputs(
@@ -1894,6 +2034,10 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
     )
 
     config_path = runtime_root / "config.yaml"
+    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
+        algorithm_id,
+        confidence_settings,
+    )
     config_text = build_beeline_config(
         input_dir=input_dir,
         output_dir=output_dir,
@@ -1901,6 +2045,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         run_ids=run_ids,
         algorithm_id=algorithm_id,
         include_pseudotime=bool(project_manifest.get("pseudotime_path")),
+        max_regulators_per_target=ranked_edges_per_target_limit,
     )
     config_path.write_text(config_text, encoding="utf-8")
 
@@ -1936,20 +2081,13 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         )
         raise RuntimeError(friendly_error)
 
-    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
-        algorithm_id,
-        confidence_settings,
-    )
-    run_edges_by_id, ranked_edge_paths = parse_confidence_run_outputs(
+    top_edges, network_summary, ranked_edge_paths = aggregate_confidence_run_outputs(
         output_dir,
         dataset_id,
         run_ids,
         algorithm_id,
         runtime_root=runtime_root,
         max_edges_per_target=ranked_edges_per_target_limit,
-    )
-    top_edges, network_summary = aggregate_confidence_edges(
-        run_edges_by_id,
         stability_top_k=int(confidence_settings["stability_top_k"]),
     )
     ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
@@ -2039,6 +2177,12 @@ def run_beeline_with_progress(
     stdout_log_path = runtime_root / "stdout.log"
     stderr_log_path = runtime_root / "stderr.log"
     total_run_count = max(1, len(run_ids))
+    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
+        algorithm_id,
+        confidence_settings,
+    )
+    confidence_accumulator = create_confidence_accumulator()
+    ranked_edge_paths: dict[str, str] = {}
 
     for run_index, run_id in enumerate(run_ids, start=1):
         if stop_event is not None and stop_event.is_set():
@@ -2061,6 +2205,7 @@ def run_beeline_with_progress(
             run_ids=[run_id],
             algorithm_id=algorithm_id,
             include_pseudotime=source_pseudotime is not None,
+            max_regulators_per_target=ranked_edges_per_target_limit,
         )
         config_path.write_text(config_text, encoding="utf-8")
 
@@ -2200,6 +2345,22 @@ def run_beeline_with_progress(
                     algorithm_id,
                 )
                 raise RuntimeError(friendly_error)
+
+            run_edges, ranked_edges_path = parse_confidence_run_output(
+                output_dir,
+                dataset_id,
+                run_id,
+                algorithm_id,
+                runtime_root=runtime_root,
+                max_edges_per_target=ranked_edges_per_target_limit,
+            )
+            update_confidence_accumulator(
+                confidence_accumulator,
+                run_edges,
+                stability_top_k=int(confidence_settings["stability_top_k"]),
+            )
+            ranked_edge_paths[run_id] = str(ranked_edges_path)
+            del run_edges
         finally:
             shutil.rmtree(run_dir, ignore_errors=True)
 
@@ -2211,20 +2372,9 @@ def run_beeline_with_progress(
         progress_label="Aggregating confidence scores",
     )
 
-    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
-        algorithm_id,
-        confidence_settings,
-    )
-    run_edges_by_id, ranked_edge_paths = parse_confidence_run_outputs(
-        output_dir,
-        dataset_id,
-        run_ids,
-        algorithm_id,
-        runtime_root=runtime_root,
-        max_edges_per_target=ranked_edges_per_target_limit,
-    )
-    top_edges, network_summary = aggregate_confidence_edges(
-        run_edges_by_id,
+    top_edges, network_summary = finalize_confidence_accumulator(
+        confidence_accumulator,
+        run_count=len(run_ids),
         stability_top_k=int(confidence_settings["stability_top_k"]),
     )
     ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"

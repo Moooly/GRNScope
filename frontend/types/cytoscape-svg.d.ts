@@ -1,7 +1,7 @@
 import "cytoscape";
 
 declare module "cytoscape-svg" {
-  const cytoscapeSvg: (cytoscape: any) => void;
+  const cytoscapeSvg: (cytoscape: typeof import("cytoscape")) => void;
   export default cytoscapeSvg;
 }
 
