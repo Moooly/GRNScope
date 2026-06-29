@@ -151,7 +151,7 @@ export default function JobProgressBanner({
   };
 
   return (
-    <section className="mt-8 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4 text-slate-900 shadow-sm sm:px-6">
+    <section className="mt-8 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4 text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:px-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">

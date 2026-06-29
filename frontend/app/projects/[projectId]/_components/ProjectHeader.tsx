@@ -24,7 +24,7 @@ export default function ProjectHeader({
         </p>
         {projectId ? (
           <span
-            className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-bold text-slate-600 shadow-sm"
+            className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-bold text-slate-600"
             title={`Project ID: ${projectId}`}
           >
             <span className="uppercase tracking-[0.16em] text-slate-400">

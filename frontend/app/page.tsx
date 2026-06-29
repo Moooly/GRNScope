@@ -215,10 +215,10 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="relative overflow-hidden bg-[#f4f6f8]">
-        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/90 to-transparent" />
-        <div className="absolute -left-24 top-28 h-72 w-72 rounded-full bg-cyan-100/60 blur-3xl" />
-        <div className="absolute -right-24 top-20 h-72 w-72 rounded-full bg-teal-100/60 blur-3xl" />
+      <section className="relative overflow-hidden bg-[#f7fbff]">
+        <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/65 to-transparent" />
+        <div className="absolute -left-24 top-32 h-64 w-64 rounded-full bg-cyan-100/30 blur-3xl" />
+        <div className="absolute -right-24 top-24 h-64 w-64 rounded-full bg-teal-100/30 blur-3xl" />
 
         <div className="relative mx-auto max-w-[1180px] px-6 pb-10 pt-16 lg:px-10 lg:pb-12 lg:pt-18">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_0.55fr] lg:items-center">
@@ -240,7 +240,7 @@ export default function HomePage() {
 
             <Link
               href="/projects/demo"
-              className="group flex w-full flex-col rounded-[1.75rem] border border-slate-200 bg-[#f7fbff] p-6 text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:shadow-md"
+              className="group flex w-full flex-col rounded-[1.75rem] border border-slate-200 bg-[#f7fbff] p-6 text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30"
             >
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
@@ -299,7 +299,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(true)}
-                className="inline-flex h-10 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white shadow-sm shadow-[#1b75a6]/20 transition hover:bg-[#155f87]"
+                className="inline-flex h-10 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
               >
                 Create new project
               </button>
@@ -315,9 +315,9 @@ export default function HomePage() {
               </div>
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-0 hidden w-24 items-center justify-end bg-gradient-to-l from-[#f7fbff] via-[#f7fbff]/85 to-transparent opacity-0 transition-opacity duration-200 group-hover/history:flex group-hover/history:opacity-100 lg:flex"
+                className="pointer-events-none absolute inset-y-0 right-0 hidden w-16 items-center justify-end bg-gradient-to-l from-[#f7fbff] via-[#f7fbff]/45 to-transparent opacity-0 transition-opacity duration-200 group-hover/history:flex group-hover/history:opacity-100 lg:flex"
               >
-                <span className="mr-1 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm ring-1 ring-slate-200">
+                <span className="mr-1 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200">
                   <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">
                     <path
                       d="M2.5 3.5 12.5 14 2.5 24.5"
@@ -374,7 +374,7 @@ function HomeProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[2px] hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70"
+      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:-translate-y-[2px] hover:border-[#1b75a6]/25 hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
