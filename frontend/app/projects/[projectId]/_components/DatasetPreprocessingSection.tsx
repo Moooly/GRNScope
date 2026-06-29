@@ -22,7 +22,7 @@ export default function DatasetPreprocessingSection({
   onOpenDownloadMenu,
 }: DatasetPreprocessingSectionProps) {
   return (
-    <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900 shadow-sm">
+    <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">

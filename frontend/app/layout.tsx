@@ -42,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={{ "--grnscope-header-height": "78px" } as React.CSSProperties}>
-        <header className="sticky top-0 z-[60] border-b border-[#1a3448] bg-[#213f54] shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
+        <header className="sticky top-0 z-[60] border-b border-[#1a3448] bg-[#213f54]">
           <div className="mx-auto flex h-[78px] w-full max-w-[1440px] items-center px-9 xl:px-16">
             <Link
               href="/"

@@ -617,11 +617,8 @@ export default function CircosNetworkGraph({
   }
 
   return (
-    <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.14),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(96,165,250,0.12),_transparent_22%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.08),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#eef4fb_52%,_#eaf1f8_100%)] shadow-[0_24px_60px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.86)]">
+    <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[#f8fbff]">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-45" />
-      <div className="pointer-events-none absolute left-8 top-8 h-36 w-36 rounded-full bg-teal-300/20 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-10 right-10 h-40 w-40 rounded-full bg-blue-300/18 blur-3xl" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/50 to-transparent" />
       <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] ring-1 ring-white/55" />
       <svg
         ref={svgRef}

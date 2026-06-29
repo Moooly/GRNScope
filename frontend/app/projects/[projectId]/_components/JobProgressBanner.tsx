@@ -151,7 +151,7 @@ export default function JobProgressBanner({
   };
 
   return (
-    <section className="mt-8 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4 text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:px-6">
+    <section className="mt-8 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4 text-slate-900 sm:px-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -204,7 +204,7 @@ export default function JobProgressBanner({
                   <button
                     type="submit"
                     disabled={isSavingEmail}
-                    className="inline-flex h-10 min-w-18 items-center justify-center rounded-full bg-[#1b75a6] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 min-w-18 items-center justify-center rounded-full bg-[#1b75a6] px-4 text-sm font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSavingEmail ? "Saving..." : "Save"}
                   </button>

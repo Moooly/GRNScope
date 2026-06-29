@@ -1639,10 +1639,6 @@ useEffect(() => {
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
       <section className="relative overflow-x-clip overflow-y-visible bg-[#f7fbff]">
-        <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/65 to-transparent" />
-        <div className="absolute -left-24 top-32 h-64 w-64 rounded-full bg-cyan-100/30 blur-3xl" />
-        <div className="absolute -right-24 top-24 h-64 w-64 rounded-full bg-teal-100/30 blur-3xl" />
-
         <div className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10">
           <ProjectHeader
             projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
@@ -1664,7 +1660,7 @@ useEffect(() => {
             }
           >
                 {isPreparingFinishedResults && (
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
                     <div className="flex flex-wrap items-center gap-3">
                       <span
                         className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-200 border-t-[#1b75a6]"

@@ -131,7 +131,7 @@ export default function ResultsControlsSection({
         onClick={() => setOpenPanel((currentPanel) => (currentPanel === panel ? null : panel))}
         className={`flex min-h-[54px] w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
           isOpen
-            ? "border-[#1b75a6] bg-[#1b75a6] text-white shadow-sm"
+            ? "border-[#1b75a6] bg-[#1b75a6] text-white"
             : "border-slate-200 bg-[#eef3f7] text-slate-800 hover:border-[#1b75a6]/30 hover:bg-[#e7f2f7]"
         }`}
       >
@@ -365,7 +365,7 @@ export default function ResultsControlsSection({
       className={
         compact
           ? "relative shrink-0 text-slate-900"
-          : "relative rounded-[1.5rem] border border-slate-200 bg-white p-4 text-slate-900 shadow-sm"
+          : "relative rounded-[1.5rem] border border-slate-200 bg-white p-4 text-slate-900"
       }
     >
       <div className="flex items-center gap-2">

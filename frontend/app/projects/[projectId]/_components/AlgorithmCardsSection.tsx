@@ -48,7 +48,7 @@ export default function AlgorithmCardsSection({
   if (tasks.length === 0) return null;
 
   return (
-    <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
+    <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
       <h2 className="text-xl font-bold tracking-tight text-slate-950">Algorithms Executed</h2>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

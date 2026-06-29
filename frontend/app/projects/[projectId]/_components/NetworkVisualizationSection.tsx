@@ -172,7 +172,7 @@ export default function NetworkVisualizationSection({
   };
 
   return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
       <div className="flex items-center gap-2">
         <h3 className="text-base font-semibold text-slate-900">Network Visualization</h3>
         <button
@@ -190,9 +190,9 @@ export default function NetworkVisualizationSection({
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
-        <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-[#f3f4f6] shadow-sm">
+        <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-[#f3f4f6]">
           <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-between gap-3">
-            <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur">
+            <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 p-1">
               {layoutOptions.map(({ value, label }) => {
                 const isActive = networkLayout === value;
 
@@ -203,7 +203,7 @@ export default function NetworkVisualizationSection({
                     onClick={() => setNetworkLayout(value)}
                     className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
                       isActive
-                        ? "bg-[#1b75a6] text-white shadow-sm"
+                        ? "bg-[#1b75a6] text-white"
                         : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                     }`}
                   >
@@ -212,7 +212,7 @@ export default function NetworkVisualizationSection({
                 );
               })}
             </div>
-            <div className="pointer-events-auto relative -top-px inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur">
+            <div className="pointer-events-auto relative -top-px inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 p-1">
               <button
                 type="button"
                 onClick={() => {

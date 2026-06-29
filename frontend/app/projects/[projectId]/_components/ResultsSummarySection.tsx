@@ -81,7 +81,7 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
     const ab = countForExact(a, b);
 
     return (
-      <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.12),_transparent_26%),linear-gradient(180deg,_#f8fbff_0%,_#f1f6fb_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+      <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[#f8fbff] p-5">
         <div className="flex justify-center overflow-x-auto">
           <svg viewBox="0 0 640 360" className="mx-auto h-auto w-full max-w-[42rem]">
             <defs>
@@ -122,7 +122,7 @@ function VennSummary({ overlapEntries }: { overlapEntries: OverlapEntry[] }) {
     const abc = countForExact(a, b, c);
 
     return (
-      <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(96,165,250,0.12),_transparent_26%),linear-gradient(180deg,_#f8fbff_0%,_#f1f6fb_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+      <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[#f8fbff] p-5">
         <div className="flex justify-center overflow-x-auto">
           <svg viewBox="0 0 700 470" className="mx-auto h-auto w-full max-w-[44rem]">
             <defs>
@@ -382,7 +382,7 @@ export default function ResultsSummarySection({
 }: ResultsSummarySectionProps) {
   return (
     <div className="w-full">
-      <div className="hidden rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="hidden rounded-[1.5rem] border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h4 className="text-base font-bold text-slate-950">Per-Algorithm Edge Count</h4>
@@ -416,7 +416,7 @@ export default function ResultsSummarySection({
         </div>
       </div>
 
-      <div className="w-full rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
+      <div className="w-full rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h4 className="text-base font-bold text-slate-950">Method Overlap Visualization</h4>
