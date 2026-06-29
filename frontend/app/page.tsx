@@ -313,22 +313,6 @@ export default function HomePage() {
                   <HomeProjectCard key={project.id} project={project} />
                 ))}
               </div>
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-0 hidden w-16 items-center justify-end bg-gradient-to-l from-[#f7fbff] via-[#f7fbff]/45 to-transparent opacity-0 transition-opacity duration-200 group-hover/history:flex group-hover/history:opacity-100 lg:flex"
-              >
-                <span className="mr-1 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200">
-                  <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">
-                    <path
-                      d="M2.5 3.5 12.5 14 2.5 24.5"
-                      stroke="currentColor"
-                      strokeWidth="3.25"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-              </div>
             </div>
           ) : (
             <Link
