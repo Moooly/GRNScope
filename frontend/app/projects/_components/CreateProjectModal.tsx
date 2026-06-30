@@ -4,13 +4,38 @@ import type { ProjectAlgorithm } from "../page";
 import AlgorithmDetailModal from "./AlgorithmDetailModal";
 import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
-import UploadStep from "./UploadStep";
 
 const MAX_PREPROCESSED_GENES = 8000;
+
+const CELLORACLE_SPECIES_OPTIONS = [
+  { value: "human", label: "Human" },
+  { value: "mouse", label: "Mouse" },
+  { value: "rat", label: "Rat" },
+  { value: "pig", label: "Pig" },
+  { value: "chicken", label: "Chicken" },
+  { value: "zebrafish", label: "Zebrafish" },
+  { value: "xenopus_tropicalis", label: "Xenopus tropicalis" },
+  { value: "drosophila", label: "Drosophila" },
+  { value: "c_elegans", label: "C. elegans" },
+  { value: "s_cerevisiae", label: "S. cerevisiae" },
+];
+
+const CELLORACLE_BASE_GRN_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "promoter", label: "Promoter base GRN" },
+  { value: "mouse_scATAC_atlas", label: "Mouse scATAC atlas" },
+];
+
+const SELECT_CONTROL_CLASS =
+  "mt-2 flex items-center rounded-[1rem] border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition focus-within:border-[#1b75a6]/40 focus-within:ring-4 focus-within:ring-[#1b75a6]/10";
+
+const SELECT_INPUT_CLASS =
+  "w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none";
 
 interface DatasetSummary {
   dimensions: string;
   hasPseudotime: boolean;
+  hasClusterLabels?: boolean;
   hasGroundTruth: boolean;
   preprocessingSummary: string[];
 }
@@ -22,6 +47,7 @@ interface CreateProjectModalProps {
   projectDescription: string;
   expressionFileName: string;
   pseudotimeFileName: string;
+  clusterLabelsFileName: string;
   geneCount: number | null;
   cellCount: number | null;
   isUploadingTempDataset: boolean;
@@ -30,6 +56,8 @@ interface CreateProjectModalProps {
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
+  cellOracleSpecies: string;
+  cellOracleBaseGrn: string;
   selectedIds: string[];
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
@@ -51,12 +79,16 @@ interface CreateProjectModalProps {
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
+  setClusterLabelsFile: (file: File | null) => void;
+  setClusterLabelsFileName: (value: string) => void;
   setTopVariableGenes: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
   setNormalizeEnabled: (value: boolean) => void;
   setLogTransformEnabled: (value: boolean) => void;
-  clearExpressionFile: () => void;
+  setCellOracleSpecies: (value: string) => void;
+  setCellOracleBaseGrn: (value: string) => void;
   clearPseudotimeFile: () => void;
+  clearClusterLabelsFile: () => void;
   setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
 }
 
@@ -67,6 +99,7 @@ export default function CreateProjectModal({
   projectDescription,
   expressionFileName,
   pseudotimeFileName,
+  clusterLabelsFileName,
   geneCount,
   cellCount,
   isUploadingTempDataset,
@@ -75,6 +108,8 @@ export default function CreateProjectModal({
   includeAllTFs,
   normalizeEnabled,
   logTransformEnabled,
+  cellOracleSpecies,
+  cellOracleBaseGrn,
   selectedIds,
   compatibleAlgorithms,
   selectedAlgorithms,
@@ -96,12 +131,16 @@ export default function CreateProjectModal({
   setExpressionFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
+  setClusterLabelsFile,
+  setClusterLabelsFileName,
   setTopVariableGenes,
   setIncludeAllTFs,
   setNormalizeEnabled,
   setLogTransformEnabled,
-  clearExpressionFile,
+  setCellOracleSpecies,
+  setCellOracleBaseGrn,
   clearPseudotimeFile,
+  clearClusterLabelsFile,
   setEnsembleEnabled,
 }: CreateProjectModalProps) {
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,6 +169,30 @@ export default function CreateProjectModal({
     event.stopPropagation();
     const file = event.dataTransfer.files?.[0] ?? null;
     selectExpressionFile(file);
+  };
+
+  const selectPseudotimeFile = (file: File | null) => {
+    setPseudotimeFile(file);
+    setPseudotimeFileName(file?.name ?? "");
+  };
+
+  const handlePseudotimeDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer.files?.[0] ?? null;
+    selectPseudotimeFile(file);
+  };
+
+  const selectClusterLabelsFile = (file: File | null) => {
+    setClusterLabelsFile(file);
+    setClusterLabelsFileName(file?.name ?? "");
+  };
+
+  const handleClusterLabelsDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer.files?.[0] ?? null;
+    selectClusterLabelsFile(file);
   };
 
   useEffect(() => {
@@ -238,7 +301,7 @@ export default function CreateProjectModal({
     if (!hasExpressionFile) return "Upload an expression matrix to begin.";
     if (isUploadingTempDataset) return "Validating dataset…";
     if (!datasetReady) return "Waiting for the dataset to validate…";
-    if (selectedAlgorithms.length === 0) return "No algorithms selected — open Customize to choose at least one.";
+    if (selectedAlgorithms.length === 0) return "No algorithms selected — open Advanced settings to choose at least one.";
 
     const algoLabel =
       selectedAlgorithms.length === 1
@@ -261,6 +324,10 @@ export default function CreateProjectModal({
 
     if (logTransformEnabled) {
       settings.push("log transform enabled");
+    }
+
+    if (datasetSummary.hasClusterLabels) {
+      settings.push("cluster labels included");
     }
 
     // Removed ensembleEnabled block
@@ -299,145 +366,221 @@ export default function CreateProjectModal({
         </div>
 
         <div className="mt-6 space-y-6">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-950">Expression matrix</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    CSV with rows = genes, columns = cells. First row = cell IDs, first
-                    column = gene names. Max 500 MB.
-                  </p>
-                </div>
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr] lg:items-stretch">
+              <div>
+                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#178a62]">
+                  Required
+                </span>
+                <h3 className="mt-4 text-lg font-semibold text-slate-950">
+                  Expression matrix
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  CSV with rows = genes and columns = cells. This is the only required input before GRNScope can prepare an analysis.
+                </p>
               </div>
 
-              <div className="mt-5">
-                <label
-                  className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
-                  onDragEnter={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
+              <label
+                className="relative flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDrop={handleExpressionDrop}
+              >
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    selectExpressionFile(file);
                   }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  onDrop={handleExpressionDrop}
-                >
-                  <input
-                    type="file"
-                    accept=".csv"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      selectExpressionFile(file);
-                    }}
-                  />
-                  <FileNameDisplay
-                    fileName={expressionFileName}
-                    placeholder="Drop expression matrix CSV here"
-                  />
-                  <span className="mt-2 text-sm text-slate-500">
-                    {expressionFileName ? "Click to replace" : "or click to browse"}
-                  </span>
-                </label>
-              </div>
-
-              {hasExpressionFile && (
-                <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
-                  {isUploadingTempDataset ? (
-                    <span className="inline-flex items-center gap-2 font-medium text-slate-600">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
-                      Validating dataset…
-                    </span>
-                  ) : datasetReady ? (
-                    <>
-                      <span className="inline-flex min-w-0 max-w-full items-center gap-2 font-bold text-[#178a62]">
-                        <span className="h-2 w-2 rounded-full bg-[#20b779]" />
-                        <span
-                          className="min-w-0 max-w-full truncate"
-                          title={expressionFileName}
-                        >
-                          {compactExpressionFileName}
-                        </span>
-                      </span>
-                      {geneCount !== null && cellCount !== null && (
-                        <span className="font-medium text-slate-700">
-                          {geneCount.toLocaleString()} genes ×{" "}
-                          {cellCount.toLocaleString()} cells
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span
-                      className="min-w-0 max-w-full truncate font-medium text-slate-600"
-                      title={expressionFileName}
-                    >
-                      {compactExpressionFileName}
-                    </span>
-                  )}
-                </div>
-              )}
+                />
+                <FileNameDisplay
+                  fileName={expressionFileName}
+                  placeholder="Drop expression matrix CSV here"
+                />
+                <span className="mt-2 text-sm text-slate-500">
+                  {expressionFileName ? "Click to replace" : "or click to browse"}
+                </span>
+              </label>
             </div>
 
-            <UploadStep
-              pseudotimeFileName={pseudotimeFileName}
-              setPseudotimeFile={setPseudotimeFile}
-              setPseudotimeFileName={setPseudotimeFileName}
-            />
+            {hasExpressionFile && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
+                {isUploadingTempDataset ? (
+                  <span className="inline-flex items-center gap-2 font-medium text-slate-600">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
+                    Validating dataset…
+                  </span>
+                ) : datasetReady ? (
+                  <>
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-2 font-semibold text-[#178a62]">
+                      <span className="h-2 w-2 rounded-full bg-[#20b779]" />
+                      <span
+                        className="min-w-0 max-w-full truncate"
+                        title={expressionFileName}
+                      >
+                        {compactExpressionFileName}
+                      </span>
+                    </span>
+                    {geneCount !== null && cellCount !== null && (
+                      <span className="font-medium text-slate-700">
+                        {geneCount.toLocaleString()} genes ×{" "}
+                        {cellCount.toLocaleString()} cells
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span
+                    className="min-w-0 max-w-full truncate font-medium text-slate-600"
+                    title={expressionFileName}
+                  >
+                    {compactExpressionFileName}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-
-          {datasetReady && (
-            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                    Plan summary
-                  </p>
-                  <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
-                    {willRunSummary}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsCustomizeOpen((prev) => !prev)}
-                  className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                  aria-expanded={isCustomizeOpen}
-                >
-                  {isCustomizeOpen ? "Hide customize ▴" : "Customize ▾"}
-                </button>
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
+                  Advanced settings
+                </p>
+                <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
+                  {willRunSummary}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomizeOpen((prev) => !prev)}
+                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                aria-expanded={isCustomizeOpen}
+              >
+                {isCustomizeOpen ? "Hide advanced ▴" : "Show advanced ▾"}
+              </button>
             </div>
-          )}
+          </div>
 
-          {datasetReady && isCustomizeOpen && (
-            <div className="space-y-6 rounded-[1.5rem] border border-slate-200 bg-slate-50/40 p-5">
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-                <label
-                  htmlFor="projectName"
-                  className="block text-xs font-bold uppercase tracking-[0.18em] text-black"
-                >
-                  Project name
-                </label>
-                <input
-                  id="projectName"
-                  type="text"
-                  value={
-                    projectName === expressionFileName.replace(/\.[^/.]+$/, "")
-                      ? ""
-                      : projectName || ""
-                  }
-                  onChange={(event) => setProjectName(event.target.value)}
-                  placeholder={
-                    expressionFileName
-                      ? expressionFileName.replace(/\.[^/.]+$/, "")
-                      : "Auto-filled from uploaded expression matrix"
-                  }
-                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+          {isCustomizeOpen && (
+            <div className="space-y-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/40 p-5">
+              <div className="grid gap-5 lg:grid-cols-2">
+                <AdditionalInputCard
+                  title="Pseudotime CSV"
+                  badge="Optional"
+                  fileName={pseudotimeFileName}
+                  placeholder="Drop pseudotime CSV here"
+                  helperText="or click to browse"
+                  onDrop={handlePseudotimeDrop}
+                  onSelect={selectPseudotimeFile}
+                  onClear={clearPseudotimeFile}
+                  minHeightClassName="min-h-0"
+                  stretchDropZone
                 />
-              </div>
 
+                <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className="text-lg font-semibold text-slate-950">
+                      CellOracle inputs
+                    </h3>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Optional
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-semibold text-slate-800">
+                        Species
+                      </span>
+                      <span className={SELECT_CONTROL_CLASS}>
+                        <select
+                          value={cellOracleSpecies}
+                          onChange={(event) => {
+                            const nextSpecies = event.target.value;
+                            setCellOracleSpecies(nextSpecies);
+                            if (
+                              nextSpecies !== "mouse" &&
+                              cellOracleBaseGrn === "mouse_scATAC_atlas"
+                            ) {
+                              setCellOracleBaseGrn("auto");
+                            }
+                          }}
+                          className={SELECT_INPUT_CLASS}
+                        >
+                          {CELLORACLE_SPECIES_OPTIONS.map((species) => (
+                            <option key={species.value} value={species.value}>
+                              {species.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
+                          ▾
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-semibold text-slate-800">
+                        Base GRN
+                      </span>
+                      <span className={SELECT_CONTROL_CLASS}>
+                        <select
+                          value={cellOracleBaseGrn}
+                          onChange={(event) => setCellOracleBaseGrn(event.target.value)}
+                          className={SELECT_INPUT_CLASS}
+                        >
+                          {CELLORACLE_BASE_GRN_OPTIONS.map((option) => (
+                            <option
+                              key={option.value}
+                              value={option.value}
+                              disabled={
+                                option.value === "mouse_scATAC_atlas" &&
+                                cellOracleSpecies !== "mouse"
+                              }
+                            >
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
+                          ▾
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div
+                      className="flex min-h-24 flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-center text-slate-400"
+                      aria-disabled="true"
+                    >
+                      <span className="text-sm font-semibold">
+                        Upload base GRN CSV
+                      </span>
+                      <span className="mt-1 text-xs">Coming soon</span>
+                    </div>
+
+                    <AdditionalInputCard
+                      title=""
+                      fileName={clusterLabelsFileName}
+                      placeholder="Upload cluster labels CSV"
+                      helperText="cell_id, cluster"
+                      onDrop={handleClusterLabelsDrop}
+                      onSelect={selectClusterLabelsFile}
+                      onClear={clearClusterLabelsFile}
+                      compact
+                    />
+                  </div>
+                </div>
+              </div>
 
               <AlgorithmStep
                 algorithms={algorithms}
@@ -453,6 +596,43 @@ export default function CreateProjectModal({
                 onSelectAll={onSelectAll}
                 onShowAlgorithmDetails={handleShowAlgorithmDetails}
               />
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-800">
+                    Project name
+                  </span>
+                  <input
+                    id="projectName"
+                    type="text"
+                    value={
+                      projectName === expressionFileName.replace(/\.[^/.]+$/, "")
+                        ? ""
+                        : projectName || ""
+                    }
+                    onChange={(event) => setProjectName(event.target.value)}
+                    placeholder={
+                      expressionFileName
+                        ? expressionFileName.replace(/\.[^/.]+$/, "")
+                        : "Auto-filled from uploaded expression matrix"
+                    }
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-800">
+                    Description
+                  </span>
+                  <input
+                    type="text"
+                    value={projectDescription}
+                    onChange={(event) => setProjectDescription(event.target.value)}
+                    placeholder="Optional note for this analysis"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                  />
+                </label>
+              </div>
 
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -477,7 +657,7 @@ export default function CreateProjectModal({
                 <div className="mt-5">
                   <div className="grid items-center gap-6 lg:grid-cols-[1.55fr_0.9fr_0.9fr_0.9fr]">
                     <div className="flex items-center gap-3">
-                      <span className="whitespace-nowrap text-sm font-bold text-slate-950">
+                      <span className="whitespace-nowrap text-sm font-semibold text-slate-950">
                         Gene filtering
                       </span>
                       <input
@@ -520,10 +700,8 @@ export default function CreateProjectModal({
                       onToggle={() => setLogTransformEnabled(!logTransformEnabled)}
                     />
                   </div>
-
                 </div>
               </div>
-
             </div>
           )}
 
@@ -625,6 +803,109 @@ export default function CreateProjectModal({
         isClosing={isAlgorithmDetailClosing}
         onClose={handleCloseAlgorithmDetails}
       />
+    </div>
+  );
+}
+
+function AdditionalInputCard({
+  title,
+  badge,
+  fileName,
+  placeholder,
+  helperText,
+  minHeightClassName = "min-h-28",
+  compact = false,
+  stretchDropZone = false,
+  onDrop,
+  onSelect,
+  onClear,
+}: {
+  title: string;
+  badge?: string;
+  fileName: string;
+  placeholder: string;
+  helperText: string;
+  minHeightClassName?: string;
+  compact?: boolean;
+  stretchDropZone?: boolean;
+  onDrop: (event: DragEvent<HTMLLabelElement>) => void;
+  onSelect: (file: File | null) => void;
+  onClear: () => void;
+}) {
+  const dropZone = (
+    <label
+      className={`relative flex ${minHeightClassName} ${
+        stretchDropZone ? "h-full flex-1" : ""
+      } cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-4 py-4 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]`}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onDrop={onDrop}
+    >
+      <input
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          onSelect(file);
+        }}
+      />
+      <FileNameDisplay fileName={fileName} placeholder={placeholder} />
+      <span className="mt-1 text-xs text-slate-500">
+        {fileName ? "Click to replace" : helperText}
+      </span>
+    </label>
+  );
+
+  if (compact) {
+    return (
+      <div className="space-y-2">
+        {dropZone}
+        {fileName ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs font-semibold text-slate-500 transition hover:text-rose-600"
+          >
+            Remove file
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm ${
+        stretchDropZone ? "flex h-full flex-col" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
+        {badge ? (
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+            {badge}
+          </span>
+        ) : null}
+      </div>
+      <div className={stretchDropZone ? "mt-4 flex flex-1" : "mt-4"}>
+        {dropZone}
+      </div>
+      {fileName ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="mt-3 text-xs font-semibold text-slate-500 transition hover:text-rose-600"
+        >
+          Remove file
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -158,8 +158,10 @@ export default function CreateProjectFlow({
 
   const [expressionFile, setExpressionFile] = useState<File | null>(null);
   const [pseudotimeFile, setPseudotimeFile] = useState<File | null>(null);
+  const [clusterLabelsFile, setClusterLabelsFile] = useState<File | null>(null);
   const [expressionFileName, setExpressionFileName] = useState("");
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
+  const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
 
   const [tempUploadId, setTempUploadId] = useState("");
   const [geneCount, setGeneCount] = useState<number | null>(null);
@@ -170,6 +172,8 @@ export default function CreateProjectFlow({
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
+  const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
+  const [cellOracleBaseGrn, setCellOracleBaseGrn] = useState("auto");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasUserAdjustedAlgorithms, setHasUserAdjustedAlgorithms] = useState(false);
@@ -193,8 +197,10 @@ export default function CreateProjectFlow({
     setProjectDescription("");
     setExpressionFile(null);
     setPseudotimeFile(null);
+    setClusterLabelsFile(null);
     setExpressionFileName("");
     setPseudotimeFileName("");
+    setClusterLabelsFileName("");
     setTempUploadId("");
     setGeneCount(null);
     setCellCount(null);
@@ -203,6 +209,8 @@ export default function CreateProjectFlow({
     setIncludeAllTFs(true);
     setNormalizeEnabled(true);
     setLogTransformEnabled(true);
+    setCellOracleSpecies("human");
+    setCellOracleBaseGrn("auto");
     setSelectedIds([]);
     setHasUserAdjustedAlgorithms(false);
     setEnsembleEnabled(true);
@@ -229,7 +237,7 @@ export default function CreateProjectFlow({
         if (isCancelled) return;
         setAlgorithms(
           data
-            .filter((algorithm) => algorithm.active && algorithm.id !== "CELLORACLE")
+            .filter((algorithm) => algorithm.active)
             .map(mapBackendAlgorithm),
         );
       } catch (error) {
@@ -257,6 +265,7 @@ export default function CreateProjectFlow({
           ? `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`
           : "Matrix size pending upload validation",
       hasPseudotime: Boolean(pseudotimeFile),
+      hasClusterLabels: Boolean(clusterLabelsFile),
       hasGroundTruth: false,
       preprocessingSummary: [
         `Top variable genes retained: ${topVariableGenes || String(DEFAULT_TOP_VARIABLE_GENES)}`,
@@ -269,6 +278,7 @@ export default function CreateProjectFlow({
       geneCount,
       cellCount,
       pseudotimeFile,
+      clusterLabelsFile,
       topVariableGenes,
       includeAllTFs,
       normalizeEnabled,
@@ -347,6 +357,17 @@ export default function CreateProjectFlow({
       setErrors(["Pseudotime file size must be 500 MB or smaller."]);
       return;
     }
+    if (
+      clusterLabelsFile &&
+      !clusterLabelsFile.name.toLowerCase().endsWith(".csv")
+    ) {
+      setErrors(["Cluster labels file must be a CSV file."]);
+      return;
+    }
+    if (clusterLabelsFile && clusterLabelsFile.size > maxFileSize) {
+      setErrors(["Cluster labels file size must be 500 MB or smaller."]);
+      return;
+    }
 
     let isCancelled = false;
     const controller = new AbortController();
@@ -363,6 +384,9 @@ export default function CreateProjectFlow({
         formData.append("expression_matrix", expressionFile);
         if (pseudotimeFile) {
           formData.append("pseudotime", pseudotimeFile);
+        }
+        if (clusterLabelsFile) {
+          formData.append("cluster_labels", clusterLabelsFile);
         }
 
         const response = await fetch(`${API_BASE}/uploads/temp-dataset`, {
@@ -409,7 +433,7 @@ export default function CreateProjectFlow({
       isCancelled = true;
       controller.abort();
     };
-  }, [expressionFile, pseudotimeFile, API_BASE]);
+  }, [expressionFile, pseudotimeFile, clusterLabelsFile, API_BASE]);
 
   // Auto-select all compatible algorithms by default. Stops syncing once the
   // user manually toggles anything in the algorithm grid.
@@ -452,17 +476,15 @@ export default function CreateProjectFlow({
     setEnsembleEnabled(allCompatibleIds.length >= 2);
   };
 
-  const clearExpressionFile = () => {
-    setExpressionFile(null);
-    setExpressionFileName("");
-    setTempUploadId("");
-    setGeneCount(null);
-    setCellCount(null);
-  };
-
   const clearPseudotimeFile = () => {
     setPseudotimeFile(null);
     setPseudotimeFileName("");
+    setTempUploadId("");
+  };
+
+  const clearClusterLabelsFile = () => {
+    setClusterLabelsFile(null);
+    setClusterLabelsFileName("");
     setTempUploadId("");
   };
 
@@ -498,6 +520,14 @@ export default function CreateProjectFlow({
       }
       if (pseudotimeFile.size > maxFileSize) {
         validationErrors.push("Pseudotime file size must be 500 MB or smaller.");
+      }
+    }
+    if (clusterLabelsFile) {
+      if (!clusterLabelsFile.name.toLowerCase().endsWith(".csv")) {
+        validationErrors.push("Cluster labels file must be a CSV file.");
+      }
+      if (clusterLabelsFile.size > maxFileSize) {
+        validationErrors.push("Cluster labels file size must be 500 MB or smaller.");
       }
     }
 
@@ -552,6 +582,8 @@ export default function CreateProjectFlow({
       formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
       formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
       formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
+      formData.append("celloracle_species", cellOracleSpecies);
+      formData.append("celloracle_base_grn", cellOracleBaseGrn);
 
       const response = await apiFetch(`${API_BASE}/projects/create-from-temp`, {
         method: "POST",
@@ -631,6 +663,7 @@ export default function CreateProjectFlow({
       projectDescription={projectDescription}
       expressionFileName={expressionFileName}
       pseudotimeFileName={pseudotimeFileName}
+      clusterLabelsFileName={clusterLabelsFileName}
       geneCount={geneCount}
       cellCount={cellCount}
       isUploadingTempDataset={isUploadingTempDataset}
@@ -639,6 +672,8 @@ export default function CreateProjectFlow({
       includeAllTFs={includeAllTFs}
       normalizeEnabled={normalizeEnabled}
       logTransformEnabled={logTransformEnabled}
+      cellOracleSpecies={cellOracleSpecies}
+      cellOracleBaseGrn={cellOracleBaseGrn}
       selectedIds={selectedIds}
       compatibleAlgorithms={compatibleAlgorithms}
       selectedAlgorithms={selectedAlgorithms}
@@ -660,12 +695,16 @@ export default function CreateProjectFlow({
       setExpressionFileName={setExpressionFileName}
       setPseudotimeFile={setPseudotimeFile}
       setPseudotimeFileName={setPseudotimeFileName}
+      setClusterLabelsFile={setClusterLabelsFile}
+      setClusterLabelsFileName={setClusterLabelsFileName}
       setTopVariableGenes={setTopVariableGenes}
       setIncludeAllTFs={setIncludeAllTFs}
       setNormalizeEnabled={setNormalizeEnabled}
       setLogTransformEnabled={setLogTransformEnabled}
-      clearExpressionFile={clearExpressionFile}
+      setCellOracleSpecies={setCellOracleSpecies}
+      setCellOracleBaseGrn={setCellOracleBaseGrn}
       clearPseudotimeFile={clearPseudotimeFile}
+      clearClusterLabelsFile={clearClusterLabelsFile}
       setEnsembleEnabled={setEnsembleEnabled}
     />
   );
