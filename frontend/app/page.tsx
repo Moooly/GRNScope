@@ -216,10 +216,6 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
       <section className="relative overflow-hidden bg-[#f7fbff]">
-        <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/65 to-transparent" />
-        <div className="absolute -left-24 top-32 h-64 w-64 rounded-full bg-cyan-100/30 blur-3xl" />
-        <div className="absolute -right-24 top-24 h-64 w-64 rounded-full bg-teal-100/30 blur-3xl" />
-
         <div className="relative mx-auto max-w-[1180px] px-6 pb-10 pt-16 lg:px-10 lg:pb-12 lg:pt-18">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_0.55fr] lg:items-center">
             <div className="max-w-none">
@@ -358,7 +354,7 @@ function HomeProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:-translate-y-[2px] hover:border-[#1b75a6]/25 hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)]"
+      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition hover:border-[#1b75a6]/25"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
