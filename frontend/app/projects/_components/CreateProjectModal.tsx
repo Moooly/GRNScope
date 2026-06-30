@@ -1,33 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent, ReactNode } from "react";
+import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmDetailModal from "./AlgorithmDetailModal";
 import AlgorithmStep from "./AlgorithmStep";
-import {
-  CELLORACLE_BASE_GRN_OPTIONS,
-  CELLORACLE_SPECIES_OPTIONS,
-} from "./cellOracleOptions";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
+import UploadStep from "./UploadStep";
 
 const MAX_PREPROCESSED_GENES = 8000;
-
-function formatSpeciesLabel(species: string) {
-  return species
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatBaseGrnLabel(option: string) {
-  if (option === "auto") return "Auto";
-  if (option === "mouse_scATAC_atlas") return "Mouse scATAC atlas";
-  return "Promoter base GRN";
-}
 
 interface DatasetSummary {
   dimensions: string;
   hasPseudotime: boolean;
-  hasClusterLabels?: boolean;
   hasGroundTruth: boolean;
   preprocessingSummary: string[];
 }
@@ -39,7 +22,6 @@ interface CreateProjectModalProps {
   projectDescription: string;
   expressionFileName: string;
   pseudotimeFileName: string;
-  clusterLabelsFileName: string;
   geneCount: number | null;
   cellCount: number | null;
   isUploadingTempDataset: boolean;
@@ -48,8 +30,6 @@ interface CreateProjectModalProps {
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
-  cellOracleSpecies: string;
-  cellOracleBaseGrn: string;
   selectedIds: string[];
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
@@ -71,17 +51,12 @@ interface CreateProjectModalProps {
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
-  setClusterLabelsFile: (file: File | null) => void;
-  setClusterLabelsFileName: (value: string) => void;
   setTopVariableGenes: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
   setNormalizeEnabled: (value: boolean) => void;
   setLogTransformEnabled: (value: boolean) => void;
-  setCellOracleSpecies: (value: string) => void;
-  setCellOracleBaseGrn: (value: string) => void;
   clearExpressionFile: () => void;
   clearPseudotimeFile: () => void;
-  clearClusterLabelsFile: () => void;
   setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
 }
 
@@ -92,7 +67,6 @@ export default function CreateProjectModal({
   projectDescription,
   expressionFileName,
   pseudotimeFileName,
-  clusterLabelsFileName,
   geneCount,
   cellCount,
   isUploadingTempDataset,
@@ -101,8 +75,6 @@ export default function CreateProjectModal({
   includeAllTFs,
   normalizeEnabled,
   logTransformEnabled,
-  cellOracleSpecies,
-  cellOracleBaseGrn,
   selectedIds,
   compatibleAlgorithms,
   selectedAlgorithms,
@@ -124,23 +96,18 @@ export default function CreateProjectModal({
   setExpressionFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
-  setClusterLabelsFile,
-  setClusterLabelsFileName,
   setTopVariableGenes,
   setIncludeAllTFs,
   setNormalizeEnabled,
   setLogTransformEnabled,
-  setCellOracleSpecies,
-  setCellOracleBaseGrn,
   clearExpressionFile,
   clearPseudotimeFile,
-  clearClusterLabelsFile,
   setEnsembleEnabled,
 }: CreateProjectModalProps) {
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSelectedDatasetRef = useRef<string | null>(null);
   const [isOutsideClosing, setIsOutsideClosing] = useState(false);
-  const [isCustomizeOpen, setIsCustomizeOpen] = useState(true);
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [isPreprocessingHelpOpen, setIsPreprocessingHelpOpen] = useState(false);
   const [isPreprocessingHelpClosing, setIsPreprocessingHelpClosing] = useState(false);
   const [algorithmDetailToShow, setAlgorithmDetailToShow] = useState<ProjectAlgorithm | null>(null);
@@ -152,15 +119,6 @@ export default function CreateProjectModal({
   const datasetReady = hasExpressionFile && tempUploadId.length > 0 && !isUploadingTempDataset;
   const maxTopVariableGenes =
     geneCount === null ? MAX_PREPROCESSED_GENES : Math.min(geneCount, MAX_PREPROCESSED_GENES);
-  const cellOracleSelected = selectedIds.includes("CELLORACLE");
-  const cellOracleBaseOptions = CELLORACLE_BASE_GRN_OPTIONS.filter(
-    (option) => option !== "mouse_scATAC_atlas" || cellOracleSpecies === "mouse",
-  );
-  const cellOracleBaseValue = cellOracleBaseOptions.includes(
-    cellOracleBaseGrn as (typeof CELLORACLE_BASE_GRN_OPTIONS)[number],
-  )
-    ? cellOracleBaseGrn
-    : "auto";
 
   const selectExpressionFile = (file: File | null) => {
     setExpressionFile(file);
@@ -174,35 +132,11 @@ export default function CreateProjectModal({
     selectExpressionFile(file);
   };
 
-  const selectPseudotimeFile = (file: File | null) => {
-    setPseudotimeFile(file);
-    setPseudotimeFileName(file?.name ?? "");
-  };
-
-  const handlePseudotimeDrop = (event: DragEvent<HTMLLabelElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const file = event.dataTransfer.files?.[0] ?? null;
-    selectPseudotimeFile(file);
-  };
-
-  const selectClusterLabelsFile = (file: File | null) => {
-    setClusterLabelsFile(file);
-    setClusterLabelsFileName(file?.name ?? "");
-  };
-
-  const handleClusterLabelsDrop = (event: DragEvent<HTMLLabelElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const file = event.dataTransfer.files?.[0] ?? null;
-    selectClusterLabelsFile(file);
-  };
-
   useEffect(() => {
     if (isCreateVisible) {
       /* eslint-disable react-hooks/set-state-in-effect -- reset modal-local state on open */
       setIsOutsideClosing(false);
-      setIsCustomizeOpen(true);
+      setIsCustomizeOpen(false);
       setIsPreprocessingHelpOpen(false);
       setIsPreprocessingHelpClosing(false);
       setAlgorithmDetailToShow(null);
@@ -329,10 +263,6 @@ export default function CreateProjectModal({
       settings.push("log transform enabled");
     }
 
-    if (datasetSummary.hasClusterLabels) {
-      settings.push("global and per-cluster scopes");
-    }
-
     // Removed ensembleEnabled block
 
     const settingsLabel = settings.length > 0 ? ` with ${settings.join(", ")}` : "";
@@ -352,7 +282,7 @@ export default function CreateProjectModal({
       }
     >
       <div
-        className={`max-h-[calc(100vh-5rem)] w-full max-w-6xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-xl shadow-slate-900/15 lg:p-8 ${
+        className={`max-h-[calc(100vh-5rem)] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
           isModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -368,239 +298,184 @@ export default function CreateProjectModal({
           </div>
         </div>
 
-        <div className="mt-6 space-y-5">
-          <section className="rounded-[1.5rem] border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                  Inputs
-                </p>
-                <h3 className="mt-1 text-lg font-bold text-slate-950">
-                  Dataset and CellOracle setup
-                </h3>
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-950">Expression matrix</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    CSV with rows = genes, columns = cells. First row = cell IDs, first
+                    column = gene names. Max 500 MB.
+                  </p>
+                </div>
               </div>
-              {geneCount !== null && cellCount !== null && (
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                  {geneCount.toLocaleString()} genes x {cellCount.toLocaleString()} cells
-                </span>
-              )}
-            </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-              <InputFileCard
-                title="Expression matrix CSV"
-                description="Rows = genes, columns = cells. First column = gene names."
-                badge="Required"
-                fileName={expressionFileName}
-                placeholder="Drop expression matrix CSV here"
-                onDrop={handleExpressionDrop}
-                onSelect={selectExpressionFile}
-                onClear={clearExpressionFile}
-              >
-                {hasExpressionFile && (
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    {isUploadingTempDataset ? (
-                      <span className="inline-flex items-center gap-2 font-bold text-slate-600">
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
-                        Validating dataset
-                      </span>
-                    ) : datasetReady ? (
+              <div className="mt-5">
+                <label
+                  className="relative flex cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDrop={handleExpressionDrop}
+                >
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      selectExpressionFile(file);
+                    }}
+                  />
+                  <FileNameDisplay
+                    fileName={expressionFileName}
+                    placeholder="Drop expression matrix CSV here"
+                  />
+                  <span className="mt-2 text-sm text-slate-500">
+                    {expressionFileName ? "Click to replace" : "or click to browse"}
+                  </span>
+                </label>
+              </div>
+
+              {hasExpressionFile && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
+                  {isUploadingTempDataset ? (
+                    <span className="inline-flex items-center gap-2 font-medium text-slate-600">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
+                      Validating dataset…
+                    </span>
+                  ) : datasetReady ? (
+                    <>
                       <span className="inline-flex min-w-0 max-w-full items-center gap-2 font-bold text-[#178a62]">
                         <span className="h-2 w-2 rounded-full bg-[#20b779]" />
-                        <span className="min-w-0 max-w-full truncate" title={expressionFileName}>
+                        <span
+                          className="min-w-0 max-w-full truncate"
+                          title={expressionFileName}
+                        >
                           {compactExpressionFileName}
                         </span>
                       </span>
-                    ) : (
-                      <span
-                        className="min-w-0 max-w-full truncate font-bold text-slate-600"
-                        title={expressionFileName}
-                      >
-                        {compactExpressionFileName}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </InputFileCard>
-
-              <InputFileCard
-                title="Pseudotime CSV"
-                description="Cell IDs in the first column, trajectory values in the next columns."
-                badge="Optional"
-                fileName={pseudotimeFileName}
-                placeholder="Drop pseudotime CSV here"
-                onDrop={handlePseudotimeDrop}
-                onSelect={selectPseudotimeFile}
-                onClear={clearPseudotimeFile}
-              />
-
-              <InputFileCard
-                title="Cluster labels CSV"
-                description="Two columns: cell_id and cluster."
-                badge="Optional"
-                fileName={clusterLabelsFileName}
-                placeholder="Drop cluster labels CSV here"
-                onDrop={handleClusterLabelsDrop}
-                onSelect={selectClusterLabelsFile}
-                onClear={clearClusterLabelsFile}
-              />
-
-              <div className="flex h-full flex-col rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-base font-bold text-slate-950">
-                      CellOracle prior
-                    </h4>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">
-                      Species and base GRN for CellOracle runs.
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] ${
-                      cellOracleSelected
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-slate-200 bg-slate-50 text-slate-500"
-                    }`}
-                  >
-                    {cellOracleSelected ? "Selected" : "Ready"}
-                  </span>
-                </div>
-
-                <div className="mt-4 grid flex-1 content-start gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                  <label className="block">
-                    <span className="text-sm font-bold text-slate-950">Species</span>
-                    <select
-                      value={cellOracleSpecies}
-                      onChange={(event) => {
-                        const nextSpecies = event.target.value;
-                        setCellOracleSpecies(nextSpecies);
-                        if (
-                          nextSpecies !== "mouse" &&
-                          cellOracleBaseGrn === "mouse_scATAC_atlas"
-                        ) {
-                          setCellOracleBaseGrn("auto");
-                        }
-                      }}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                      {geneCount !== null && cellCount !== null && (
+                        <span className="font-medium text-slate-700">
+                          {geneCount.toLocaleString()} genes ×{" "}
+                          {cellCount.toLocaleString()} cells
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span
+                      className="min-w-0 max-w-full truncate font-medium text-slate-600"
+                      title={expressionFileName}
                     >
-                      {CELLORACLE_SPECIES_OPTIONS.map((species) => (
-                        <option key={species} value={species}>
-                          {formatSpeciesLabel(species)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="block">
-                    <span className="text-sm font-bold text-slate-950">Base GRN</span>
-                    <select
-                      value={cellOracleBaseValue}
-                      onChange={(event) => setCellOracleBaseGrn(event.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                    >
-                      {cellOracleBaseOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {formatBaseGrnLabel(option)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {compactExpressionFileName}
+                    </span>
+                  )}
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                  Customize analysis
-                </p>
-                <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
-                  {willRunSummary}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCustomizeOpen((prev) => !prev)}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                aria-expanded={isCustomizeOpen}
-              >
-                {isCustomizeOpen ? "Hide customize" : "Show customize"}
-              </button>
+              )}
             </div>
 
-            {isCustomizeOpen && (
-              <div className="mt-5 space-y-5 border-t border-slate-100 pt-5">
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                      Project name
-                    </span>
-                    <input
-                      id="projectName"
-                      type="text"
-                      value={projectName}
-                      onChange={(event) => setProjectName(event.target.value)}
-                      placeholder={
-                        expressionFileName
-                          ? expressionFileName.replace(/\.[^/.]+$/, "")
-                          : "Project name"
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                    />
-                  </label>
+            <UploadStep
+              pseudotimeFileName={pseudotimeFileName}
+              setPseudotimeFile={setPseudotimeFile}
+              setPseudotimeFileName={setPseudotimeFileName}
+            />
+          </div>
 
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                      Description
-                    </span>
-                    <input
-                      type="text"
-                      value={projectDescription}
-                      onChange={(event) => setProjectDescription(event.target.value)}
-                      placeholder="Optional note"
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                    />
-                  </label>
+
+          {datasetReady && (
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                    Plan summary
+                  </p>
+                  <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
+                    {willRunSummary}
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomizeOpen((prev) => !prev)}
+                  className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                  aria-expanded={isCustomizeOpen}
+                >
+                  {isCustomizeOpen ? "Hide customize ▴" : "Customize ▾"}
+                </button>
+              </div>
+            </div>
+          )}
 
-                <AlgorithmStep
-                  algorithms={algorithms}
-                  selectedIds={selectedIds}
-                  compatibleAlgorithms={compatibleAlgorithms}
-                  datasetSummary={datasetSummary}
-                  ensembleEnabled={ensembleEnabled}
-                  isLoadingAlgorithms={isLoadingAlgorithms}
-                  algorithmLoadError={algorithmLoadError}
-                  setEnsembleEnabled={setEnsembleEnabled}
-                  onToggleAlgorithm={onToggleAlgorithm}
-                  onRecommended={onRecommended}
-                  onSelectAll={onSelectAll}
-                  onShowAlgorithmDetails={handleShowAlgorithmDetails}
+          {datasetReady && isCustomizeOpen && (
+            <div className="space-y-6 rounded-[1.5rem] border border-slate-200 bg-slate-50/40 p-5">
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <label
+                  htmlFor="projectName"
+                  className="block text-xs font-bold uppercase tracking-[0.18em] text-black"
+                >
+                  Project name
+                </label>
+                <input
+                  id="projectName"
+                  type="text"
+                  value={
+                    projectName === expressionFileName.replace(/\.[^/.]+$/, "")
+                      ? ""
+                      : projectName || ""
+                  }
+                  onChange={(event) => setProjectName(event.target.value)}
+                  placeholder={
+                    expressionFileName
+                      ? expressionFileName.replace(/\.[^/.]+$/, "")
+                      : "Auto-filled from uploaded expression matrix"
+                  }
+                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
                 />
+              </div>
 
-                <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                        Preprocessing
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsPreprocessingHelpClosing(false);
-                          setIsPreprocessingHelpOpen(true);
-                        }}
-                        className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-[#1b75a6]/25 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:bg-[#e8f5fb]"
-                        aria-label="Preprocessing help"
-                      >
-                        ?
-                      </button>
-                    </div>
+
+              <AlgorithmStep
+                algorithms={algorithms}
+                selectedIds={selectedIds}
+                compatibleAlgorithms={compatibleAlgorithms}
+                datasetSummary={datasetSummary}
+                ensembleEnabled={ensembleEnabled}
+                isLoadingAlgorithms={isLoadingAlgorithms}
+                algorithmLoadError={algorithmLoadError}
+                setEnsembleEnabled={setEnsembleEnabled}
+                onToggleAlgorithm={onToggleAlgorithm}
+                onRecommended={onRecommended}
+                onSelectAll={onSelectAll}
+                onShowAlgorithmDetails={handleShowAlgorithmDetails}
+              />
+
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-black">
+                      Preprocessing
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPreprocessingHelpClosing(false);
+                        setIsPreprocessingHelpOpen(true);
+                      }}
+                      className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-[#1b75a6]/25 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:bg-[#e8f5fb]"
+                      aria-label="Preprocessing help"
+                    >
+                      ?
+                    </button>
                   </div>
+                </div>
 
-                  <div className="mt-4 grid items-center gap-4 lg:grid-cols-[1.4fr_0.9fr_0.9fr_0.9fr]">
+                <div className="mt-5">
+                  <div className="grid items-center gap-6 lg:grid-cols-[1.55fr_0.9fr_0.9fr_0.9fr]">
                     <div className="flex items-center gap-3">
                       <span className="whitespace-nowrap text-sm font-bold text-slate-950">
                         Gene filtering
@@ -645,10 +520,12 @@ export default function CreateProjectModal({
                       onToggle={() => setLogTransformEnabled(!logTransformEnabled)}
                     />
                   </div>
+
                 </div>
               </div>
-            )}
-          </section>
+
+            </div>
+          )}
 
           {errors.length > 0 && (
             <div className="rounded-[1.5rem] border border-rose-200 bg-rose-50 p-5">
@@ -748,88 +625,6 @@ export default function CreateProjectModal({
         isClosing={isAlgorithmDetailClosing}
         onClose={handleCloseAlgorithmDetails}
       />
-    </div>
-  );
-}
-
-function InputFileCard({
-  title,
-  description,
-  badge,
-  fileName,
-  placeholder,
-  onDrop,
-  onSelect,
-  onClear,
-  children,
-}: {
-  title: string;
-  description: string;
-  badge: "Required" | "Optional";
-  fileName: string;
-  placeholder: string;
-  onDrop: (event: DragEvent<HTMLLabelElement>) => void;
-  onSelect: (file: File | null) => void;
-  onClear: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="flex h-full flex-col rounded-[1.25rem] border border-slate-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-base font-bold text-slate-950">{title}</h4>
-            <span
-              className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] ${
-                badge === "Required"
-                  ? "border-[#1b75a6]/20 bg-[#f2f9fc] text-[#1b75a6]"
-                  : "border-slate-200 bg-slate-50 text-slate-500"
-              }`}
-            >
-              {badge}
-            </span>
-          </div>
-          <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
-        </div>
-        {fileName && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="shrink-0 cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-
-      <label
-        className="relative mt-4 flex min-h-24 flex-1 cursor-pointer flex-col items-center justify-center rounded-[1rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-4 py-5 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
-        onDragEnter={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-        onDrop={onDrop}
-      >
-        <input
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
-            onSelect(file);
-          }}
-        />
-        <FileNameDisplay fileName={fileName} placeholder={placeholder} />
-        <span className="mt-2 text-sm text-slate-500">
-          {fileName ? "Click to replace" : "or click to browse"}
-        </span>
-      </label>
-
-      {children ? <div className="mt-3 text-sm">{children}</div> : null}
     </div>
   );
 }

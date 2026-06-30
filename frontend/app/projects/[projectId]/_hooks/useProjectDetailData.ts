@@ -8,7 +8,7 @@ import type {
   ProjectJob,
   ProjectManifest,
 } from "../_lib/types";
-import { API_BASE, API_ROOT } from "../../../_lib/apiConfig";
+import { API_BASE } from "../../../_lib/apiConfig";
 import { apiFetch } from "../../../_lib/clientIdentity";
 
 const POLL_INTERVAL_MS = 5000;
@@ -208,7 +208,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
     const loadAlgorithmCatalog = async () => {
       try {
-        const response = await fetch(`${API_ROOT}/algorithms`, {
+        const response = await fetch(`${API_BASE}/algorithms`, {
           headers: {
             Accept: "application/json",
           },

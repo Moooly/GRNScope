@@ -5,26 +5,16 @@ interface UploadStepProps {
   pseudotimeFileName: string;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
-  clusterLabelsFileName: string;
-  setClusterLabelsFile: (file: File | null) => void;
-  setClusterLabelsFileName: (value: string) => void;
 }
 
 export default function UploadStep({
   pseudotimeFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
-  clusterLabelsFileName,
-  setClusterLabelsFile,
-  setClusterLabelsFileName,
 }: UploadStepProps) {
   const selectPseudotimeFile = (file: File | null) => {
     setPseudotimeFile(file);
     setPseudotimeFileName(file?.name ?? "");
-  };
-  const selectClusterLabelsFile = (file: File | null) => {
-    setClusterLabelsFile(file);
-    setClusterLabelsFileName(file?.name ?? "");
   };
 
   const handlePseudotimeDrop = (event: DragEvent<HTMLLabelElement>) => {
@@ -34,63 +24,20 @@ export default function UploadStep({
     selectPseudotimeFile(file);
   };
 
-  const handleClusterLabelsDrop = (event: DragEvent<HTMLLabelElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const file = event.dataTransfer.files?.[0] ?? null;
-    selectClusterLabelsFile(file);
-  };
-
-  return (
-    <div className="space-y-5">
-      <OptionalFileCard
-        title="Pseudotime CSV"
-        description="Optional CSV file used by trajectory-based algorithms."
-        fileName={pseudotimeFileName}
-        placeholder="Drop pseudotime CSV here"
-        onDrop={handlePseudotimeDrop}
-        onSelect={selectPseudotimeFile}
-      />
-      <OptionalFileCard
-        title="Cluster labels CSV"
-        description="Optional cell_id, cluster CSV for global plus per-cluster results."
-        fileName={clusterLabelsFileName}
-        placeholder="Drop cluster labels CSV here"
-        onDrop={handleClusterLabelsDrop}
-        onSelect={selectClusterLabelsFile}
-      />
-    </div>
-  );
-}
-
-interface OptionalFileCardProps {
-  title: string;
-  description: string;
-  fileName: string;
-  placeholder: string;
-  onDrop: (event: DragEvent<HTMLLabelElement>) => void;
-  onSelect: (file: File | null) => void;
-}
-
-function OptionalFileCard({
-  title,
-  description,
-  fileName,
-  placeholder,
-  onDrop,
-  onSelect,
-}: OptionalFileCardProps) {
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="w-full">
           <div className="flex w-full items-center justify-between gap-4">
-            <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+            <h3 className="text-lg font-bold text-slate-950">Pseudotime CSV</h3>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
               Optional
             </span>
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Optional CSV file used by trajectory-based algorithms. Upload it only
+            if your dataset includes pseudotime values.
+          </p>
         </div>
       </div>
 
@@ -105,7 +52,7 @@ function OptionalFileCard({
             event.preventDefault();
             event.stopPropagation();
           }}
-          onDrop={onDrop}
+          onDrop={handlePseudotimeDrop}
         >
           <input
             type="file"
@@ -113,12 +60,15 @@ function OptionalFileCard({
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
-              onSelect(file);
+              selectPseudotimeFile(file);
             }}
           />
-          <FileNameDisplay fileName={fileName} placeholder={placeholder} />
+          <FileNameDisplay
+            fileName={pseudotimeFileName}
+            placeholder="Drop pseudotime CSV here"
+          />
           <span className="mt-2 text-sm text-slate-500">
-            {fileName ? "Click to replace" : "or click to browse"}
+            {pseudotimeFileName ? "Click to replace" : "or click to browse"}
           </span>
         </label>
       </div>
