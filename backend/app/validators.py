@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from itertools import chain
 import os
 from math import isfinite
 from pathlib import Path
@@ -10,6 +11,17 @@ from typing import Any
 MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
 CSV_SNIFF_SAMPLE_BYTES = 65536
 MISSING_TOKENS = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
+CELL_ID_HEADER_NAMES = {
+    "cell",
+    "cell_id",
+    "cellid",
+    "cell id",
+    "cells",
+    "sample",
+    "sample_id",
+    "sampleid",
+    "sample id",
+}
 DEFAULT_EXPRESSION_FULL_NUMERIC_CHECK_ROWS = 5
 DEFAULT_EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS = 4
 DEFAULT_EXPRESSION_FAST_SAMPLE_ROWS = 20
@@ -134,6 +146,69 @@ def parse_optional_finite_float(value: object) -> bool:
     if not isfinite(parsed):
         raise ValueError("Pseudotime file contains non-numeric values outside blank/NA cells.")
     return True
+
+
+def is_cell_id_header(value: str) -> bool:
+    return value.strip().lower() in CELL_ID_HEADER_NAMES
+
+
+def uniquify_pseudotime_headers(headers: list[str]) -> list[str]:
+    unique_headers: list[str] = []
+    seen_headers: set[str] = set()
+
+    for index, raw_header in enumerate(headers, start=1):
+        base_header = raw_header.strip() or f"PseudoTime{index}"
+        header = base_header
+        suffix = 2
+        while header in seen_headers:
+            header = f"{base_header}_{suffix}"
+            suffix += 1
+        seen_headers.add(header)
+        unique_headers.append(header)
+
+    return unique_headers
+
+
+def resolve_pseudotime_table_layout(
+    raw_headers: list[str],
+    first_data_row: list[str] | None,
+) -> tuple[list[str], int]:
+    """Return trajectory headers and expected row width.
+
+    Some exported pseudotime files omit the cell-ID header while keeping cell IDs
+    in the first data column, producing headers like:
+    PseudoTime1,PseudoTime2
+    E37_5_927,114.7,NA
+
+    Others include a trailing empty header:
+    PseudoTime1,PseudoTime2,
+
+    Treat those as shifted headers: the first data column is still cell IDs, and
+    the shown headers belong to trajectory columns.
+    """
+
+    if len(raw_headers) < 2:
+        raise ValueError(
+            "Pseudotime file must contain either one pseudotime column or a first column of cell IDs followed by one or more pseudotime columns."
+        )
+
+    first_header = raw_headers[0].strip()
+    first_data_width = len(first_data_row) if first_data_row is not None else len(raw_headers)
+    has_explicit_cell_header = first_header == "" or is_cell_id_header(first_header)
+    has_shifted_headers = (
+        not has_explicit_cell_header
+        and (
+            first_data_width == len(raw_headers) + 1
+            or (raw_headers[-1].strip() == "" and first_data_width == len(raw_headers))
+        )
+    )
+
+    if has_shifted_headers:
+        if raw_headers[-1].strip() == "" and first_data_width == len(raw_headers):
+            return uniquify_pseudotime_headers(raw_headers[:-1]), len(raw_headers)
+        return uniquify_pseudotime_headers(raw_headers), len(raw_headers) + 1
+
+    return uniquify_pseudotime_headers(raw_headers[1:]), len(raw_headers)
 
 
 def expression_numeric_values_to_check(row: list[str], data_row_index: int) -> list[str]:
@@ -287,7 +362,8 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
     2. BEELINE-style format: first column is cell IDs, remaining columns are
        pseudotime trajectories such as PseudoTime1, PseudoTime2, etc.
        Blank/NA values are allowed in trajectory columns because a cell may
-       belong to only one branch.
+       belong to only one branch. Files with an omitted first-column header are
+       also accepted when the first data column clearly contains cell IDs.
     """
 
     dialect = detect_csv_dialect_from_file(csv_path)
@@ -341,24 +417,36 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
             "Pseudotime file must contain either one pseudotime column or a first column of cell IDs followed by one or more pseudotime columns."
         )
 
-    raw_headers = [str(column).strip() for column in first_row]
-    if any(header == "" for header in raw_headers[1:]):
-        raise ValueError("Pseudotime file contains blank trajectory column names.")
+    try:
+        first_data_row = next(rows)
+    except StopIteration:
+        first_data_row = None
 
-    trajectory_count = len(raw_headers) - 1
+    raw_headers = [str(column).strip() for column in first_row]
+    trajectory_headers, expected_column_count = resolve_pseudotime_table_layout(
+        raw_headers,
+        first_data_row,
+    )
+    trajectory_count = len(trajectory_headers)
     trajectory_numeric_counts = [0] * trajectory_count
     total_numeric_values = 0
     cell_count = 0
     seen_cell_ids: set[str] = set()
 
     try:
-        for row_number, row in enumerate(rows, start=2):
-            if len(row) > len(first_row):
+        first_data_rows = (
+            [(2, first_data_row)]
+            if first_data_row is not None
+            else []
+        )
+
+        for row_number, row in chain(first_data_rows, enumerate(rows, start=3)):
+            if len(row) > expected_column_count:
                 raise ValueError(
-                    f"Pseudotime row {row_number} has {len(row)} columns; expected {len(first_row)}."
+                    f"Pseudotime row {row_number} has {len(row)} columns; expected {expected_column_count}."
                 )
 
-            padded_row = [*row, *([""] * (len(first_row) - len(row)))]
+            padded_row = [*row, *([""] * (expected_column_count - len(row)))]
             cell_id = str(padded_row[0]).strip()
             if cell_id == "":
                 raise ValueError("Pseudotime file contains blank cell identifiers.")
@@ -368,7 +456,7 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
             seen_cell_ids.add(cell_id)
             cell_count += 1
 
-            for index, value in enumerate(padded_row[1:]):
+            for index, value in enumerate(padded_row[1 : trajectory_count + 1]):
                 if parse_optional_finite_float(value):
                     trajectory_numeric_counts[index] += 1
                     total_numeric_values += 1
@@ -384,7 +472,7 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
         raise ValueError("Pseudotime file must contain at least one numeric pseudotime value.")
 
     empty_trajectory_columns = [
-        raw_headers[index + 1]
+        trajectory_headers[index]
         for index, numeric_count in enumerate(trajectory_numeric_counts)
         if numeric_count == 0
     ]
