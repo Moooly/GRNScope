@@ -30,6 +30,11 @@ def temp_pseudotime_path(temp_upload_id: str, original_name: str) -> Path:
     return TEMP_UPLOAD_DIR / f"{temp_upload_id}__pseudotime__{safe_name}"
 
 
+def temp_cluster_labels_path(temp_upload_id: str, original_name: str) -> Path:
+    safe_name = Path(original_name).name
+    return TEMP_UPLOAD_DIR / f"{temp_upload_id}__cluster_labels__{safe_name}"
+
+
 def temp_metadata_path(temp_upload_id: str) -> Path:
     return TEMP_UPLOAD_DIR / f"{temp_upload_id}__metadata.json"
 
@@ -72,6 +77,15 @@ def move_temp_upload_to_project(temp_upload_id: str, project_id: str) -> dict[st
         shutil.move(str(pseudo_src), str(pseudo_dst))
         result["pseudotime_path"] = str(pseudo_dst)
 
+    cluster_labels_path = metadata.get("cluster_labels_path")
+    if cluster_labels_path:
+        labels_src = Path(cluster_labels_path)
+        labels_dst = project_dir / labels_src.name.replace(
+            f"{temp_upload_id}__", "", 1
+        )
+        shutil.move(str(labels_src), str(labels_dst))
+        result["cluster_labels_path"] = str(labels_dst)
+
     shutil.move(str(temp_metadata_path(temp_upload_id)), str(project_dir / "upload_metadata.json"))
     return result
 
@@ -83,7 +97,7 @@ def cleanup_temp_upload(temp_upload_id: str) -> None:
 
     metadata = load_json(meta_path)
 
-    for key in ("expression_path", "pseudotime_path"):
+    for key in ("expression_path", "pseudotime_path", "cluster_labels_path"):
         file_path = metadata.get(key)
         if file_path:
             p = Path(file_path)

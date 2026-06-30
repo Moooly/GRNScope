@@ -56,15 +56,36 @@ def compact_result_for_client(result: dict) -> dict:
         or []
     )
 
-    compact_edges = [
-        {
-            key: value
-            for key, value in edge.items()
-            if key in CLIENT_RESULT_EDGE_FIELDS
-        }
-        for edge in edges
-        if isinstance(edge, dict)
-    ]
+    def compact_edges_for_client(edges: list) -> list[dict]:
+        return [
+            {
+                key: value
+                for key, value in edge.items()
+                if key in CLIENT_RESULT_EDGE_FIELDS
+            }
+            for edge in edges
+            if isinstance(edge, dict)
+        ]
+
+    compact_edges = compact_edges_for_client(edges)
+
+    compact_scopes = {}
+    scopes = result.get("scopes")
+    if isinstance(scopes, dict):
+        for scope_id, scope_payload in scopes.items():
+            if not isinstance(scope_payload, dict):
+                continue
+            scope_edges = scope_payload.get("top_edges") or []
+            compact_scopes[str(scope_id)] = {
+                "scope_id": scope_payload.get("scope_id") or scope_id,
+                "scope_label": scope_payload.get("scope_label") or scope_id,
+                "scope_type": scope_payload.get("scope_type"),
+                "cell_count": scope_payload.get("cell_count"),
+                "status": scope_payload.get("status"),
+                "skip_reason": scope_payload.get("skip_reason"),
+                "network_summary": scope_payload.get("network_summary"),
+                "top_edges": compact_edges_for_client(scope_edges),
+            }
 
     compact = {
         "algorithm_id": result.get("algorithm_id"),
@@ -77,9 +98,34 @@ def compact_result_for_client(result: dict) -> dict:
         "network_summary": result.get("network_summary"),
         "edge_count": result.get("edge_count", len(compact_edges)),
         "top_edges": compact_edges,
+        "scope_order": result.get("scope_order"),
+        "scopes": compact_scopes or None,
     }
 
     return {key: value for key, value in compact.items() if value is not None}
+
+
+def iter_result_edges(result: dict):
+    edges = (
+        result.get("edges")
+        or result.get("top_edges")
+        or result.get("ranked_edges")
+        or []
+    )
+
+    for edge in edges:
+        if isinstance(edge, dict):
+            yield edge
+
+    scopes = result.get("scopes")
+    if not isinstance(scopes, dict):
+        return
+    for scope_payload in scopes.values():
+        if not isinstance(scope_payload, dict):
+            continue
+        for edge in scope_payload.get("top_edges") or []:
+            if isinstance(edge, dict):
+                yield edge
 
 
 def attach_gene_coordinates_to_result(result: dict) -> dict:
@@ -89,15 +135,8 @@ def attach_gene_coordinates_to_result(result: dict) -> dict:
     position in the Circos view. This keeps the edge payload unchanged while
     adding a lookup table keyed by gene name.
     """
-    edges = (
-        result.get("edges")
-        or result.get("top_edges")
-        or result.get("ranked_edges")
-        or []
-    )
-
     gene_names: set[str] = set()
-    for edge in edges:
+    for edge in iter_result_edges(result):
         source = str(edge.get("source", "")).strip()
         target = str(edge.get("target", "")).strip()
 

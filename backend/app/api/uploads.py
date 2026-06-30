@@ -9,13 +9,16 @@ from ..storage import (
     create_temp_upload_id,
     save_json,
     save_upload_file,
+    temp_cluster_labels_path,
     temp_expression_path,
     temp_metadata_path,
     temp_pseudotime_path,
 )
 from ..validators import (
+    parse_cluster_labels,
     parse_expression_matrix,
     parse_pseudotime,
+    read_expression_cell_names,
     validate_csv_extension,
 )
 router = APIRouter()
@@ -31,6 +34,7 @@ def preview_names(names: list[str]) -> list[str]:
 async def temp_dataset_upload(
     expression_matrix: UploadFile = File(...),
     pseudotime: UploadFile | None = File(default=None),
+    cluster_labels: UploadFile | None = File(default=None),
 ):
     errors: list[str] = []
 
@@ -42,6 +46,11 @@ async def temp_dataset_upload(
         pseudo_ext_error = validate_csv_extension(pseudotime.filename or "")
         if pseudo_ext_error:
             errors.append(f"Pseudotime: {pseudo_ext_error}")
+
+    if cluster_labels:
+        cluster_ext_error = validate_csv_extension(cluster_labels.filename or "")
+        if cluster_ext_error:
+            errors.append(f"Cluster labels: {cluster_ext_error}")
 
     if errors:
         return TempUploadResponse(ok=False, errors=errors)
@@ -57,9 +66,16 @@ async def temp_dataset_upload(
             temp_upload_id, pseudotime.filename or "pseudotime.csv"
         )
 
+    cluster_labels_path: Path | None = None
+    if cluster_labels:
+        cluster_labels_path = temp_cluster_labels_path(
+            temp_upload_id, cluster_labels.filename or "cluster_labels.csv"
+        )
+
     try:
         save_upload_file(expression_matrix, expression_path)
         expression_info = parse_expression_matrix(expression_path)
+        expression_cell_names = read_expression_cell_names(expression_path)
 
         pseudotime_info = None
         if pseudotime and pseudotime_path is not None:
@@ -68,12 +84,26 @@ async def temp_dataset_upload(
                 pseudotime_path, expression_info["cell_count"]
             )
 
+        cluster_labels_info = None
+        if cluster_labels and cluster_labels_path is not None:
+            save_upload_file(cluster_labels, cluster_labels_path)
+            cluster_labels_info = parse_cluster_labels(
+                cluster_labels_path,
+                expression_cell_names,
+            )
+
         metadata = {
             "temp_upload_id": temp_upload_id,
             "expression_path": str(expression_path),
             "pseudotime_path": str(pseudotime_path) if pseudotime_path else None,
+            "cluster_labels_path": (
+                str(cluster_labels_path) if cluster_labels_path else None
+            ),
             "expression_filename": expression_matrix.filename,
             "pseudotime_filename": pseudotime.filename if pseudotime else None,
+            "cluster_labels_filename": (
+                cluster_labels.filename if cluster_labels else None
+            ),
             "gene_count": expression_info["gene_count"],
             "cell_count": expression_info["cell_count"],
             "gene_names": preview_names(expression_info["gene_names"]),
@@ -88,6 +118,23 @@ async def temp_dataset_upload(
             "pseudotime_count": (
                 pseudotime_info["pseudotime_count"] if pseudotime_info else None
             ),
+            "has_cluster_labels": cluster_labels is not None,
+            "cluster_label_count": (
+                cluster_labels_info["cluster_label_count"]
+                if cluster_labels_info
+                else None
+            ),
+            "cluster_count": (
+                cluster_labels_info["cluster_count"] if cluster_labels_info else None
+            ),
+            "cluster_names": (
+                cluster_labels_info["cluster_names"] if cluster_labels_info else []
+            ),
+            "cluster_cell_counts": (
+                cluster_labels_info["cluster_cell_counts"]
+                if cluster_labels_info
+                else {}
+            ),
         }
         save_json(temp_metadata_path(temp_upload_id), metadata)
 
@@ -96,9 +143,16 @@ async def temp_dataset_upload(
             temp_upload_id=temp_upload_id,
             expression_filename=expression_matrix.filename,
             pseudotime_filename=pseudotime.filename if pseudotime else None,
+            cluster_labels_filename=(
+                cluster_labels.filename if cluster_labels else None
+            ),
             gene_count=expression_info["gene_count"],
             cell_count=expression_info["cell_count"],
             has_pseudotime=pseudotime is not None,
+            has_cluster_labels=cluster_labels is not None,
+            cluster_count=(
+                cluster_labels_info["cluster_count"] if cluster_labels_info else None
+            ),
             errors=[],
         )
     except Exception as e:
@@ -106,6 +160,8 @@ async def temp_dataset_upload(
             expression_path.unlink()
         if pseudotime_path and pseudotime_path.exists():
             pseudotime_path.unlink()
+        if cluster_labels_path and cluster_labels_path.exists():
+            cluster_labels_path.unlink()
 
         meta_path = temp_metadata_path(temp_upload_id)
         if meta_path.exists():

@@ -14,6 +14,7 @@ AlgorithmCategory = Literal[
     "Granger causality",
     "Tree-based dynamical system",
     "Graph learning",
+    "Prior-informed regression",
 ]
 
 
@@ -51,6 +52,26 @@ class AlgorithmInfo(TypedDict):
     limitations: list[str]
     recommended_use_cases: list[str]
     parameters: list[AlgorithmParameter]
+
+
+CELLORACLE_SPECIES_OPTIONS: list[str] = [
+    "human",
+    "mouse",
+    "rat",
+    "pig",
+    "chicken",
+    "zebrafish",
+    "xenopus_tropicalis",
+    "drosophila",
+    "c_elegans",
+    "s_cerevisiae",
+]
+
+CELLORACLE_BASE_GRN_OPTIONS: list[str] = [
+    "auto",
+    "mouse_scATAC_atlas",
+    "promoter",
+]
 
 
 ALGORITHMS: list[AlgorithmInfo] = [
@@ -169,6 +190,106 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Recommended preset selection.",
         ],
         "parameters": [],
+    },
+    {
+        "id": "CELLORACLE",
+        "name": "CellOracle",
+        "description": "Prior-informed GRN construction using promoter or atlas base-GRN candidates.",
+        "long_description": (
+            "CellOracle combines a TF-target base GRN with single-cell expression "
+            "data to estimate directed, signed regulatory links. GRNScope runs it "
+            "globally, and also per cluster when cluster labels are uploaded."
+        ),
+        "category": "Prior-informed regression",
+        "year": "2022",
+        "journal": "Nature",
+        "publication_title": "CellOracle: dissecting cell identity by network biology",
+        "publication_url": "https://doi.org/10.1038/s41586-022-05688-9",
+        "source_url": "https://github.com/morris-lab/CellOracle",
+        "docker_image": "grnbeeline/celloracle:base",
+        "runner": "BLRun/celloracleRunner.py",
+        "directed": True,
+        "signed": True,
+        "requires_pseudotime": False,
+        "supports_expression_matrix": True,
+        "active": True,
+        "recommended": False,
+        "estimated_runtime": "Slow for large gene or cell sets",
+        "strengths": [
+            "Uses prior TF-target candidates instead of testing every possible gene pair.",
+            "Produces directed and signed regulatory coefficients.",
+            "Supports global and per-cluster network construction.",
+        ],
+        "limitations": [
+            "Requires a species-specific base GRN prior.",
+            "Very large datasets may require stronger gene or cell downsampling.",
+            "Cluster-specific networks are only available when cluster labels are uploaded.",
+        ],
+        "recommended_use_cases": [
+            "Prior-informed regulatory network construction.",
+            "Comparing global and cluster-specific regulation.",
+            "Signed TF-target interpretation.",
+        ],
+        "parameters": [
+            {
+                "name": "species",
+                "label": "Species",
+                "description": "Species used to load the CellOracle promoter base GRN.",
+                "default": "human",
+                "required": True,
+                "value_type": "string",
+                "options": CELLORACLE_SPECIES_OPTIONS,
+            },
+            {
+                "name": "baseGrn",
+                "label": "Base GRN",
+                "description": "Base GRN prior used by CellOracle.",
+                "default": "auto",
+                "required": True,
+                "value_type": "string",
+                "options": CELLORACLE_BASE_GRN_OPTIONS,
+            },
+            {
+                "name": "maxGenes",
+                "label": "CellOracle gene cap",
+                "description": "Maximum number of genes passed to CellOracle after variance ranking.",
+                "default": 3000,
+                "required": False,
+                "value_type": "integer",
+            },
+            {
+                "name": "maxCells",
+                "label": "CellOracle cell cap",
+                "description": "Maximum number of cells per CellOracle scope.",
+                "default": 30000,
+                "required": False,
+                "value_type": "integer",
+            },
+            {
+                "name": "minClusterCells",
+                "label": "Minimum cluster cells",
+                "description": "Clusters below this size are skipped.",
+                "default": 50,
+                "required": False,
+                "value_type": "integer",
+            },
+            {
+                "name": "topK",
+                "label": "Top edges per target",
+                "description": "Maximum strongest CellOracle links to keep per target.",
+                "default": 25,
+                "required": False,
+                "value_type": "integer",
+            },
+            {
+                "name": "pValueCutoff",
+                "label": "P-value cutoff",
+                "description": "CellOracle links above this p-value are removed when p-values are available.",
+                "default": 0.05,
+                "required": False,
+                "value_type": "float",
+            },
+        ],
     },
     {
         "id": "PPCOR",
@@ -838,6 +959,7 @@ ALGORITHM_RUN_DIFFICULTY_ORDER: list[str] = [
     "SCODE",
     "SINCERITIES",
     "GRNBOOST2",
+    "CELLORACLE",
     "JUMP3",
     "SCSGL",
     "GENIE3",

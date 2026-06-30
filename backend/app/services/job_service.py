@@ -6,7 +6,11 @@ import shutil
 import subprocess
 import time
 import threading
+import csv
+import hashlib
+import re
 from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
 
 from ..algorithm_registry import sort_algorithm_ids_by_difficulty
@@ -20,7 +24,10 @@ from ..repositories.project_repository import read_project_manifest
 from ..services.beeline_service import (
     AlgorithmStoppedError,
     MatrixValidationRuntimeError,
+    detect_csv_dialect_from_file,
+    read_delimited_header,
     run_beeline_with_progress,
+    write_expression_subset_by_cells,
 )
 from ..services.email_service import (
     normalize_notification_email,
@@ -34,6 +41,17 @@ from ..services.result_service import algorithm_result_path, write_algorithm_res
 class TaskControl:
     stop_event: "TaskStopSignal"
     process: subprocess.Popen | None = None
+
+
+@dataclass
+class AlgorithmScope:
+    scope_id: str
+    label: str
+    scope_type: str
+    cell_count: int
+    selected_column_indices: list[int] | None = None
+    skipped: bool = False
+    skip_reason: str | None = None
 
 
 class TaskStopSignal:
@@ -83,6 +101,193 @@ ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
     MAX_CONCURRENT_ALGORITHM_TASKS
 )
 TERMINAL_JOB_STATUSES = {"Completed", "Failed", "Stopped"}
+MIN_CLUSTER_SCOPE_CELLS = 50
+
+
+def safe_scope_id(scope_type: str, label: str) -> str:
+    if scope_type == "global":
+        return "global"
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_.-")
+    if not slug:
+        slug = "cluster"
+    slug = slug[:48]
+    digest = hashlib.sha1(label.encode("utf-8")).hexdigest()[:8]
+    return f"cluster_{slug}_{digest}"
+
+
+def cluster_file_has_header(row: list[str]) -> bool:
+    if len(row) < 2:
+        return False
+    first = str(row[0]).strip().lower()
+    second = str(row[1]).strip().lower()
+    return first in {"cell", "cell_id", "cellid", "cell id", "cells"} and second in {
+        "cluster",
+        "cluster_id",
+        "clusterid",
+        "cluster id",
+        "cell_type",
+        "celltype",
+        "cell type",
+        "label",
+        "group",
+    }
+
+
+def load_cluster_scope_definitions(project_manifest: dict) -> list[AlgorithmScope]:
+    expression_path = project_manifest.get("expression_path")
+    cluster_labels_path = project_manifest.get("cluster_labels_path")
+    if not expression_path or not cluster_labels_path:
+        return []
+
+    header, _dialect = read_delimited_header(Path(expression_path))
+    cell_to_column_index = {
+        str(cell_name).strip(): index
+        for index, cell_name in enumerate(header[1:], start=1)
+        if str(cell_name).strip()
+    }
+
+    labels_path = Path(cluster_labels_path)
+    if not labels_path.exists():
+        return []
+
+    dialect = detect_csv_dialect_from_file(labels_path)
+    cluster_columns: dict[str, list[int]] = {}
+    with labels_path.open("r", encoding="utf-8", newline="") as labels_file:
+        reader = csv.reader(labels_file, dialect=dialect)
+        try:
+            first_row = next(reader)
+        except StopIteration:
+            return []
+
+        rows = reader if cluster_file_has_header(first_row) else chain([first_row], reader)
+        for row in rows:
+            if len(row) < 2:
+                continue
+            cell_id = str(row[0]).strip()
+            cluster_label = str(row[1]).strip()
+            if not cell_id or not cluster_label:
+                continue
+            column_index = cell_to_column_index.get(cell_id)
+            if column_index is None:
+                continue
+            cluster_columns.setdefault(cluster_label, []).append(column_index)
+
+    scopes: list[AlgorithmScope] = []
+    for cluster_label, column_indices in sorted(
+        cluster_columns.items(),
+        key=lambda item: (-len(item[1]), item[0]),
+    ):
+        scope_id = safe_scope_id("cluster", cluster_label)
+        cell_count = len(column_indices)
+        skipped = cell_count < MIN_CLUSTER_SCOPE_CELLS
+        scopes.append(
+            AlgorithmScope(
+                scope_id=scope_id,
+                label=cluster_label,
+                scope_type="cluster",
+                cell_count=cell_count,
+                selected_column_indices=sorted(column_indices),
+                skipped=skipped,
+                skip_reason=(
+                    f"Skipped because this cluster has {cell_count} cells; "
+                    f"minimum is {MIN_CLUSTER_SCOPE_CELLS}."
+                    if skipped
+                    else None
+                ),
+            )
+        )
+
+    return scopes
+
+
+def build_algorithm_scopes(project_manifest: dict) -> list[AlgorithmScope]:
+    expression_path = project_manifest.get("expression_path")
+    cell_count = 0
+    if expression_path:
+        try:
+            header, _dialect = read_delimited_header(Path(expression_path))
+            cell_count = max(0, len(header) - 1)
+        except Exception:
+            cell_count = 0
+
+    scopes = [
+        AlgorithmScope(
+            scope_id="global",
+            label="Global",
+            scope_type="global",
+            cell_count=cell_count,
+        )
+    ]
+    scopes.extend(load_cluster_scope_definitions(project_manifest))
+    return scopes
+
+
+def prepare_scope_manifest(
+    project_dir: Path,
+    project_manifest: dict,
+    scope: AlgorithmScope,
+    *,
+    has_cluster_scopes: bool,
+) -> dict:
+    scope_manifest = {
+        **project_manifest,
+        "scope": {
+            "id": scope.scope_id,
+            "label": scope.label,
+            "type": scope.scope_type,
+            "cell_count": scope.cell_count,
+        },
+    }
+
+    dataset_suffix = scope.scope_id if has_cluster_scopes else None
+    if dataset_suffix:
+        scope_manifest["beeline_dataset_id"] = f"{project_manifest.get('project_id')}_{dataset_suffix}"
+
+    if scope.scope_type != "cluster" or not scope.selected_column_indices:
+        return scope_manifest
+
+    scope_dir = project_dir / "scopes" / scope.scope_id
+    scope_expression = scope_dir / "ExpressionData.raw.csv"
+    write_expression_subset_by_cells(
+        Path(project_manifest["expression_path"]),
+        scope_expression,
+        scope.selected_column_indices,
+    )
+
+    scope_manifest["expression_path"] = str(scope_expression)
+    scope_manifest["preprocessed_expression_path"] = str(
+        scope_dir / "preprocessed" / "ExpressionData.csv"
+    )
+    return scope_manifest
+
+
+def scope_result_payload(scope: AlgorithmScope, beeline_result: dict) -> dict:
+    return {
+        "scope_id": scope.scope_id,
+        "scope_label": scope.label,
+        "scope_type": scope.scope_type,
+        "cell_count": scope.cell_count,
+        "status": "Completed",
+        "network_summary": beeline_result["network_summary"],
+        "top_edges": beeline_result["top_edges"],
+        "confidence_summary": beeline_result.get("confidence_summary"),
+        "run_ranked_edges_paths": beeline_result.get("run_ranked_edges_paths"),
+        "beeline_runtime_root": beeline_result["runtime_root"],
+        "ranked_edges_path": beeline_result["ranked_edges_path"],
+    }
+
+
+def skipped_scope_payload(scope: AlgorithmScope) -> dict:
+    return {
+        "scope_id": scope.scope_id,
+        "scope_label": scope.label,
+        "scope_type": scope.scope_type,
+        "cell_count": scope.cell_count,
+        "status": "Skipped",
+        "skip_reason": scope.skip_reason,
+        "network_summary": None,
+        "top_edges": [],
+    }
 
 
 def format_runtime_timestamp(timestamp: float | None = None) -> str:
@@ -493,24 +698,86 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
     recompute_overall_status(project_dir, job_id)
 
     try:
-        beeline_result = run_beeline_with_progress(
-            project_id,
-            job_id,
-            algorithm_id,
-            update_job_state,
-            stop_event=control.stop_event,
-            on_process_start=lambda process: set_task_process(
+        project_manifest = read_project_manifest(project_dir)
+        scopes = build_algorithm_scopes(project_manifest)
+        has_cluster_scopes = any(scope.scope_type == "cluster" for scope in scopes)
+        runnable_scopes = [scope for scope in scopes if not scope.skipped]
+        skipped_scopes = [scope for scope in scopes if scope.skipped]
+        completed_scope_results: dict[str, dict] = {}
+
+        total_runnable_scopes = max(1, len(runnable_scopes))
+        for scope_index, scope in enumerate(runnable_scopes, start=1):
+            if control.stop_event.is_set():
+                raise AlgorithmStoppedError("Algorithm run was stopped.")
+
+            scope_manifest = prepare_scope_manifest(
+                project_dir,
+                project_manifest,
+                scope,
+                has_cluster_scopes=has_cluster_scopes,
+            )
+            runtime_key = (
+                f"{algorithm_id}__{scope.scope_id}" if has_cluster_scopes else None
+            )
+
+            def scoped_update_job_state(
+                scoped_project_dir: Path,
+                scoped_job_id: str,
+                **kwargs,
+            ) -> None:
+                progress_percent = kwargs.get("progress_percent")
+                if progress_percent is not None and total_runnable_scopes > 1:
+                    scaled_percent = round(
+                        2
+                        + (
+                            (scope_index - 1)
+                            + (max(0, min(100, int(progress_percent))) / 100)
+                        )
+                        * (96 / total_runnable_scopes)
+                    )
+                    kwargs["progress_percent"] = max(1, min(98, scaled_percent))
+
+                progress_label = kwargs.get("progress_label")
+                if progress_label and total_runnable_scopes > 1:
+                    kwargs["progress_label"] = (
+                        f"{scope.label}: {progress_label} "
+                        f"({scope_index}/{total_runnable_scopes})"
+                    )
+
+                update_job_state(scoped_project_dir, scoped_job_id, **kwargs)
+
+            beeline_result = run_beeline_with_progress(
                 project_id,
                 job_id,
                 algorithm_id,
-                process,
-            ),
-            elapsed_started_at=started_at_timestamp,
-        )
+                scoped_update_job_state,
+                stop_event=control.stop_event,
+                on_process_start=lambda process: set_task_process(
+                    project_id,
+                    job_id,
+                    algorithm_id,
+                    process,
+                ),
+                elapsed_started_at=started_at_timestamp,
+                project_manifest_override=scope_manifest,
+                runtime_key=runtime_key,
+                scope_label=scope.label,
+            )
+            completed_scope_results[scope.scope_id] = scope_result_payload(
+                scope,
+                beeline_result,
+            )
 
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
         completed_at = format_runtime_timestamp(completed_at_timestamp)
+        for scope in skipped_scopes:
+            completed_scope_results[scope.scope_id] = skipped_scope_payload(scope)
+
+        primary_scope_id = "global" if "global" in completed_scope_results else next(
+            iter(completed_scope_results)
+        )
+        primary_scope_result = completed_scope_results[primary_scope_id]
 
         actual_result = {
             "project_id": project_id,
@@ -523,12 +790,14 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "completed_at": completed_at,
             "completed_at_timestamp": completed_at_timestamp,
             "elapsed_seconds": elapsed,
-            "network_summary": beeline_result["network_summary"],
-            "top_edges": beeline_result["top_edges"],
-            "confidence_summary": beeline_result.get("confidence_summary"),
-            "run_ranked_edges_paths": beeline_result.get("run_ranked_edges_paths"),
-            "beeline_runtime_root": beeline_result["runtime_root"],
-            "ranked_edges_path": beeline_result["ranked_edges_path"],
+            "network_summary": primary_scope_result["network_summary"],
+            "top_edges": primary_scope_result["top_edges"],
+            "confidence_summary": primary_scope_result.get("confidence_summary"),
+            "run_ranked_edges_paths": primary_scope_result.get("run_ranked_edges_paths"),
+            "beeline_runtime_root": primary_scope_result["beeline_runtime_root"],
+            "ranked_edges_path": primary_scope_result["ranked_edges_path"],
+            "scope_order": [scope.scope_id for scope in scopes],
+            "scopes": completed_scope_results,
         }
 
         saved_result_path = write_algorithm_result(

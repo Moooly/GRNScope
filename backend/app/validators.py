@@ -22,6 +22,17 @@ CELL_ID_HEADER_NAMES = {
     "sampleid",
     "sample id",
 }
+CLUSTER_LABEL_HEADER_NAMES = {
+    "cluster",
+    "cluster_id",
+    "clusterid",
+    "cluster id",
+    "cell_type",
+    "celltype",
+    "cell type",
+    "label",
+    "group",
+}
 DEFAULT_EXPRESSION_FULL_NUMERIC_CHECK_ROWS = 5
 DEFAULT_EXPRESSION_EDGE_NUMERIC_CHECK_COLUMNS = 4
 DEFAULT_EXPRESSION_FAST_SAMPLE_ROWS = 20
@@ -352,6 +363,104 @@ def parse_expression_matrix(csv_path: Path) -> dict[str, Any]:
     if upload_validation_mode() == STRICT_UPLOAD_VALIDATION_MODE:
         return parse_expression_matrix_strict(csv_path)
     return parse_expression_matrix_fast(csv_path)
+
+
+def read_expression_cell_names(csv_path: Path) -> list[str]:
+    dialect = detect_csv_dialect_from_file(csv_path)
+    rows = iter_non_empty_csv_rows(csv_path, dialect)
+
+    try:
+        header = next(rows)
+    except StopIteration as exc:
+        raise ValueError("Expression matrix is empty.") from exc
+
+    cell_names, _ = validate_expression_header(header)
+    return cell_names
+
+
+def is_cluster_label_header(value: str) -> bool:
+    return value.strip().lower() in CLUSTER_LABEL_HEADER_NAMES
+
+
+def parse_cluster_labels(csv_path: Path, expected_cell_names: list[str]) -> dict[str, Any]:
+    """Validate a CellOracle cluster-label CSV.
+
+    Supported format:
+    cell_id,cluster
+    E37_5_927,Chondrocyte
+
+    The file must label every expression-matrix cell exactly once. GRNScope later
+    skips clusters that are too small for CellOracle, but the assignment itself
+    should be complete so global and per-cluster outputs stay comparable.
+    """
+
+    expected_cell_set = set(expected_cell_names)
+    if not expected_cell_names:
+        raise ValueError("Cluster labels require an expression matrix with cell identifiers.")
+
+    dialect = detect_csv_dialect_from_file(csv_path)
+    rows = iter_non_empty_csv_rows(csv_path, dialect)
+
+    try:
+        first_row = next(rows)
+    except StopIteration as exc:
+        raise ValueError("Cluster label file is empty.") from exc
+
+    if len(first_row) < 2:
+        raise ValueError("Cluster label file must contain two columns: cell_id and cluster.")
+
+    has_header = is_cell_id_header(first_row[0]) and is_cluster_label_header(first_row[1])
+    data_rows = enumerate(rows, start=2)
+    if not has_header:
+        data_rows = chain([(1, first_row)], data_rows)
+
+    labels: dict[str, str] = {}
+    cluster_counts: dict[str, int] = {}
+
+    try:
+        for row_number, row in data_rows:
+            if len(row) < 2:
+                raise ValueError(
+                    f"Cluster label row {row_number} has {len(row)} columns; expected at least 2."
+                )
+
+            cell_id = str(row[0]).strip()
+            cluster = str(row[1]).strip()
+            if not cell_id:
+                raise ValueError("Cluster label file contains blank cell identifiers.")
+            if not cluster:
+                raise ValueError("Cluster label file contains blank cluster labels.")
+            if cell_id in labels:
+                raise ValueError("Cluster label file cell identifiers must be unique.")
+            if cell_id not in expected_cell_set:
+                raise ValueError(
+                    f"Cluster label file contains a cell not present in the expression matrix: {cell_id}."
+                )
+
+            labels[cell_id] = cluster
+            cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+    except csv.Error as exc:
+        raise ValueError(f"Cluster label file could not be parsed as CSV: {exc}") from exc
+
+    missing_cells = [cell_id for cell_id in expected_cell_names if cell_id not in labels]
+    if missing_cells:
+        preview = ", ".join(missing_cells[:5])
+        suffix = "..." if len(missing_cells) > 5 else ""
+        raise ValueError(
+            f"Cluster label file is missing labels for {len(missing_cells)} expression cells: {preview}{suffix}"
+        )
+
+    if not cluster_counts:
+        raise ValueError("Cluster label file must contain at least one labeled cell.")
+
+    cluster_items = sorted(cluster_counts.items(), key=lambda item: (-item[1], item[0]))
+
+    return {
+        "cluster_label_count": len(labels),
+        "cluster_count": len(cluster_counts),
+        "cluster_names": preview_items([name for name, _ in cluster_items]),
+        "cluster_cell_counts": dict(cluster_items),
+    }
 
 
 def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]:

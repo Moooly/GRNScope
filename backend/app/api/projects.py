@@ -8,7 +8,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Response
 
-from ..algorithm_registry import sort_algorithm_ids_by_difficulty
+from ..algorithm_registry import (
+    CELLORACLE_BASE_GRN_OPTIONS,
+    CELLORACLE_SPECIES_OPTIONS,
+    sort_algorithm_ids_by_difficulty,
+)
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from .client_identity import (
     get_or_create_client_id,
@@ -76,6 +80,8 @@ async def create_project_from_temp(
     log_transform_enabled: str = Form(...),
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
+    celloracle_species: str = Form("human"),
+    celloracle_base_grn: str = Form("auto"),
 ):
     owner_id = get_or_create_client_id(request, response)
     meta_path = temp_metadata_path(temp_upload_id)
@@ -89,12 +95,31 @@ async def create_project_from_temp(
     job_id = uuid.uuid4().hex[:12]
 
     try:
-        move_result = move_temp_upload_to_project(temp_upload_id, project_id)
-
-        project_dir = Path(move_result["project_dir"])
         selected_algorithms_list = sort_algorithm_ids_by_difficulty(
             json.loads(selected_algorithms)
         )
+        normalized_celloracle_species = (celloracle_species or "human").strip()
+        normalized_celloracle_base_grn = (celloracle_base_grn or "auto").strip()
+
+        if normalized_celloracle_species not in CELLORACLE_SPECIES_OPTIONS:
+            return CreateProjectResponse(
+                ok=False,
+                errors=[
+                    "Unsupported CellOracle species: "
+                    f"{normalized_celloracle_species}."
+                ],
+            )
+        if normalized_celloracle_base_grn not in CELLORACLE_BASE_GRN_OPTIONS:
+            return CreateProjectResponse(
+                ok=False,
+                errors=[
+                    "Unsupported CellOracle base GRN: "
+                    f"{normalized_celloracle_base_grn}."
+                ],
+            )
+
+        move_result = move_temp_upload_to_project(temp_upload_id, project_id)
+        project_dir = Path(move_result["project_dir"])
 
         upload_metadata_path = project_dir / "upload_metadata.json"
         upload_metadata = {}
@@ -144,9 +169,14 @@ async def create_project_from_temp(
             "ensemble_enabled": ensemble_enabled,
             "expression_path": move_result["expression_path"],
             "pseudotime_path": move_result.get("pseudotime_path"),
+            "cluster_labels_path": move_result.get("cluster_labels_path"),
             "preprocessed_expression_path": str(
                 project_dir / "preprocessed" / "ExpressionData.csv"
             ),
+            "celloracle": {
+                "species": normalized_celloracle_species,
+                "base_grn": normalized_celloracle_base_grn,
+            },
             "latest_job_id": job_id,
         }
 
@@ -157,6 +187,7 @@ async def create_project_from_temp(
             "project_description": project_description,
             "expression_filename": upload_metadata.get("expression_filename"),
             "pseudotime_filename": upload_metadata.get("pseudotime_filename"),
+            "cluster_labels_filename": upload_metadata.get("cluster_labels_filename"),
             "gene_count": upload_metadata.get("gene_count"),
             "cell_count": upload_metadata.get("cell_count"),
             "gene_names": upload_metadata.get("gene_names", []),
@@ -164,11 +195,20 @@ async def create_project_from_temp(
             "known_tf_gene_names": known_tf_gene_names,
             "has_pseudotime": upload_metadata.get("has_pseudotime"),
             "pseudotime_count": upload_metadata.get("pseudotime_count"),
+            "has_cluster_labels": upload_metadata.get("has_cluster_labels"),
+            "cluster_label_count": upload_metadata.get("cluster_label_count"),
+            "cluster_count": upload_metadata.get("cluster_count"),
+            "cluster_names": upload_metadata.get("cluster_names", []),
+            "cluster_cell_counts": upload_metadata.get("cluster_cell_counts", {}),
             "preprocessing": {
                 "top_variable_genes": top_variable_genes,
                 "include_all_tfs": include_all_tfs,
                 "normalize_enabled": normalize_enabled,
                 "log_transform_enabled": log_transform_enabled,
+            },
+            "celloracle": {
+                "species": normalized_celloracle_species,
+                "base_grn": normalized_celloracle_base_grn,
             },
             "selected_algorithms": selected_algorithms_list,
             "results_directory": str(project_dir / "results"),

@@ -8,9 +8,12 @@ class TempUploadResponse(BaseModel):
     temp_upload_id: Optional[str] = None
     expression_filename: Optional[str] = None
     pseudotime_filename: Optional[str] = None
+    cluster_labels_filename: Optional[str] = None
     gene_count: Optional[int] = None
     cell_count: Optional[int] = None
     has_pseudotime: Optional[bool] = None
+    has_cluster_labels: Optional[bool] = None
+    cluster_count: Optional[int] = None
     errors: list[str] = []
 
 

@@ -1087,6 +1087,8 @@ def plan_confidence_run_inputs(
     header, _expression_dialect = read_delimited_header(preprocessed_expression)
     gene_count = count_expression_gene_rows(preprocessed_expression)
     settings = resolve_confidence_settings(project_manifest, gene_count=gene_count)
+    if algorithm_id.upper() == "CELLORACLE":
+        settings["bootstrap_runs"] = 1
     bootstrap_runs = int(settings["bootstrap_runs"])
     subsample_fraction = float(settings["subsample_fraction"])
     max_regulators_per_target = resolve_ranked_edges_per_target_limit(
@@ -1369,6 +1371,25 @@ def collect_algorithm_error_log_text(
     return "\n".join(read_recent_log_text(path) for path in log_paths)
 
 
+def build_algorithm_runtime_params(
+    algorithm_id: str,
+    project_manifest: dict,
+    *,
+    scope_label: str | None = None,
+) -> dict:
+    normalized_algorithm_id = algorithm_id.upper()
+    if normalized_algorithm_id != "CELLORACLE":
+        return {}
+
+    celloracle_settings = project_manifest.get("celloracle") or {}
+    scope = project_manifest.get("scope") or {}
+    return {
+        "species": str(celloracle_settings.get("species") or "human"),
+        "baseGrn": str(celloracle_settings.get("base_grn") or "auto"),
+        "clusterName": str(scope_label or scope.get("label") or "Global"),
+    }
+
+
 def build_missing_ranked_edges_error(
     *,
     runtime_root: Path,
@@ -1401,9 +1422,12 @@ def initialize_beeline_runtime(
     project_id: str,
     algorithm_id: str,
     project_manifest: dict,
+    *,
+    runtime_key: str | None = None,
 ) -> tuple[Path, Path, Path, str, Path, Path | None]:
-    project_runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
-    runtime_root = space_free_runtime_root(project_runtime_root, project_id, algorithm_id)
+    runtime_segment = runtime_key or algorithm_id
+    project_runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / runtime_segment
+    runtime_root = space_free_runtime_root(project_runtime_root, project_id, runtime_segment)
 
     remove_path_if_present(project_runtime_root)
     if runtime_root != project_runtime_root:
@@ -1412,7 +1436,7 @@ def initialize_beeline_runtime(
 
     input_dir = runtime_root / "inputs"
     output_dir = runtime_root / "outputs"
-    dataset_id = project_id
+    dataset_id = str(project_manifest.get("beeline_dataset_id") or project_id)
 
     expression_path = project_manifest.get("expression_path")
     pseudotime_path = project_manifest.get("pseudotime_path")
@@ -1488,6 +1512,7 @@ def build_beeline_config(
     algorithm_id: str,
     include_pseudotime: bool,
     max_regulators_per_target: int | None = None,
+    extra_params: dict | None = None,
 ) -> str:
     normalized_algorithm_id = algorithm_id.upper()
     image_name = resolve_algorithm_image(algorithm_id)
@@ -1504,6 +1529,9 @@ def build_beeline_config(
             run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
 
     params = resolve_algorithm_default_params(normalized_algorithm_id)
+    if extra_params:
+        for key, value in extra_params.items():
+            params[str(key)] = value if isinstance(value, list) else [value]
     if max_regulators_per_target is not None:
         params["maxRegulatorsPerTarget"] = [int(max_regulators_per_target)]
 
@@ -2118,9 +2146,12 @@ def run_beeline_with_progress(
     stop_event=None,
     on_process_start=None,
     elapsed_started_at: float | None = None,
+    project_manifest_override: dict | None = None,
+    runtime_key: str | None = None,
+    scope_label: str | None = None,
 ) -> dict:
     project_dir = PROJECTS_ROOT / project_id
-    project_manifest = read_project_manifest(project_dir)
+    project_manifest = project_manifest_override or read_project_manifest(project_dir)
     beeline_root = resolve_beeline_root()
 
     update_job_state_fn(
@@ -2145,6 +2176,7 @@ def run_beeline_with_progress(
         project_id,
         algorithm_id,
         project_manifest,
+        runtime_key=runtime_key,
     )
 
     (
@@ -2181,6 +2213,11 @@ def run_beeline_with_progress(
         algorithm_id,
         confidence_settings,
     )
+    algorithm_runtime_params = build_algorithm_runtime_params(
+        algorithm_id,
+        project_manifest,
+        scope_label=scope_label,
+    )
     confidence_accumulator = create_confidence_accumulator()
     ranked_edge_paths: dict[str, str] = {}
 
@@ -2206,6 +2243,7 @@ def run_beeline_with_progress(
             algorithm_id=algorithm_id,
             include_pseudotime=source_pseudotime is not None,
             max_regulators_per_target=ranked_edges_per_target_limit,
+            extra_params=algorithm_runtime_params,
         )
         config_path.write_text(config_text, encoding="utf-8")
 

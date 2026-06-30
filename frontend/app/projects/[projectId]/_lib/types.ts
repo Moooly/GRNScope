@@ -30,6 +30,8 @@ export type ProjectManifest = {
   expression_filename?: string | null;
   pseudotime_path?: string | null;
   pseudotime_filename?: string | null;
+  cluster_labels_path?: string | null;
+  cluster_labels_filename?: string | null;
   selected_algorithms?: string[];
   ensemble_enabled?: boolean | string;
   latest_job_id?: string | null;
@@ -46,12 +48,17 @@ export type MetadataManifest = {
   project_description?: string;
   expression_filename?: string | null;
   pseudotime_filename?: string | null;
+  cluster_labels_filename?: string | null;
   gene_count?: number | null;
   cell_count?: number | null;
   gene_names?: string[];
   cell_names?: string[];
   known_tf_gene_names?: string[];
   has_pseudotime?: boolean | null;
+  has_cluster_labels?: boolean | null;
+  cluster_count?: number | null;
+  cluster_names?: string[];
+  cluster_cell_counts?: Record<string, number>;
   has_ground_truth?: boolean | null;
   selected_algorithms?: string[];
   ensemble_enabled?: boolean | string;
@@ -102,9 +109,25 @@ export type AlgorithmStoredResult = {
   edges?: AlgorithmResultEdge[];
   ranked_edges?: AlgorithmResultEdge[];
   top_edges?: AlgorithmResultEdge[];
+  scope_order?: string[];
+  scopes?: Record<string, AlgorithmResultScope>;
   source_file?: string;
   gene_coordinates?: Record<string, GeneCoordinate>;
   gene_coordinate_count?: number;
+};
+
+export type AlgorithmResultScope = {
+  scope_id: string;
+  scope_label: string;
+  scope_type: "global" | "cluster" | string;
+  cell_count?: number;
+  status?: string;
+  skip_reason?: string | null;
+  network_summary?: {
+    edge_count?: number;
+    node_count?: number;
+  } | null;
+  top_edges?: AlgorithmResultEdge[];
 };
 
 export type AlgorithmResultEdge = {

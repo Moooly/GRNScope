@@ -25,6 +25,7 @@ import { apiFetch } from "../../_lib/clientIdentity";
 import {
   type AggregatedEdge,
   type AlgorithmResultEdge,
+  type AlgorithmStoredResult,
   type MetadataManifest,
   type NodeInfo,
   type OverlapEntry,
@@ -45,6 +46,20 @@ type GeneCoordinateInfo = {
 };
 
 const edgeKeyFor = (source: string, target: string) => `${source}|||${target}`;
+
+function edgesForScope(
+  result: AlgorithmStoredResult | undefined,
+  scopeId: string
+): AlgorithmResultEdge[] {
+  if (!result) return [];
+  if (result.scopes?.[scopeId]?.status === "Completed") {
+    return result.scopes[scopeId]?.top_edges ?? [];
+  }
+  if (scopeId === "global") {
+    return result.top_edges ?? [];
+  }
+  return [];
+}
 
 function numericEdgeScore(edge: AlgorithmResultEdge) {
   const rawScore = Number(edge.score ?? edge.weight ?? edge.edge_weight ?? 0);
@@ -202,6 +217,7 @@ export default function ProjectDetailPage() {
     setLatestJob,
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
+  const [selectedResultScopeId, setSelectedResultScopeId] = useState("global");
   const [evidenceThreshold, setEvidenceThreshold] = useState(0.8);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [directionConfidenceThreshold, setDirectionConfidenceThreshold] = useState(0);
@@ -336,6 +352,44 @@ export default function ProjectDetailPage() {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
   }, [completedAlgorithmIds, selectedAlgorithmIds]);
 
+  const availableResultScopes = useMemo(() => {
+    const scopeById = new Map<
+      string,
+      { id: string; label: string; type: string; cellCount?: number; skipped?: boolean }
+    >();
+    scopeById.set("global", { id: "global", label: "Global", type: "global" });
+
+    completedAlgorithmIds.forEach((algorithmId) => {
+      const result = algorithmResults[algorithmId];
+      const scopes = result?.scopes;
+      if (!scopes) return;
+
+      Object.entries(scopes).forEach(([scopeId, scope]) => {
+        const existing = scopeById.get(scopeId);
+        scopeById.set(scopeId, {
+          id: scopeId,
+          label: scope.scope_label || existing?.label || scopeId,
+          type: scope.scope_type || existing?.type || "cluster",
+          cellCount: scope.cell_count ?? existing?.cellCount,
+          skipped: existing?.skipped ?? scope.status === "Skipped",
+        });
+      });
+    });
+
+    return Array.from(scopeById.values()).sort((a, b) => {
+      if (a.id === "global") return -1;
+      if (b.id === "global") return 1;
+      return a.label.localeCompare(b.label);
+    });
+  }, [algorithmResults, completedAlgorithmIds]);
+
+  useEffect(() => {
+    if (availableResultScopes.some((scope) => scope.id === selectedResultScopeId)) {
+      return;
+    }
+    setSelectedResultScopeId("global");
+  }, [availableResultScopes, selectedResultScopeId]);
+
   useEffect(() => {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
     if (activeAlgorithmIds.length < 7) return;
@@ -382,7 +436,7 @@ export default function ProjectDetailPage() {
     const sourceGenes = new Set<string>();
 
     completedAlgorithmIds.forEach((algorithmId) => {
-      (algorithmResults[algorithmId]?.top_edges ?? []).forEach((edge) => {
+      edgesForScope(algorithmResults[algorithmId], selectedResultScopeId).forEach((edge) => {
         const source = String(edge.source ?? "").trim();
         const target = String(edge.target ?? "").trim();
 
@@ -398,7 +452,7 @@ export default function ProjectDetailPage() {
       allGenes: [...allGenes].sort(),
       sourceGenes: [...sourceGenes].sort(),
     };
-  }, [algorithmResults, completedAlgorithmIds]);
+  }, [algorithmResults, completedAlgorithmIds, selectedResultScopeId]);
 
   const candidateRegulatorIds = useMemo(() => {
     const observedByUpper = new Map(
@@ -465,7 +519,7 @@ export default function ProjectDetailPage() {
         }
       };
 
-      (algorithmResults[algorithmId]?.top_edges ?? []).forEach((edge) => {
+      edgesForScope(algorithmResults[algorithmId], selectedResultScopeId).forEach((edge) => {
         const source = String(edge.source ?? "").trim();
         const target = String(edge.target ?? "").trim();
         const rawScore = numericEdgeScore(edge);
@@ -571,6 +625,7 @@ export default function ProjectDetailPage() {
     candidateRegulatorIds,
     candidateTargetIds,
     completedAlgorithmIds,
+    selectedResultScopeId,
   ]);
 
   const algorithmEdgeRows = useMemo(() => {
@@ -1558,6 +1613,7 @@ useEffect(() => {
     consensusThreshold,
     isolatedGene,
     edgeDisplayLimit,
+    selectedResultScopeId,
   ]);
 
   useEffect(() => {
@@ -1611,6 +1667,14 @@ useEffect(() => {
         edgeDisplayLimit={edgeDisplayLimit}
         onChangeEdgeDisplayLimit={setEdgeDisplayLimit}
         filteredEdgeCount={filteredNetworkEdges.length}
+        resultScopes={availableResultScopes}
+        selectedResultScopeId={selectedResultScopeId}
+        onChangeSelectedResultScopeId={(value) => {
+          setSelectedResultScopeId(value);
+          setSelectedGene(null);
+          setSelectedEdgeKey(null);
+          setIsolatedGene(null);
+        }}
         isGuideOpen={isResultsGuideOpen}
         onOpenGuide={() => setIsResultsGuideOpen(true)}
       />

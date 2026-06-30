@@ -3,6 +3,10 @@ import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmDetailModal from "./AlgorithmDetailModal";
 import AlgorithmStep from "./AlgorithmStep";
+import {
+  CELLORACLE_BASE_GRN_OPTIONS,
+  CELLORACLE_SPECIES_OPTIONS,
+} from "./cellOracleOptions";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 import UploadStep from "./UploadStep";
 
@@ -11,6 +15,7 @@ const MAX_PREPROCESSED_GENES = 8000;
 interface DatasetSummary {
   dimensions: string;
   hasPseudotime: boolean;
+  hasClusterLabels?: boolean;
   hasGroundTruth: boolean;
   preprocessingSummary: string[];
 }
@@ -22,6 +27,7 @@ interface CreateProjectModalProps {
   projectDescription: string;
   expressionFileName: string;
   pseudotimeFileName: string;
+  clusterLabelsFileName: string;
   geneCount: number | null;
   cellCount: number | null;
   isUploadingTempDataset: boolean;
@@ -30,6 +36,8 @@ interface CreateProjectModalProps {
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
+  cellOracleSpecies: string;
+  cellOracleBaseGrn: string;
   selectedIds: string[];
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
@@ -51,12 +59,17 @@ interface CreateProjectModalProps {
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
+  setClusterLabelsFile: (file: File | null) => void;
+  setClusterLabelsFileName: (value: string) => void;
   setTopVariableGenes: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
   setNormalizeEnabled: (value: boolean) => void;
   setLogTransformEnabled: (value: boolean) => void;
+  setCellOracleSpecies: (value: string) => void;
+  setCellOracleBaseGrn: (value: string) => void;
   clearExpressionFile: () => void;
   clearPseudotimeFile: () => void;
+  clearClusterLabelsFile: () => void;
   setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
 }
 
@@ -67,6 +80,7 @@ export default function CreateProjectModal({
   projectDescription,
   expressionFileName,
   pseudotimeFileName,
+  clusterLabelsFileName,
   geneCount,
   cellCount,
   isUploadingTempDataset,
@@ -75,6 +89,8 @@ export default function CreateProjectModal({
   includeAllTFs,
   normalizeEnabled,
   logTransformEnabled,
+  cellOracleSpecies,
+  cellOracleBaseGrn,
   selectedIds,
   compatibleAlgorithms,
   selectedAlgorithms,
@@ -96,12 +112,17 @@ export default function CreateProjectModal({
   setExpressionFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
+  setClusterLabelsFile,
+  setClusterLabelsFileName,
   setTopVariableGenes,
   setIncludeAllTFs,
   setNormalizeEnabled,
   setLogTransformEnabled,
+  setCellOracleSpecies,
+  setCellOracleBaseGrn,
   clearExpressionFile,
   clearPseudotimeFile,
+  clearClusterLabelsFile,
   setEnsembleEnabled,
 }: CreateProjectModalProps) {
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,6 +140,10 @@ export default function CreateProjectModal({
   const datasetReady = hasExpressionFile && tempUploadId.length > 0 && !isUploadingTempDataset;
   const maxTopVariableGenes =
     geneCount === null ? MAX_PREPROCESSED_GENES : Math.min(geneCount, MAX_PREPROCESSED_GENES);
+  const cellOracleSelected = selectedIds.includes("CELLORACLE");
+  const cellOracleBaseOptions = CELLORACLE_BASE_GRN_OPTIONS.filter(
+    (option) => option !== "mouse_scATAC_atlas" || cellOracleSpecies === "mouse",
+  );
 
   const selectExpressionFile = (file: File | null) => {
     setExpressionFile(file);
@@ -263,6 +288,10 @@ export default function CreateProjectModal({
       settings.push("log transform enabled");
     }
 
+    if (datasetSummary.hasClusterLabels) {
+      settings.push("global and per-cluster scopes");
+    }
+
     // Removed ensembleEnabled block
 
     const settingsLabel = settings.length > 0 ? ` with ${settings.join(", ")}` : "";
@@ -384,6 +413,9 @@ export default function CreateProjectModal({
               pseudotimeFileName={pseudotimeFileName}
               setPseudotimeFile={setPseudotimeFile}
               setPseudotimeFileName={setPseudotimeFileName}
+              clusterLabelsFileName={clusterLabelsFileName}
+              setClusterLabelsFile={setClusterLabelsFile}
+              setClusterLabelsFileName={setClusterLabelsFileName}
             />
           </div>
 
@@ -453,6 +485,66 @@ export default function CreateProjectModal({
                 onSelectAll={onSelectAll}
                 onShowAlgorithmDetails={handleShowAlgorithmDetails}
               />
+
+              {cellOracleSelected && (
+                <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-black">
+                    CellOracle
+                  </p>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-bold text-slate-950">
+                        Species
+                      </span>
+                      <select
+                        value={cellOracleSpecies}
+                        onChange={(event) => {
+                          const nextSpecies = event.target.value;
+                          setCellOracleSpecies(nextSpecies);
+                          if (
+                            nextSpecies !== "mouse" &&
+                            cellOracleBaseGrn === "mouse_scATAC_atlas"
+                          ) {
+                            setCellOracleBaseGrn("auto");
+                          }
+                        }}
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                      >
+                        {CELLORACLE_SPECIES_OPTIONS.map((species) => (
+                          <option key={species} value={species}>
+                            {species.replace(/_/g, " ")}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-bold text-slate-950">
+                        Base GRN
+                      </span>
+                      <select
+                        value={cellOracleBaseOptions.includes(
+                          cellOracleBaseGrn as (typeof CELLORACLE_BASE_GRN_OPTIONS)[number],
+                        )
+                          ? cellOracleBaseGrn
+                          : "auto"}
+                        onChange={(event) => setCellOracleBaseGrn(event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                      >
+                        {cellOracleBaseOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option === "auto"
+                              ? "Auto"
+                              : option === "mouse_scATAC_atlas"
+                                ? "Mouse scATAC atlas"
+                                : "Promoter base GRN"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
