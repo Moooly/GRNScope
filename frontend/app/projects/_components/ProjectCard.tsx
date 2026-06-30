@@ -59,7 +59,7 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
               : "bg-slate-50 text-slate-600 ring-slate-200";
 
   return (
-    <article className="group rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-900 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-lg hover:shadow-slate-200/70">
+    <article className="group rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-900 transition duration-200 hover:border-[#1b75a6]/25">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="grid min-w-0 gap-2">
           <h3 className="truncate text-xl font-bold tracking-tight text-slate-950">

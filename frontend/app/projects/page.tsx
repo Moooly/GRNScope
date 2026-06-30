@@ -215,10 +215,6 @@ function ProjectsPageContent() {
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
       <section className="relative overflow-hidden bg-[#f4f6f8]">
-        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/90 to-transparent" />
-        <div className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-cyan-100/60 blur-3xl" />
-        <div className="absolute -right-24 top-16 h-72 w-72 rounded-full bg-teal-100/60 blur-3xl" />
-
         <div className="relative mx-auto max-w-[1180px] px-6 py-16 lg:px-10 lg:py-20">
           <div className="flex flex-col gap-6 border-b border-[#213f54]/35 pb-8 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-3xl">
@@ -237,7 +233,7 @@ function ProjectsPageContent() {
             <button
               type="button"
               onClick={() => setIsCreateOpen(true)}
-              className="inline-flex w-fit cursor-pointer items-center justify-center rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#1b75a6]/20 transition hover:bg-[#155f87]"
+              className="inline-flex w-fit cursor-pointer items-center justify-center rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#155f87]"
             >
               Create New Project
             </button>
