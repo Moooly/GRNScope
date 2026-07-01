@@ -163,7 +163,6 @@ export default function CreateProjectFlow({
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
   const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
 
-  const [tempUploadId, setTempUploadId] = useState("");
   const [geneCount, setGeneCount] = useState<number | null>(null);
   const [cellCount, setCellCount] = useState<number | null>(null);
   const [isUploadingTempDataset, setIsUploadingTempDataset] = useState(false);
@@ -202,7 +201,6 @@ export default function CreateProjectFlow({
     setExpressionFileName("");
     setPseudotimeFileName("");
     setClusterLabelsFileName("");
-    setTempUploadId("");
     setGeneCount(null);
     setCellCount(null);
     setIsUploadingTempDataset(false);
@@ -339,114 +337,12 @@ export default function CreateProjectFlow({
     );
   }, [geneCount]);
 
-  // Save the chosen files in the background, but defer matrix parsing until the
-  // project job starts so validation errors appear on the detail page.
+  // Selecting files should stay local and instant. Server work starts only after
+  // the user clicks Start analysis.
   useEffect(() => {
-    if (!expressionFile) {
-      setTempUploadId("");
-      setGeneCount(null);
-      setCellCount(null);
-      return;
-    }
-
-    const maxFileSize = 500 * 1024 * 1024;
-    if (!expressionFile.name.toLowerCase().endsWith(".csv")) {
-      setErrors(["Expression matrix must be a CSV file."]);
-      setTempUploadId("");
-      return;
-    }
-    if (expressionFile.size > maxFileSize) {
-      setErrors(["Expression matrix file size must be 500 MB or smaller."]);
-      setTempUploadId("");
-      return;
-    }
-    if (pseudotimeFile && !pseudotimeFile.name.toLowerCase().endsWith(".csv")) {
-      setErrors(["Pseudotime file must be a CSV file."]);
-      setTempUploadId("");
-      return;
-    }
-    if (pseudotimeFile && pseudotimeFile.size > maxFileSize) {
-      setErrors(["Pseudotime file size must be 500 MB or smaller."]);
-      setTempUploadId("");
-      return;
-    }
-    if (clusterLabelsFile && !clusterLabelsFile.name.toLowerCase().endsWith(".csv")) {
-      setErrors(["Cluster labels file must be a CSV file."]);
-      setTempUploadId("");
-      return;
-    }
-    if (clusterLabelsFile && clusterLabelsFile.size > maxFileSize) {
-      setErrors(["Cluster labels file size must be 500 MB or smaller."]);
-      setTempUploadId("");
-      return;
-    }
-
-    let isCancelled = false;
-    const controller = new AbortController();
-
-    const saveTempDataset = async () => {
-      try {
-        setIsUploadingTempDataset(true);
-        setErrors([]);
-        setTempUploadId("");
-        setGeneCount(null);
-        setCellCount(null);
-
-        const formData = new FormData();
-        formData.append("expression_matrix", expressionFile);
-        formData.append("defer_validation", "true");
-        if (pseudotimeFile) {
-          formData.append("pseudotime", pseudotimeFile);
-        }
-        if (clusterLabelsFile) {
-          formData.append("cluster_labels", clusterLabelsFile);
-        }
-
-        const response = await fetch(`${API_BASE}/uploads/temp-dataset`, {
-          method: "POST",
-          body: formData,
-          signal: controller.signal,
-        });
-        const data = await readApiPayload(response);
-        if (isCancelled) return;
-
-        if (!response.ok) {
-          setErrors(formatTemporaryUploadError(response, data));
-          setTempUploadId("");
-          return;
-        }
-
-        if (!data || data.ok !== true) {
-          const serverErrors = extractApiErrors(data);
-          setErrors(serverErrors.length ? serverErrors : ["Temporary dataset upload failed."]);
-          setTempUploadId("");
-          return;
-        }
-
-        setTempUploadId(getPayloadString(data, "temp_upload_id"));
-        setGeneCount(getPayloadNumber(data, "gene_count"));
-        setCellCount(getPayloadNumber(data, "cell_count"));
-      } catch (error) {
-        if ((error as Error)?.name === "AbortError") return;
-        if (!isCancelled) {
-          setTempUploadId("");
-          setErrors([
-            error instanceof Error && error.message
-              ? error.message
-              : "Could not connect to the server for temporary upload.",
-          ]);
-        }
-      } finally {
-        if (!isCancelled) setIsUploadingTempDataset(false);
-      }
-    };
-
-    void saveTempDataset();
-    return () => {
-      isCancelled = true;
-      controller.abort();
-    };
-  }, [expressionFile, pseudotimeFile, clusterLabelsFile, API_BASE]);
+    setGeneCount(null);
+    setCellCount(null);
+  }, [expressionFile, pseudotimeFile, clusterLabelsFile]);
 
   // Auto-select all compatible algorithms by default. Stops syncing once the
   // user manually toggles anything in the algorithm grid.
@@ -491,13 +387,61 @@ export default function CreateProjectFlow({
   const clearPseudotimeFile = () => {
     setPseudotimeFile(null);
     setPseudotimeFileName("");
-    setTempUploadId("");
   };
 
   const clearClusterLabelsFile = () => {
     setClusterLabelsFile(null);
     setClusterLabelsFileName("");
-    setTempUploadId("");
+  };
+
+  const uploadTempDatasetForStart = async () => {
+    if (!expressionFile) {
+      throw new Error("Upload an expression matrix CSV to continue.");
+    }
+
+    setIsUploadingTempDataset(true);
+    setGeneCount(null);
+    setCellCount(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("expression_matrix", expressionFile);
+      formData.append("defer_validation", "true");
+      if (pseudotimeFile) {
+        formData.append("pseudotime", pseudotimeFile);
+      }
+      if (clusterLabelsFile) {
+        formData.append("cluster_labels", clusterLabelsFile);
+      }
+
+      const response = await fetch(`${API_BASE}/uploads/temp-dataset`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await readApiPayload(response);
+
+      if (!response.ok) {
+        throw new Error(formatTemporaryUploadError(response, data).join("\n"));
+      }
+
+      if (!data || data.ok !== true) {
+        const serverErrors = extractApiErrors(data);
+        throw new Error(
+          serverErrors.length ? serverErrors.join("\n") : "Temporary dataset upload failed.",
+        );
+      }
+
+      const uploadId = getPayloadString(data, "temp_upload_id");
+      if (!uploadId) {
+        throw new Error("Temporary dataset upload failed: missing upload id.");
+      }
+
+      setGeneCount(getPayloadNumber(data, "gene_count"));
+      setCellCount(getPayloadNumber(data, "cell_count"));
+      return uploadId;
+    } finally {
+      setIsUploadingTempDataset(false);
+    }
   };
 
   const handleStartAnalysis = async () => {
@@ -571,21 +515,15 @@ export default function CreateProjectFlow({
       return;
     }
 
-    if (isUploadingTempDataset || !tempUploadId) {
-      setErrors([
-        "Dataset is still uploading. Wait for the upload to finish, then start the analysis.",
-      ]);
-      return;
-    }
-
     const safeSelectedIds = selectedCompatibleAlgorithms.map((algorithm) => algorithm.id);
 
     try {
       setIsSubmitting(true);
       setErrors([]);
+      const uploadedTempId = await uploadTempDatasetForStart();
 
       const formData = new FormData();
-      formData.append("temp_upload_id", tempUploadId);
+      formData.append("temp_upload_id", uploadedTempId);
       formData.append("project_name", projectName);
       formData.append("project_description", projectDescription);
       formData.append("top_variable_genes", topVariableGenes);
@@ -673,7 +611,6 @@ export default function CreateProjectFlow({
       geneCount={geneCount}
       cellCount={cellCount}
       isUploadingTempDataset={isUploadingTempDataset}
-      tempUploadId={tempUploadId}
       topVariableGenes={topVariableGenes}
       includeAllTFs={includeAllTFs}
       normalizeEnabled={normalizeEnabled}
