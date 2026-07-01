@@ -25,6 +25,7 @@ from ..services.beeline_service import (
     AlgorithmStoppedError,
     MatrixValidationRuntimeError,
     detect_csv_dialect_from_file,
+    ensure_project_preprocessed_expression,
     read_delimited_header,
     run_beeline_with_progress,
     write_expression_subset_by_cells,
@@ -699,6 +700,30 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
 
     try:
         project_manifest = read_project_manifest(project_dir)
+        update_job_state(
+            project_dir,
+            job_id,
+            algorithm_id=algorithm_id,
+            elapsed_seconds=0,
+            progress_percent=2,
+            progress_label="Validating dataset",
+            estimated_remaining_seconds=None,
+        )
+
+        expression_path = project_manifest.get("expression_path")
+        if not expression_path:
+            raise MatrixValidationRuntimeError("Expression matrix file is missing.")
+
+        source_expression = Path(expression_path)
+        if not source_expression.exists():
+            raise MatrixValidationRuntimeError("Expression matrix file could not be found.")
+
+        ensure_project_preprocessed_expression(
+            project_id,
+            source_expression,
+            project_manifest,
+        )
+
         scopes = build_algorithm_scopes(project_manifest)
         has_cluster_scopes = any(scope.scope_type == "cluster" for scope in scopes)
         runnable_scopes = [scope for scope in scopes if not scope.skipped]

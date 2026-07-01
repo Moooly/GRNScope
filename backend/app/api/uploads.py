@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..schemas import TempUploadResponse
 from ..storage import (
@@ -35,6 +35,7 @@ async def temp_dataset_upload(
     expression_matrix: UploadFile = File(...),
     pseudotime: UploadFile | None = File(default=None),
     cluster_labels: UploadFile | None = File(default=None),
+    defer_validation: bool = Form(False),
 ):
     errors: list[str] = []
 
@@ -74,6 +75,58 @@ async def temp_dataset_upload(
 
     try:
         save_upload_file(expression_matrix, expression_path)
+
+        if defer_validation:
+            if pseudotime and pseudotime_path is not None:
+                save_upload_file(pseudotime, pseudotime_path)
+            if cluster_labels and cluster_labels_path is not None:
+                save_upload_file(cluster_labels, cluster_labels_path)
+
+            metadata = {
+                "temp_upload_id": temp_upload_id,
+                "expression_path": str(expression_path),
+                "pseudotime_path": str(pseudotime_path) if pseudotime_path else None,
+                "cluster_labels_path": (
+                    str(cluster_labels_path) if cluster_labels_path else None
+                ),
+                "expression_filename": expression_matrix.filename,
+                "pseudotime_filename": pseudotime.filename if pseudotime else None,
+                "cluster_labels_filename": (
+                    cluster_labels.filename if cluster_labels else None
+                ),
+                "gene_count": None,
+                "cell_count": None,
+                "gene_names": [],
+                "cell_names": [],
+                "gene_names_truncated": False,
+                "cell_names_truncated": False,
+                "has_pseudotime": pseudotime is not None,
+                "pseudotime_count": None,
+                "has_cluster_labels": cluster_labels is not None,
+                "cluster_label_count": None,
+                "cluster_count": None,
+                "cluster_names": [],
+                "cluster_cell_counts": {},
+                "deferred_validation": True,
+            }
+            save_json(temp_metadata_path(temp_upload_id), metadata)
+
+            return TempUploadResponse(
+                ok=True,
+                temp_upload_id=temp_upload_id,
+                expression_filename=expression_matrix.filename,
+                pseudotime_filename=pseudotime.filename if pseudotime else None,
+                cluster_labels_filename=(
+                    cluster_labels.filename if cluster_labels else None
+                ),
+                gene_count=None,
+                cell_count=None,
+                has_pseudotime=pseudotime is not None,
+                has_cluster_labels=cluster_labels is not None,
+                cluster_count=None,
+                errors=[],
+            )
+
         expression_info = parse_expression_matrix(expression_path)
         expression_cell_names = read_expression_cell_names(expression_path)
 
