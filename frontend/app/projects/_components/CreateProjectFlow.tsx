@@ -31,66 +31,25 @@ type BackendAlgorithmEntry = {
   recommended_use_cases: string[];
 };
 
-type ApiPayload = Record<string, unknown>;
 const DEFAULT_TOP_VARIABLE_GENES = 2000;
 const MAX_PREPROCESSED_GENES = 8000;
 
-function isApiPayload(value: unknown): value is ApiPayload {
-  return typeof value === "object" && value !== null;
-}
+type CreateProjectResponsePayload = {
+  ok?: boolean;
+  project_id?: string;
+  job_id?: string;
+  errors?: string[];
+};
 
-function extractApiErrors(payload: ApiPayload | null): string[] {
-  if (!payload || !Array.isArray(payload.errors)) return [];
-  return payload.errors.filter(
-    (error): error is string => typeof error === "string" && error.trim().length > 0,
-  );
-}
-
-async function readApiPayload(response: Response): Promise<ApiPayload | null> {
+async function readCreateProjectResponse(response: Response) {
   const responseText = await response.text();
   if (!responseText.trim()) return null;
 
   try {
-    const parsed: unknown = JSON.parse(responseText);
-    return isApiPayload(parsed) ? parsed : null;
+    return JSON.parse(responseText) as CreateProjectResponsePayload;
   } catch {
     return null;
   }
-}
-
-function formatTemporaryUploadError(response: Response, payload: ApiPayload | null) {
-  const serverErrors = extractApiErrors(payload);
-  if (serverErrors.length > 0) return serverErrors;
-
-  if (response.status === 413) {
-    return [
-      "Upload was rejected because the request is larger than the server limit. Increase nginx client_max_body_size to 500M, restart nginx, and try again.",
-    ];
-  }
-
-  if (response.status === 504) {
-    return [
-      "The server timed out while saving this dataset. Check nginx timeout settings and backend logs, then try again.",
-    ];
-  }
-
-  if (response.status >= 500) {
-    return [
-      `Temporary dataset upload failed with HTTP ${response.status}. Check the backend or nginx logs for the detailed error.`,
-    ];
-  }
-
-  return [`Temporary dataset upload failed with HTTP ${response.status}.`];
-}
-
-function getPayloadString(payload: ApiPayload, key: string) {
-  const value = payload[key];
-  return typeof value === "string" ? value : "";
-}
-
-function getPayloadNumber(payload: ApiPayload, key: string) {
-  const value = payload[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function getDockerVersion(dockerImage: string) {
@@ -165,7 +124,6 @@ export default function CreateProjectFlow({
 
   const [geneCount, setGeneCount] = useState<number | null>(null);
   const [cellCount, setCellCount] = useState<number | null>(null);
-  const [isUploadingTempDataset, setIsUploadingTempDataset] = useState(false);
 
   const [topVariableGenes, setTopVariableGenes] = useState(String(DEFAULT_TOP_VARIABLE_GENES));
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
@@ -203,7 +161,6 @@ export default function CreateProjectFlow({
     setClusterLabelsFileName("");
     setGeneCount(null);
     setCellCount(null);
-    setIsUploadingTempDataset(false);
     setTopVariableGenes(String(DEFAULT_TOP_VARIABLE_GENES));
     setIncludeAllTFs(true);
     setNormalizeEnabled(true);
@@ -394,54 +351,76 @@ export default function CreateProjectFlow({
     setClusterLabelsFileName("");
   };
 
-  const uploadTempDatasetForStart = async () => {
+  const createPendingProject = async (safeSelectedIds: string[]) => {
+    const formData = new FormData();
+    formData.append("project_name", projectName);
+    formData.append("project_description", projectDescription);
+    formData.append("top_variable_genes", topVariableGenes);
+    formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
+    formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
+    formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
+    formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
+    formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
+    formData.append("celloracle_species", cellOracleSpecies);
+    formData.append("celloracle_base_grn", cellOracleBaseGrn);
+    formData.append("expression_filename", expressionFileName);
+    formData.append("pseudotime_filename", pseudotimeFileName);
+    formData.append("cluster_labels_filename", clusterLabelsFileName);
+
+    const response = await apiFetch(`${API_BASE}/projects/create-pending`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await readCreateProjectResponse(response);
+
+    if (!response.ok || !data?.ok || !data.project_id || !data.job_id) {
+      throw new Error(
+        data?.errors?.length ? data.errors.join("\n") : "Project creation failed.",
+      );
+    }
+
+    return {
+      project_id: data.project_id,
+      job_id: data.job_id,
+    };
+  };
+
+  const uploadProjectFilesAndStart = async (projectId: string) => {
     if (!expressionFile) {
       throw new Error("Upload an expression matrix CSV to continue.");
     }
 
-    setIsUploadingTempDataset(true);
-    setGeneCount(null);
-    setCellCount(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("expression_matrix", expressionFile);
-      formData.append("defer_validation", "true");
-      if (pseudotimeFile) {
-        formData.append("pseudotime", pseudotimeFile);
-      }
-      if (clusterLabelsFile) {
-        formData.append("cluster_labels", clusterLabelsFile);
-      }
-
-      const response = await fetch(`${API_BASE}/uploads/temp-dataset`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await readApiPayload(response);
-
-      if (!response.ok) {
-        throw new Error(formatTemporaryUploadError(response, data).join("\n"));
-      }
-
-      if (!data || data.ok !== true) {
-        const serverErrors = extractApiErrors(data);
-        throw new Error(
-          serverErrors.length ? serverErrors.join("\n") : "Temporary dataset upload failed.",
-        );
-      }
-
-      const uploadId = getPayloadString(data, "temp_upload_id");
-      if (!uploadId) {
-        throw new Error("Temporary dataset upload failed: missing upload id.");
-      }
-
-      setGeneCount(getPayloadNumber(data, "gene_count"));
-      setCellCount(getPayloadNumber(data, "cell_count"));
-      return uploadId;
-    } finally {
-      setIsUploadingTempDataset(false);
+    const formData = new FormData();
+    formData.append("expression_matrix", expressionFile);
+    if (pseudotimeFile) {
+      formData.append("pseudotime", pseudotimeFile);
     }
+    if (clusterLabelsFile) {
+      formData.append("cluster_labels", clusterLabelsFile);
+    }
+
+    const response = await apiFetch(`${API_BASE}/projects/${projectId}/upload-and-start`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await readCreateProjectResponse(response);
+
+    if (!response.ok || !data?.ok) {
+      throw new Error(
+        data?.errors?.length
+          ? data.errors.join("\n")
+          : `Could not upload project files. HTTP ${response.status}`,
+      );
+    }
+  };
+
+  const markProjectUploadFailed = async (projectId: string, message: string) => {
+    const formData = new FormData();
+    formData.append("message", message);
+    await apiFetch(`${API_BASE}/projects/${projectId}/upload-failed`, {
+      method: "POST",
+      body: formData,
+    });
   };
 
   const handleStartAnalysis = async () => {
@@ -520,35 +499,12 @@ export default function CreateProjectFlow({
     try {
       setIsSubmitting(true);
       setErrors([]);
-      const uploadedTempId = await uploadTempDatasetForStart();
-
-      const formData = new FormData();
-      formData.append("temp_upload_id", uploadedTempId);
-      formData.append("project_name", projectName);
-      formData.append("project_description", projectDescription);
-      formData.append("top_variable_genes", topVariableGenes);
-      formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
-      formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
-      formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
-      formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
-      formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
-      formData.append("celloracle_species", cellOracleSpecies);
-      formData.append("celloracle_base_grn", cellOracleBaseGrn);
-
-      const response = await apiFetch(`${API_BASE}/projects/create-from-temp`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-
-      if (!data.ok) {
-        setErrors(data.errors || ["Project creation failed."]);
-        return;
-      }
+      const data = await createPendingProject(safeSelectedIds);
+      const uploadPromise = uploadProjectFilesAndStart(data.project_id);
 
       const now = new Date();
       const createdProject: Project = {
-        id: data.project_id || `project-${now.getTime()}`,
+        id: data.project_id,
         name: projectName,
         description:
           projectDescription || "Single-cell RNA-seq dataset for GRN inference.",
@@ -568,7 +524,7 @@ export default function CreateProjectFlow({
         cellCount,
         jobCount: 1,
         latestJob: {
-          job_id: data.job_id || "pending",
+          job_id: data.job_id,
           overall_status: "Queued",
           ensemble_enabled: ensembleEnabled,
           tasks: safeSelectedIds.map((algorithmId) => ({
@@ -581,13 +537,24 @@ export default function CreateProjectFlow({
             started_at_timestamp: null,
             completed_at: null,
             completed_at_timestamp: null,
+            progress_percent: 0,
+            progress_label: "Waiting for dataset upload",
           })),
         },
       };
 
-      // Close the modal first, then notify the parent.
       onClose();
       onProjectCreated?.(createdProject);
+      void uploadPromise.catch((error) => {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Dataset upload failed before analysis could start.";
+        void markProjectUploadFailed(data.project_id, message).catch((markError) => {
+          console.error("Could not mark project upload as failed:", markError);
+        });
+        console.error("Project file upload failed after navigation:", error);
+      });
     } catch (error) {
       setErrors([
         error instanceof Error && error.message
@@ -610,7 +577,6 @@ export default function CreateProjectFlow({
       clusterLabelsFileName={clusterLabelsFileName}
       geneCount={geneCount}
       cellCount={cellCount}
-      isUploadingTempDataset={isUploadingTempDataset}
       topVariableGenes={topVariableGenes}
       includeAllTFs={includeAllTFs}
       normalizeEnabled={normalizeEnabled}

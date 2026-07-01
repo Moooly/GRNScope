@@ -6,7 +6,16 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 
 from ..algorithm_registry import (
     CELLORACLE_BASE_GRN_OPTIONS,
@@ -30,16 +39,19 @@ from ..repositories.project_repository import (
     write_project_manifest,
 )
 from ..storage import move_temp_upload_to_project, temp_metadata_path
+from ..storage import save_upload_file
 from ..schemas import (
     CreateProjectFromTempRequest,
     CreateProjectFromTempResponse,
     CreateProjectResponse,
     UpdateNotificationEmailRequest,
 )
+from ..validators import validate_csv_extension
 from ..services.email_service import normalize_notification_email
 from ..services.job_service import (
     launch_independent_algorithm_tasks,
     send_job_completion_notification_if_needed,
+    update_job_state,
 )
 from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
@@ -64,6 +76,397 @@ def load_known_tf_gene_names() -> list[str]:
             ]
 
     return []
+
+
+def parse_selected_algorithms(selected_algorithms: str) -> list[str]:
+    parsed = json.loads(selected_algorithms)
+    if not isinstance(parsed, list):
+        raise ValueError("Selected algorithms must be a list.")
+    return sort_algorithm_ids_by_difficulty(
+        [str(algorithm_id) for algorithm_id in parsed]
+    )
+
+
+def normalize_celloracle_settings(
+    celloracle_species: str,
+    celloracle_base_grn: str,
+) -> tuple[str, str]:
+    normalized_species = (celloracle_species or "human").strip()
+    normalized_base_grn = (celloracle_base_grn or "auto").strip()
+
+    if normalized_species not in CELLORACLE_SPECIES_OPTIONS:
+        raise ValueError(f"Unsupported CellOracle species: {normalized_species}.")
+    if normalized_base_grn not in CELLORACLE_BASE_GRN_OPTIONS:
+        raise ValueError(f"Unsupported CellOracle base GRN: {normalized_base_grn}.")
+
+    return normalized_species, normalized_base_grn
+
+
+def build_queued_task(algorithm_id: str, progress_label: str = "Queued") -> dict:
+    return {
+        "algorithm_id": algorithm_id,
+        "status": "Queued",
+        "elapsed_seconds": 0,
+        "error_message": None,
+        "error_type": None,
+        "result_path": None,
+        "started_at": None,
+        "started_at_timestamp": None,
+        "completed_at": None,
+        "completed_at_timestamp": None,
+        "progress_percent": 0,
+        "progress_label": progress_label,
+    }
+
+
+def build_job_manifest(
+    project_id: str,
+    job_id: str,
+    selected_algorithms_list: list[str],
+    ensemble_enabled: str,
+    overall_status: str = "Queued",
+    progress_label: str = "Queued",
+) -> dict:
+    return {
+        "job_id": job_id,
+        "project_id": project_id,
+        "overall_status": overall_status,
+        "ensemble_enabled": ensemble_enabled,
+        "tasks": [
+            build_queued_task(algorithm_id, progress_label=progress_label)
+            for algorithm_id in selected_algorithms_list
+        ],
+    }
+
+
+def mark_upload_failure(project_dir: Path, job_id: str, message: str) -> None:
+    completed_at_timestamp = time.time()
+    completed_at = time.strftime(
+        "%Y-%m-%d %H:%M",
+        time.localtime(completed_at_timestamp),
+    )
+
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
+        jobs_manifest = read_jobs_manifest(project_dir)
+        for job in jobs_manifest:
+            if not isinstance(job, dict) or job.get("job_id") != job_id:
+                continue
+            job["overall_status"] = "Failed"
+            for task in job.get("tasks", []):
+                if not isinstance(task, dict):
+                    continue
+                task["status"] = "Failed"
+                task["error_type"] = "upload"
+                task["error_message"] = message
+                task["progress_percent"] = 100
+                task["progress_label"] = "Dataset upload failed"
+                task["completed_at"] = completed_at
+                task["completed_at_timestamp"] = completed_at_timestamp
+            break
+        write_jobs_manifest(project_dir, jobs_manifest)
+
+
+@router.post("/api/projects/create-pending", response_model=CreateProjectResponse)
+async def create_pending_project(
+    request: Request,
+    response: Response,
+    project_name: str = Form(...),
+    project_description: str = Form(""),
+    top_variable_genes: str = Form(...),
+    include_all_tfs: str = Form(...),
+    normalize_enabled: str = Form(...),
+    log_transform_enabled: str = Form(...),
+    selected_algorithms: str = Form(...),
+    ensemble_enabled: str = Form(...),
+    celloracle_species: str = Form("human"),
+    celloracle_base_grn: str = Form("auto"),
+    expression_filename: str = Form(""),
+    pseudotime_filename: str = Form(""),
+    cluster_labels_filename: str = Form(""),
+):
+    owner_id = get_or_create_client_id(request, response)
+    project_id = uuid.uuid4().hex[:12]
+    job_id = uuid.uuid4().hex[:12]
+
+    try:
+        selected_algorithms_list = parse_selected_algorithms(selected_algorithms)
+        normalized_celloracle_species, normalized_celloracle_base_grn = (
+            normalize_celloracle_settings(celloracle_species, celloracle_base_grn)
+        )
+    except Exception as exc:
+        return CreateProjectResponse(ok=False, errors=[str(exc)])
+
+    project_dir = PROJECTS_ROOT / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+    known_tf_gene_names = load_known_tf_gene_names()
+
+    job_manifest = build_job_manifest(
+        project_id,
+        job_id,
+        selected_algorithms_list,
+        ensemble_enabled,
+        progress_label="Waiting for dataset upload",
+    )
+
+    project_manifest = {
+        "project_id": project_id,
+        "owner_id": owner_id,
+        "project_name": project_name,
+        "project_description": project_description,
+        "created_at": time.time(),
+        "created_at_display": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
+        "notification_email": None,
+        "top_variable_genes": top_variable_genes,
+        "include_all_tfs": include_all_tfs,
+        "normalize_enabled": normalize_enabled,
+        "log_transform_enabled": log_transform_enabled,
+        "selected_algorithms": selected_algorithms_list,
+        "ensemble_enabled": ensemble_enabled,
+        "expression_path": None,
+        "pseudotime_path": None,
+        "cluster_labels_path": None,
+        "preprocessed_expression_path": str(
+            project_dir / "preprocessed" / "ExpressionData.csv"
+        ),
+        "upload_status": "waiting_for_upload",
+        "celloracle": {
+            "species": normalized_celloracle_species,
+            "base_grn": normalized_celloracle_base_grn,
+        },
+        "latest_job_id": job_id,
+    }
+
+    metadata_manifest = {
+        "project_id": project_id,
+        "owner_id": owner_id,
+        "project_name": project_name,
+        "project_description": project_description,
+        "expression_filename": expression_filename or None,
+        "pseudotime_filename": pseudotime_filename or None,
+        "cluster_labels_filename": cluster_labels_filename or None,
+        "gene_count": None,
+        "cell_count": None,
+        "gene_names": [],
+        "cell_names": [],
+        "known_tf_gene_names": known_tf_gene_names,
+        "has_pseudotime": bool(pseudotime_filename),
+        "pseudotime_count": None,
+        "has_cluster_labels": bool(cluster_labels_filename),
+        "cluster_label_count": None,
+        "cluster_count": None,
+        "cluster_names": [],
+        "cluster_cell_counts": {},
+        "preprocessing": {
+            "top_variable_genes": top_variable_genes,
+            "include_all_tfs": include_all_tfs,
+            "normalize_enabled": normalize_enabled,
+            "log_transform_enabled": log_transform_enabled,
+        },
+        "celloracle": {
+            "species": normalized_celloracle_species,
+            "base_grn": normalized_celloracle_base_grn,
+        },
+        "selected_algorithms": selected_algorithms_list,
+        "results_directory": str(project_dir / "results"),
+        "ensemble_enabled": ensemble_enabled,
+        "upload_status": "waiting_for_upload",
+        "job": {
+            "job_id": job_id,
+            "overall_status": "Queued",
+        },
+    }
+
+    try:
+        write_project_manifest(project_dir, project_manifest)
+        (project_dir / "metadata.json").write_text(
+            json.dumps(metadata_manifest, indent=2),
+            encoding="utf-8",
+        )
+        (project_dir / "jobs.json").write_text(
+            json.dumps([job_manifest], indent=2),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        shutil.rmtree(project_dir, ignore_errors=True)
+        return CreateProjectResponse(ok=False, errors=[str(exc)])
+
+    return CreateProjectResponse(
+        ok=True,
+        project_id=project_id,
+        job_id=job_id,
+        errors=[],
+    )
+
+
+@router.post("/api/projects/{project_id}/upload-and-start")
+async def upload_project_dataset_and_start(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
+    expression_matrix: UploadFile = File(...),
+    pseudotime: UploadFile | None = File(default=None),
+    cluster_labels: UploadFile | None = File(default=None),
+):
+    owner_id = get_or_create_client_id(request, response)
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        selected_algorithms_list = [
+            str(algorithm_id)
+            for algorithm_id in project_manifest.get("selected_algorithms", [])
+        ]
+        job_id = str(project_manifest.get("latest_job_id") or "")
+        if not job_id:
+            raise RuntimeError("Project is missing its pending job id.")
+
+        errors: list[str] = []
+        expression_ext_error = validate_csv_extension(expression_matrix.filename or "")
+        if expression_ext_error:
+            errors.append(f"Expression matrix: {expression_ext_error}")
+        if pseudotime:
+            pseudo_ext_error = validate_csv_extension(pseudotime.filename or "")
+            if pseudo_ext_error:
+                errors.append(f"Pseudotime: {pseudo_ext_error}")
+        if cluster_labels:
+            cluster_ext_error = validate_csv_extension(cluster_labels.filename or "")
+            if cluster_ext_error:
+                errors.append(f"Cluster labels: {cluster_ext_error}")
+
+        if errors:
+            message = "\n".join(errors)
+            mark_upload_failure(project_dir, job_id, message)
+            return {
+                "ok": False,
+                "project_id": project_id,
+                "job_id": job_id,
+                "errors": errors,
+            }
+
+        expression_path = (
+            project_dir
+            / f"expression__{Path(expression_matrix.filename or 'expression.csv').name}"
+        )
+        save_upload_file(expression_matrix, expression_path)
+
+        pseudotime_path: Path | None = None
+        if pseudotime:
+            pseudotime_path = (
+                project_dir
+                / f"pseudotime__{Path(pseudotime.filename or 'pseudotime.csv').name}"
+            )
+            save_upload_file(pseudotime, pseudotime_path)
+
+        cluster_labels_path: Path | None = None
+        if cluster_labels:
+            cluster_labels_path = (
+                project_dir
+                / (
+                    "cluster_labels__"
+                    f"{Path(cluster_labels.filename or 'cluster_labels.csv').name}"
+                )
+            )
+            save_upload_file(cluster_labels, cluster_labels_path)
+
+        project_manifest["expression_path"] = str(expression_path)
+        project_manifest["pseudotime_path"] = (
+            str(pseudotime_path) if pseudotime_path else None
+        )
+        project_manifest["cluster_labels_path"] = (
+            str(cluster_labels_path) if cluster_labels_path else None
+        )
+        project_manifest["upload_status"] = "uploaded"
+        write_project_manifest(project_dir, project_manifest)
+
+        metadata_path = project_dir / "metadata.json"
+        metadata_manifest = {}
+        if metadata_path.exists():
+            metadata_manifest = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata_manifest.update(
+            {
+                "expression_filename": expression_matrix.filename,
+                "pseudotime_filename": pseudotime.filename if pseudotime else None,
+                "cluster_labels_filename": (
+                    cluster_labels.filename if cluster_labels else None
+                ),
+                "has_pseudotime": pseudotime is not None,
+                "has_cluster_labels": cluster_labels is not None,
+                "upload_status": "uploaded",
+            }
+        )
+        metadata_path.write_text(
+            json.dumps(metadata_manifest, indent=2),
+            encoding="utf-8",
+        )
+
+        update_job_state(project_dir, job_id, overall_status="Queued")
+        for algorithm_id in selected_algorithms_list:
+            update_job_state(
+                project_dir,
+                job_id,
+                algorithm_id=algorithm_id,
+                task_status="Queued",
+                progress_percent=0,
+                progress_label="Queued",
+            )
+
+        if queue_enabled():
+            enqueue_algorithm_job(project_id, job_id, selected_algorithms_list)
+        else:
+            background_tasks.add_task(
+                launch_independent_algorithm_tasks,
+                project_id,
+                job_id,
+                selected_algorithms_list,
+            )
+
+        return {"ok": True, "project_id": project_id, "job_id": job_id, "errors": []}
+    except Exception as exc:
+        try:
+            project_manifest = read_project_manifest(project_dir)
+            job_id = str(project_manifest.get("latest_job_id") or "")
+            if job_id:
+                mark_upload_failure(project_dir, job_id, str(exc))
+        except Exception:
+            pass
+        return {"ok": False, "project_id": project_id, "errors": [str(exc)]}
+
+
+@router.post("/api/projects/{project_id}/upload-failed")
+async def mark_project_upload_failed(
+    project_id: str,
+    request: Request,
+    response: Response,
+    message: str = Form("Dataset upload failed before analysis could start."),
+):
+    owner_id = get_or_create_client_id(request, response)
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        job_id = str(project_manifest.get("latest_job_id") or "")
+        if not job_id:
+            raise RuntimeError("Project is missing its pending job id.")
+
+        project_manifest["upload_status"] = "failed"
+        write_project_manifest(project_dir, project_manifest)
+
+        metadata_path = project_dir / "metadata.json"
+        if metadata_path.exists():
+            metadata_manifest = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata_manifest["upload_status"] = "failed"
+            metadata_path.write_text(
+                json.dumps(metadata_manifest, indent=2),
+                encoding="utf-8",
+            )
+
+        mark_upload_failure(project_dir, job_id, message)
+        return {"ok": True, "project_id": project_id, "job_id": job_id, "errors": []}
+    except Exception as exc:
+        return {"ok": False, "project_id": project_id, "errors": [str(exc)]}
 
 
 @router.post("/api/projects/create-from-temp", response_model=CreateProjectResponse)

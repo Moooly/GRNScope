@@ -47,7 +47,6 @@ interface CreateProjectModalProps {
   clusterLabelsFileName: string;
   geneCount: number | null;
   cellCount: number | null;
-  isUploadingTempDataset: boolean;
   topVariableGenes: string;
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
@@ -99,7 +98,6 @@ export default function CreateProjectModal({
   clusterLabelsFileName,
   geneCount,
   cellCount,
-  isUploadingTempDataset,
   topVariableGenes,
   includeAllTFs,
   normalizeEnabled,
@@ -160,7 +158,7 @@ export default function CreateProjectModal({
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
   const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
-  const datasetReady = hasExpressionFile && !isUploadingTempDataset;
+  const datasetReady = hasExpressionFile;
   const maxTopVariableGenes =
     geneCount === null ? MAX_PREPROCESSED_GENES : Math.min(geneCount, MAX_PREPROCESSED_GENES);
 
@@ -375,16 +373,12 @@ export default function CreateProjectModal({
 
   const startDisabled =
     isSubmitting ||
-    isUploadingTempDataset ||
     !hasExpressionFile ||
     selectedAlgorithms.length === 0 ||
     isLoadingAlgorithms;
 
   const willRunSummary = (() => {
     if (!hasExpressionFile) return "Upload an expression matrix to begin.";
-    if (isUploadingTempDataset || !datasetReady) {
-      return "Saving dataset and starting analysis.";
-    }
     if (selectedAlgorithms.length === 0) return "No algorithms selected — open Advanced settings to choose at least one.";
 
     const algoLabel =
@@ -509,12 +503,7 @@ export default function CreateProjectModal({
 
             {hasExpressionFile && (
               <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
-                {isUploadingTempDataset ? (
-                  <span className="inline-flex items-center gap-2 font-medium text-slate-600">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]" />
-                    Saving dataset…
-                  </span>
-                ) : datasetReady ? (
+                {datasetReady ? (
                   <>
                     <span className="inline-flex min-w-0 max-w-full items-center gap-2 font-semibold text-[#178a62]">
                       <span className="h-2 w-2 rounded-full bg-[#20b779]" />
@@ -726,11 +715,7 @@ export default function CreateProjectModal({
               disabled={startDisabled}
               className="cursor-pointer rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting
-                ? "Starting…"
-                : isUploadingTempDataset
-                  ? "Validating…"
-                  : "Start analysis →"}
+              {isSubmitting ? "Opening project…" : "Start analysis →"}
             </button>
           </div>
         </div>
