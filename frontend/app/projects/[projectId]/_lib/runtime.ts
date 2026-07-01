@@ -22,6 +22,14 @@ export function runtimeLabel(status: string, elapsedSeconds: number | null | und
   if (status === "Queued") return "Not started";
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
+  if (status === "Running" || status === "Stopping") return `${status} ${runtime}`;
+  return `Runtime ${runtime}`;
+}
+
+function runtimeTitleLabel(status: string, elapsedSeconds: number | null | undefined): string {
+  if (status === "Queued") return "Not started";
+
+  const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `Running time ${runtime}`;
   return `Runtime ${runtime}`;
 }
@@ -37,7 +45,7 @@ export function runtimeTitle({
   startedAt?: string | null;
   completedAt?: string | null;
 }): string {
-  const parts = [runtimeLabel(status, elapsedSeconds)];
+  const parts = [runtimeTitleLabel(status, elapsedSeconds)];
   if (startedAt) parts.push(`Started ${startedAt}`);
   if (completedAt) parts.push(`Ended ${completedAt}`);
   return parts.join(" · ");

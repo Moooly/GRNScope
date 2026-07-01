@@ -113,7 +113,7 @@ export default function AlgorithmCardsSection({
                     {name}
                   </p>
                   <p
-                    className="mt-0.5 truncate text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500"
+                    className="mt-0.5 max-w-full whitespace-normal text-[11px] font-bold uppercase leading-tight tracking-[0.06em] text-slate-500"
                     title={algorithmRuntimeTitle}
                   >
                     {algorithmRuntimeLabel}
