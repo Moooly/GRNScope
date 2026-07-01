@@ -6,6 +6,7 @@ import type { ProjectAlgorithm } from "../page";
 import type { Project } from "../_types/project";
 import { getApiBase } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
+import { registerPendingProjectUpload } from "../_lib/pendingProjectUpload";
 
 type BackendAlgorithmEntry = {
   id: string;
@@ -482,44 +483,6 @@ export default function CreateProjectFlow({
     };
   };
 
-  const uploadProjectFilesAndStart = async (projectId: string) => {
-    if (!expressionFile) {
-      throw new Error("Upload an expression matrix CSV to continue.");
-    }
-
-    const formData = new FormData();
-    formData.append("expression_matrix", expressionFile);
-    if (pseudotimeFile) {
-      formData.append("pseudotime", pseudotimeFile);
-    }
-    if (clusterLabelsFile) {
-      formData.append("cluster_labels", clusterLabelsFile);
-    }
-
-    const response = await apiFetch(`${API_BASE}/projects/${projectId}/upload-and-start`, {
-      method: "POST",
-      body: formData,
-    });
-    const data = await readCreateProjectResponse(response);
-
-    if (!response.ok || !data?.ok) {
-      throw new Error(
-        data?.errors?.length
-          ? data.errors.join("\n")
-          : `Could not upload project files. HTTP ${response.status}`,
-      );
-    }
-  };
-
-  const markProjectUploadFailed = async (projectId: string, message: string) => {
-    const formData = new FormData();
-    formData.append("message", message);
-    await apiFetch(`${API_BASE}/projects/${projectId}/upload-failed`, {
-      method: "POST",
-      body: formData,
-    });
-  };
-
   const handleStartAnalysis = async () => {
     const validationErrors: string[] = [];
     const maxFileSize = 500 * 1024 * 1024;
@@ -602,7 +565,15 @@ export default function CreateProjectFlow({
       setIsSubmitting(true);
       setErrors([]);
       const data = await createPendingProject(safeSelectedIds);
-      const uploadPromise = uploadProjectFilesAndStart(data.project_id);
+      if (!expressionFile) {
+        throw new Error("Upload an expression matrix CSV to continue.");
+      }
+
+      registerPendingProjectUpload(data.project_id, {
+        expressionFile,
+        pseudotimeFile,
+        clusterLabelsFile,
+      });
 
       const now = new Date();
       const createdProject: Project = {
@@ -647,16 +618,6 @@ export default function CreateProjectFlow({
 
       onClose();
       onProjectCreated?.(createdProject);
-      void uploadPromise.catch((error) => {
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : "Dataset upload failed before analysis could start.";
-        void markProjectUploadFailed(data.project_id, message).catch((markError) => {
-          console.error("Could not mark project upload as failed:", markError);
-        });
-        console.error("Project file upload failed after navigation:", error);
-      });
     } catch (error) {
       setErrors([
         error instanceof Error && error.message

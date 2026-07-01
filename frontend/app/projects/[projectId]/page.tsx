@@ -21,6 +21,7 @@ import ResultsHubSection from "./_components/ResultsHubSection";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
 import { API_BASE } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
+import { consumePendingProjectUpload } from "../_lib/pendingProjectUpload";
 
 import {
   type AggregatedEdge,
@@ -269,6 +270,61 @@ export default function ProjectDetailPage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!projectId || isDemoRoute) return;
+
+    const pendingUpload = consumePendingProjectUpload(projectId);
+    if (!pendingUpload) return;
+
+    const uploadProjectFilesAndStart = async () => {
+      try {
+        const formData = new FormData();
+        formData.append("expression_matrix", pendingUpload.expressionFile);
+        if (pendingUpload.pseudotimeFile) {
+          formData.append("pseudotime", pendingUpload.pseudotimeFile);
+        }
+        if (pendingUpload.clusterLabelsFile) {
+          formData.append("cluster_labels", pendingUpload.clusterLabelsFile);
+        }
+
+        const response = await apiFetch(`${API_BASE}/projects/${projectId}/upload-and-start`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await response.json().catch(() => null) as {
+          ok?: boolean;
+          errors?: string[];
+        } | null;
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(
+            data?.errors?.length
+              ? data.errors.join("\n")
+              : `Could not upload project files. HTTP ${response.status}`,
+          );
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Dataset upload failed before analysis could start.";
+        const formData = new FormData();
+        formData.append("message", message);
+        await apiFetch(`${API_BASE}/projects/${projectId}/upload-failed`, {
+          method: "POST",
+          body: formData,
+        }).catch((markError) => {
+          console.error("Could not mark project upload as failed:", markError);
+        });
+        console.error("Project file upload failed after navigation:", error);
+      } finally {
+        await refreshProjectData();
+      }
+    };
+
+    void uploadProjectFilesAndStart();
+  }, [isDemoRoute, projectId, refreshProjectData]);
 
   const expressionMatrixLabel =
     metadata?.gene_count && metadata?.cell_count
