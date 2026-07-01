@@ -38,6 +38,74 @@ function formatTopVariableGenes(value: string) {
   return value.trim().toLowerCase() === "all" ? "All genes retained" : value;
 }
 
+function countCsvColumns(line: string) {
+  let columns = 1;
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    const nextCharacter = line[index + 1];
+
+    if (character === "\"") {
+      if (inQuotes && nextCharacter === "\"") {
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (character === "," && !inQuotes) {
+      columns += 1;
+    }
+  }
+
+  return columns;
+}
+
+async function readExpressionMatrixDimensions(file: File) {
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let headerLine: string | null = null;
+  let nonEmptyLineCount = 0;
+
+  const processLine = (rawLine: string) => {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    if (line.trim() === "") return;
+    nonEmptyLineCount += 1;
+    headerLine ??= line;
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      let lineEnd = buffer.indexOf("\n");
+      while (lineEnd !== -1) {
+        processLine(buffer.slice(0, lineEnd));
+        buffer = buffer.slice(lineEnd + 1);
+        lineEnd = buffer.indexOf("\n");
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.length > 0) {
+      processLine(buffer);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!headerLine) {
+    throw new Error("Expression matrix is empty.");
+  }
+
+  return {
+    geneCount: Math.max(0, nonEmptyLineCount - 1),
+    cellCount: Math.max(0, countCsvColumns(headerLine) - 1),
+  };
+}
+
 type CreateProjectResponsePayload = {
   ok?: boolean;
   project_id?: string;
@@ -293,9 +361,42 @@ export default function CreateProjectFlow({
   // Selecting files should stay local and instant. Server work starts only after
   // the user clicks Start analysis.
   useEffect(() => {
+    if (!expressionFile) {
+      setGeneCount(null);
+      setCellCount(null);
+      setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
+      return;
+    }
+
+    let isCancelled = false;
     setGeneCount(null);
     setCellCount(null);
-  }, [expressionFile, pseudotimeFile, clusterLabelsFile]);
+    setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
+
+    const readDimensions = async () => {
+      try {
+        const dimensions = await readExpressionMatrixDimensions(expressionFile);
+        if (isCancelled) return;
+        setGeneCount(dimensions.geneCount);
+        setCellCount(dimensions.cellCount);
+        if (dimensions.geneCount > 0) {
+          setTopVariableGenes(String(dimensions.geneCount));
+        }
+      } catch (error) {
+        if (isCancelled) return;
+        setGeneCount(null);
+        setCellCount(null);
+        setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
+        console.error("Could not read expression matrix dimensions:", error);
+      }
+    };
+
+    void readDimensions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [expressionFile]);
 
   // Auto-select all compatible algorithms by default. Stops syncing once the
   // user manually toggles anything in the algorithm grid.
