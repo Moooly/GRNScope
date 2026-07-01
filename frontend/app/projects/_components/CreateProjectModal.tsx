@@ -558,6 +558,45 @@ export default function CreateProjectModal({
 
           {isCustomizeOpen && (
             <div className="space-y-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/40 p-5">
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-800">
+                      Project name
+                    </span>
+                    <input
+                      id="projectName"
+                      type="text"
+                      value={
+                        projectName === expressionFileName.replace(/\.[^/.]+$/, "")
+                          ? ""
+                          : projectName || ""
+                      }
+                      onChange={(event) => setProjectName(event.target.value)}
+                      placeholder={
+                        expressionFileName
+                          ? expressionFileName.replace(/\.[^/.]+$/, "")
+                          : "Auto-filled from uploaded expression matrix"
+                      }
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-800">
+                      Description
+                    </span>
+                    <input
+                      type="text"
+                      value={projectDescription}
+                      onChange={(event) => setProjectDescription(event.target.value)}
+                      placeholder="Optional note for this analysis"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                    />
+                  </label>
+                </div>
+              </div>
+
               <OptionalInputsPanel
                 pseudotimeFileName={pseudotimeFileName}
                 cellOracleConfigLabel={cellOracleConfigLabel}
@@ -580,43 +619,6 @@ export default function CreateProjectModal({
                 onSelectAll={onSelectAll}
                 onShowAlgorithmDetails={handleShowAlgorithmDetails}
               />
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-800">
-                    Project name
-                  </span>
-                  <input
-                    id="projectName"
-                    type="text"
-                    value={
-                      projectName === expressionFileName.replace(/\.[^/.]+$/, "")
-                        ? ""
-                        : projectName || ""
-                    }
-                    onChange={(event) => setProjectName(event.target.value)}
-                    placeholder={
-                      expressionFileName
-                        ? expressionFileName.replace(/\.[^/.]+$/, "")
-                        : "Auto-filled from uploaded expression matrix"
-                    }
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-800">
-                    Description
-                  </span>
-                  <input
-                    type="text"
-                    value={projectDescription}
-                    onChange={(event) => setProjectDescription(event.target.value)}
-                    placeholder="Optional note for this analysis"
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                  />
-                </label>
-              </div>
 
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
