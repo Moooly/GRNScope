@@ -18,16 +18,30 @@ export function formatAlgorithmRuntime(seconds: number | null | undefined): stri
   return `${secondsRemainder}s`;
 }
 
-export function runtimeLabel(status: string, elapsedSeconds: number | null | undefined): string {
-  if (status === "Queued") return "Not started";
+function queuedLabel(progressLabel?: string | null): string {
+  const normalized = progressLabel?.trim();
+  if (normalized && normalized.toLowerCase() !== "queued") return normalized;
+  return "Not started";
+}
+
+export function runtimeLabel(
+  status: string,
+  elapsedSeconds: number | null | undefined,
+  progressLabel?: string | null,
+): string {
+  if (status === "Queued") return queuedLabel(progressLabel);
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `${status} ${runtime}`;
   return `Runtime ${runtime}`;
 }
 
-function runtimeTitleLabel(status: string, elapsedSeconds: number | null | undefined): string {
-  if (status === "Queued") return "Not started";
+function runtimeTitleLabel(
+  status: string,
+  elapsedSeconds: number | null | undefined,
+  progressLabel?: string | null,
+): string {
+  if (status === "Queued") return queuedLabel(progressLabel);
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `Running time ${runtime}`;
@@ -37,15 +51,17 @@ function runtimeTitleLabel(status: string, elapsedSeconds: number | null | undef
 export function runtimeTitle({
   status,
   elapsedSeconds,
+  progressLabel,
   startedAt,
   completedAt,
 }: {
   status: string;
   elapsedSeconds: number | null | undefined;
+  progressLabel?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
 }): string {
-  const parts = [runtimeTitleLabel(status, elapsedSeconds)];
+  const parts = [runtimeTitleLabel(status, elapsedSeconds, progressLabel)];
   if (startedAt) parts.push(`Started ${startedAt}`);
   if (completedAt) parts.push(`Ended ${completedAt}`);
   return parts.join(" · ");

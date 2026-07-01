@@ -589,7 +589,7 @@ export default function CreateProjectFlow({
         pseudotimeFile,
         clusterLabelsFile,
       });
-      void startPendingProjectUpload(data.project_id, API_BASE);
+      await startPendingProjectUpload(data.project_id, API_BASE);
 
       const now = new Date();
       const createdProject: Project = {

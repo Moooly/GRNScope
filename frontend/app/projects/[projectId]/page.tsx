@@ -277,9 +277,13 @@ export default function ProjectDetailPage() {
     const uploadPromise = startPendingProjectUpload(projectId, API_BASE);
     if (!uploadPromise) return;
 
-    void uploadPromise.finally(() => {
-      void refreshProjectData();
-    });
+    void uploadPromise
+      .catch(() => {
+        return undefined;
+      })
+      .finally(() => {
+        void refreshProjectData();
+      });
   }, [isDemoRoute, projectId, refreshProjectData]);
 
   const expressionMatrixLabel =

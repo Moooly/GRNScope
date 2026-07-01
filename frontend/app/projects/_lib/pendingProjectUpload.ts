@@ -120,6 +120,7 @@ export function startPendingProjectUpload(projectId: string, apiBase: string) {
         console.error("Could not mark project upload as failed:", markError);
       });
       console.error("Project file upload failed after navigation:", error);
+      throw error;
     });
 
   return record.promise;

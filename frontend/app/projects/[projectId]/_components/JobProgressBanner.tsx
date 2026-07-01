@@ -51,6 +51,13 @@ export default function JobProgressBanner({
 
   const total = tasks.length;
   const finished = completed.length + failed.length + stopped.length;
+  const isWaitingForUpload =
+    running.length === 0 &&
+    stopping.length === 0 &&
+    queued.length > 0 &&
+    queued.every(
+      (task) => task.progress_label?.trim().toLowerCase() === "waiting for dataset upload",
+    );
 
   // Overall percent blends finished tasks with the partial progress of any
   // currently-running tasks. Each finished task = 1 unit, each running task
@@ -159,7 +166,9 @@ export default function JobProgressBanner({
               aria-hidden="true"
               className="inline-flex h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]"
             />
-            <h2 className="text-lg font-bold text-slate-950">Analysis running</h2>
+            <h2 className="text-lg font-bold text-slate-950">
+              {isWaitingForUpload ? "Uploading dataset" : "Analysis running"}
+            </h2>
             <span className="hidden text-slate-300 sm:inline">·</span>
             <p className="text-sm font-semibold text-slate-500">
               {completionSummary.join(" · ")}

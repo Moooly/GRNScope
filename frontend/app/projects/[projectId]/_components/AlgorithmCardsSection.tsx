@@ -59,10 +59,15 @@ export default function AlgorithmCardsSection({
           const isFailed = task.status === "Failed";
           const isStopped = task.status === "Stopped";
           const canStop = task.status === "Running" || task.status === "Queued";
-          const algorithmRuntimeLabel = runtimeLabel(task.status, task.elapsed_seconds);
+          const algorithmRuntimeLabel = runtimeLabel(
+            task.status,
+            task.elapsed_seconds,
+            task.progress_label,
+          );
           const algorithmRuntimeTitle = runtimeTitle({
             status: task.status,
             elapsedSeconds: task.elapsed_seconds,
+            progressLabel: task.progress_label,
             startedAt: task.started_at,
             completedAt: task.completed_at,
           });
