@@ -201,10 +201,10 @@ function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void
         aria-label="Stop algorithm"
         title="Stop algorithm"
         onClick={onClick}
-        className="group/stop relative inline-flex h-6 w-6 shrink-0 items-center justify-center text-[#1b75a6] transition hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 focus-visible:ring-offset-2"
+        className="group/stop inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 focus-visible:ring-offset-2"
       >
-        <span className="absolute h-5 w-5 animate-spin rounded-full border-2 border-current/20 border-t-current" />
-        <span className="h-1.5 w-1.5 rounded-[2px] bg-current transition group-hover/stop:scale-110" />
+        <span className="h-2 w-2 rounded-[2px] bg-current transition group-hover/stop:scale-110" />
+        Stop
       </button>
     );
   }

@@ -28,6 +28,7 @@ from ..services.beeline_service import (
     ensure_project_preprocessed_expression,
     read_delimited_header,
     run_beeline_with_progress,
+    terminate_algorithm_docker_containers,
     write_expression_subset_by_cells,
 )
 from ..services.email_service import (
@@ -997,6 +998,7 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
 
     task_pid = task.get("process_pid")
     fallback_pid = int(task_pid) if isinstance(task_pid, int) else None
+    terminate_algorithm_docker_containers(project_id, algorithm_id)
     terminate_process(control.process, fallback_pid=fallback_pid)
 
     if status == "Queued" or (control.process is None and fallback_pid is not None):

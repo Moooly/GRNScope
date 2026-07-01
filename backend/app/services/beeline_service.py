@@ -186,6 +186,167 @@ def remove_path_if_present(path: Path) -> None:
         shutil.rmtree(path)
 
 
+def docker_cli_available() -> bool:
+    return shutil.which("docker") is not None
+
+
+def inspect_running_docker_containers() -> list[dict]:
+    if not docker_cli_available():
+        return []
+
+    try:
+        container_ids = subprocess.run(
+            ["docker", "ps", "-q"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.split()
+    except Exception:
+        return []
+
+    if not container_ids:
+        return []
+
+    try:
+        inspected = subprocess.run(
+            ["docker", "inspect", *container_ids],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except Exception:
+        return []
+
+    if inspected.returncode != 0 or not inspected.stdout.strip():
+        return []
+
+    try:
+        payload = json.loads(inspected.stdout)
+    except json.JSONDecodeError:
+        return []
+
+    return payload if isinstance(payload, list) else []
+
+
+def container_mount_matches(container: dict, marker_paths: set[str]) -> bool:
+    mounts = container.get("Mounts")
+    if not isinstance(mounts, list):
+        return False
+
+    for mount in mounts:
+        if not isinstance(mount, dict):
+            continue
+        source = str(mount.get("Source") or "")
+        destination = str(mount.get("Destination") or "")
+        for marker_path in marker_paths:
+            if (
+                source == marker_path
+                or source.startswith(f"{marker_path}/")
+                or destination == marker_path
+                or destination.startswith(f"{marker_path}/")
+            ):
+                return True
+
+    return False
+
+
+def stop_docker_containers(container_ids: list[str]) -> None:
+    if not container_ids:
+        return
+
+    try:
+        subprocess.run(
+            ["docker", "stop", "-t", "2", *container_ids],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except Exception:
+        pass
+
+    still_running_ids: list[str] = []
+    for container_id in container_ids:
+        try:
+            still_running = subprocess.run(
+                ["docker", "ps", "-q", "--filter", f"id={container_id}"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            still_running_ids.append(container_id)
+            continue
+        if still_running.stdout.strip():
+            still_running_ids.append(container_id)
+
+    if not still_running_ids:
+        return
+
+    try:
+        subprocess.run(
+            ["docker", "kill", *still_running_ids],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except Exception:
+        pass
+
+
+def runtime_marker_paths(runtime_root: Path) -> set[str]:
+    markers = {str(runtime_root)}
+    try:
+        markers.add(str(runtime_root.resolve()))
+    except OSError:
+        pass
+
+    return {marker.rstrip("/") for marker in markers if marker}
+
+
+def terminate_runtime_docker_containers(runtime_root: Path) -> None:
+    marker_paths = runtime_marker_paths(runtime_root)
+    matching_container_ids: list[str] = []
+
+    for container in inspect_running_docker_containers():
+        container_id = str(container.get("Id") or "")
+        if not container_id:
+            continue
+        if container_mount_matches(container, marker_paths):
+            matching_container_ids.append(container_id)
+
+    stop_docker_containers(matching_container_ids)
+
+
+def terminate_algorithm_docker_containers(project_id: str, algorithm_id: str) -> None:
+    runtime_parent = PROJECTS_ROOT / project_id / "_beeline_runtime"
+    runtime_segments: list[str] = []
+    if runtime_parent.exists():
+        runtime_segments = [
+            child.name
+            for child in runtime_parent.iterdir()
+            if child.name == algorithm_id or child.name.startswith(f"{algorithm_id}__")
+        ]
+
+    if not runtime_segments:
+        runtime_segments = [algorithm_id]
+
+    for runtime_segment in runtime_segments:
+        project_runtime_root = runtime_parent / runtime_segment
+        terminate_runtime_docker_containers(project_runtime_root)
+        space_free_root = space_free_runtime_root(
+            project_runtime_root,
+            project_id,
+            runtime_segment,
+        )
+        if space_free_root != project_runtime_root:
+            terminate_runtime_docker_containers(space_free_root)
+
+
 def space_free_beeline_root(beeline_root: Path) -> Path:
     beeline_root = beeline_root.resolve()
     if not path_contains_shell_sensitive_whitespace(beeline_root):
@@ -2284,6 +2445,7 @@ def run_beeline_with_progress(
 
                 while process.poll() is None:
                     if stop_event is not None and stop_event.is_set():
+                        terminate_runtime_docker_containers(runtime_root)
                         try:
                             os.killpg(process.pid, signal.SIGTERM)
                         except ProcessLookupError:
