@@ -739,7 +739,7 @@ export default function CreateProjectModal({
               disabled={startDisabled}
               className="cursor-pointer rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? "Uploading dataset..." : "Start analysis ->"}
+              {isSubmitting ? "Uploading dataset..." : "Start analysis"}
             </button>
           </div>
         </div>
