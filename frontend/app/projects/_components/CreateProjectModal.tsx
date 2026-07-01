@@ -375,8 +375,9 @@ export default function CreateProjectModal({
 
   const willRunSummary = (() => {
     if (!hasExpressionFile) return "Upload an expression matrix to begin.";
-    if (isUploadingTempDataset) return "Validating dataset…";
-    if (!datasetReady) return "Waiting for the dataset to validate…";
+    if (isUploadingTempDataset || !datasetReady) {
+      return "Choose methods and optional inputs for this analysis.";
+    }
     if (selectedAlgorithms.length === 0) return "No algorithms selected — open Advanced settings to choose at least one.";
 
     const algoLabel =
