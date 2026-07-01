@@ -142,6 +142,8 @@ def normalize_celloracle_settings(
         raise ValueError(f"Unsupported CellOracle species: {normalized_species}.")
     if normalized_base_grn not in CELLORACLE_BASE_GRN_OPTIONS:
         raise ValueError(f"Unsupported CellOracle base GRN: {normalized_base_grn}.")
+    if normalized_base_grn == "mouse_scATAC_atlas" and normalized_species != "mouse":
+        raise ValueError("CellOracle mouse scATAC atlas base GRN is only available for mouse.")
 
     return normalized_species, normalized_base_grn
 

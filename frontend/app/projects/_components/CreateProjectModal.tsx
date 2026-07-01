@@ -20,6 +20,24 @@ const CELLORACLE_SPECIES_OPTIONS = [
   { value: "s_cerevisiae", label: "S. cerevisiae" },
 ];
 
+const CELLORACLE_BASE_GRN_OPTIONS = [
+  {
+    value: "auto",
+    label: "Auto",
+    description: "Mouse uses the mouse scATAC atlas; other species use the promoter base GRN.",
+  },
+  {
+    value: "mouse_scATAC_atlas",
+    label: "Mouse scATAC atlas",
+    description: "Use the CellOracle mouse scATAC atlas prior. Available only for mouse.",
+  },
+  {
+    value: "promoter",
+    label: "Promoter base GRN",
+    description: "Use the CellOracle promoter base GRN for the selected species.",
+  },
+];
+
 const SELECT_CONTROL_CLASS =
   "mt-2 flex items-center rounded-[1rem] border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition focus-within:border-[#1b75a6]/40 focus-within:ring-4 focus-within:ring-[#1b75a6]/10";
 
@@ -52,6 +70,7 @@ interface CreateProjectModalProps {
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
   cellOracleSpecies: string;
+  cellOracleBaseGrn: string;
   hasCellOracleSettingsConfigured: boolean;
   selectedIds: string[];
   compatibleAlgorithms: ProjectAlgorithm[];
@@ -103,6 +122,7 @@ export default function CreateProjectModal({
   normalizeEnabled,
   logTransformEnabled,
   cellOracleSpecies,
+  cellOracleBaseGrn,
   hasCellOracleSettingsConfigured,
   selectedIds,
   compatibleAlgorithms,
@@ -420,8 +440,11 @@ export default function CreateProjectModal({
   const cellOracleSpeciesLabel =
     CELLORACLE_SPECIES_OPTIONS.find((species) => species.value === cellOracleSpecies)?.label ??
     cellOracleSpecies;
+  const cellOracleBaseGrnLabel =
+    CELLORACLE_BASE_GRN_OPTIONS.find((baseGrn) => baseGrn.value === cellOracleBaseGrn)?.label ??
+    cellOracleBaseGrn;
   const cellOracleConfigLabel = hasCellOracleSettingsConfigured
-    ? `${cellOracleBaseGrnSource === "built-in" ? `Built-in: ${cellOracleSpeciesLabel}` : "Custom GRN"}${
+    ? `${cellOracleBaseGrnSource === "built-in" ? `Built-in: ${cellOracleSpeciesLabel}, ${cellOracleBaseGrnLabel}` : "Custom GRN"}${
         clusterLabelsFileName ? " + labels" : ""
       }`
     : "";
@@ -811,6 +834,7 @@ export default function CreateProjectModal({
         isClosing={isCellOracleSettingsClosing}
         baseGrnSource={cellOracleBaseGrnSource}
         cellOracleSpecies={cellOracleSpecies}
+        cellOracleBaseGrn={cellOracleBaseGrn}
         clusterLabelsFileName={clusterLabelsFileName}
         isClusterLabelsOpen={isClusterLabelsOpen}
         onBaseGrnSourceChange={(value) => {
@@ -821,6 +845,10 @@ export default function CreateProjectModal({
           setHasCellOracleSettingsConfigured(true);
           setCellOracleSpecies(value);
           setCellOracleBaseGrn("auto");
+        }}
+        onSetCellOracleBaseGrn={(value) => {
+          setHasCellOracleSettingsConfigured(true);
+          setCellOracleBaseGrn(value);
         }}
         onToggleClusterLabels={() =>
           setIsClusterLabelsOpen((current) => !current)
@@ -921,10 +949,12 @@ function CellOracleSettingsModal({
   isClosing,
   baseGrnSource,
   cellOracleSpecies,
+  cellOracleBaseGrn,
   clusterLabelsFileName,
   isClusterLabelsOpen,
   onBaseGrnSourceChange,
   onSetCellOracleSpecies,
+  onSetCellOracleBaseGrn,
   onToggleClusterLabels,
   onSelectClusterLabels,
   onDropClusterLabels,
@@ -936,10 +966,12 @@ function CellOracleSettingsModal({
   isClosing: boolean;
   baseGrnSource: CellOracleBaseGrnSource;
   cellOracleSpecies: string;
+  cellOracleBaseGrn: string;
   clusterLabelsFileName: string;
   isClusterLabelsOpen: boolean;
   onBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
   onSetCellOracleSpecies: (value: string) => void;
+  onSetCellOracleBaseGrn: (value: string) => void;
   onToggleClusterLabels: () => void;
   onSelectClusterLabels: (file: File | null) => void;
   onDropClusterLabels: (event: DragEvent<HTMLLabelElement>) => void;
@@ -950,6 +982,9 @@ function CellOracleSettingsModal({
   if (!open) return null;
 
   const isBuiltInGrn = baseGrnSource === "built-in";
+  const selectedBaseGrn =
+    CELLORACLE_BASE_GRN_OPTIONS.find((baseGrn) => baseGrn.value === cellOracleBaseGrn) ??
+    CELLORACLE_BASE_GRN_OPTIONS[0];
 
   return (
     <div
@@ -1051,6 +1086,40 @@ function CellOracleSettingsModal({
                     <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
                       ▾
                     </span>
+                  </span>
+                </label>
+                <label className="mt-4 block">
+                  <span className="text-sm font-semibold text-slate-800">
+                    Built-in base GRN
+                  </span>
+                  <span className={SELECT_CONTROL_CLASS}>
+                    <select
+                      value={cellOracleBaseGrn}
+                      onChange={(event) => onSetCellOracleBaseGrn(event.target.value)}
+                      className={SELECT_INPUT_CLASS}
+                    >
+                      {CELLORACLE_BASE_GRN_OPTIONS.map((baseGrn) => (
+                        <option
+                          key={baseGrn.value}
+                          value={baseGrn.value}
+                          disabled={
+                            baseGrn.value === "mouse_scATAC_atlas" &&
+                            cellOracleSpecies !== "mouse"
+                          }
+                        >
+                          {baseGrn.value === "mouse_scATAC_atlas" &&
+                          cellOracleSpecies !== "mouse"
+                            ? `${baseGrn.label} (mouse only)`
+                            : baseGrn.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
+                      ▾
+                    </span>
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-slate-500">
+                    {selectedBaseGrn.description}
                   </span>
                 </label>
               </>

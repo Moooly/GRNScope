@@ -661,6 +661,7 @@ export default function CreateProjectFlow({
       normalizeEnabled={normalizeEnabled}
       logTransformEnabled={logTransformEnabled}
       cellOracleSpecies={cellOracleSpecies}
+      cellOracleBaseGrn={cellOracleBaseGrn}
       hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}
       compatibleAlgorithms={compatibleAlgorithms}
