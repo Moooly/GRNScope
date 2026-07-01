@@ -234,20 +234,11 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "species",
                 "label": "Species",
-                "description": "Species used to load the CellOracle promoter base GRN.",
+                "description": "Species used to select the matching CellOracle pre-built base GRN.",
                 "default": "human",
                 "required": True,
                 "value_type": "string",
                 "options": CELLORACLE_SPECIES_OPTIONS,
-            },
-            {
-                "name": "baseGrn",
-                "label": "Base GRN",
-                "description": "Base GRN prior used by CellOracle.",
-                "default": "auto",
-                "required": True,
-                "value_type": "string",
-                "options": CELLORACLE_BASE_GRN_OPTIONS,
             },
             {
                 "name": "maxGenes",

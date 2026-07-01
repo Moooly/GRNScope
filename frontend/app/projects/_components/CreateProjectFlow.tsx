@@ -38,6 +38,7 @@ type BackendAlgorithmEntry = {
 const DEFAULT_TOP_VARIABLE_GENES = "";
 const ALL_GENES_VALUE = "all";
 const MAX_PREPROCESSED_GENES = 8000;
+const CELLORACLE_INTERNAL_BASE_GRN = "auto";
 
 function formatTopVariableGenes(value: string) {
   const normalizedValue = value.trim().toLowerCase();
@@ -217,7 +218,6 @@ export default function CreateProjectFlow({
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
-  const [cellOracleBaseGrn, setCellOracleBaseGrn] = useState("auto");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -253,7 +253,6 @@ export default function CreateProjectFlow({
     setNormalizeEnabled(true);
     setLogTransformEnabled(true);
     setCellOracleSpecies("human");
-    setCellOracleBaseGrn("auto");
     setHasCellOracleSettingsConfigured(false);
     setSelectedIds([]);
     setHasUserAdjustedAlgorithms(false);
@@ -475,7 +474,7 @@ export default function CreateProjectFlow({
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
     formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
     formData.append("celloracle_species", cellOracleSpecies);
-    formData.append("celloracle_base_grn", cellOracleBaseGrn);
+    formData.append("celloracle_base_grn", CELLORACLE_INTERNAL_BASE_GRN);
     formData.append("expression_filename", expressionFileName);
     formData.append("pseudotime_filename", pseudotimeFileName);
     formData.append("cluster_labels_filename", clusterLabelsFileName);
@@ -690,7 +689,6 @@ export default function CreateProjectFlow({
       setNormalizeEnabled={setNormalizeEnabled}
       setLogTransformEnabled={setLogTransformEnabled}
       setCellOracleSpecies={setCellOracleSpecies}
-      setCellOracleBaseGrn={setCellOracleBaseGrn}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
       clearClusterLabelsFile={clearClusterLabelsFile}

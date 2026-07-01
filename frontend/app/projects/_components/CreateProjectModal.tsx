@@ -81,7 +81,6 @@ interface CreateProjectModalProps {
   setNormalizeEnabled: (value: boolean) => void;
   setLogTransformEnabled: (value: boolean) => void;
   setCellOracleSpecies: (value: string) => void;
-  setCellOracleBaseGrn: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
   clearClusterLabelsFile: () => void;
@@ -132,7 +131,6 @@ export default function CreateProjectModal({
   setNormalizeEnabled,
   setLogTransformEnabled,
   setCellOracleSpecies,
-  setCellOracleBaseGrn,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
   clearClusterLabelsFile,
@@ -304,9 +302,7 @@ export default function CreateProjectModal({
   const handleCloseCellOracleSettings = useCallback(() => {
     if (!isCellOracleSettingsOpen || isCellOracleSettingsClosing) return;
 
-    if (cellOracleBaseGrnSource === "built-in") {
-      setHasCellOracleSettingsConfigured(true);
-    }
+    setHasCellOracleSettingsConfigured(cellOracleBaseGrnSource === "built-in");
     setIsCellOracleSettingsClosing(true);
 
     if (cellOracleSettingsCloseTimeoutRef.current) {
@@ -820,13 +816,14 @@ export default function CreateProjectModal({
         onSetCellOracleSpecies={(value) => {
           setHasCellOracleSettingsConfigured(true);
           setCellOracleSpecies(value);
-          setCellOracleBaseGrn("auto");
         }}
         onToggleClusterLabels={() =>
           setIsClusterLabelsOpen((current) => !current)
         }
         onSelectClusterLabels={(file) => {
-          if (file) setHasCellOracleSettingsConfigured(true);
+          if (file && cellOracleBaseGrnSource === "built-in") {
+            setHasCellOracleSettingsConfigured(true);
+          }
           selectClusterLabelsFile(file);
           if (file) setIsClusterLabelsOpen(true);
         }}
@@ -976,7 +973,7 @@ function CellOracleSettingsModal({
               CellOracle inputs
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              A base GRN source is required to run CellOracle. Cluster labels are optional for cluster-specific networks.
+              Choose a built-in species GRN, or upload your own TF-target prior once custom GRN upload is available.
             </p>
           </div>
           <button
@@ -1000,7 +997,7 @@ function CellOracleSettingsModal({
               />
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Choose a built-in species GRN, or upload your own TF-target prior.
+              Built-in mode only needs species selection. GRNScope chooses the corresponding pre-built base GRN internally.
             </p>
 
             <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
@@ -1031,29 +1028,27 @@ function CellOracleSettingsModal({
             </div>
 
             {isBuiltInGrn ? (
-              <>
-                <label className="mt-4 block">
-                  <span className="text-sm font-semibold text-slate-800">
-                    Species
+              <label className="mt-4 block">
+                <span className="text-sm font-semibold text-slate-800">
+                  Species
+                </span>
+                <span className={SELECT_CONTROL_CLASS}>
+                  <select
+                    value={cellOracleSpecies}
+                    onChange={(event) => onSetCellOracleSpecies(event.target.value)}
+                    className={SELECT_INPUT_CLASS}
+                  >
+                    {CELLORACLE_SPECIES_OPTIONS.map((species) => (
+                      <option key={species.value} value={species.value}>
+                        {species.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
+                    ▾
                   </span>
-                  <span className={SELECT_CONTROL_CLASS}>
-                    <select
-                      value={cellOracleSpecies}
-                      onChange={(event) => onSetCellOracleSpecies(event.target.value)}
-                      className={SELECT_INPUT_CLASS}
-                    >
-                      {CELLORACLE_SPECIES_OPTIONS.map((species) => (
-                        <option key={species.value} value={species.value}>
-                          {species.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
-                      ▾
-                    </span>
-                  </span>
-                </label>
-              </>
+                </span>
+              </label>
             ) : (
               <div
                 className="mt-4 flex min-h-28 flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-slate-400"

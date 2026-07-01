@@ -44,7 +44,7 @@ export default function AlgorithmStep({
       return "Requires a pseudotime file named PseudoTime.csv.";
     }
     if (algorithm.id === "CELLORACLE" && !datasetSummary.hasCellOracleSettingsConfigured) {
-      return "Requires a configured CellOracle base GRN source.";
+      return "Requires CellOracle species selection.";
     }
     return "";
   };
