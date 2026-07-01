@@ -32,11 +32,22 @@ type BackendAlgorithmEntry = {
   recommended_use_cases: string[];
 };
 
-const DEFAULT_TOP_VARIABLE_GENES = "all";
+const DEFAULT_TOP_VARIABLE_GENES = "";
+const ALL_GENES_VALUE = "all";
 const MAX_PREPROCESSED_GENES = 8000;
 
 function formatTopVariableGenes(value: string) {
-  return value.trim().toLowerCase() === "all" ? "All genes retained" : value;
+  const normalizedValue = value.trim().toLowerCase();
+  if (normalizedValue === ALL_GENES_VALUE) return "All genes retained";
+  return value || "Gene count pending";
+}
+
+function inferGeneCountFromFileName(fileName: string) {
+  const match = fileName.match(/(?:^|[_\-\s])(?:top)?(\d+)[_\-\s]*genes?(?:[_\-\s.]|$)/i);
+  if (!match) return null;
+
+  const value = Number(match[1]);
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function countCsvColumns(line: string) {
@@ -299,7 +310,7 @@ export default function CreateProjectFlow({
       hasCellOracleSettingsConfigured,
       hasGroundTruth: false,
       preprocessingSummary: [
-        `Gene filtering: ${formatTopVariableGenes(topVariableGenes || DEFAULT_TOP_VARIABLE_GENES)}`,
+        `Gene filtering: ${formatTopVariableGenes(topVariableGenes)}`,
         `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
         `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
         `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
@@ -370,9 +381,10 @@ export default function CreateProjectFlow({
     }
 
     let isCancelled = false;
+    const inferredGeneCount = inferGeneCountFromFileName(expressionFile.name);
     setGeneCount(null);
     setCellCount(null);
-    setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
+    setTopVariableGenes(inferredGeneCount ? String(inferredGeneCount) : DEFAULT_TOP_VARIABLE_GENES);
 
     const readDimensions = async () => {
       try {
@@ -527,7 +539,7 @@ export default function CreateProjectFlow({
     }
 
     const trimmedTopGenes = topVariableGenes.trim();
-    const useAllGenes = trimmedTopGenes.toLowerCase() === DEFAULT_TOP_VARIABLE_GENES;
+    const useAllGenes = trimmedTopGenes.toLowerCase() === ALL_GENES_VALUE;
     const parsedTopGenes = Number(trimmedTopGenes);
     if (
       !useAllGenes &&

@@ -675,10 +675,13 @@ export default function CreateProjectModal({
                         }}
                         onBlur={() => {
                           const normalizedValue = topVariableGenes.trim().toLowerCase();
-                          if (
-                            normalizedValue === "" ||
-                            "all".startsWith(normalizedValue)
-                          ) {
+                          if (normalizedValue === "") {
+                            if (geneCount !== null && geneCount > 0) {
+                              setTopVariableGenes(String(geneCount));
+                            }
+                            return;
+                          }
+                          if ("all".startsWith(normalizedValue)) {
                             setTopVariableGenes("all");
                           }
                         }}
@@ -780,7 +783,7 @@ export default function CreateProjectModal({
               </p>
               <div className="space-y-3">
                 <p>
-                  <span className="font-bold text-slate-950">Gene filtering:</span> defaults to keeping all genes. Enter a number only when you want to retain the most variable genes.
+                  <span className="font-bold text-slate-950">Gene filtering:</span> defaults to the uploaded matrix gene count. Enter a smaller number when you want to retain only the most variable genes.
                 </p>
                 <p>
                   <span className="font-bold text-slate-950">Known TFs:</span> keeps known transcription factors even if they are outside the variable-gene cutoff.
