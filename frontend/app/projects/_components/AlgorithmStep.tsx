@@ -3,6 +3,7 @@ import AlgorithmCard from "./AlgorithmCard";
 
 interface DatasetSummary {
   hasPseudotime: boolean;
+  hasCellOracleSettingsConfigured?: boolean;
   hasGroundTruth?: boolean;
 }
 
@@ -42,34 +43,65 @@ export default function AlgorithmStep({
     if (algorithm.requiresPseudotime && !datasetSummary.hasPseudotime) {
       return "Requires a pseudotime file named PseudoTime.csv.";
     }
+    if (algorithm.id === "CELLORACLE" && !datasetSummary.hasCellOracleSettingsConfigured) {
+      return "Requires a configured CellOracle base GRN source.";
+    }
     return "";
   };
 
   const availableAlgorithms = algorithms.filter((algorithm) => !getUnavailableReason(algorithm));
   const availableAlgorithmIds = new Set(availableAlgorithms.map((algorithm) => algorithm.id));
-  const unavailableAlgorithms = algorithms.filter((algorithm) => Boolean(getUnavailableReason(algorithm)));
-  const unavailableReasonSummary = (() => {
-    const needsGroundTruth = unavailableAlgorithms.some(
-      (algorithm) => algorithm.id === "SCSGL" && !datasetSummary.hasGroundTruth,
+  const unavailablePseudotimeAlgorithms = algorithms.filter(
+    (algorithm) =>
+      Boolean(getUnavailableReason(algorithm)) &&
+      algorithm.requiresPseudotime &&
+      !datasetSummary.hasPseudotime,
+  );
+  const unavailableGroundTruthAlgorithms = algorithms.filter(
+    (algorithm) =>
+      Boolean(getUnavailableReason(algorithm)) &&
+      algorithm.id === "SCSGL" &&
+      !datasetSummary.hasGroundTruth,
+  );
+  const unavailableCellOracleAlgorithms = algorithms.filter(
+    (algorithm) => Boolean(getUnavailableReason(algorithm)) && algorithm.id === "CELLORACLE",
+  );
+  const hasUnavailableAlgorithms =
+    unavailablePseudotimeAlgorithms.length > 0 ||
+    unavailableGroundTruthAlgorithms.length > 0 ||
+    unavailableCellOracleAlgorithms.length > 0;
+
+  const renderUnavailableGroup = (
+    title: string,
+    unavailableGroupAlgorithms: ProjectAlgorithm[],
+  ) => {
+    if (unavailableGroupAlgorithms.length === 0) return null;
+
+    return (
+      <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/60 p-4">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+          {title}
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {unavailableGroupAlgorithms.map((algorithm) => (
+            <AlgorithmCard
+              key={algorithm.id}
+              algorithm={algorithm}
+              checked={false}
+              disabled={true}
+              onToggle={() => onToggleAlgorithm(algorithm.id, true)}
+              onInfoClick={
+                onShowAlgorithmDetails
+                  ? () => onShowAlgorithmDetails(algorithm)
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      </div>
     );
-    const needsPseudotime = unavailableAlgorithms.some(
-      (algorithm) => algorithm.requiresPseudotime && !datasetSummary.hasPseudotime,
-    );
+  };
 
-    if (needsPseudotime && needsGroundTruth) {
-      return "These methods need a pseudotime file or a ground-truth network file before they can run.";
-    }
-
-    if (needsPseudotime) {
-      return "These methods need a pseudotime file before they can run.";
-    }
-
-    if (needsGroundTruth) {
-      return "These methods need a ground-truth network file before they can run.";
-    }
-
-    return "These methods need extra input files before they can run.";
-  })();
   return (
     <div className="space-y-6">
       <section className="space-y-6">
@@ -120,32 +152,21 @@ export default function AlgorithmStep({
                 </div>
               </div>
 
-              {unavailableAlgorithms.length > 0 ? (
+              {hasUnavailableAlgorithms ? (
                 <div>
                   <div>
                     <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">
                       Unavailable methods
                     </h3>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {unavailableReasonSummary}
+                      These methods need one more input or setup step before they can run.
                     </p>
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {unavailableAlgorithms.map((algorithm) => (
-                      <AlgorithmCard
-                        key={algorithm.id}
-                        algorithm={algorithm}
-                        checked={false}
-                        disabled={true}
-                        onToggle={() => onToggleAlgorithm(algorithm.id, true)}
-                        onInfoClick={
-                          onShowAlgorithmDetails
-                            ? () => onShowAlgorithmDetails(algorithm)
-                            : undefined
-                        }
-                      />
-                    ))}
+                  <div className="mt-4 space-y-4">
+                    {renderUnavailableGroup("Need pseudotime CSV", unavailablePseudotimeAlgorithms)}
+                    {renderUnavailableGroup("Need CellOracle setup", unavailableCellOracleAlgorithms)}
+                    {renderUnavailableGroup("Need ground-truth network", unavailableGroundTruthAlgorithms)}
                   </div>
                 </div>
               ) : null}

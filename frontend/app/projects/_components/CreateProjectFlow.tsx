@@ -174,6 +174,7 @@ export default function CreateProjectFlow({
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [cellOracleBaseGrn, setCellOracleBaseGrn] = useState("auto");
+  const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasUserAdjustedAlgorithms, setHasUserAdjustedAlgorithms] = useState(false);
@@ -211,6 +212,7 @@ export default function CreateProjectFlow({
     setLogTransformEnabled(true);
     setCellOracleSpecies("human");
     setCellOracleBaseGrn("auto");
+    setHasCellOracleSettingsConfigured(false);
     setSelectedIds([]);
     setHasUserAdjustedAlgorithms(false);
     setEnsembleEnabled(true);
@@ -266,6 +268,7 @@ export default function CreateProjectFlow({
           : "Matrix size pending upload validation",
       hasPseudotime: Boolean(pseudotimeFile),
       hasClusterLabels: Boolean(clusterLabelsFile),
+      hasCellOracleSettingsConfigured,
       hasGroundTruth: false,
       preprocessingSummary: [
         `Top variable genes retained: ${topVariableGenes || String(DEFAULT_TOP_VARIABLE_GENES)}`,
@@ -283,6 +286,7 @@ export default function CreateProjectFlow({
       includeAllTFs,
       normalizeEnabled,
       logTransformEnabled,
+      hasCellOracleSettingsConfigured,
     ],
   );
 
@@ -293,9 +297,16 @@ export default function CreateProjectFlow({
           !algorithm.requiresPseudotime || datasetSummary.hasPseudotime;
         const hasRequiredGroundTruth =
           algorithm.id !== "SCSGL" || datasetSummary.hasGroundTruth;
-        return hasRequiredPseudotime && hasRequiredGroundTruth;
+        const hasRequiredCellOracleInputs =
+          algorithm.id !== "CELLORACLE" || datasetSummary.hasCellOracleSettingsConfigured;
+        return hasRequiredPseudotime && hasRequiredGroundTruth && hasRequiredCellOracleInputs;
       }),
-    [algorithms, datasetSummary.hasGroundTruth, datasetSummary.hasPseudotime],
+    [
+      algorithms,
+      datasetSummary.hasCellOracleSettingsConfigured,
+      datasetSummary.hasGroundTruth,
+      datasetSummary.hasPseudotime,
+    ],
   );
 
   const selectedAlgorithms = useMemo(
@@ -470,7 +481,6 @@ export default function CreateProjectFlow({
   };
 
   const handleSelectAll = () => {
-    setHasUserAdjustedAlgorithms(true);
     const allCompatibleIds = compatibleAlgorithms.map((algorithm) => algorithm.id);
     setSelectedIds(allCompatibleIds);
     setEnsembleEnabled(allCompatibleIds.length >= 2);
@@ -673,6 +683,7 @@ export default function CreateProjectFlow({
       normalizeEnabled={normalizeEnabled}
       logTransformEnabled={logTransformEnabled}
       cellOracleSpecies={cellOracleSpecies}
+      hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}
       compatibleAlgorithms={compatibleAlgorithms}
       selectedAlgorithms={selectedAlgorithms}
@@ -702,6 +713,7 @@ export default function CreateProjectFlow({
       setLogTransformEnabled={setLogTransformEnabled}
       setCellOracleSpecies={setCellOracleSpecies}
       setCellOracleBaseGrn={setCellOracleBaseGrn}
+      setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
       clearClusterLabelsFile={clearClusterLabelsFile}
       setEnsembleEnabled={setEnsembleEnabled}

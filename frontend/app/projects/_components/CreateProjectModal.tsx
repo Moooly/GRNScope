@@ -54,6 +54,7 @@ interface CreateProjectModalProps {
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
   cellOracleSpecies: string;
+  hasCellOracleSettingsConfigured: boolean;
   selectedIds: string[];
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
@@ -83,6 +84,7 @@ interface CreateProjectModalProps {
   setLogTransformEnabled: (value: boolean) => void;
   setCellOracleSpecies: (value: string) => void;
   setCellOracleBaseGrn: (value: string) => void;
+  setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
   clearClusterLabelsFile: () => void;
   setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
@@ -105,6 +107,7 @@ export default function CreateProjectModal({
   normalizeEnabled,
   logTransformEnabled,
   cellOracleSpecies,
+  hasCellOracleSettingsConfigured,
   selectedIds,
   compatibleAlgorithms,
   selectedAlgorithms,
@@ -134,6 +137,7 @@ export default function CreateProjectModal({
   setLogTransformEnabled,
   setCellOracleSpecies,
   setCellOracleBaseGrn,
+  setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
   clearClusterLabelsFile,
   setEnsembleEnabled,
@@ -148,7 +152,6 @@ export default function CreateProjectModal({
   const [isCellOracleSettingsClosing, setIsCellOracleSettingsClosing] = useState(false);
   const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] =
     useState<CellOracleBaseGrnSource>("built-in");
-  const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
   const [isClusterLabelsOpen, setIsClusterLabelsOpen] = useState(false);
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
@@ -202,7 +205,6 @@ export default function CreateProjectModal({
       setIsCellOracleSettingsOpen(false);
       setIsCellOracleSettingsClosing(false);
       setCellOracleBaseGrnSource("built-in");
-      setHasCellOracleSettingsConfigured(false);
       setIsClusterLabelsOpen(false);
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
@@ -306,7 +308,9 @@ export default function CreateProjectModal({
   const handleCloseCellOracleSettings = useCallback(() => {
     if (!isCellOracleSettingsOpen || isCellOracleSettingsClosing) return;
 
-    setHasCellOracleSettingsConfigured(true);
+    if (cellOracleBaseGrnSource === "built-in") {
+      setHasCellOracleSettingsConfigured(true);
+    }
     setIsCellOracleSettingsClosing(true);
 
     if (cellOracleSettingsCloseTimeoutRef.current) {
@@ -318,7 +322,12 @@ export default function CreateProjectModal({
       setIsCellOracleSettingsClosing(false);
       cellOracleSettingsCloseTimeoutRef.current = null;
     }, 480);
-  }, [isCellOracleSettingsClosing, isCellOracleSettingsOpen]);
+  }, [
+    cellOracleBaseGrnSource,
+    isCellOracleSettingsClosing,
+    isCellOracleSettingsOpen,
+    setHasCellOracleSettingsConfigured,
+  ]);
 
   const handleOpenCellOracleHelp = (topic: CellOracleHelpTopic) => {
     setIsCellOracleHelpClosing(false);
@@ -797,7 +806,10 @@ export default function CreateProjectModal({
         cellOracleSpecies={cellOracleSpecies}
         clusterLabelsFileName={clusterLabelsFileName}
         isClusterLabelsOpen={isClusterLabelsOpen}
-        onBaseGrnSourceChange={setCellOracleBaseGrnSource}
+        onBaseGrnSourceChange={(value) => {
+          setCellOracleBaseGrnSource(value);
+          setHasCellOracleSettingsConfigured(value === "built-in");
+        }}
         onSetCellOracleSpecies={(value) => {
           setHasCellOracleSettingsConfigured(true);
           setCellOracleSpecies(value);
@@ -847,7 +859,7 @@ function OptionalInputsPanel({
             Optional inputs
           </h3>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Add method-specific files only when your selected algorithms need them.
+            Add these inputs when you want to make more algorithms available.
           </p>
         </div>
       </div>
@@ -869,7 +881,7 @@ function OptionalInputsPanel({
                 CellOracle inputs
               </h4>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                These settings apply only to <span className="font-semibold text-slate-900">CellOracle</span>.
+                These settings apply only to CellOracle.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -957,7 +969,7 @@ function CellOracleSettingsModal({
               CellOracle inputs
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              These settings apply only to <span className="font-semibold text-slate-900">CellOracle</span>. A <span className="font-semibold text-slate-900">base GRN source is required</span>; cluster labels are optional for cluster-specific networks.
+              A base GRN source is required to run CellOracle. Cluster labels are optional for cluster-specific networks.
             </p>
           </div>
           <button
@@ -980,6 +992,9 @@ function CellOracleSettingsModal({
                 onClick={() => onShowHelp("base-grn")}
               />
             </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Choose a built-in species GRN, or upload your own TF-target prior.
+            </p>
 
             <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
               <button
@@ -1031,9 +1046,6 @@ function CellOracleSettingsModal({
                     </span>
                   </span>
                 </label>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Uses CellOracle&apos;s built-in promoter base GRN for the selected species.
-                </p>
               </>
             ) : (
               <div
