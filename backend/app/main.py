@@ -24,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(algorithm.router)
+app.include_router(algorithm.router, prefix="/api")
 app.include_router(contact.router)
 app.include_router(downloads.router)
 app.include_router(jobs.router)
