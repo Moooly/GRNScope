@@ -209,7 +209,7 @@ function ProjectsPageContent() {
 
   const handleProjectCreated = (project: Project) => {
     setProjectHistory((currentProjects) => [project, ...currentProjects]);
-    router.push("/projects");
+    router.push(`/projects/${project.id}`);
   };
 
   return (

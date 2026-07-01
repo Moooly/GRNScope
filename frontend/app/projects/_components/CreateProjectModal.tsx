@@ -48,6 +48,7 @@ interface CreateProjectModalProps {
   geneCount: number | null;
   cellCount: number | null;
   isUploadingTempDataset: boolean;
+  tempUploadId: string;
   topVariableGenes: string;
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
@@ -100,6 +101,7 @@ export default function CreateProjectModal({
   geneCount,
   cellCount,
   isUploadingTempDataset,
+  tempUploadId,
   topVariableGenes,
   includeAllTFs,
   normalizeEnabled,
@@ -160,7 +162,7 @@ export default function CreateProjectModal({
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
   const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
-  const datasetReady = hasExpressionFile && !isUploadingTempDataset;
+  const datasetReady = hasExpressionFile && tempUploadId.length > 0 && !isUploadingTempDataset;
   const maxTopVariableGenes =
     geneCount === null ? MAX_PREPROCESSED_GENES : Math.min(geneCount, MAX_PREPROCESSED_GENES);
 
@@ -250,7 +252,7 @@ export default function CreateProjectModal({
       return;
     }
 
-    const autoSelectKey = `${expressionFileName}:${datasetSummary.hasPseudotime ? "time" : "no-time"}`;
+    const autoSelectKey = `${tempUploadId}:${datasetSummary.hasPseudotime ? "time" : "no-time"}`;
 
     if (autoSelectedDatasetRef.current === autoSelectKey) {
       return;
@@ -262,9 +264,9 @@ export default function CreateProjectModal({
     compatibleAlgorithms.length,
     datasetReady,
     datasetSummary.hasPseudotime,
-    expressionFileName,
     isLoadingAlgorithms,
     onSelectAll,
+    tempUploadId,
   ]);
 
   const handleOutsideClose = () => {
