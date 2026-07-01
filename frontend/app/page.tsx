@@ -324,6 +324,22 @@ export default function HomePage() {
                   <HomeProjectCard key={project.id} project={project} />
                 ))}
               </div>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 mb-4 flex w-22 items-center justify-end bg-gradient-to-r from-[#f7fbff]/0 via-[#f7fbff]/55 to-[#f7fbff]/95 pr-1 opacity-0 transition-opacity duration-200 group-hover/history:opacity-100 group-focus-within/history:opacity-100"
+              >
+                <span className="inline-flex h-10 w-10 translate-x-[-8px] items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white/95 text-[#1b75a6] shadow-[0_10px_22px_rgba(15,23,42,0.10),0_0_0_8px_rgba(247,251,255,0.72)] transition-transform duration-200 group-hover/history:translate-x-0 group-focus-within/history:translate-x-0">
+                  <svg viewBox="0 0 16 28" className="h-5 w-3" fill="none">
+                    <path
+                      d="M2.5 3.5 12.5 14 2.5 24.5"
+                      stroke="currentColor"
+                      strokeWidth="3.25"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              </div>
             </div>
           ) : (
             <Link
