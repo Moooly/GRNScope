@@ -678,6 +678,10 @@ def build_preprocessing_signature(
     return signature
 
 
+def all_genes_requested(value: object) -> bool:
+    return str(value or "").strip().lower() in {"all", "all genes", "all_genes"}
+
+
 def read_preprocessed_manifest(manifest_path: Path) -> dict | None:
     try:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -981,13 +985,15 @@ def preprocess_expression_matrix(
 
     cell_names = validate_preprocessing_header(header)
     cell_count = len(cell_names)
+    requested_all_genes = all_genes_requested(project_manifest.get("top_variable_genes"))
     requested_top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
     max_preprocessed_genes = resolve_max_preprocessed_genes()
-    top_variable_genes = (
-        min(requested_top_variable_genes, max_preprocessed_genes)
-        if requested_top_variable_genes is not None
-        else max_preprocessed_genes
-    )
+    if requested_all_genes:
+        top_variable_genes = None
+    elif requested_top_variable_genes is not None:
+        top_variable_genes = min(requested_top_variable_genes, max_preprocessed_genes)
+    else:
+        top_variable_genes = max_preprocessed_genes
     include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
     normalize_enabled = parse_bool(project_manifest.get("normalize_enabled"))
     log_transform_enabled = parse_bool(project_manifest.get("log_transform_enabled"))
@@ -1064,7 +1070,7 @@ def preprocess_expression_matrix(
             if gene_name in tf_genes:
                 retained_indices.add(index)
 
-    if len(retained_indices) > max_preprocessed_genes:
+    if not requested_all_genes and len(retained_indices) > max_preprocessed_genes:
         prioritized_rows = sorted(
             (
                 (variance, index, gene_name)

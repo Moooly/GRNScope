@@ -31,8 +31,12 @@ type BackendAlgorithmEntry = {
   recommended_use_cases: string[];
 };
 
-const DEFAULT_TOP_VARIABLE_GENES = 2000;
+const DEFAULT_TOP_VARIABLE_GENES = "all";
 const MAX_PREPROCESSED_GENES = 8000;
+
+function formatTopVariableGenes(value: string) {
+  return value.trim().toLowerCase() === "all" ? "All genes retained" : value;
+}
 
 type CreateProjectResponsePayload = {
   ok?: boolean;
@@ -125,7 +129,7 @@ export default function CreateProjectFlow({
   const [geneCount, setGeneCount] = useState<number | null>(null);
   const [cellCount, setCellCount] = useState<number | null>(null);
 
-  const [topVariableGenes, setTopVariableGenes] = useState(String(DEFAULT_TOP_VARIABLE_GENES));
+  const [topVariableGenes, setTopVariableGenes] = useState(DEFAULT_TOP_VARIABLE_GENES);
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
@@ -161,7 +165,7 @@ export default function CreateProjectFlow({
     setClusterLabelsFileName("");
     setGeneCount(null);
     setCellCount(null);
-    setTopVariableGenes(String(DEFAULT_TOP_VARIABLE_GENES));
+    setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
     setIncludeAllTFs(true);
     setNormalizeEnabled(true);
     setLogTransformEnabled(true);
@@ -226,7 +230,7 @@ export default function CreateProjectFlow({
       hasCellOracleSettingsConfigured,
       hasGroundTruth: false,
       preprocessingSummary: [
-        `Top variable genes retained: ${topVariableGenes || String(DEFAULT_TOP_VARIABLE_GENES)}`,
+        `Gene filtering: ${formatTopVariableGenes(topVariableGenes || DEFAULT_TOP_VARIABLE_GENES)}`,
         `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
         `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
         `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
@@ -285,14 +289,6 @@ export default function CreateProjectFlow({
       return baseName;
     });
   }, [expressionFileName]);
-
-  // Sync top-variable-genes default to a safe cap for every fresh dataset.
-  useEffect(() => {
-    if (geneCount === null) return;
-    setTopVariableGenes(
-      String(Math.min(geneCount, DEFAULT_TOP_VARIABLE_GENES, MAX_PREPROCESSED_GENES)),
-    );
-  }, [geneCount]);
 
   // Selecting files should stay local and instant. Server work starts only after
   // the user clicks Start analysis.
@@ -466,18 +462,23 @@ export default function CreateProjectFlow({
       }
     }
 
-    const parsedTopGenes = Number(topVariableGenes);
+    const trimmedTopGenes = topVariableGenes.trim();
+    const useAllGenes = trimmedTopGenes.toLowerCase() === DEFAULT_TOP_VARIABLE_GENES;
+    const parsedTopGenes = Number(trimmedTopGenes);
     if (
-      !topVariableGenes.trim() ||
-      !Number.isInteger(parsedTopGenes) ||
-      parsedTopGenes <= 0
+      !useAllGenes &&
+      (
+        !trimmedTopGenes ||
+        !Number.isInteger(parsedTopGenes) ||
+        parsedTopGenes <= 0
+      )
     ) {
-      validationErrors.push("Top variable genes must be a positive integer.");
-    } else if (geneCount !== null && parsedTopGenes > geneCount) {
-      validationErrors.push("Top variable genes cannot be larger than the uploaded gene count.");
-    } else if (parsedTopGenes > MAX_PREPROCESSED_GENES) {
+      validationErrors.push("Gene filtering must be \"all\" or a positive integer.");
+    } else if (!useAllGenes && geneCount !== null && parsedTopGenes > geneCount) {
+      validationErrors.push("Gene filtering cannot be larger than the uploaded gene count.");
+    } else if (!useAllGenes && parsedTopGenes > MAX_PREPROCESSED_GENES) {
       validationErrors.push(
-        `Top variable genes cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()}.`,
+        `Gene filtering cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()} when using a numeric cutoff.`,
       );
     }
 

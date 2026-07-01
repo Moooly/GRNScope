@@ -388,7 +388,9 @@ export default function CreateProjectModal({
 
     const settings: string[] = [];
 
-    if (topVariableGenes && Number(topVariableGenes) > 0) {
+    if (topVariableGenes.trim().toLowerCase() === "all") {
+      settings.push("all genes retained");
+    } else if (topVariableGenes && Number(topVariableGenes) > 0) {
       settings.push(`top ${Number(topVariableGenes).toLocaleString()} variable genes`);
     }
 
@@ -643,10 +645,7 @@ export default function CreateProjectModal({
                         Gene filtering
                       </span>
                       <input
-                        type="number"
-                        min="1"
-                        max={maxTopVariableGenes}
-                        step="1"
+                        type="text"
                         value={topVariableGenes}
                         onChange={(e) => {
                           const nextValue = e.target.value;
@@ -654,15 +653,35 @@ export default function CreateProjectModal({
                             setTopVariableGenes("");
                             return;
                           }
+                          if ("all".startsWith(nextValue.toLowerCase())) {
+                            setTopVariableGenes(nextValue);
+                            return;
+                          }
                           const parsedValue = Number(nextValue);
-                          if (Number.isNaN(parsedValue)) return;
+                          if (
+                            Number.isNaN(parsedValue) ||
+                            !Number.isInteger(parsedValue) ||
+                            parsedValue <= 0
+                          ) {
+                            return;
+                          }
                           if (parsedValue > maxTopVariableGenes) {
                             setTopVariableGenes(String(maxTopVariableGenes));
                             return;
                           }
                           setTopVariableGenes(nextValue);
                         }}
-                        className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 [appearance:textfield] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        onBlur={() => {
+                          const normalizedValue = topVariableGenes.trim().toLowerCase();
+                          if (
+                            normalizedValue === "" ||
+                            "all".startsWith(normalizedValue)
+                          ) {
+                            setTopVariableGenes("all");
+                          }
+                        }}
+                        aria-label="Gene filtering"
+                        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
                       />
                     </div>
 
@@ -759,7 +778,7 @@ export default function CreateProjectModal({
               </p>
               <div className="space-y-3">
                 <p>
-                  <span className="font-bold text-slate-950">Gene filtering:</span> keeps the selected number of variable genes for analysis.
+                  <span className="font-bold text-slate-950">Gene filtering:</span> defaults to keeping all genes. Enter a number only when you want to retain the most variable genes.
                 </p>
                 <p>
                   <span className="font-bold text-slate-950">Known TFs:</span> keeps known transcription factors even if they are outside the variable-gene cutoff.

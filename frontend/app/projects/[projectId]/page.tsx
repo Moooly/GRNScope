@@ -278,7 +278,9 @@ export default function ProjectDetailPage() {
         : "Pending";
   const topVariableGenesLabel = isDemoProject
     ? "All 19 genes retained"
-    : metadata?.preprocessing?.top_variable_genes || "-";
+    : metadata?.preprocessing?.top_variable_genes?.trim().toLowerCase() === "all"
+      ? "All genes retained"
+      : metadata?.preprocessing?.top_variable_genes || "-";
   const tfOverrideLabel = isDemoProject
     ? "Enabled"
     : boolText(metadata?.preprocessing?.include_all_tfs);
