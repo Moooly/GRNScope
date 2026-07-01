@@ -12,7 +12,9 @@ import { Project, ProjectJob } from "./projects/_types/project";
 export default function HomePage() {
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [canScrollProjectHistoryRight, setCanScrollProjectHistoryRight] = useState(false);
   const metadataRequestIds = useRef<Set<string>>(new Set());
+  const projectHistoryRowRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   const visibleProjectHistory = useMemo(
@@ -228,6 +230,52 @@ export default function HomePage() {
     router.push(`/projects/${project.id}`);
   };
 
+  useEffect(() => {
+    const row = projectHistoryRowRef.current;
+    if (!row) {
+      const frameId = window.requestAnimationFrame(() => {
+        setCanScrollProjectHistoryRight(false);
+      });
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    let frameId: number | null = null;
+    const scheduleScrollAffordanceUpdate = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateScrollAffordance();
+      });
+    };
+
+    const updateScrollAffordance = () => {
+      const hasOverflow = row.scrollWidth > row.clientWidth + 1;
+      const hasMoreToRight = row.scrollLeft + row.clientWidth < row.scrollWidth - 1;
+      setCanScrollProjectHistoryRight(hasOverflow && hasMoreToRight);
+    };
+
+    scheduleScrollAffordanceUpdate();
+    row.addEventListener("scroll", scheduleScrollAffordanceUpdate, { passive: true });
+    window.addEventListener("resize", scheduleScrollAffordanceUpdate);
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(scheduleScrollAffordanceUpdate);
+    resizeObserver?.observe(row);
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      row.removeEventListener("scroll", scheduleScrollAffordanceUpdate);
+      window.removeEventListener("resize", scheduleScrollAffordanceUpdate);
+      resizeObserver?.disconnect();
+    };
+  }, [visibleProjectHistory.length]);
+
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
       <section className="relative overflow-hidden bg-[#f7fbff]">
@@ -319,27 +367,32 @@ export default function HomePage() {
 
           {visibleProjectHistory.length > 0 ? (
             <div className="group/history relative mt-5">
-              <div className="flex snap-x items-start gap-4 overflow-x-auto pb-4 pt-1">
+              <div
+                ref={projectHistoryRowRef}
+                className="flex snap-x items-start gap-4 overflow-x-auto pb-4 pt-1"
+              >
                 {visibleProjectHistory.map((project) => (
                   <HomeProjectCard key={project.id} project={project} />
                 ))}
               </div>
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-0 mb-4 flex w-22 items-center justify-end bg-gradient-to-r from-[#f7fbff]/0 via-[#f7fbff]/55 to-[#f7fbff]/95 pr-1 opacity-0 transition-opacity duration-200 group-hover/history:opacity-100 group-focus-within/history:opacity-100"
-              >
-                <span className="inline-flex h-10 w-10 translate-x-[-8px] items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white/95 text-[#1b75a6] shadow-[0_10px_22px_rgba(15,23,42,0.10),0_0_0_8px_rgba(247,251,255,0.72)] transition-transform duration-200 group-hover/history:translate-x-0 group-focus-within/history:translate-x-0">
-                  <svg viewBox="0 0 16 28" className="h-5 w-3" fill="none">
-                    <path
-                      d="M2.5 3.5 12.5 14 2.5 24.5"
-                      stroke="currentColor"
-                      strokeWidth="3.25"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-              </div>
+              {canScrollProjectHistoryRight ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 mb-4 flex w-22 items-center justify-end bg-gradient-to-r from-[#f7fbff]/0 via-[#f7fbff]/55 to-[#f7fbff]/95 pr-1 opacity-0 transition-opacity duration-200 group-hover/history:opacity-100 group-focus-within/history:opacity-100"
+                >
+                  <span className="inline-flex h-10 w-10 translate-x-[-8px] items-center justify-center rounded-full border border-[#1b75a6]/20 bg-white/95 text-[#1b75a6] shadow-[0_10px_22px_rgba(15,23,42,0.10),0_0_0_8px_rgba(247,251,255,0.72)] transition-transform duration-200 group-hover/history:translate-x-0 group-focus-within/history:translate-x-0">
+                    <svg viewBox="0 0 16 28" className="h-5 w-3" fill="none">
+                      <path
+                        d="M2.5 3.5 12.5 14 2.5 24.5"
+                        stroke="currentColor"
+                        strokeWidth="3.25"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </div>
+              ) : null}
             </div>
           ) : (
             <Link
