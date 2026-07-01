@@ -6,7 +6,10 @@ import type { ProjectAlgorithm } from "../page";
 import type { Project } from "../_types/project";
 import { getApiBase } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
-import { registerPendingProjectUpload } from "../_lib/pendingProjectUpload";
+import {
+  registerPendingProjectUpload,
+  startPendingProjectUpload,
+} from "../_lib/pendingProjectUpload";
 
 type BackendAlgorithmEntry = {
   id: string;
@@ -586,6 +589,7 @@ export default function CreateProjectFlow({
         pseudotimeFile,
         clusterLabelsFile,
       });
+      void startPendingProjectUpload(data.project_id, API_BASE);
 
       const now = new Date();
       const createdProject: Project = {
