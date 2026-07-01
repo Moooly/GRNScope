@@ -84,6 +84,8 @@ export default function HomePage() {
               const data = await response.json();
               return {
                 projectId,
+                geneCount: readOptionalDimension(data.project ?? {}, "gene"),
+                cellCount: readOptionalDimension(data.project ?? {}, "cell"),
                 latestJob: (data.latest_job ?? null) as ProjectJob | null,
               };
             } catch {
@@ -97,18 +99,26 @@ export default function HomePage() {
         const latestJobMap = new Map(
           responses
             .filter(
-              (item): item is { projectId: string; latestJob: ProjectJob | null } =>
+              (item): item is {
+                projectId: string;
+                geneCount: number | null;
+                cellCount: number | null;
+                latestJob: ProjectJob | null;
+              } =>
                 item !== null,
             )
-            .map((item) => [item.projectId, item.latestJob]),
+            .map((item) => [item.projectId, item]),
         );
 
         setProjectHistory((currentProjects) =>
           currentProjects.map((project) => {
             if (!latestJobMap.has(project.id)) return project;
+            const projectUpdate = latestJobMap.get(project.id);
             return {
               ...project,
-              latestJob: latestJobMap.get(project.id) ?? null,
+              geneCount: projectUpdate?.geneCount ?? project.geneCount,
+              cellCount: projectUpdate?.cellCount ?? project.cellCount,
+              latestJob: projectUpdate?.latestJob ?? null,
             };
           }),
         );
@@ -159,10 +169,15 @@ export default function HomePage() {
             }
             const data = await response.json();
             const metadata = data.metadata ?? {};
+            const geneCount = readOptionalDimension(metadata, "gene");
+            const cellCount = readOptionalDimension(metadata, "cell");
+            if (geneCount === null || cellCount === null) {
+              metadataRequestIds.current.delete(projectId);
+            }
             return {
               projectId,
-              geneCount: readOptionalDimension(metadata, "gene"),
-              cellCount: readOptionalDimension(metadata, "cell"),
+              geneCount,
+              cellCount,
             };
           } catch {
             metadataRequestIds.current.delete(projectId);

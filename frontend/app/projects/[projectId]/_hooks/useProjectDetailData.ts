@@ -187,6 +187,12 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
         setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
       }
 
+      const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
+      if (metadataResponse.ok) {
+        const metadataData = await metadataResponse.json();
+        setMetadata((metadataData.metadata ?? null) as MetadataManifest | null);
+      }
+
       setIsLoadingCompletedResults(true);
       try {
         const nextResults = await loadCompletedAlgorithmResults(
@@ -323,6 +329,15 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           if (!cancelled) {
             setProject((projectData.project ?? null) as ProjectManifest | null);
             setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
+          }
+        }
+
+        const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
+        if (metadataResponse.ok) {
+          const metadataData = await metadataResponse.json();
+
+          if (!cancelled) {
+            setMetadata((metadataData.metadata ?? null) as MetadataManifest | null);
           }
         }
 

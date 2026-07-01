@@ -8,6 +8,7 @@ import time
 import threading
 import csv
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from itertools import chain
@@ -21,9 +22,11 @@ from ..repositories.job_repository import (
     write_jobs_manifest,
 )
 from ..repositories.project_repository import read_project_manifest
+from ..repositories.project_repository import write_project_manifest
 from ..services.beeline_service import (
     AlgorithmStoppedError,
     MatrixValidationRuntimeError,
+    count_expression_gene_rows,
     detect_csv_dialect_from_file,
     ensure_project_preprocessed_expression,
     read_delimited_header,
@@ -104,6 +107,40 @@ ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
 )
 TERMINAL_JOB_STATUSES = {"Completed", "Failed", "Stopped"}
 MIN_CLUSTER_SCOPE_CELLS = 50
+
+
+def sync_project_dataset_dimensions(
+    project_dir: Path,
+    project_manifest: dict,
+    source_expression: Path,
+) -> None:
+    header, _dialect = read_delimited_header(source_expression)
+    gene_count = count_expression_gene_rows(source_expression)
+    cell_count = max(0, len(header) - 1)
+
+    if gene_count <= 0 or cell_count <= 0:
+        return
+
+    project_manifest["gene_count"] = gene_count
+    project_manifest["cell_count"] = cell_count
+    write_project_manifest(project_dir, project_manifest)
+
+    metadata_path = project_dir / "metadata.json"
+    if not metadata_path.exists():
+        return
+
+    try:
+        metadata_manifest = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+
+    metadata_manifest["gene_count"] = gene_count
+    metadata_manifest["cell_count"] = cell_count
+    metadata_manifest["upload_status"] = "validated"
+    metadata_path.write_text(
+        json.dumps(metadata_manifest, indent=2),
+        encoding="utf-8",
+    )
 
 
 def safe_scope_id(scope_type: str, label: str) -> str:
@@ -724,6 +761,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             source_expression,
             project_manifest,
         )
+        sync_project_dataset_dimensions(project_dir, project_manifest, source_expression)
 
         scopes = build_algorithm_scopes(project_manifest)
         has_cluster_scopes = any(scope.scope_type == "cluster" for scope in scopes)

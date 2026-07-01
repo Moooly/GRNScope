@@ -47,6 +47,7 @@ from ..schemas import (
     UpdateNotificationEmailRequest,
 )
 from ..validators import validate_csv_extension
+from ..services.beeline_service import count_expression_gene_rows, read_delimited_header
 from ..services.email_service import normalize_notification_email
 from ..services.job_service import (
     launch_independent_algorithm_tasks,
@@ -76,6 +77,49 @@ def load_known_tf_gene_names() -> list[str]:
             ]
 
     return []
+
+
+def backfill_dataset_dimensions(
+    project_dir: Path,
+    project_manifest: dict,
+    metadata_manifest: dict,
+) -> tuple[dict, dict]:
+    if metadata_manifest.get("gene_count") and metadata_manifest.get("cell_count"):
+        return project_manifest, metadata_manifest
+
+    expression_path = project_manifest.get("expression_path")
+    if not expression_path:
+        return project_manifest, metadata_manifest
+
+    source_expression = Path(str(expression_path))
+    if not source_expression.exists():
+        return project_manifest, metadata_manifest
+
+    try:
+        header, _dialect = read_delimited_header(source_expression)
+        gene_count = count_expression_gene_rows(source_expression)
+        cell_count = max(0, len(header) - 1)
+    except Exception:
+        return project_manifest, metadata_manifest
+
+    if gene_count <= 0 or cell_count <= 0:
+        return project_manifest, metadata_manifest
+
+    project_manifest["gene_count"] = gene_count
+    project_manifest["cell_count"] = cell_count
+    metadata_manifest["gene_count"] = gene_count
+    metadata_manifest["cell_count"] = cell_count
+
+    try:
+        write_project_manifest(project_dir, project_manifest)
+        (project_dir / "metadata.json").write_text(
+            json.dumps(metadata_manifest, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+    return project_manifest, metadata_manifest
 
 
 def parse_selected_algorithms(selected_algorithms: str) -> list[str]:
@@ -780,6 +824,11 @@ async def list_projects(request: Request, response: Response):
                         )
                     except Exception:
                         metadata_manifest = {}
+                project_manifest, metadata_manifest = backfill_dataset_dimensions(
+                    project_dir,
+                    project_manifest,
+                    metadata_manifest,
+                )
 
                 created_at = project_manifest.get("created_at")
                 if not created_at:
@@ -875,6 +924,18 @@ async def get_project(project_id: str, request: Request, response: Response):
 
     try:
         project_manifest = read_project_manifest(project_dir)
+        metadata_manifest = {}
+        metadata_path = project_dir / "metadata.json"
+        if metadata_path.exists():
+            try:
+                metadata_manifest = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except Exception:
+                metadata_manifest = {}
+        project_manifest, _metadata_manifest = backfill_dataset_dimensions(
+            project_dir,
+            project_manifest,
+            metadata_manifest,
+        )
         jobs_manifest = read_jobs_manifest(project_dir)
 
         latest_job = jobs_manifest[-1] if jobs_manifest else None
@@ -939,6 +1000,15 @@ async def get_project_metadata(project_id: str, request: Request, response: Resp
 
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        try:
+            project_manifest = read_project_manifest(project_dir)
+            _project_manifest, metadata = backfill_dataset_dimensions(
+                project_dir,
+                project_manifest,
+                metadata,
+            )
+        except Exception:
+            pass
         return {
             "ok": True,
             "project_id": project_id,
