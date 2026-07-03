@@ -502,7 +502,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "publication_title": "Inferring Causal Gene Regulatory Networks from Coupled Single-Cell Expression Dynamics Using Scribe",
         "publication_url": "https://doi.org/10.1016/j.cels.2020.02.003",
         "source_url": "https://github.com/aristoteleo/Scribe-py",
-        "docker_image": "scribe:base",
+        "docker_image": "grnbeeline/scribe:base",
         "runner": "BLRun/scribeRunner.py",
         "directed": True,
         "signed": False,
