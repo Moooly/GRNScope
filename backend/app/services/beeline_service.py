@@ -1545,6 +1545,9 @@ def build_algorithm_runtime_params(
     scope_label: str | None = None,
 ) -> dict:
     normalized_algorithm_id = algorithm_id.upper()
+    if normalized_algorithm_id == "PEARSON":
+        return {"matrixFormat": "dense"}
+
     if normalized_algorithm_id != "CELLORACLE":
         return {}
 
@@ -2233,6 +2236,10 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         algorithm_id,
         confidence_settings,
     )
+    algorithm_runtime_params = build_algorithm_runtime_params(
+        algorithm_id,
+        project_manifest,
+    )
     config_text = build_beeline_config(
         input_dir=input_dir,
         output_dir=output_dir,
@@ -2241,6 +2248,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         algorithm_id=algorithm_id,
         include_pseudotime=bool(project_manifest.get("pseudotime_path")),
         max_regulators_per_target=ranked_edges_per_target_limit,
+        extra_params=algorithm_runtime_params,
     )
     config_path.write_text(config_text, encoding="utf-8")
 
