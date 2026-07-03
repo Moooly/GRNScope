@@ -89,7 +89,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "publication_title": "Gene regulatory network inference from single-cell data using multivariate information measures",
         "publication_url": "https://doi.org/10.1016/j.cels.2017.08.014",
         "source_url": None,
-        "docker_image": "pidc:base",
+        "docker_image": "grnbeeline/pidc:base",
         "runner": "BLRun/pidcRunner.py",
         "directed": False,
         "signed": False,
