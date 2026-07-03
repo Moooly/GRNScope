@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GRNScope Result Settings Algorithm Filter Preview</title>
+  <style>
+    :root {
+      --blue: #1b75a6;
+      --blue-dark: #1f7eaa;
+      --blue-soft: #f2f9fc;
+      --panel: #ffffff;
+      --surface: #f8fbfd;
+      --row: #f2f9fc;
+      --line: #d8e4ef;
+      --line-strong: #b7d4e6;
+      --text: #17243a;
+      --muted: #65758b;
+      --page: #f4f8fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(27, 117, 166, 0.045) 1px, transparent 1px),
+        linear-gradient(rgba(27, 117, 166, 0.045) 1px, transparent 1px),
+        var(--page);
+      background-size: 64px 64px;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 32px;
+    }
+
+    .shell {
+      max-width: 1180px;
+      min-height: 760px;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 24px 80px rgba(31, 55, 82, 0.12);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 14px;
+      padding: 16px 42px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .search-main,
+    .settings-trigger {
+      height: 62px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      font-weight: 850;
+    }
+
+    .search-main {
+      width: min(520px, 44vw);
+      padding: 0 32px;
+      color: #8798ad;
+      font-size: 24px;
+    }
+
+    .settings-trigger {
+      min-width: 318px;
+      justify-content: center;
+      gap: 14px;
+      color: var(--blue);
+      font-size: 24px;
+      border-color: #b9d2e4;
+    }
+
+    .panel {
+      width: min(860px, calc(100vw - 72px));
+      margin: 14px 42px 48px auto;
+      border: 2px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel);
+      padding: 22px;
+      box-shadow: 0 24px 80px rgba(31, 55, 82, 0.14);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 0 6px 16px;
+    }
+
+    .eyebrow {
+      color: #687891;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .count {
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 20px;
+      color: var(--blue);
+      font-size: 18px;
+      font-weight: 900;
+      background: #fff;
+    }
+
+    .accordion-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 78px;
+      border-radius: 20px;
+      background: var(--blue-dark);
+      color: #fff;
+      padding: 0 26px;
+      font-size: 25px;
+      font-weight: 900;
+    }
+
+    .algorithm-box {
+      margin-top: 12px;
+      border: 2px solid var(--line);
+      border-radius: 20px;
+      background: #fbfdff;
+      padding: 18px;
+    }
+
+    .soft-button {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 0 14px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .filter-controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+      position: relative;
+    }
+
+    .filter-pill {
+      position: relative;
+      min-width: 0;
+    }
+
+    .filter-pill::after {
+      content: "";
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-bottom: 2px solid #516174;
+      border-right: 2px solid #516174;
+      pointer-events: none;
+      transform: translateY(-65%) rotate(45deg);
+    }
+
+    .filter-select {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      min-width: 0;
+      height: 44px;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: #26364d;
+      outline: none;
+      padding: 0 38px 0 16px;
+      font-size: 13px;
+      font-weight: 850;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+      transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+
+    .filter-select:hover,
+    .filter-select:focus {
+      border-color: #accfe3;
+      background: #f8fcff;
+      box-shadow: 0 0 0 4px rgba(27, 117, 166, 0.08);
+    }
+
+    .reset-filters {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 9px);
+      z-index: 1;
+    }
+
+    .algorithm-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      max-height: 170px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .algorithm-card {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 46px;
+      border: 2px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--row);
+      padding: 0 10px;
+      cursor: pointer;
+      color: var(--blue);
+      text-align: center;
+      transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+    }
+
+    .algorithm-card:not(.selected) {
+      border-color: var(--line);
+      background: #fff;
+      color: #516174;
+    }
+
+    .algorithm-card:hover {
+      border-color: #9cc8df;
+      background: #f6fbfe;
+    }
+
+    .algorithm-main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .algorithm-name {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .empty {
+      display: none;
+      border: 2px dashed var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 76px;
+      margin-top: 12px;
+      border: 2px solid var(--line);
+      border-radius: 20px;
+      background: #edf4f8;
+      padding: 0 20px;
+    }
+
+    .settings-row h3 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .stepper {
+      display: grid;
+      grid-template-columns: 56px 86px 52px 56px;
+      overflow: hidden;
+      height: 58px;
+      min-width: 250px;
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      color: #5d6d83;
+      font-size: 22px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .stepper div {
+      display: grid;
+      place-items: center;
+      border-right: 2px solid var(--line);
+    }
+
+    .stepper div:last-child {
+      border-right: 0;
+    }
+
+    .stepper div:nth-child(2) {
+      color: #101827;
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        padding: 18px;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .search-main,
+      .settings-trigger,
+      .panel {
+        width: 100%;
+        min-width: 0;
+        margin-right: 0;
+        margin-left: 0;
+      }
+
+      .filter-controls {
+        grid-template-columns: 1fr;
+      }
+
+      .algorithm-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .settings-row {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 16px;
+      }
+
+      .stepper {
+        min-width: 0;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="shell" aria-label="GRNScope result settings preview">
+      <div class="topbar">
+        <div class="search-main">Search gene name</div>
+        <div class="settings-trigger">
+          <span>*</span>
+          <span>Results Settings</span>
+          <span>^</span>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <div class="eyebrow">Filters</div>
+          <div class="count">4 matching edges</div>
+        </div>
+
+        <div class="accordion-title">
+          <span>Algorithms</span>
+          <span>^</span>
+        </div>
+
+        <section class="algorithm-box">
+          <div class="filter-controls">
+            <label class="filter-pill">
+              <select class="filter-select" id="directionFilter" aria-label="Direction filter">
+                <option value="all">All directions</option>
+                <option value="directed">Directed</option>
+                <option value="undirected">Undirected</option>
+              </select>
+            </label>
+            <label class="filter-pill">
+              <select class="filter-select" id="signFilter" aria-label="Sign filter">
+                <option value="all">All signs</option>
+                <option value="signed">Signed</option>
+                <option value="unsigned">Unsigned</option>
+              </select>
+            </label>
+            <label class="filter-pill">
+              <select class="filter-select" id="categoryFilter" aria-label="Category filter">
+                <option value="all">All categories</option>
+                <option value="Correlation">Correlation</option>
+                <option value="Granger causality">Granger causality</option>
+                <option value="Mutual information">Mutual information</option>
+                <option value="ODE + regression">ODE + regression</option>
+                <option value="Random forest">Random forest</option>
+                <option value="Regression">Regression</option>
+              </select>
+            </label>
+            <button class="soft-button reset-filters" id="resetFilters" type="button">Reset</button>
+          </div>
+
+          <div class="algorithm-grid" id="algorithmGrid"></div>
+          <div class="empty" id="emptyState">No completed algorithms match these filters.</div>
+        </section>
+
+        <div class="settings-row">
+          <h3>Evidence</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>80</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <h3>Confidence level</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>80</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <h3>Direction confidence</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>0</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const algorithms = [
+      { id: "GENIE3", name: "GENIE3", category: "Random forest", directed: true, signed: false },
+      { id: "GRISLI", name: "GRISLI", category: "ODE + regression", directed: true, signed: false },
+      { id: "GRNBOOST2", name: "GRNBoost2", category: "Random forest", directed: true, signed: false },
+      { id: "GRNVBEM", name: "GRNVBEM", category: "Regression", directed: true, signed: true },
+      { id: "LEAP", name: "LEAP", category: "Correlation", directed: true, signed: false },
+      { id: "PEARSON", name: "Pearson", category: "Correlation", directed: false, signed: true },
+      { id: "PIDC", name: "PIDC", category: "Mutual information", directed: false, signed: false },
+      { id: "PPCOR", name: "PPCOR", category: "Correlation", directed: false, signed: true },
+      { id: "SCODE", name: "SCODE", category: "ODE + regression", directed: true, signed: true },
+      { id: "SCRIBE", name: "SCRIBE", category: "Mutual information", directed: true, signed: false },
+      { id: "SINCERITIES", name: "SINCERITIES", category: "Regression", directed: true, signed: true },
+      { id: "SINGE", name: "SINGE", category: "Granger causality", directed: true, signed: false }
+    ];
+
+    const selected = new Set(algorithms.map((algorithm) => algorithm.id));
+    const filters = {
+      direction: "all",
+      sign: "all",
+      category: "all"
+    };
+
+    const grid = document.getElementById("algorithmGrid");
+    const emptyState = document.getElementById("emptyState");
+    const resetFilters = document.getElementById("resetFilters");
+    const directionFilter = document.getElementById("directionFilter");
+    const signFilter = document.getElementById("signFilter");
+    const categoryFilter = document.getElementById("categoryFilter");
+
+    function matches(algorithm) {
+      if (filters.direction === "directed" && !algorithm.directed) return false;
+      if (filters.direction === "undirected" && algorithm.directed) return false;
+      if (filters.sign === "signed" && !algorithm.signed) return false;
+      if (filters.sign === "unsigned" && algorithm.signed) return false;
+      if (filters.category !== "all" && algorithm.category !== filters.category) return false;
+
+      return true;
+    }
+
+    function render() {
+      const visible = algorithms.filter(matches);
+      grid.innerHTML = "";
+
+      visible.forEach((algorithm) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = `algorithm-card ${selected.has(algorithm.id) ? "selected" : ""}`;
+        row.setAttribute("aria-pressed", selected.has(algorithm.id) ? "true" : "false");
+        row.innerHTML = `
+          <span class="algorithm-main">
+            <span class="algorithm-name">${algorithm.name}</span>
+          </span>
+        `;
+        row.addEventListener("click", () => {
+          if (selected.has(algorithm.id) && selected.size === 1) return;
+          if (selected.has(algorithm.id)) selected.delete(algorithm.id);
+          else selected.add(algorithm.id);
+          render();
+        });
+        grid.appendChild(row);
+      });
+
+      grid.style.display = visible.length ? "grid" : "none";
+      emptyState.style.display = visible.length ? "none" : "block";
+      resetFilters.style.visibility = hasActiveFilters() ? "visible" : "hidden";
+    }
+
+    function hasActiveFilters() {
+      return filters.direction !== "all" ||
+        filters.sign !== "all" ||
+        filters.category !== "all";
+    }
+
+    directionFilter.addEventListener("change", (event) => {
+      filters.direction = event.target.value;
+      render();
+    });
+
+    signFilter.addEventListener("change", (event) => {
+      filters.sign = event.target.value;
+      render();
+    });
+
+    categoryFilter.addEventListener("change", (event) => {
+      filters.category = event.target.value;
+      render();
+    });
+
+    resetFilters.addEventListener("click", () => {
+      filters.direction = "all";
+      filters.sign = "all";
+      filters.category = "all";
+      directionFilter.value = "all";
+      signFilter.value = "all";
+      categoryFilter.value = "all";
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

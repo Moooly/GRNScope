@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GRNScope CellOracle Cluster Atlas Preview</title>
+  <style>
+    :root {
+      --ink: #0f172a;
+      --muted: #5f6f89;
+      --line: #d9e2ef;
+      --soft: #f5f8fb;
+      --panel: #ffffff;
+      --blue: #1b75a6;
+      --teal: #21897e;
+      --green: #4f8f46;
+      --red: #c95d63;
+      --gold: #b5832f;
+      --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef3f8;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button, select, input { font: inherit; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 18px 24px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .segmented, .mode-tabs {
+      display: inline-grid;
+      grid-auto-flow: column;
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
+    .segmented button, .mode-tabs button {
+      min-height: 34px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 12px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .segmented button.active, .mode-tabs button.active {
+      color: var(--blue);
+      background: #fff;
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.08);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 310px minmax(0, 1fr) 330px;
+      min-height: 0;
+    }
+
+    aside, main, .inspector {
+      min-height: 0;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    aside {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+      padding: 18px;
+    }
+
+    .search {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 10px;
+      min-height: 42px;
+      background: #fff;
+    }
+
+    .search input {
+      min-width: 0;
+      width: 100%;
+      border: 0;
+      outline: 0;
+      color: var(--ink);
+      background: transparent;
+    }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfdff;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .cluster-list {
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      padding-right: 2px;
+    }
+
+    .cluster-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      min-height: 66px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .cluster-row.active {
+      border-color: rgba(27, 117, 166, 0.55);
+      box-shadow: inset 4px 0 0 var(--blue), 0 4px 14px rgba(27, 117, 166, 0.10);
+    }
+
+    .cluster-row .name {
+      font-weight: 800;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+
+    .cluster-row .meta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .score-pill {
+      min-width: 58px;
+      border-radius: 999px;
+      padding: 5px 8px;
+      color: #0f3c37;
+      background: #dff3ee;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    main {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 16px;
+      padding: 18px;
+      background: #f8fbfe;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .scope-title {
+      min-width: 0;
+    }
+
+    .scope-title h2 {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1.2;
+    }
+
+    .scope-title p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .select {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 38px 0 12px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .canvas {
+      position: relative;
+      min-height: 520px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(#eef4fa 1px, transparent 1px),
+        linear-gradient(90deg, #eef4fa 1px, transparent 1px),
+        #fff;
+      background-size: 28px 28px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 520px;
+    }
+
+    .edge {
+      fill: none;
+      stroke-linecap: round;
+      opacity: 0.8;
+    }
+
+    .edge.shared { stroke: #8b98aa; }
+    .edge.gained { stroke: var(--blue); }
+    .edge.lost { stroke: var(--red); stroke-dasharray: 7 7; }
+    .edge.changed { stroke: var(--teal); }
+
+    .node circle {
+      stroke: #fff;
+      stroke-width: 3;
+      filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.15));
+    }
+
+    .node text {
+      font-size: 12px;
+      font-weight: 800;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .swatch {
+      width: 24px;
+      height: 3px;
+      border-radius: 999px;
+      background: #8b98aa;
+    }
+
+    .swatch.gained { background: var(--blue); }
+    .swatch.lost { background: var(--red); }
+    .swatch.changed { background: var(--teal); }
+
+    .inspector {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      padding: 18px;
+      background: #fff;
+      border-right: 0;
+      gap: 16px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .section-title h3 {
+      margin: 0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .section-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .inspector-scroll {
+      overflow: auto;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .tf-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tf-item {
+      display: grid;
+      grid-template-columns: 68px 1fr 42px;
+      gap: 10px;
+      align-items: center;
+      min-height: 32px;
+      font-size: 13px;
+    }
+
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #e8eef5;
+      overflow: hidden;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--teal);
+    }
+
+    .heatmap {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .heat-row {
+      display: grid;
+      grid-template-columns: 56px repeat(6, 1fr);
+      gap: 4px;
+      align-items: center;
+    }
+
+    .heat-cell {
+      min-height: 22px;
+      border-radius: 5px;
+      background: #edf3f7;
+      border: 1px solid rgba(15, 23, 42, 0.05);
+    }
+
+    .heat-label {
+      color: var(--muted);
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .edge-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .edge-table th, .edge-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 4px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .edge-table th {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #173b35;
+      background: #e1f3ee;
+    }
+
+    .chip.lost {
+      color: #6f272d;
+      background: #fae5e7;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    @media (max-width: 1120px) {
+      .layout {
+        grid-template-columns: 280px minmax(0, 1fr);
+      }
+      .inspector {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--line);
+      }
+      .inspector-scroll {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        overflow: visible;
+      }
+    }
+
+    @media (max-width: 760px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      aside {
+        max-height: 420px;
+      }
+      .summary-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .inspector-scroll {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="eyebrow">CellOracle Cluster Analysis</div>
+        <h1>Network Atlas</h1>
+      </div>
+      <div class="header-actions">
+        <div class="segmented" aria-label="Edge display mode">
+          <button class="active" title="Color edges by global comparison">Compare</button>
+          <button title="Show signed edge weights">Signed</button>
+          <button title="Show strongest edges only">Top K</button>
+        </div>
+        <select class="select" aria-label="Sort clusters">
+          <option>Sort by changed edges</option>
+          <option>Sort by cell count</option>
+          <option>Sort by density</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside>
+        <div class="search">
+          <span aria-hidden="true">#</span>
+          <input id="clusterSearch" type="search" placeholder="Search clusters or TFs" />
+        </div>
+
+        <div class="overview-grid">
+          <div class="metric"><strong>18</strong><span>clusters</span></div>
+          <div class="metric"><strong>42k</strong><span>edges</span></div>
+          <div class="metric"><strong>312</strong><span>active TFs</span></div>
+          <div class="metric"><strong>0.41</strong><span>mean shift</span></div>
+        </div>
+
+        <div id="clusterList" class="cluster-list" aria-label="Cluster list"></div>
+      </aside>
+
+      <main>
+        <div class="toolbar">
+          <div class="scope-title">
+            <h2 id="scopeName">Erythroid progenitors</h2>
+            <p id="scopeSubtitle">Cluster-specific CellOracle GRN compared against Global</p>
+          </div>
+          <div class="mode-tabs" aria-label="Analysis mode">
+            <button class="active" data-mode="network">Network</button>
+            <button data-mode="compare">Compare</button>
+            <button data-mode="heatmap">TF Heatmap</button>
+          </div>
+        </div>
+
+        <section class="canvas" aria-label="Network canvas">
+          <svg id="networkSvg" viewBox="0 0 900 560" role="img" aria-label="Selected cluster regulatory network"></svg>
+        </section>
+
+        <div class="legend">
+          <span><i class="swatch"></i>shared with Global</span>
+          <span><i class="swatch gained"></i>cluster-specific</span>
+          <span><i class="swatch changed"></i>stronger or weaker</span>
+          <span><i class="swatch lost"></i>lost vs Global</span>
+        </div>
+      </main>
+
+      <section class="inspector">
+        <div class="section-title">
+          <h3>Cluster Details</h3>
+          <span id="detailCount">1,024 cells</span>
+        </div>
+
+        <div class="inspector-scroll">
+          <div class="panel">
+            <div class="section-title">
+              <h3>Top Regulators</h3>
+              <span>outgoing strength</span>
+            </div>
+            <div id="tfList" class="tf-list"></div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <h3>TF Atlas</h3>
+              <span>across clusters</span>
+            </div>
+            <div id="heatmap" class="heatmap"></div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <h3>Top Changed Edges</h3>
+              <span>cluster vs Global</span>
+            </div>
+            <table class="edge-table">
+              <thead>
+                <tr><th>TF</th><th>Target</th><th>Delta</th><th>Type</th></tr>
+              </thead>
+              <tbody id="edgeRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const clusters = [
+      { id: "global", name: "Global", cells: 1023, edges: 8200, changed: 0.00, density: 0.31, tfs: [["Gata1", 92], ["Spi1", 81], ["Klf1", 77], ["Runx1", 70]], accent: "#1b75a6" },
+      { id: "ery", name: "Erythroid progenitors", cells: 184, edges: 3180, changed: 0.68, density: 0.43, tfs: [["Gata1", 98], ["Klf1", 89], ["Tal1", 72], ["Lmo2", 61]], accent: "#c95d63" },
+      { id: "myeloid", name: "Myeloid precursors", cells: 156, edges: 2760, changed: 0.61, density: 0.39, tfs: [["Spi1", 96], ["Cebpa", 83], ["Irf8", 76], ["Runx1", 62]], accent: "#21897e" },
+      { id: "meg", name: "Megakaryocyte", cells: 118, edges: 2284, changed: 0.57, density: 0.36, tfs: [["Fli1", 90], ["Gata2", 82], ["Runx1", 75], ["Tal1", 66]], accent: "#b5832f" },
+      { id: "lymph", name: "Lymphoid-like", cells: 92, edges: 1880, changed: 0.49, density: 0.33, tfs: [["Ikaros", 91], ["Tcf7", 73], ["Runx1", 69], ["Spi1", 55]], accent: "#4f8f46" },
+      { id: "cycling", name: "Cycling cells", cells: 141, edges: 2440, changed: 0.44, density: 0.37, tfs: [["Myc", 88], ["E2f1", 82], ["Foxm1", 80], ["E2f4", 71]], accent: "#6f63c9" },
+      { id: "stem", name: "Stem-like", cells: 132, edges: 2108, changed: 0.38, density: 0.30, tfs: [["Sox4", 76], ["Meis1", 71], ["Runx1", 63], ["Gata2", 59]], accent: "#60758f" }
+    ];
+
+    const nodes = [
+      ["Gata1", 450, 120, "tf"], ["Klf1", 250, 180, "tf"], ["Spi1", 640, 190, "tf"],
+      ["Tal1", 180, 340, "tf"], ["Runx1", 720, 350, "tf"], ["Hbb", 390, 300, "gene"],
+      ["Epor", 520, 310, "gene"], ["Mpo", 590, 440, "gene"], ["Itga2b", 330, 440, "gene"]
+    ];
+
+    const edgeSets = {
+      global: [["Gata1","Hbb","shared",4],["Spi1","Mpo","shared",4],["Runx1","Itga2b","shared",3],["Tal1","Epor","shared",3],["Klf1","Hbb","shared",3]],
+      ery: [["Gata1","Hbb","gained",7],["Klf1","Hbb","gained",6],["Tal1","Epor","changed",5],["Gata1","Epor","changed",4],["Spi1","Mpo","lost",3],["Runx1","Itga2b","shared",3]],
+      myeloid: [["Spi1","Mpo","gained",7],["Cebpa","Mpo","gained",5],["Runx1","Mpo","changed",4],["Gata1","Hbb","lost",3],["Klf1","Hbb","lost",2],["Spi1","Epor","changed",3]],
+      meg: [["Runx1","Itga2b","gained",6],["Tal1","Itga2b","changed",5],["Gata1","Epor","shared",3],["Fli1","Itga2b","gained",6],["Spi1","Mpo","lost",2]],
+      lymph: [["Runx1","Epor","changed",3],["Spi1","Mpo","shared",3],["Gata1","Hbb","lost",2],["Klf1","Hbb","lost",2],["Tal1","Epor","lost",2]],
+      cycling: [["Runx1","Epor","changed",4],["Gata1","Hbb","shared",3],["Klf1","Hbb","shared",3],["Tal1","Itga2b","changed",3],["Spi1","Mpo","shared",3]],
+      stem: [["Runx1","Epor","shared",3],["Gata1","Epor","changed",3],["Tal1","Hbb","changed",3],["Spi1","Mpo","shared",2],["Klf1","Hbb","shared",2]]
+    };
+
+    const changedEdges = {
+      global: [["Gata1","Hbb","+0.00","shared"],["Spi1","Mpo","+0.00","shared"],["Runx1","Itga2b","+0.00","shared"]],
+      ery: [["Gata1","Hbb","+0.72","gain"],["Klf1","Hbb","+0.61","gain"],["Spi1","Mpo","-0.48","lost"],["Tal1","Epor","+0.32","shift"]],
+      myeloid: [["Spi1","Mpo","+0.75","gain"],["Cebpa","Mpo","+0.66","gain"],["Gata1","Hbb","-0.59","lost"],["Runx1","Mpo","+0.29","shift"]],
+      meg: [["Fli1","Itga2b","+0.70","gain"],["Runx1","Itga2b","+0.58","gain"],["Spi1","Mpo","-0.34","lost"],["Tal1","Itga2b","+0.31","shift"]],
+      lymph: [["Ikaros","Tcf7","+0.63","gain"],["Gata1","Hbb","-0.54","lost"],["Klf1","Hbb","-0.49","lost"],["Runx1","Epor","+0.21","shift"]],
+      cycling: [["Myc","E2f1","+0.69","gain"],["Foxm1","E2f4","+0.58","gain"],["Runx1","Epor","+0.23","shift"],["Spi1","Mpo","+0.05","shared"]],
+      stem: [["Sox4","Meis1","+0.55","gain"],["Gata2","Runx1","+0.37","shift"],["Tal1","Hbb","+0.25","shift"],["Spi1","Mpo","+0.03","shared"]]
+    };
+
+    const svg = document.getElementById("networkSvg");
+    const clusterList = document.getElementById("clusterList");
+    const tfList = document.getElementById("tfList");
+    const edgeRows = document.getElementById("edgeRows");
+    const heatmap = document.getElementById("heatmap");
+    let selected = "ery";
+
+    function findCluster(id) {
+      return clusters.find(cluster => cluster.id === id) || clusters[0];
+    }
+
+    function drawClusters(filter = "") {
+      const text = filter.trim().toLowerCase();
+      clusterList.innerHTML = "";
+      clusters
+        .filter(cluster => cluster.name.toLowerCase().includes(text) || cluster.tfs.some(tf => tf[0].toLowerCase().includes(text)))
+        .forEach(cluster => {
+          const row = document.createElement("button");
+          row.className = "cluster-row" + (cluster.id === selected ? " active" : "");
+          row.type = "button";
+          row.innerHTML = `
+            <span>
+              <span class="name">${cluster.name}</span>
+              <span class="meta">${cluster.cells.toLocaleString()} cells | ${cluster.edges.toLocaleString()} edges | density ${cluster.density.toFixed(2)}</span>
+            </span>
+            <span class="score-pill">${cluster.changed.toFixed(2)}</span>
+          `;
+          row.addEventListener("click", () => selectCluster(cluster.id));
+          clusterList.appendChild(row);
+        });
+    }
+
+    function drawNetwork(cluster) {
+      const edges = edgeSets[cluster.id] || edgeSets.global;
+      const nodeMap = new Map(nodes.map(node => [node[0], node]));
+      const extraNames = new Set(edges.flatMap(edge => [edge[0], edge[1]]));
+      let dynamicX = 120;
+      extraNames.forEach(name => {
+        if (!nodeMap.has(name)) {
+          nodeMap.set(name, [name, dynamicX, 500, "tf"]);
+          dynamicX += 110;
+        }
+      });
+
+      svg.innerHTML = "";
+      edges.forEach(([source, target, type, weight]) => {
+        const a = nodeMap.get(source);
+        const b = nodeMap.get(target);
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const midY = Math.min(a[2], b[2]) - 70;
+        path.setAttribute("d", `M ${a[1]} ${a[2]} C ${a[1]} ${midY}, ${b[1]} ${midY}, ${b[1]} ${b[2]}`);
+        path.setAttribute("class", `edge ${type}`);
+        path.setAttribute("stroke-width", weight);
+        svg.appendChild(path);
+      });
+
+      Array.from(nodeMap.values()).forEach(([name, x, y, kind]) => {
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("class", "node");
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", x);
+        circle.setAttribute("cy", y);
+        circle.setAttribute("r", kind === "tf" ? 33 : 29);
+        circle.setAttribute("fill", kind === "tf" ? cluster.accent : "#e8f0f6");
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", x);
+        text.setAttribute("y", y);
+        text.setAttribute("fill", kind === "tf" ? "#fff" : "#102033");
+        text.textContent = name.length > 6 ? name.slice(0, 6) : name;
+        g.append(circle, text);
+        svg.appendChild(g);
+      });
+    }
+
+    function drawDetails(cluster) {
+      document.getElementById("scopeName").textContent = cluster.name;
+      document.getElementById("scopeSubtitle").textContent = `${cluster.edges.toLocaleString()} edges | density ${cluster.density.toFixed(2)} | changed score ${cluster.changed.toFixed(2)}`;
+      document.getElementById("detailCount").textContent = `${cluster.cells.toLocaleString()} cells`;
+
+      tfList.innerHTML = cluster.tfs.map(([name, value]) => `
+        <div class="tf-item">
+          <strong>${name}</strong>
+          <span class="bar"><span style="width:${value}%"></span></span>
+          <span>${value}</span>
+        </div>
+      `).join("");
+
+      edgeRows.innerHTML = (changedEdges[cluster.id] || changedEdges.global).map(([tf, target, delta, type]) => `
+        <tr>
+          <td>${tf}</td>
+          <td>${target}</td>
+          <td>${delta}</td>
+          <td><span class="chip ${type === "lost" ? "lost" : ""}">${type}</span></td>
+        </tr>
+      `).join("");
+    }
+
+    function drawHeatmap() {
+      const tfNames = ["Gata1", "Spi1", "Runx1", "Klf1", "Tal1", "Myc"];
+      const visibleClusters = clusters.slice(1, 7);
+      heatmap.innerHTML = `
+        <div class="heat-row">
+          <span></span>
+          ${visibleClusters.map(cluster => `<span class="heat-label">${cluster.name.split(" ")[0]}</span>`).join("")}
+        </div>
+        ${tfNames.map((tf, tfIndex) => `
+          <div class="heat-row">
+            <span class="heat-label">${tf}</span>
+            ${visibleClusters.map((cluster, index) => {
+              const hit = cluster.tfs.find(item => item[0] === tf);
+              const value = hit ? hit[1] : Math.max(10, 55 - ((tfIndex + index) * 7) % 45);
+              const color = `rgba(33, 137, 126, ${Math.max(0.12, value / 100)})`;
+              return `<span class="heat-cell" title="${tf} in ${cluster.name}: ${value}" style="background:${color}"></span>`;
+            }).join("")}
+          </div>
+        `).join("")}
+      `;
+    }
+
+    function selectCluster(id) {
+      selected = id;
+      const cluster = findCluster(id);
+      drawClusters(document.getElementById("clusterSearch").value);
+      drawNetwork(cluster);
+      drawDetails(cluster);
+      drawHeatmap();
+    }
+
+    document.getElementById("clusterSearch").addEventListener("input", event => drawClusters(event.target.value));
+    document.querySelectorAll(".mode-tabs button").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".mode-tabs button").forEach(item => item.classList.remove("active"));
+        button.classList.add("active");
+      });
+    });
+
+    selectCluster(selected);
+  </script>
+</body>
+</html>

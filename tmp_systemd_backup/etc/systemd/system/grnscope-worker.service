@@ -1,0 +1,21 @@
+[Unit]
+Description=GRNScope RQ Worker
+After=network.target redis-server.service docker.service
+Requires=redis-server.service docker.service
+
+[Service]
+User=immoooly
+WorkingDirectory=/home/immoooly/GRNScope/backend
+Environment="BEELINE_ROOT=/home/immoooly/Beeline"
+Environment="BEELINE_PYTHON=/home/immoooly/miniconda3/envs/BEELINE/bin/python"
+Environment="GRNSCOPE_QUEUE_BACKEND=redis"
+Environment="GRNSCOPE_REDIS_URL=redis://127.0.0.1:6379/0"
+Environment="GRNSCOPE_WORKER_QUEUE=grnscope"
+Environment="GRNSCOPE_WORKER_JOB_TIMEOUT=604800"
+Environment="GRNSCOPE_CONFIDENCE_BOOTSTRAP_RUNS=1"
+ExecStart=/home/immoooly/GRNScope/backend/.venv/bin/python worker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

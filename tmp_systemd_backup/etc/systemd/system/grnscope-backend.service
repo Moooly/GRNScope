@@ -1,0 +1,16 @@
+[Unit]
+Description=GRNScope FastAPI Backend
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+User=immoooly
+WorkingDirectory=/home/immoooly/GRNScope/backend
+Environment=BEELINE_ROOT=/home/immoooly/Beeline
+Environment=BEELINE_PYTHON=/home/immoooly/miniconda3/envs/BEELINE/bin/python
+ExecStart=/home/immoooly/GRNScope/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

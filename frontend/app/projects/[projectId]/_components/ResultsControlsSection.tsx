@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type { AlgorithmCatalogItem } from "../_lib/types";
 
 type ResultsControlsSectionProps = {
   completedAlgorithmIds: string[];
+  algorithmCatalog?: AlgorithmCatalogItem[];
   selectedAlgorithmIds: string[];
   onChangeSelectedAlgorithmIds: (value: string[]) => void;
   evidenceThreshold: number;
@@ -36,9 +38,12 @@ type ResultsControlsSectionProps = {
 };
 
 type SettingsPanel = "algorithms";
+type AlgorithmDirectionFilter = "all" | "directed" | "undirected";
+type AlgorithmSignFilter = "all" | "signed" | "unsigned";
 
 export default function ResultsControlsSection({
   completedAlgorithmIds,
+  algorithmCatalog = [],
   selectedAlgorithmIds,
   onChangeSelectedAlgorithmIds,
   evidenceThreshold = 0.8,
@@ -65,6 +70,11 @@ export default function ResultsControlsSection({
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
   const [edgeDisplayDraft, setEdgeDisplayDraft] = useState<string | null>(null);
+  const [algorithmDirectionFilter, setAlgorithmDirectionFilter] =
+    useState<AlgorithmDirectionFilter>("all");
+  const [algorithmSignFilter, setAlgorithmSignFilter] =
+    useState<AlgorithmSignFilter>("all");
+  const [algorithmCategoryFilter, setAlgorithmCategoryFilter] = useState("all");
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
@@ -89,6 +99,58 @@ export default function ResultsControlsSection({
       return;
     }
     onChangeSelectedAlgorithmIds([...selectedAlgorithmIds, algorithmId]);
+  };
+
+  const algorithmMetaMap = useMemo(
+    () => new Map(algorithmCatalog.map((algorithm) => [algorithm.id, algorithm])),
+    [algorithmCatalog]
+  );
+
+  const completedAlgorithmCategories = useMemo(() => {
+    const categories = new Set<string>();
+
+    completedAlgorithmIds.forEach((algorithmId) => {
+      const category = algorithmMetaMap.get(algorithmId)?.category?.trim();
+      if (category) categories.add(category);
+    });
+
+    return [...categories].sort((a, b) => a.localeCompare(b));
+  }, [algorithmMetaMap, completedAlgorithmIds]);
+
+  const filteredAlgorithmIds = useMemo(() => {
+    return completedAlgorithmIds.filter((algorithmId) => {
+      const meta = algorithmMetaMap.get(algorithmId);
+      const isDirected = meta?.directed ?? true;
+      const isSigned = meta?.signed ?? false;
+      const category = meta?.category ?? "";
+
+      if (algorithmDirectionFilter === "directed" && !isDirected) return false;
+      if (algorithmDirectionFilter === "undirected" && isDirected) return false;
+      if (algorithmSignFilter === "signed" && !isSigned) return false;
+      if (algorithmSignFilter === "unsigned" && isSigned) return false;
+      if (algorithmCategoryFilter !== "all" && category !== algorithmCategoryFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    algorithmCategoryFilter,
+    algorithmDirectionFilter,
+    algorithmMetaMap,
+    algorithmSignFilter,
+    completedAlgorithmIds,
+  ]);
+
+  const hasAlgorithmFilter =
+    algorithmDirectionFilter !== "all" ||
+    algorithmSignFilter !== "all" ||
+    algorithmCategoryFilter !== "all";
+
+  const resetAlgorithmFilters = () => {
+    setAlgorithmDirectionFilter("all");
+    setAlgorithmSignFilter("all");
+    setAlgorithmCategoryFilter("all");
   };
 
   const clampPercent = (value: number) => Math.min(1, Math.max(0, value));
@@ -156,11 +218,6 @@ export default function ResultsControlsSection({
       </button>
     );
   };
-
-  const algorithmSelectionSummary =
-    selectedAlgorithmIds.length === completedAlgorithmIds.length
-      ? "All selected"
-      : `${selectedAlgorithmIds.length}/${completedAlgorithmIds.length} selected`;
 
   const safeFilteredEdgeCount = Math.max(0, filteredEdgeCount);
   const minEdgeDisplayLimit = 0;
@@ -356,6 +413,33 @@ export default function ResultsControlsSection({
     </span>
   );
 
+  const compactSelect = (
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    options: Array<{ value: string; label: string }>
+  ) => (
+    <label className="relative min-w-0">
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full appearance-none rounded-xl border-2 border-slate-200 bg-white px-3.5 pr-9 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#1b75a6]/30 hover:bg-[#f8fcff] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+        aria-label={label}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span
+        className="pointer-events-none absolute right-3.5 top-1/2 h-2 w-2 -translate-y-[65%] rotate-45 border-b-2 border-r-2 border-slate-500"
+        aria-hidden="true"
+      />
+    </label>
+  );
+
   const edgeDisplayRow = (
     <div className="mt-3 border-t border-slate-200 pt-3">
       {sectionLabel(
@@ -444,42 +528,82 @@ export default function ResultsControlsSection({
             {sectionLabel("Filters", matchingEdgesBadge)}
             {panelHeader("algorithms", "Algorithms")}
             {openPanel === "algorithms" && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-2">
-                <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                    {algorithmSelectionSummary}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onChangeSelectedAlgorithmIds([...completedAlgorithmIds])}
-                    className="rounded-full border border-[#1b75a6]/20 bg-white px-2 py-1 text-[10px] font-bold text-[#1b75a6] transition hover:bg-[#f2f9fc]"
-                  >
-                    Select all
-                  </button>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <div className="relative mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {compactSelect(
+                    "Direction filter",
+                    algorithmDirectionFilter,
+                    (value) => setAlgorithmDirectionFilter(value as AlgorithmDirectionFilter),
+                    [
+                      { value: "all", label: "All directions" },
+                      { value: "directed", label: "Directed" },
+                      { value: "undirected", label: "Undirected" },
+                    ]
+                  )}
+                  {compactSelect(
+                    "Sign filter",
+                    algorithmSignFilter,
+                    (value) => setAlgorithmSignFilter(value as AlgorithmSignFilter),
+                    [
+                      { value: "all", label: "All signs" },
+                      { value: "signed", label: "Signed" },
+                      { value: "unsigned", label: "Unsigned" },
+                    ]
+                  )}
+                  {compactSelect(
+                    "Category filter",
+                    algorithmCategoryFilter,
+                    setAlgorithmCategoryFilter,
+                    [
+                      { value: "all", label: "All categories" },
+                      ...completedAlgorithmCategories.map((category) => ({
+                        value: category,
+                        label: category,
+                      })),
+                    ]
+                  )}
+                  {hasAlgorithmFilter && (
+                    <button
+                      type="button"
+                      onClick={resetAlgorithmFilters}
+                      className="absolute right-0 top-[calc(100%+6px)] z-10 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 shadow-sm transition hover:border-[#1b75a6]/20 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                    >
+                      Reset
+                    </button>
+                  )}
                 </div>
-                <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto pr-1">
-                  {completedAlgorithmIds.map((algorithmId) => {
-                    const checked = selectedAlgorithmIds.includes(algorithmId);
-                    return (
-                      <label
-                        key={algorithmId}
-                        className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 text-xs font-bold transition ${
-                          checked
-                            ? "border-[#1b75a6]/25 bg-[#f2f9fc] text-[#1b75a6]"
-                            : "border-transparent bg-white text-slate-600 hover:border-[#1b75a6]/20 hover:text-[#1b75a6]"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleAlgorithm(algorithmId)}
-                          className="h-3.5 w-3.5 shrink-0 accent-[#1b75a6]"
-                        />
-                        <span className="min-w-0 truncate">{algorithmId}</span>
-                      </label>
-                    );
-                  })}
-                </div>
+                {filteredAlgorithmIds.length > 0 ? (
+                  <div className="grid max-h-[170px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-4">
+                    {filteredAlgorithmIds.map((algorithmId) => {
+                      const checked = selectedAlgorithmIds.includes(algorithmId);
+                      const algorithmName =
+                        algorithmMetaMap.get(algorithmId)?.name ?? algorithmId;
+
+                      return (
+                        <label
+                          key={algorithmId}
+                          className={`flex min-h-[46px] min-w-0 cursor-pointer items-center justify-center rounded-xl border-2 px-2 text-center text-[13px] font-bold transition ${
+                            checked
+                              ? "border-[#9cc8df] bg-[#f2f9fc] text-[#1b75a6]"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-[#9cc8df] hover:bg-[#f8fcff] hover:text-[#1b75a6]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAlgorithm(algorithmId)}
+                            className="sr-only"
+                          />
+                          <span className="block min-w-0 truncate">{algorithmName}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-[11px] font-bold text-slate-500">
+                    No completed algorithms match these filters.
+                  </div>
+                )}
               </div>
             )}
 

@@ -1652,6 +1652,7 @@ useEffect(() => {
         compact
         projectId={projectId}
         completedAlgorithmIds={completedAlgorithmIds}
+        algorithmCatalog={algorithmCatalog}
         selectedAlgorithmIds={selectedAlgorithmIds}
         onChangeSelectedAlgorithmIds={(value) => {
           setSelectedAlgorithmIds(value);

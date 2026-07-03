@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GRNScope Clean Algorithm Filter Preview</title>
+  <style>
+    :root {
+      --blue: #1b75a6;
+      --blue-soft: #f1f8fc;
+      --line: #d7e3ee;
+      --line-strong: #bfd3e3;
+      --text: #17243a;
+      --muted: #65758b;
+      --bg: #f5f8fb;
+      --white: #fff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(27, 117, 166, 0.045) 1px, transparent 1px),
+        linear-gradient(rgba(27, 117, 166, 0.045) 1px, transparent 1px),
+        #f4f8fb;
+      background-size: 64px 64px;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 32px;
+    }
+
+    .shell {
+      max-width: 1180px;
+      min-height: 760px;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 20px 70px rgba(42, 67, 94, 0.12);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 14px;
+      padding: 12px 42px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .search-main,
+    .settings-trigger {
+      height: 62px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: var(--white);
+      display: flex;
+      align-items: center;
+      font-weight: 850;
+    }
+
+    .search-main {
+      width: min(520px, 44vw);
+      padding: 0 32px;
+      color: #8798ad;
+      font-size: 24px;
+    }
+
+    .settings-trigger {
+      min-width: 318px;
+      justify-content: center;
+      gap: 14px;
+      color: var(--blue);
+      font-size: 24px;
+      border-color: #b9d2e4;
+    }
+
+    .panel {
+      width: min(860px, calc(100vw - 72px));
+      margin: 14px 42px 48px auto;
+      border: 2px solid var(--line);
+      border-radius: 28px;
+      background: var(--white);
+      padding: 22px;
+      box-shadow: 0 24px 80px rgba(31, 55, 82, 0.14);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 0 6px 16px;
+    }
+
+    .eyebrow {
+      color: #687891;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .count {
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 20px;
+      color: var(--blue);
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .accordion-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 78px;
+      border-radius: 20px;
+      background: #1f7eaa;
+      color: var(--white);
+      padding: 0 26px;
+      font-size: 25px;
+      font-weight: 900;
+    }
+
+    .algorithm-box {
+      margin-top: 12px;
+      border: 2px solid var(--line);
+      border-radius: 20px;
+      background: #fbfdff;
+      overflow: hidden;
+    }
+
+    .algorithm-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .selection-title {
+      margin: 0;
+      color: #65758b;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .selection-subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    button,
+    select,
+    input {
+      font: inherit;
+    }
+
+    .soft-button {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--white);
+      color: var(--blue);
+      padding: 0 15px;
+      font-size: 13px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .filter-strip {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbfd;
+    }
+
+    .filter-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .filter-select,
+    .algorithm-search {
+      height: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: var(--white);
+      color: #31435a;
+      font-size: 14px;
+      font-weight: 800;
+      outline: none;
+    }
+
+    .filter-select {
+      width: 152px;
+      padding: 0 12px;
+    }
+
+    .algorithm-search {
+      width: 210px;
+      padding: 0 16px;
+    }
+
+    .algorithm-search::placeholder {
+      color: #92a2b6;
+    }
+
+    .table {
+      max-height: 348px;
+      overflow-y: auto;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 34px minmax(150px, 1fr) minmax(170px, 1fr) minmax(160px, 1fr);
+      gap: 12px;
+      align-items: center;
+      min-height: 58px;
+      width: 100%;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: var(--white);
+      padding: 9px 18px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .row:hover {
+      background: var(--blue-soft);
+    }
+
+    .row.selected {
+      background: #f2f9fc;
+    }
+
+    .row:last-child {
+      border-bottom: 0;
+    }
+
+    .checkbox {
+      display: grid;
+      width: 23px;
+      height: 23px;
+      place-items: center;
+      border: 2px solid #b7d4e6;
+      border-radius: 7px;
+      color: transparent;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .selected .checkbox {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: var(--white);
+    }
+
+    .algorithm-name {
+      color: var(--blue);
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.15;
+    }
+
+    .algorithm-category,
+    .algorithm-properties {
+      color: #526379;
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .recommended {
+      display: inline-block;
+      margin-left: 8px;
+      color: #2f8f75;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+
+    .empty {
+      display: none;
+      padding: 28px 18px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 76px;
+      margin-top: 12px;
+      border: 2px solid var(--line);
+      border-radius: 20px;
+      background: #eef3f7;
+      padding: 0 22px;
+    }
+
+    .settings-row h3 {
+      margin: 0;
+      font-size: 21px;
+      font-weight: 900;
+    }
+
+    .stepper {
+      display: grid;
+      grid-template-columns: 50px 82px 46px 50px;
+      width: 228px;
+      height: 56px;
+      overflow: hidden;
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      background: var(--white);
+    }
+
+    .stepper div {
+      display: grid;
+      place-items: center;
+      border-right: 1px solid var(--line);
+      color: #66768e;
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .stepper div:nth-child(2) {
+      color: #111827;
+      font-size: 24px;
+    }
+
+    .stepper div:last-child {
+      border-right: 0;
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        padding: 12px;
+      }
+
+      .topbar,
+      .algorithm-header,
+      .filter-strip {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .topbar {
+        padding: 12px;
+      }
+
+      .search-main,
+      .settings-trigger,
+      .panel,
+      .algorithm-search,
+      .filter-select {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .panel {
+        margin: 12px;
+      }
+
+      .row {
+        grid-template-columns: 30px 1fr;
+      }
+
+      .algorithm-category,
+      .algorithm-properties {
+        grid-column: 2;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="shell" aria-label="Clean result settings preview">
+      <div class="topbar">
+        <div class="search-main">Search gene name</div>
+        <div class="settings-trigger">
+          <span>*</span>
+          <span>Results Settings</span>
+          <span>^</span>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <div class="eyebrow">Filters</div>
+          <div class="count">1 matching edges</div>
+        </div>
+
+        <div class="accordion-title">
+          <span>Algorithms</span>
+          <span>^</span>
+        </div>
+
+        <section class="algorithm-box">
+          <div class="algorithm-header">
+            <div>
+              <p class="selection-title" id="summaryTitle">8 selected</p>
+              <p class="selection-subtitle" id="summaryLine">Showing 15 completed algorithms</p>
+            </div>
+            <div class="header-actions">
+              <button class="soft-button" id="clearFilters" type="button">Clear</button>
+              <button class="soft-button" id="selectShown" type="button">Select shown</button>
+            </div>
+          </div>
+
+          <div class="filter-strip">
+            <div class="filter-controls">
+              <select class="filter-select" id="directionFilter" aria-label="Direction">
+                <option value="any">Direction: Any</option>
+                <option value="directed">Directed only</option>
+                <option value="undirected">Undirected only</option>
+              </select>
+              <select class="filter-select" id="signFilter" aria-label="Sign">
+                <option value="any">Sign: Any</option>
+                <option value="signed">Signed only</option>
+                <option value="unsigned">Unsigned only</option>
+              </select>
+              <select class="filter-select" id="inputFilter" aria-label="Input requirement">
+                <option value="any">Input: Any</option>
+                <option value="pseudotime">Uses pseudotime</option>
+                <option value="expression">Expression only</option>
+              </select>
+              <select class="filter-select" id="categoryFilter" aria-label="Category">
+                <option value="any">Category: Any</option>
+                <option value="Correlation">Correlation</option>
+                <option value="Mutual information">Mutual information</option>
+                <option value="Random forest">Random forest</option>
+                <option value="Regression">Regression</option>
+                <option value="ODE + regression">ODE + regression</option>
+                <option value="Prior-informed regression">Prior-informed</option>
+                <option value="Granger causality">Granger causality</option>
+                <option value="Graph learning">Graph learning</option>
+                <option value="Tree-based dynamical system">Tree dynamical</option>
+              </select>
+            </div>
+            <input class="algorithm-search" id="algorithmSearch" type="search" placeholder="Search algorithms" />
+          </div>
+
+          <div class="table" id="algorithmTable"></div>
+          <div class="empty" id="emptyState">No completed algorithms match these filters.</div>
+        </section>
+
+        <div class="settings-row">
+          <h3>Evidence</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>80</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <h3>Confidence level</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>80</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <h3>Direction confidence</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>0</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const algorithms = [
+      { id: "PIDC", name: "PIDC", category: "Mutual information", directed: false, signed: false, pseudotime: false, recommended: true },
+      { id: "GENIE3", name: "GENIE3", category: "Random forest", directed: true, signed: false, pseudotime: false, recommended: true },
+      { id: "GRNBOOST2", name: "GRNBoost2", category: "Random forest", directed: true, signed: false, pseudotime: false, recommended: true },
+      { id: "CELLORACLE", name: "CellOracle", category: "Prior-informed regression", directed: true, signed: true, pseudotime: false, recommended: false },
+      { id: "PPCOR", name: "PPCOR", category: "Correlation", directed: false, signed: true, pseudotime: false, recommended: false },
+      { id: "PEARSON", name: "Pearson", category: "Correlation", directed: false, signed: true, pseudotime: false, recommended: false },
+      { id: "SCODE", name: "SCODE", category: "ODE + regression", directed: true, signed: true, pseudotime: true, recommended: false },
+      { id: "SINCERITIES", name: "SINCERITIES", category: "Regression", directed: true, signed: true, pseudotime: true, recommended: false },
+      { id: "SCRIBE", name: "SCRIBE", category: "Mutual information", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "SINGE", name: "SINGE", category: "Granger causality", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "LEAP", name: "LEAP", category: "Correlation", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "GRISLI", name: "GRISLI", category: "ODE + regression", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "GRNVBEM", name: "GRNVBEM", category: "Regression", directed: true, signed: true, pseudotime: true, recommended: false },
+      { id: "JUMP3", name: "Jump3", category: "Tree-based dynamical system", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "SCSGL", name: "scSGL", category: "Graph learning", directed: false, signed: true, pseudotime: false, recommended: false }
+    ];
+
+    const selected = new Set(["PIDC", "GENIE3", "GRNBOOST2", "CELLORACLE", "PPCOR", "PEARSON", "SCODE", "SINCERITIES"]);
+    const filters = {
+      direction: "any",
+      sign: "any",
+      input: "any",
+      category: "any",
+      query: ""
+    };
+
+    const table = document.getElementById("algorithmTable");
+    const emptyState = document.getElementById("emptyState");
+    const summaryTitle = document.getElementById("summaryTitle");
+    const summaryLine = document.getElementById("summaryLine");
+
+    function properties(algorithm) {
+      return [
+        algorithm.directed ? "Directed" : "Undirected",
+        algorithm.signed ? "Signed" : "Unsigned",
+        algorithm.pseudotime ? "Pseudotime" : "Expression only"
+      ].join(" / ");
+    }
+
+    function matches(algorithm) {
+      if (filters.direction === "directed" && !algorithm.directed) return false;
+      if (filters.direction === "undirected" && algorithm.directed) return false;
+      if (filters.sign === "signed" && !algorithm.signed) return false;
+      if (filters.sign === "unsigned" && algorithm.signed) return false;
+      if (filters.input === "pseudotime" && !algorithm.pseudotime) return false;
+      if (filters.input === "expression" && algorithm.pseudotime) return false;
+      if (filters.category !== "any" && algorithm.category !== filters.category) return false;
+      if (filters.query) {
+        const haystack = `${algorithm.id} ${algorithm.name} ${algorithm.category} ${properties(algorithm)}`.toLowerCase();
+        if (!haystack.includes(filters.query.toLowerCase())) return false;
+      }
+      return true;
+    }
+
+    function render() {
+      const visible = algorithms.filter(matches);
+      table.innerHTML = "";
+
+      for (const algorithm of visible) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = `row ${selected.has(algorithm.id) ? "selected" : ""}`;
+        row.innerHTML = `
+          <span class="checkbox">v</span>
+          <span class="algorithm-name">${algorithm.name}${algorithm.recommended ? '<span class="recommended">Recommended</span>' : ''}</span>
+          <span class="algorithm-category">${algorithm.category}</span>
+          <span class="algorithm-properties">${properties(algorithm)}</span>
+        `;
+        row.addEventListener("click", () => {
+          if (selected.has(algorithm.id) && selected.size === 1) return;
+          if (selected.has(algorithm.id)) selected.delete(algorithm.id);
+          else selected.add(algorithm.id);
+          render();
+        });
+        table.appendChild(row);
+      }
+
+      summaryTitle.textContent = `${selected.size} selected`;
+      summaryLine.textContent = `Showing ${visible.length} of ${algorithms.length} completed algorithms`;
+      table.style.display = visible.length ? "block" : "none";
+      emptyState.style.display = visible.length ? "none" : "block";
+    }
+
+    function bindSelect(id, filterName) {
+      document.getElementById(id).addEventListener("change", (event) => {
+        filters[filterName] = event.target.value;
+        render();
+      });
+    }
+
+    bindSelect("directionFilter", "direction");
+    bindSelect("signFilter", "sign");
+    bindSelect("inputFilter", "input");
+    bindSelect("categoryFilter", "category");
+
+    document.getElementById("algorithmSearch").addEventListener("input", (event) => {
+      filters.query = event.target.value;
+      render();
+    });
+
+    document.getElementById("clearFilters").addEventListener("click", () => {
+      filters.direction = "any";
+      filters.sign = "any";
+      filters.input = "any";
+      filters.category = "any";
+      filters.query = "";
+      document.getElementById("directionFilter").value = "any";
+      document.getElementById("signFilter").value = "any";
+      document.getElementById("inputFilter").value = "any";
+      document.getElementById("categoryFilter").value = "any";
+      document.getElementById("algorithmSearch").value = "";
+      render();
+    });
+
+    document.getElementById("selectShown").addEventListener("click", () => {
+      algorithms.filter(matches).forEach((algorithm) => selected.add(algorithm.id));
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

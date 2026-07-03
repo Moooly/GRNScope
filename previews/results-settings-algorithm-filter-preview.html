@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GRNScope Results Settings Algorithm Filter Preview</title>
+  <style>
+    :root {
+      --blue: #1b75a6;
+      --blue-dark: #155f88;
+      --blue-soft: #eef8fd;
+      --line: #d7e3ee;
+      --line-strong: #b8d5e8;
+      --panel: #f7fafc;
+      --panel-soft: #eef3f7;
+      --text: #17243a;
+      --muted: #68778d;
+      --green: #2f8f75;
+      --amber: #a46b00;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(27, 117, 166, 0.04) 1px, transparent 1px),
+        linear-gradient(rgba(27, 117, 166, 0.04) 1px, transparent 1px),
+        #f4f8fb;
+      background-size: 64px 64px;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .stage {
+      min-height: 100vh;
+      padding: 36px;
+    }
+
+    .mock-page {
+      position: relative;
+      max-width: 1220px;
+      min-height: 760px;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.74);
+      box-shadow: 0 24px 80px rgba(38, 59, 86, 0.12);
+      overflow: hidden;
+    }
+
+    .graph-backdrop {
+      position: absolute;
+      inset: 88px 0 0;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(27, 117, 166, 0.16) 0 4px, transparent 5px),
+        radial-gradient(circle at 42% 58%, rgba(27, 117, 166, 0.13) 0 5px, transparent 6px),
+        radial-gradient(circle at 72% 38%, rgba(27, 117, 166, 0.12) 0 4px, transparent 5px),
+        linear-gradient(90deg, rgba(27, 117, 166, 0.05) 1px, transparent 1px),
+        linear-gradient(rgba(27, 117, 166, 0.05) 1px, transparent 1px);
+      background-size: auto, auto, auto, 58px 58px, 58px 58px;
+    }
+
+    .topbar {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      justify-content: flex-end;
+      gap: 14px;
+      padding: 10px 42px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .search {
+      display: flex;
+      align-items: center;
+      width: min(520px, 44vw);
+      height: 64px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      padding: 0 34px;
+      color: #8498b5;
+      font-size: 25px;
+      font-weight: 800;
+    }
+
+    .settings-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      min-width: 322px;
+      height: 64px;
+      border: 2px solid var(--line-strong);
+      border-radius: 999px;
+      background: var(--white);
+      color: var(--blue);
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .gear {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--blue);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .settings-panel {
+      position: relative;
+      z-index: 3;
+      width: min(920px, calc(100vw - 72px));
+      margin: 12px 42px 48px auto;
+      border: 2px solid var(--line);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.98);
+      padding: 22px;
+      box-shadow: 0 28px 90px rgba(31, 55, 82, 0.14);
+    }
+
+    .panel-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 0 6px 16px;
+    }
+
+    .eyebrow {
+      color: #687891;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .edge-count {
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 22px;
+      background: var(--white);
+      color: var(--blue);
+      font-size: 19px;
+      font-weight: 900;
+    }
+
+    .accordion-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 88px;
+      margin-bottom: 12px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, #2381b0, #1b75a6);
+      color: var(--white);
+      padding: 0 28px;
+      font-size: 27px;
+      font-weight: 900;
+    }
+
+    .algorithm-card {
+      border: 2px solid var(--line);
+      border-radius: 22px;
+      background: rgba(248, 251, 253, 0.9);
+      padding: 16px;
+    }
+
+    .filter-summary {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .summary-title {
+      margin: 0 0 8px;
+      color: #697992;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .summary-line {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .pill-button {
+      min-height: 38px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: var(--white);
+      color: var(--blue);
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .filter-group {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--white);
+      padding: 10px;
+    }
+
+    .filter-label {
+      margin: 0 0 8px;
+      color: #687891;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .segmented {
+      display: grid;
+      gap: 6px;
+    }
+
+    .segmented.two {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .segmented.three {
+      grid-template-columns: 1fr;
+    }
+
+    .chip {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: #5d6b80;
+      padding: 0 9px;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .chip.active {
+      border-color: rgba(27, 117, 166, 0.42);
+      background: var(--blue-soft);
+      color: var(--blue);
+      box-shadow: inset 0 0 0 1px rgba(27, 117, 166, 0.08);
+    }
+
+    .category-select {
+      width: 100%;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: #40506a;
+      padding: 0 9px;
+      font-size: 13px;
+      font-weight: 800;
+      outline: none;
+    }
+
+    .algorithm-toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .search-small {
+      height: 42px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: var(--white);
+      padding: 0 16px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 800;
+      outline: none;
+    }
+
+    .search-small::placeholder {
+      color: #96a5b8;
+    }
+
+    .algorithm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      max-height: 318px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .algorithm-tile {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      min-width: 0;
+      border: 2px solid var(--line-strong);
+      border-radius: 14px;
+      background: #eef7fb;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+    }
+
+    .algorithm-tile:not(.selected) {
+      border-color: #dce7ef;
+      background: var(--white);
+    }
+
+    .algorithm-tile.hidden {
+      display: none;
+    }
+
+    .check {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--blue);
+      color: var(--white);
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .algorithm-tile:not(.selected) .check {
+      border: 2px solid var(--line-strong);
+      background: var(--white);
+      color: transparent;
+    }
+
+    .algorithm-main {
+      min-width: 0;
+    }
+
+    .algorithm-name {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+      color: var(--blue);
+      font-size: 19px;
+      font-weight: 950;
+      line-height: 1.1;
+    }
+
+    .algorithm-name span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .recommended {
+      border-radius: 999px;
+      background: rgba(47, 143, 117, 0.12);
+      color: var(--green);
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 950;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .property-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .property {
+      border: 1px solid rgba(104, 120, 145, 0.18);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.75);
+      color: #607087;
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .property.good {
+      color: var(--blue);
+      background: rgba(27, 117, 166, 0.09);
+    }
+
+    .property.signed {
+      color: var(--green);
+      background: rgba(47, 143, 117, 0.1);
+    }
+
+    .property.time {
+      color: var(--amber);
+      background: rgba(164, 107, 0, 0.1);
+    }
+
+    .empty {
+      display: none;
+      border: 2px dashed var(--line);
+      border-radius: 14px;
+      padding: 24px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 78px;
+      margin-top: 12px;
+      border: 2px solid var(--line);
+      border-radius: 20px;
+      background: var(--panel-soft);
+      padding: 0 22px;
+    }
+
+    .settings-row h3 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .stepper {
+      display: grid;
+      grid-template-columns: 52px 84px 48px 52px;
+      width: 236px;
+      height: 58px;
+      overflow: hidden;
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      background: var(--white);
+    }
+
+    .stepper div {
+      display: grid;
+      place-items: center;
+      border-right: 1px solid var(--line);
+      color: #66768e;
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .stepper div:nth-child(2) {
+      color: #111827;
+      font-size: 24px;
+    }
+
+    .stepper div:last-child {
+      border-right: 0;
+    }
+
+    @media (max-width: 760px) {
+      .stage {
+        padding: 14px;
+      }
+
+      .topbar {
+        flex-direction: column;
+        padding: 12px;
+      }
+
+      .search,
+      .settings-button {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .settings-panel {
+        width: auto;
+        margin: 12px;
+        padding: 14px;
+      }
+
+      .filter-grid,
+      .algorithm-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .algorithm-toolbar,
+      .filter-summary {
+        grid-template-columns: 1fr;
+      }
+
+      .button-row {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="mock-page" aria-label="GRNScope result settings preview">
+      <div class="graph-backdrop" aria-hidden="true"></div>
+      <div class="topbar">
+        <div class="search">Search gene name</div>
+        <div class="settings-button">
+          <span class="gear">*</span>
+          <span>Results Settings</span>
+          <span>^</span>
+        </div>
+      </div>
+
+      <aside class="settings-panel">
+        <div class="panel-meta">
+          <div class="eyebrow">Filters</div>
+          <div class="edge-count">1 matching edges</div>
+        </div>
+
+        <div class="accordion-header">
+          <span>Algorithms</span>
+          <span>^</span>
+        </div>
+
+        <section class="algorithm-card">
+          <div class="filter-summary">
+            <div>
+              <p class="summary-title" id="summaryTitle">All selected</p>
+              <p class="summary-line" id="summaryLine">15 selected algorithms. Filtered list shows 15 of 15 completed methods.</p>
+            </div>
+            <div class="button-row">
+              <button class="pill-button" id="clearFilters" type="button">Clear filters</button>
+              <button class="pill-button" id="selectVisible" type="button">Select visible</button>
+            </div>
+          </div>
+
+          <div class="filter-grid" aria-label="Algorithm property filters">
+            <div class="filter-group">
+              <p class="filter-label">Direction</p>
+              <div class="segmented two">
+                <button class="chip active" data-filter="direction" data-value="any" type="button">Any</button>
+                <button class="chip" data-filter="direction" data-value="directed" type="button">Directed</button>
+                <button class="chip" data-filter="direction" data-value="undirected" type="button">Undirected</button>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <p class="filter-label">Sign</p>
+              <div class="segmented two">
+                <button class="chip active" data-filter="sign" data-value="any" type="button">Any</button>
+                <button class="chip" data-filter="sign" data-value="signed" type="button">Signed</button>
+                <button class="chip" data-filter="sign" data-value="unsigned" type="button">Unsigned</button>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <p class="filter-label">Inputs</p>
+              <div class="segmented two">
+                <button class="chip active" data-filter="input" data-value="any" type="button">Any</button>
+                <button class="chip" data-filter="input" data-value="pseudotime" type="button">Pseudotime</button>
+                <button class="chip" data-filter="input" data-value="expression" type="button">Expression only</button>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <p class="filter-label">Category</p>
+              <select class="category-select" id="categoryFilter">
+                <option value="any">Any category</option>
+                <option value="Correlation">Correlation</option>
+                <option value="Mutual information">Mutual information</option>
+                <option value="Random forest">Random forest</option>
+                <option value="Regression">Regression</option>
+                <option value="ODE + regression">ODE + regression</option>
+                <option value="Prior-informed regression">Prior-informed regression</option>
+                <option value="Granger causality">Granger causality</option>
+                <option value="Graph learning">Graph learning</option>
+                <option value="Tree-based dynamical system">Tree-based dynamical system</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="algorithm-toolbar">
+            <input class="search-small" id="algorithmSearch" type="search" placeholder="Search algorithms" />
+            <button class="pill-button" id="recommendedOnly" type="button">Recommended only</button>
+          </div>
+
+          <div class="algorithm-grid" id="algorithmGrid"></div>
+          <div class="empty" id="emptyState">No completed algorithms match these filters.</div>
+        </section>
+
+        <div class="settings-row">
+          <h3>Evidence</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>80</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <h3>Confidence level</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>80</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <h3>Direction confidence</h3>
+          <div class="stepper" aria-hidden="true">
+            <div>-</div>
+            <div>0</div>
+            <div>%</div>
+            <div>+</div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const algorithms = [
+      { id: "PIDC", name: "PIDC", category: "Mutual information", directed: false, signed: false, pseudotime: false, recommended: true },
+      { id: "GENIE3", name: "GENIE3", category: "Random forest", directed: true, signed: false, pseudotime: false, recommended: true },
+      { id: "GRNBOOST2", name: "GRNBoost2", category: "Random forest", directed: true, signed: false, pseudotime: false, recommended: true },
+      { id: "CELLORACLE", name: "CellOracle", category: "Prior-informed regression", directed: true, signed: true, pseudotime: false, recommended: false },
+      { id: "PPCOR", name: "PPCOR", category: "Correlation", directed: false, signed: true, pseudotime: false, recommended: false },
+      { id: "PEARSON", name: "Pearson", category: "Correlation", directed: false, signed: true, pseudotime: false, recommended: false },
+      { id: "SCODE", name: "SCODE", category: "ODE + regression", directed: true, signed: true, pseudotime: true, recommended: false },
+      { id: "SINCERITIES", name: "SINCERITIES", category: "Regression", directed: true, signed: true, pseudotime: true, recommended: false },
+      { id: "SCRIBE", name: "SCRIBE", category: "Mutual information", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "SINGE", name: "SINGE", category: "Granger causality", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "LEAP", name: "LEAP", category: "Correlation", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "GRISLI", name: "GRISLI", category: "ODE + regression", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "GRNVBEM", name: "GRNVBEM", category: "Regression", directed: true, signed: true, pseudotime: true, recommended: false },
+      { id: "JUMP3", name: "Jump3", category: "Tree-based dynamical system", directed: true, signed: false, pseudotime: true, recommended: false },
+      { id: "SCSGL", name: "scSGL", category: "Graph learning", directed: false, signed: true, pseudotime: false, recommended: false }
+    ];
+
+    const selected = new Set(algorithms.slice(0, 8).map((algorithm) => algorithm.id));
+    const filters = {
+      direction: "any",
+      sign: "any",
+      input: "any",
+      category: "any",
+      recommendedOnly: false,
+      query: ""
+    };
+
+    const grid = document.getElementById("algorithmGrid");
+    const summaryTitle = document.getElementById("summaryTitle");
+    const summaryLine = document.getElementById("summaryLine");
+    const emptyState = document.getElementById("emptyState");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const algorithmSearch = document.getElementById("algorithmSearch");
+    const recommendedOnly = document.getElementById("recommendedOnly");
+
+    function matches(algorithm) {
+      if (filters.direction === "directed" && !algorithm.directed) return false;
+      if (filters.direction === "undirected" && algorithm.directed) return false;
+      if (filters.sign === "signed" && !algorithm.signed) return false;
+      if (filters.sign === "unsigned" && algorithm.signed) return false;
+      if (filters.input === "pseudotime" && !algorithm.pseudotime) return false;
+      if (filters.input === "expression" && algorithm.pseudotime) return false;
+      if (filters.category !== "any" && algorithm.category !== filters.category) return false;
+      if (filters.recommendedOnly && !algorithm.recommended) return false;
+      if (filters.query) {
+        const text = `${algorithm.id} ${algorithm.name} ${algorithm.category}`.toLowerCase();
+        if (!text.includes(filters.query.toLowerCase())) return false;
+      }
+      return true;
+    }
+
+    function propertyLabel(algorithm) {
+      const direction = algorithm.directed ? "Directed" : "Undirected";
+      const sign = algorithm.signed ? "Signed" : "Unsigned";
+      const input = algorithm.pseudotime ? "Pseudotime" : "Expression";
+      return { direction, sign, input };
+    }
+
+    function render() {
+      const visible = algorithms.filter(matches);
+      const selectedVisible = visible.filter((algorithm) => selected.has(algorithm.id));
+      grid.innerHTML = "";
+
+      for (const algorithm of visible) {
+        const labels = propertyLabel(algorithm);
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = `algorithm-tile ${selected.has(algorithm.id) ? "selected" : ""}`;
+        tile.dataset.id = algorithm.id;
+        tile.innerHTML = `
+          <span class="check">v</span>
+          <span class="algorithm-main">
+            <span class="algorithm-name">
+              <span>${algorithm.name}</span>
+              ${algorithm.recommended ? '<span class="recommended">Recommended</span>' : ''}
+            </span>
+            <span class="property-row">
+              <span class="property good">${labels.direction}</span>
+              <span class="property ${algorithm.signed ? 'signed' : ''}">${labels.sign}</span>
+              <span class="property ${algorithm.pseudotime ? 'time' : ''}">${labels.input}</span>
+            </span>
+          </span>
+        `;
+        tile.addEventListener("click", () => {
+          if (selected.has(algorithm.id) && selected.size === 1) return;
+          if (selected.has(algorithm.id)) selected.delete(algorithm.id);
+          else selected.add(algorithm.id);
+          render();
+        });
+        grid.appendChild(tile);
+      }
+
+      summaryTitle.textContent = selected.size === algorithms.length ? "All selected" : `${selected.size} selected`;
+      summaryLine.textContent = `${selectedVisible.length} selected in view. Filtered list shows ${visible.length} of ${algorithms.length} completed methods.`;
+      emptyState.style.display = visible.length === 0 ? "block" : "none";
+      grid.style.display = visible.length === 0 ? "none" : "grid";
+      recommendedOnly.classList.toggle("active", filters.recommendedOnly);
+    }
+
+    document.querySelectorAll("[data-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const filter = button.dataset.filter;
+        filters[filter] = button.dataset.value;
+        document.querySelectorAll(`[data-filter="${filter}"]`).forEach((peer) => {
+          peer.classList.toggle("active", peer === button);
+        });
+        render();
+      });
+    });
+
+    categoryFilter.addEventListener("change", (event) => {
+      filters.category = event.target.value;
+      render();
+    });
+
+    algorithmSearch.addEventListener("input", (event) => {
+      filters.query = event.target.value;
+      render();
+    });
+
+    recommendedOnly.addEventListener("click", () => {
+      filters.recommendedOnly = !filters.recommendedOnly;
+      render();
+    });
+
+    document.getElementById("clearFilters").addEventListener("click", () => {
+      filters.direction = "any";
+      filters.sign = "any";
+      filters.input = "any";
+      filters.category = "any";
+      filters.recommendedOnly = false;
+      filters.query = "";
+      categoryFilter.value = "any";
+      algorithmSearch.value = "";
+      document.querySelectorAll("[data-filter]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.value === "any");
+      });
+      render();
+    });
+
+    document.getElementById("selectVisible").addEventListener("click", () => {
+      algorithms.filter(matches).forEach((algorithm) => selected.add(algorithm.id));
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
