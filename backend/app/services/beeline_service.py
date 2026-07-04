@@ -28,7 +28,7 @@ from ..repositories.project_repository import read_project_manifest
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 30
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
-DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 50
+DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
 DEFAULT_MAX_PREPROCESSED_GENES = 8000
 DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
 DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
@@ -444,15 +444,7 @@ def format_run_timestamp(timestamp: float | None = None) -> str:
 
 
 def resolve_adaptive_max_regulators_per_target(gene_count: int | None) -> int:
-    if gene_count is None or gene_count <= 0:
-        return DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT
-    if gene_count <= 500:
-        return 100
-    if gene_count <= 3000:
-        return 50
-    if gene_count <= 8000:
-        return 25
-    return 10
+    return DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT
 
 
 def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
@@ -528,17 +520,17 @@ def resolve_ranked_edges_per_target_limit(
         )
         or parse_positive_int(os.environ.get("GRNSCOPE_RANKED_EDGES_PER_TARGET_LIMIT"))
     )
-    if configured_limit is not None:
-        return configured_limit
-
     resolved_gene_count = gene_count
     if resolved_gene_count is None and confidence_settings:
         resolved_gene_count = parse_positive_int(confidence_settings.get("gene_count"))
-    adaptive_limit = resolve_adaptive_max_regulators_per_target(resolved_gene_count)
-    stability_top_k = None
-    if confidence_settings:
-        stability_top_k = parse_positive_int(confidence_settings.get("stability_top_k"))
-    return max(adaptive_limit, stability_top_k or 0)
+    limit = (
+        configured_limit
+        if configured_limit is not None
+        else resolve_adaptive_max_regulators_per_target(resolved_gene_count)
+    )
+    if resolved_gene_count is not None and resolved_gene_count > 0:
+        return min(limit, resolved_gene_count)
+    return limit
 
 
 def stable_seed_for(project_id: str, algorithm_id: str) -> int:

@@ -268,7 +268,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "name": "topK",
                 "label": "Top edges per target",
                 "description": "Maximum strongest CellOracle links to keep per target.",
-                "default": 25,
+                "default": 20,
                 "required": False,
                 "value_type": "integer",
             },
@@ -374,7 +374,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "name": "topK",
                 "label": "Top edges per target",
                 "description": "Maximum number of strongest Pearson edges to keep for each target gene.",
-                "default": 10,
+                "default": 20,
                 "required": False,
                 "value_type": "integer",
             }
