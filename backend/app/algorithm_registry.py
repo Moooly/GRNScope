@@ -834,7 +834,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "supports_expression_matrix": True,
         "active": True,
         "recommended": False,
-        "estimated_runtime": "Medium to slow",
+        "estimated_runtime": "Slow for large gene sets; capped by default",
         "strengths": [
             "Bayesian modeling approach.",
             "Can infer directed and signed edges.",
@@ -847,7 +847,19 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Trajectory-based datasets.",
             "Comparing Bayesian GRN inference methods.",
         ],
-        "parameters": [],
+        "parameters": [
+            {
+                "name": "maxGenes",
+                "label": "GRNVBEM gene cap",
+                "description": (
+                    "Maximum number of high-variance genes passed to GRNVBEM. "
+                    "Large gene sets can make the Bayesian regression run out of memory."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "int",
+            },
+        ],
     },
     {
         "id": "JUMP3",
