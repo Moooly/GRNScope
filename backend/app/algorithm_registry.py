@@ -464,7 +464,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "supports_expression_matrix": True,
         "active": True,
         "recommended": False,
-        "estimated_runtime": "Fast to medium",
+        "estimated_runtime": "Slow for large gene sets; capped by default",
         "strengths": [
             "Designed for time-stamped single-cell expression data.",
             "Can infer directed and signed edges.",
@@ -483,6 +483,17 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "label": "Number of bins",
                 "description": "Number of bins used by SINCERITIES.",
                 "default": 10,
+                "required": False,
+                "value_type": "int",
+            },
+            {
+                "name": "maxGenes",
+                "label": "SINCERITIES gene cap",
+                "description": (
+                    "Maximum number of high-variance genes passed to SINCERITIES. "
+                    "This method scales poorly with large gene sets."
+                ),
+                "default": 500,
                 "required": False,
                 "value_type": "int",
             }
