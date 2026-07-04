@@ -1,16 +1,22 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE } from "./_lib/apiConfig";
 import { apiFetch } from "./_lib/clientIdentity";
-import CreateProjectFlow from "./projects/_components/CreateProjectFlow";
 import { formatProjectCreatedAt } from "./projects/_lib/time";
 import { Project, ProjectJob } from "./projects/_types/project";
 
+const CreateProjectFlow = dynamic(() => import("./projects/_components/CreateProjectFlow"), {
+  ssr: false,
+  loading: () => null,
+});
+
 export default function HomePage() {
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
+  const [isProjectHistoryLoading, setIsProjectHistoryLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [canScrollProjectHistoryRight, setCanScrollProjectHistoryRight] = useState(false);
   const metadataRequestIds = useRef<Set<string>>(new Set());
@@ -26,6 +32,7 @@ export default function HomePage() {
     let isCancelled = false;
 
     const loadProjectHistory = async () => {
+      setIsProjectHistoryLoading(true);
       try {
         const response = await apiFetch(`${API_BASE}/projects`);
         if (!response.ok) {
@@ -43,6 +50,8 @@ export default function HomePage() {
         }
       } catch {
         if (!isCancelled) setProjectHistory([]);
+      } finally {
+        if (!isCancelled) setIsProjectHistoryLoading(false);
       }
     };
 
@@ -365,7 +374,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          {visibleProjectHistory.length > 0 ? (
+          {isProjectHistoryLoading ? (
+            <HomeProjectHistoryLoading />
+          ) : visibleProjectHistory.length > 0 ? (
             <div className="group/history relative mt-5">
               <div
                 ref={projectHistoryRowRef}
@@ -408,12 +419,30 @@ export default function HomePage() {
         </div>
       </section>
 
-      <CreateProjectFlow
-        open={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        onProjectCreated={handleProjectCreated}
-      />
+      {isCreateOpen ? (
+        <CreateProjectFlow
+          open={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          onProjectCreated={handleProjectCreated}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function HomeProjectHistoryLoading() {
+  return (
+    <div
+      className="mt-5 rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-8"
+      aria-label="Loading project history"
+    >
+      <div className="h-5 w-44 animate-pulse rounded-full bg-slate-200" />
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="h-4 animate-pulse rounded-full bg-slate-100" />
+        <div className="h-4 animate-pulse rounded-full bg-slate-100" />
+        <div className="hidden h-4 animate-pulse rounded-full bg-slate-100 lg:block" />
+      </div>
+    </div>
   );
 }
 
