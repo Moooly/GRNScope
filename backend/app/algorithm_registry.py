@@ -760,7 +760,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "supports_expression_matrix": True,
         "active": True,
         "recommended": False,
-        "estimated_runtime": "Medium to slow",
+        "estimated_runtime": "Slow for large gene or cell sets; capped by default",
         "strengths": [
             "ODE-based dynamic modeling approach.",
             "Designed for ordered single-cell data.",
@@ -797,6 +797,17 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0.0,
                 "required": False,
                 "value_type": "float",
+            },
+            {
+                "name": "maxGenes",
+                "label": "GRISLI gene cap",
+                "description": (
+                    "Maximum number of high-variance genes passed to GRISLI. "
+                    "GRISLI can allocate very large cell-by-cell-by-gene arrays."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "int",
             },
         ],
     },
