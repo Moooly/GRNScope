@@ -459,6 +459,12 @@ def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
     return 10
 
 
+def confidence_runs_enabled(project_manifest: dict) -> bool:
+    return parse_bool(project_manifest.get("enable_confidence_runs")) or parse_bool(
+        os.environ.get("GRNSCOPE_ENABLE_CONFIDENCE_RUNS")
+    )
+
+
 def resolve_max_preprocessed_genes() -> int:
     return (
         parse_positive_int(os.environ.get("GRNSCOPE_MAX_PREPROCESSED_GENES"))
@@ -479,27 +485,36 @@ def resolve_confidence_settings(
     *,
     gene_count: int | None = None,
 ) -> dict:
-    configured_run_count = (
-        parse_positive_int(project_manifest.get("confidence_bootstrap_runs"))
-        or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_BOOTSTRAP_RUNS"))
-    )
-    run_count = (
-        configured_run_count
-        if configured_run_count is not None
-        else resolve_adaptive_confidence_bootstrap_runs(gene_count)
-    )
+    confidence_enabled = confidence_runs_enabled(project_manifest)
+    if confidence_enabled:
+        configured_run_count = (
+            parse_positive_int(project_manifest.get("confidence_bootstrap_runs"))
+            or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_BOOTSTRAP_RUNS"))
+        )
+        run_count = (
+            configured_run_count
+            if configured_run_count is not None
+            else resolve_adaptive_confidence_bootstrap_runs(gene_count)
+        )
+    else:
+        run_count = 1
     stability_top_k = (
         parse_positive_int(project_manifest.get("confidence_stability_top_k"))
         or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_STABILITY_TOP_K"))
         or DEFAULT_CONFIDENCE_STABILITY_TOP_K
     )
     subsample_fraction = (
-        parse_positive_float(project_manifest.get("confidence_subsample_fraction"))
-        or parse_positive_float(os.environ.get("GRNSCOPE_CONFIDENCE_SUBSAMPLE_FRACTION"))
-        or DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
+        (
+            parse_positive_float(project_manifest.get("confidence_subsample_fraction"))
+            or parse_positive_float(os.environ.get("GRNSCOPE_CONFIDENCE_SUBSAMPLE_FRACTION"))
+            or DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
+        )
+        if confidence_enabled
+        else 1.0
     )
 
     return {
+        "confidence_enabled": confidence_enabled,
         "bootstrap_runs": max(1, run_count),
         "subsample_fraction": min(max(subsample_fraction, 0.01), 1.0),
         "stability_top_k": max(1, stability_top_k),
@@ -2080,6 +2095,56 @@ def parse_confidence_run_output(
     return run_edges, ranked_edges_path
 
 
+def parse_single_run_raw_output(
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+    *,
+    runtime_root: Path,
+    max_edges_per_target: int | None = None,
+) -> tuple[list[dict], dict, Path]:
+    ranked_edges_path = confidence_ranked_edges_path(
+        output_dir,
+        dataset_id,
+        run_id,
+        algorithm_id,
+    )
+    try:
+        top_edges, network_summary = parse_ranked_edges_csv(
+            ranked_edges_path,
+            max_edges_per_target=max_edges_per_target,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            build_missing_ranked_edges_error(
+                runtime_root=runtime_root,
+                output_dir=output_dir,
+                dataset_id=dataset_id,
+                run_id=run_id,
+                algorithm_id=algorithm_id,
+            )
+        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{algorithm_id} produced an edge result, but GRNScope could not read it: {sanitize_error_message(str(exc))}"
+        ) from exc
+
+    for index, edge in enumerate(top_edges, start=1):
+        edge["rank"] = index
+        edge["mean_raw_score"] = edge["score"]
+
+    network_summary.update(
+        {
+            "confidence_scored": False,
+            "bootstrap_runs": 1,
+            "processed_runs": 1,
+            "aggregation_mode": "raw_single_run",
+        }
+    )
+    return top_edges, network_summary, ranked_edges_path
+
+
 def aggregate_confidence_run_outputs(
     output_dir: Path,
     dataset_id: str,
@@ -2276,17 +2341,28 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         )
         raise RuntimeError(friendly_error)
 
-    top_edges, network_summary, ranked_edge_paths = aggregate_confidence_run_outputs(
-        output_dir,
-        dataset_id,
-        run_ids,
-        algorithm_id,
-        runtime_root=runtime_root,
-        max_edges_per_target=ranked_edges_per_target_limit,
-        stability_top_k=int(confidence_settings["stability_top_k"]),
-    )
-    ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
-    write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
+    if confidence_settings.get("confidence_enabled"):
+        top_edges, network_summary, ranked_edge_paths = aggregate_confidence_run_outputs(
+            output_dir,
+            dataset_id,
+            run_ids,
+            algorithm_id,
+            runtime_root=runtime_root,
+            max_edges_per_target=ranked_edges_per_target_limit,
+            stability_top_k=int(confidence_settings["stability_top_k"]),
+        )
+        ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
+        write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
+    else:
+        top_edges, network_summary, ranked_edges_path = parse_single_run_raw_output(
+            output_dir,
+            dataset_id,
+            run_ids[0],
+            algorithm_id,
+            runtime_root=runtime_root,
+            max_edges_per_target=ranked_edges_per_target_limit,
+        )
+        ranked_edge_paths = {run_ids[0]: str(ranked_edges_path)}
 
     docker_image_version = resolve_algorithm_image(algorithm_id)
     return {
@@ -2560,31 +2636,47 @@ def run_beeline_with_progress(
                 runtime_root=runtime_root,
                 max_edges_per_target=ranked_edges_per_target_limit,
             )
-            update_confidence_accumulator(
-                confidence_accumulator,
-                run_edges,
-                stability_top_k=int(confidence_settings["stability_top_k"]),
-            )
+            if confidence_settings.get("confidence_enabled"):
+                update_confidence_accumulator(
+                    confidence_accumulator,
+                    run_edges,
+                    stability_top_k=int(confidence_settings["stability_top_k"]),
+                )
             ranked_edge_paths[run_id] = str(ranked_edges_path)
             del run_edges
         finally:
             shutil.rmtree(run_dir, ignore_errors=True)
 
+    progress_label = (
+        "Aggregating confidence scores"
+        if confidence_settings.get("confidence_enabled")
+        else "Finalizing result"
+    )
     update_job_state_fn(
         project_dir,
         job_id,
         algorithm_id=algorithm_id,
         progress_percent=92,
-        progress_label="Aggregating confidence scores",
+        progress_label=progress_label,
     )
 
-    top_edges, network_summary = finalize_confidence_accumulator(
-        confidence_accumulator,
-        run_count=len(run_ids),
-        stability_top_k=int(confidence_settings["stability_top_k"]),
-    )
-    ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
-    write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
+    if confidence_settings.get("confidence_enabled"):
+        top_edges, network_summary = finalize_confidence_accumulator(
+            confidence_accumulator,
+            run_count=len(run_ids),
+            stability_top_k=int(confidence_settings["stability_top_k"]),
+        )
+        ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
+        write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
+    else:
+        top_edges, network_summary, ranked_edges_path = parse_single_run_raw_output(
+            output_dir,
+            dataset_id,
+            run_ids[0],
+            algorithm_id,
+            runtime_root=runtime_root,
+            max_edges_per_target=ranked_edges_per_target_limit,
+        )
 
     update_job_state_fn(
         project_dir,
