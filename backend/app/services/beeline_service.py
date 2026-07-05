@@ -1537,15 +1537,15 @@ def build_algorithm_runtime_params(
     scope_label: str | None = None,
 ) -> dict:
     normalized_algorithm_id = algorithm_id.upper()
-    if normalized_algorithm_id == "PEARSON":
-        return {"matrixFormat": "dense"}
+    runtime_params = {"matrixFormat": "sparse"}
 
     if normalized_algorithm_id != "CELLORACLE":
-        return {}
+        return runtime_params
 
     celloracle_settings = project_manifest.get("celloracle") or {}
     scope = project_manifest.get("scope") or {}
     return {
+        **runtime_params,
         "species": str(celloracle_settings.get("species") or "human"),
         "baseGrn": str(celloracle_settings.get("base_grn") or "auto"),
         "clusterName": str(scope_label or scope.get("label") or "Global"),
