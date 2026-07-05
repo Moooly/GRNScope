@@ -39,7 +39,11 @@ from ..services.email_service import (
     send_job_completion_email,
     smtp_is_configured,
 )
-from ..services.result_service import algorithm_result_path, write_algorithm_result
+from ..services.result_service import (
+    archive_beeline_result_artifacts,
+    clear_algorithm_result_artifacts,
+    write_algorithm_result,
+)
 
 
 @dataclass
@@ -312,6 +316,7 @@ def scope_result_payload(scope: AlgorithmScope, beeline_result: dict) -> dict:
         "confidence_summary": beeline_result.get("confidence_summary"),
         "run_ranked_edges_paths": beeline_result.get("run_ranked_edges_paths"),
         "beeline_runtime_root": beeline_result["runtime_root"],
+        "result_artifact_root": beeline_result.get("result_artifact_root"),
         "ranked_edges_path": beeline_result["ranked_edges_path"],
     }
 
@@ -549,9 +554,7 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["progress_label"] = "Queued"
                 task.pop("estimated_remaining_seconds", None)
                 task.pop("process_pid", None)
-                result_path = algorithm_result_path(project_dir, algorithm_id)
-                if result_path.exists():
-                    result_path.unlink()
+                clear_algorithm_result_artifacts(project_dir, algorithm_id)
                 break
 
             job["overall_status"] = "Running"
@@ -827,6 +830,12 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
                 runtime_key=runtime_key,
                 scope_label=scope.label,
             )
+            beeline_result = archive_beeline_result_artifacts(
+                project_dir,
+                algorithm_id,
+                beeline_result,
+                scope_id=scope.scope_id if has_cluster_scopes else None,
+            )
             completed_scope_results[scope.scope_id] = scope_result_payload(
                 scope,
                 beeline_result,
@@ -859,6 +868,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "confidence_summary": primary_scope_result.get("confidence_summary"),
             "run_ranked_edges_paths": primary_scope_result.get("run_ranked_edges_paths"),
             "beeline_runtime_root": primary_scope_result["beeline_runtime_root"],
+            "result_artifact_root": primary_scope_result.get("result_artifact_root"),
             "ranked_edges_path": primary_scope_result["ranked_edges_path"],
             "scope_order": [scope.scope_id for scope in scopes],
             "scopes": completed_scope_results,
