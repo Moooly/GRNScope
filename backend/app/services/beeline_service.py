@@ -25,9 +25,19 @@ from ..config import BEELINE_ROOT_CANDIDATES, PROJECTS_ROOT
 from ..repositories.project_repository import read_project_manifest
 
 
-DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 30
+# Confidence bootstrap run bounds. Applied uniformly to every dataset size:
+# never stop before MIN runs (protects the resolution of the stability
+# fraction that the website's confidence filter uses), never exceed MAX runs.
+DEFAULT_CONFIDENCE_MIN_RUNS = 5
+DEFAULT_CONFIDENCE_MAX_RUNS = 15
+DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = DEFAULT_CONFIDENCE_MAX_RUNS
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
+# Spearman-based early stopping: stop once the aggregate edge ordering has
+# stabilised. rho >= STOP_RHO for STREAK consecutive runs (after MIN runs)
+# ends the loop early. Replaces the former R `coin` hypothesis test.
+DEFAULT_CONFIDENCE_STOP_RHO = 0.99
+DEFAULT_CONFIDENCE_STOP_STREAK = 2
 DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
 DEFAULT_MAX_PREPROCESSED_GENES = 8000
 DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
@@ -439,6 +449,20 @@ def parse_positive_float(value: object) -> float | None:
     return parsed if parsed > 0 else None
 
 
+def parse_probability(value: object) -> float | None:
+    parsed = parse_positive_float(value)
+    if parsed is None or parsed >= 1:
+        return None
+    return parsed
+
+
+def parse_stop_rho(value: object) -> float | None:
+    parsed = parse_positive_float(value)
+    if parsed is None or parsed > 1:
+        return None
+    return parsed
+
+
 def format_run_timestamp(timestamp: float | None = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp or time.time()))
 
@@ -448,15 +472,16 @@ def resolve_adaptive_max_regulators_per_target(gene_count: int | None) -> int:
 
 
 def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
-    if gene_count is None or gene_count <= 0:
-        return DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
-    if gene_count <= 500:
-        return 30
-    if gene_count <= 2000:
-        return 20
-    if gene_count <= 8000:
-        return 10
-    return 10
+    # Uniform maximum for every dataset size. Early stopping (Spearman) decides
+    # when to finish sooner; this is only the ceiling.
+    return DEFAULT_CONFIDENCE_MAX_RUNS
+
+
+def resolve_confidence_min_runs() -> int:
+    return (
+        parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_MIN_RUNS"))
+        or DEFAULT_CONFIDENCE_MIN_RUNS
+    )
 
 
 def confidence_runs_enabled(project_manifest: dict) -> bool:
@@ -512,12 +537,45 @@ def resolve_confidence_settings(
         if confidence_enabled
         else 1.0
     )
+    # Spearman early stopping is on by default whenever confidence runs are
+    # enabled. It can be explicitly disabled to force the full run_count.
+    early_stopping_enabled = confidence_enabled and not (
+        parse_bool(project_manifest.get("disable_confidence_early_stopping"))
+        or parse_bool(os.environ.get("GRNSCOPE_DISABLE_CONFIDENCE_EARLY_STOPPING"))
+    )
+    min_runs = (
+        parse_positive_int(project_manifest.get("confidence_min_runs"))
+        or resolve_confidence_min_runs()
+    )
+    stop_rho = (
+        parse_stop_rho(project_manifest.get("confidence_stop_rho"))
+        or parse_stop_rho(os.environ.get("GRNSCOPE_CONFIDENCE_STOP_RHO"))
+        or DEFAULT_CONFIDENCE_STOP_RHO
+    )
+    stop_streak = (
+        parse_positive_int(project_manifest.get("confidence_stop_streak"))
+        or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_STOP_STREAK"))
+        or DEFAULT_CONFIDENCE_STOP_STREAK
+    )
+
+    # Clamp the run ceiling to [min_runs, MAX] so an early-stop floor can never
+    # exceed the ceiling.
+    bounded_run_count = max(1, run_count)
+    if confidence_enabled:
+        bounded_min_runs = max(1, min(min_runs, DEFAULT_CONFIDENCE_MAX_RUNS))
+        bounded_run_count = max(bounded_min_runs, min(bounded_run_count, DEFAULT_CONFIDENCE_MAX_RUNS))
+    else:
+        bounded_min_runs = 1
 
     return {
         "confidence_enabled": confidence_enabled,
-        "bootstrap_runs": max(1, run_count),
+        "bootstrap_runs": bounded_run_count,
         "subsample_fraction": min(max(subsample_fraction, 0.01), 1.0),
         "stability_top_k": max(1, stability_top_k),
+        "early_stopping_enabled": early_stopping_enabled,
+        "min_runs": bounded_min_runs,
+        "stop_rho": stop_rho,
+        "stop_streak": max(1, stop_streak),
         "gene_count": gene_count,
     }
 
@@ -2049,6 +2107,188 @@ def finalize_confidence_accumulator(
     }
 
 
+def edge_confidence_key(edge: dict) -> tuple[str, str]:
+    return str(edge.get("source", "")).strip(), str(edge.get("target", "")).strip()
+
+
+def edge_confidence_value(edge: dict | None) -> float:
+    if not edge:
+        return 0.0
+    try:
+        value = float(edge.get("confidence", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if isfinite(value) else 0.0
+
+
+def _average_ranks(values: list[float]) -> list[float]:
+    """Rank values ascending, assigning tied values their average rank."""
+    order = sorted(range(len(values)), key=lambda index: values[index])
+    ranks = [0.0] * len(values)
+    total = len(values)
+    position = 0
+    while position < total:
+        tie_end = position
+        while (
+            tie_end + 1 < total
+            and values[order[tie_end + 1]] == values[order[position]]
+        ):
+            tie_end += 1
+        average_rank = (position + tie_end) / 2.0 + 1.0  # 1-based average
+        for offset in range(position, tie_end + 1):
+            ranks[order[offset]] = average_rank
+        position = tie_end + 1
+    return ranks
+
+
+def spearman_rho(first: list[float], second: list[float]) -> float | None:
+    """
+    Spearman rank correlation, computed in pure Python (no numpy/scipy/pandas).
+    Uses average ranks for ties (there are many tied 0 confidences), so it is
+    the general Pearson-on-ranks form rather than the tie-free shortcut.
+    Returns None when either vector has no rank variation.
+    """
+    if len(first) != len(second) or len(first) < 2:
+        return None
+    ranks_first = _average_ranks(first)
+    ranks_second = _average_ranks(second)
+    total = len(ranks_first)
+    mean_first = fsum(ranks_first) / total
+    mean_second = fsum(ranks_second) / total
+    covariance = fsum(
+        (ranks_first[i] - mean_first) * (ranks_second[i] - mean_second)
+        for i in range(total)
+    )
+    variance_first = fsum((rank - mean_first) ** 2 for rank in ranks_first)
+    variance_second = fsum((rank - mean_second) ** 2 for rank in ranks_second)
+    if variance_first <= 0 or variance_second <= 0:
+        return None
+    rho = covariance / ((variance_first ** 0.5) * (variance_second ** 0.5))
+    if not isfinite(rho):
+        return None
+    return max(-1.0, min(1.0, rho))
+
+
+def write_stability_comparison_csv(
+    comparison_path: Path,
+    previous_edges: list[dict],
+    current_edges: list[dict],
+) -> tuple[list[float], list[float]]:
+    """
+    Align two aggregate edge->confidence snapshots on the union of their edges
+    (edges absent from one side score 0) and write an audit CSV. Returns the two
+    aligned confidence vectors in matching edge order.
+    """
+    previous_by_key: dict[tuple[str, str], dict] = {}
+    for edge in previous_edges:
+        key = edge_confidence_key(edge)
+        if all(key):
+            previous_by_key[key] = edge
+
+    current_by_key: dict[tuple[str, str], dict] = {}
+    for edge in current_edges:
+        key = edge_confidence_key(edge)
+        if all(key):
+            current_by_key[key] = edge
+
+    all_keys = sorted(set(previous_by_key) | set(current_by_key))
+
+    previous_vector: list[float] = []
+    current_vector: list[float] = []
+
+    comparison_path.parent.mkdir(parents=True, exist_ok=True)
+    with comparison_path.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=[
+                "edge_id",
+                "source",
+                "target",
+                "confidence_old",
+                "confidence_new",
+            ],
+        )
+        writer.writeheader()
+        for source, target in all_keys:
+            confidence_old = edge_confidence_value(previous_by_key.get((source, target)))
+            confidence_new = edge_confidence_value(current_by_key.get((source, target)))
+            previous_vector.append(confidence_old)
+            current_vector.append(confidence_new)
+            writer.writerow(
+                {
+                    "edge_id": f"{source}->{target}",
+                    "source": source,
+                    "target": target,
+                    "confidence_old": confidence_old,
+                    "confidence_new": confidence_new,
+                }
+            )
+
+    return previous_vector, current_vector
+
+
+def spearman_stability_check(
+    *,
+    runtime_root: Path,
+    previous_edges: list[dict],
+    current_edges: list[dict],
+    current_run_count: int,
+    stop_rho: float,
+) -> dict:
+    """
+    Decide whether the aggregate edge ordering has stabilised between two
+    consecutive confidence aggregates using the Spearman rank correlation of
+    their per-edge confidence values. rho >= stop_rho => the ranking is stable.
+
+    This replaces the former R `coin::wilcoxsign_test` early-stop check. It is
+    pure Python (pandas) and only measures ordering, which is what the website's
+    confidence filter consumes.
+    """
+    checks_dir = runtime_root / "stability_checks"
+    comparison_path = checks_dir / f"run-{current_run_count}.csv"
+    previous_vector, current_vector = write_stability_comparison_csv(
+        comparison_path,
+        previous_edges,
+        current_edges,
+    )
+    compared_edges = len(previous_vector)
+    result = {
+        "method": "spearman_rank_correlation",
+        "run_count": current_run_count,
+        "stop_rho": stop_rho,
+        "compared_edges": compared_edges,
+        "comparison_path": str(comparison_path),
+        "rho": None,
+        "stop_early": False,
+        "status": "not_run",
+    }
+
+    if compared_edges < 2:
+        result["status"] = "insufficient_edges"
+        result["message"] = "Need at least two paired edges for a Spearman check."
+        return result
+
+    # Identical vectors (or all-zero) are perfectly stable by definition.
+    if previous_vector == current_vector:
+        result["rho"] = 1.0
+        result["stop_early"] = True
+        result["status"] = "stable"
+        return result
+
+    rho = spearman_rho(previous_vector, current_vector)
+
+    # Undefined when a vector has zero rank variation (e.g. every edge tied).
+    if rho is None:
+        result["status"] = "no_variance"
+        result["message"] = "Spearman correlation undefined (no rank variation)."
+        return result
+
+    result["rho"] = rho
+    result["stop_early"] = rho >= stop_rho
+    result["status"] = "stable" if result["stop_early"] else "changing"
+    return result
+
+
 def confidence_ranked_edges_path(
     output_dir: Path,
     dataset_id: str,
@@ -2463,6 +2703,16 @@ def run_beeline_with_progress(
     )
     confidence_accumulator = create_confidence_accumulator()
     ranked_edge_paths: dict[str, str] = {}
+    early_stopping = {
+        "enabled": bool(confidence_settings.get("early_stopping_enabled")),
+        "method": "spearman_rank_correlation",
+        "stop_rho": float(confidence_settings.get("stop_rho", DEFAULT_CONFIDENCE_STOP_RHO)),
+        "stop_streak": int(confidence_settings.get("stop_streak", DEFAULT_CONFIDENCE_STOP_STREAK)),
+        "min_runs": int(confidence_settings.get("min_runs", DEFAULT_CONFIDENCE_MIN_RUNS)),
+        "stopped_early": False,
+        "streak": 0,
+        "checks": [],
+    }
 
     for run_index, run_id in enumerate(run_ids, start=1):
         if stop_event is not None and stop_event.is_set():
@@ -2637,11 +2887,86 @@ def run_beeline_with_progress(
                 max_edges_per_target=ranked_edges_per_target_limit,
             )
             if confidence_settings.get("confidence_enabled"):
+                previous_run_count = int(confidence_accumulator.get("processed_runs", 0))
+                previous_edges: list[dict] = []
+                # Begin comparing aggregates early enough that a full streak can
+                # complete exactly at the min-runs floor, but skip the noisiest
+                # first couple of aggregates.
+                check_start_prev = max(
+                    1, int(early_stopping["min_runs"]) - int(early_stopping["stop_streak"])
+                )
+                if (
+                    early_stopping["enabled"]
+                    and previous_run_count >= check_start_prev
+                ):
+                    previous_edges, _previous_summary = finalize_confidence_accumulator(
+                        confidence_accumulator,
+                        run_count=previous_run_count,
+                        stability_top_k=int(confidence_settings["stability_top_k"]),
+                    )
+
                 update_confidence_accumulator(
                     confidence_accumulator,
                     run_edges,
                     stability_top_k=int(confidence_settings["stability_top_k"]),
                 )
+                current_run_count = int(confidence_accumulator.get("processed_runs", 0))
+                if previous_edges:
+                    current_edges, _current_summary = finalize_confidence_accumulator(
+                        confidence_accumulator,
+                        run_count=current_run_count,
+                        stability_top_k=int(confidence_settings["stability_top_k"]),
+                    )
+                    stability_check = spearman_stability_check(
+                        runtime_root=runtime_root,
+                        previous_edges=previous_edges,
+                        current_edges=current_edges,
+                        current_run_count=current_run_count,
+                        stop_rho=float(confidence_settings["stop_rho"]),
+                    )
+                    early_stopping["checks"].append(stability_check)
+                    if stability_check.get("stop_early"):
+                        early_stopping["streak"] = int(early_stopping["streak"]) + 1
+                    else:
+                        early_stopping["streak"] = 0
+
+                    # Stop only after the ordering has been stable for the
+                    # required number of consecutive checks AND the min-runs
+                    # floor (protects confidence-filter resolution) is met.
+                    if (
+                        int(early_stopping["streak"]) >= int(early_stopping["stop_streak"])
+                        and current_run_count >= int(early_stopping["min_runs"])
+                    ):
+                        early_stopping["stopped_early"] = True
+                        early_stopping["stopped_after_runs"] = current_run_count
+                        early_stopping["decision"] = stability_check
+                        rho_value = stability_check.get("rho")
+                        skipped_at = time.time()
+                        for skipped_run_id in run_ids[run_index:]:
+                            run_metadata[skipped_run_id].update(
+                                {
+                                    "status": "Skipped",
+                                    "reason": "confidence_early_stopping",
+                                    "completed_at": format_run_timestamp(skipped_at),
+                                    "completed_at_timestamp": skipped_at,
+                                    "elapsed_seconds": 0,
+                                }
+                            )
+                        write_run_timings(runtime_root, run_metadata)
+                        update_job_state_fn(
+                            project_dir,
+                            job_id,
+                            algorithm_id=algorithm_id,
+                            progress_label=(
+                                f"Stopping early: edge ranking stable (Spearman rho {rho_value:.3f})"
+                                if rho_value is not None
+                                else "Stopping early: edge ranking stable"
+                            ),
+                            run_metadata=run_metadata,
+                        )
+                        ranked_edge_paths[run_id] = str(ranked_edges_path)
+                        del run_edges
+                        break
             ranked_edge_paths[run_id] = str(ranked_edges_path)
             del run_edges
         finally:
@@ -2661,9 +2986,10 @@ def run_beeline_with_progress(
     )
 
     if confidence_settings.get("confidence_enabled"):
+        processed_run_count = int(confidence_accumulator.get("processed_runs", 0))
         top_edges, network_summary = finalize_confidence_accumulator(
             confidence_accumulator,
-            run_count=len(run_ids),
+            run_count=processed_run_count,
             stability_top_k=int(confidence_settings["stability_top_k"]),
         )
         ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
@@ -2695,6 +3021,9 @@ def run_beeline_with_progress(
         "top_edges": top_edges,
         "confidence_summary": {
             **confidence_settings,
+            "planned_bootstrap_runs": total_run_count,
+            "bootstrap_runs": int(network_summary.get("bootstrap_runs", total_run_count)),
+            "early_stopping": early_stopping,
             "run_metadata": run_metadata,
         },
         "run_ranked_edges_paths": ranked_edge_paths,
