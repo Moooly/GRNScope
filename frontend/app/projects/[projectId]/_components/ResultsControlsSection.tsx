@@ -341,15 +341,16 @@ export default function ResultsControlsSection({
 
   const resultScopeControl = () => (
     <label
-      className="relative block h-9 w-[172px] shrink-0"
+      className="relative block h-9 w-[146px] shrink-0"
       onClick={(event) => event.stopPropagation()}
     >
-      <span className="sr-only">Result scope</span>
+      <span className="sr-only">Result cluster</span>
       <select
         value={selectedResultScopeId}
         onChange={(event) => onChangeSelectedResultScopeId?.(event.target.value)}
-        className="h-full w-full appearance-none rounded-lg border border-slate-200 bg-white py-0 pl-3 pr-8 text-sm font-bold text-slate-900 outline-none transition hover:bg-slate-50 hover:text-[#1b75a6] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-        aria-label="Result scope"
+        className="h-full w-full appearance-none rounded-lg border border-slate-200 bg-white py-0 pl-2 pr-7 text-center text-sm font-bold text-slate-900 outline-none transition hover:bg-slate-50 hover:text-[#1b75a6] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+        style={{ textAlignLast: "center" }}
+        aria-label="Result cluster"
       >
         {selectableResultScopes.map((scope) => (
           <option key={scope.id} value={scope.id}>
@@ -621,7 +622,7 @@ export default function ResultsControlsSection({
             )}
 
             {selectableResultScopes.length > 1 &&
-              inlineRow("Result scope", resultScopeControl())}
+              inlineRow("Result cluster", resultScopeControl())}
             {inlineRow(
               "Evidence",
               inlinePercentControl(
