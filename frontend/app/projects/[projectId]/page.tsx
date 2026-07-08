@@ -1686,14 +1686,6 @@ useEffect(() => {
         edgeDisplayLimit={edgeDisplayLimit}
         onChangeEdgeDisplayLimit={setEdgeDisplayLimit}
         filteredEdgeCount={filteredNetworkEdges.length}
-        resultScopes={availableResultScopes}
-        selectedResultScopeId={selectedResultScopeId}
-        onChangeSelectedResultScopeId={(value) => {
-          setSelectedResultScopeId(value);
-          setSelectedGene(null);
-          setSelectedEdgeKey(null);
-          setIsolatedGene(null);
-        }}
         isGuideOpen={isResultsGuideOpen}
         onOpenGuide={() => setIsResultsGuideOpen(true)}
       />
@@ -1778,6 +1770,14 @@ useEffect(() => {
                       setNetworkLayout={setNetworkLayout}
                       onExportNetwork={handleExportNetwork}
                       onExportCircosPng={handleExportCircosPng}
+                      resultScopes={availableResultScopes}
+                      selectedResultScopeId={selectedResultScopeId}
+                      onChangeSelectedResultScopeId={(value) => {
+                        setSelectedResultScopeId(value);
+                        setSelectedGene(null);
+                        setSelectedEdgeKey(null);
+                        setIsolatedGene(null);
+                      }}
                       onGraphReady={(cy) => {
                         networkGraphRef.current = cy;
                       }}

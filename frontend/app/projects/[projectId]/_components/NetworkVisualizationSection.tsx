@@ -38,6 +38,15 @@ type NetworkVisualizationSectionProps = {
   setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular" | "circos") => void;
   onExportNetwork: (format: "png" | "svg") => void;
   onExportCircosPng: (svgElement: SVGSVGElement) => void | Promise<void>;
+  resultScopes?: Array<{
+    id: string;
+    label: string;
+    type: string;
+    cellCount?: number;
+    skipped?: boolean;
+  }>;
+  selectedResultScopeId?: string;
+  onChangeSelectedResultScopeId?: (value: string) => void;
   onGraphReady?: (cy: import("cytoscape").Core | null) => void;
   networkNodes: NodeInfo[];
   filteredNetworkEdges: AggregatedEdge[];
@@ -64,6 +73,9 @@ export default function NetworkVisualizationSection({
   setNetworkLayout,
   onExportNetwork,
   onExportCircosPng,
+  resultScopes = [],
+  selectedResultScopeId = "global",
+  onChangeSelectedResultScopeId,
   onGraphReady,
   networkNodes,
   filteredNetworkEdges,
@@ -87,6 +99,7 @@ export default function NetworkVisualizationSection({
 
   const selectedEdge =
     filteredNetworkEdges.find((edge) => edge.key === selectedEdgeKey) ?? null;
+  const selectableResultScopes = resultScopes.filter((scope) => !scope.skipped);
   const effectiveEdgeLimit =
     filteredNetworkEdges.length === 0
       ? 0
@@ -192,7 +205,7 @@ export default function NetworkVisualizationSection({
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
         <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-[#f3f4f6]">
           <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-between gap-3">
-            <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 p-1">
+            <div className="pointer-events-auto inline-flex min-h-9 flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 p-0.5 shadow-sm">
               {layoutOptions.map(({ value, label }) => {
                 const isActive = networkLayout === value;
 
@@ -201,7 +214,7 @@ export default function NetworkVisualizationSection({
                     key={value}
                     type="button"
                     onClick={() => setNetworkLayout(value)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                    className={`h-8 rounded-xl px-2.5 text-[11px] font-semibold transition ${
                       isActive
                         ? "bg-[#1b75a6] text-white"
                         : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
@@ -212,7 +225,31 @@ export default function NetworkVisualizationSection({
                 );
               })}
             </div>
-            <div className="pointer-events-auto relative -top-px inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 p-1">
+            <div className="relative -top-px inline-flex items-center gap-2">
+              {selectableResultScopes.length > 1 && (
+                <label className="pointer-events-auto relative inline-flex h-9 items-center">
+                  <span className="sr-only">Result scope</span>
+                  <select
+                    value={selectedResultScopeId}
+                    onChange={(event) => onChangeSelectedResultScopeId?.(event.target.value)}
+                    className="h-9 max-w-[220px] appearance-none rounded-2xl border border-slate-200 bg-white/95 py-0 pl-3 pr-8 text-xs font-bold text-slate-700 shadow-sm outline-none transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                    aria-label="Result scope"
+                    title="Result scope"
+                  >
+                    {selectableResultScopes.map((scope) => (
+                      <option key={scope.id} value={scope.id}>
+                        {scope.type === "global"
+                          ? "Global"
+                          : `${scope.label}${scope.cellCount ? ` (${scope.cellCount})` : ""}`}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-[65%] rotate-45 border-b-2 border-r-2 border-slate-500"
+                    aria-hidden="true"
+                  />
+                </label>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -221,7 +258,7 @@ export default function NetworkVisualizationSection({
                 }}
                 aria-label="Download current network"
                 title="Download current network"
-                className="rounded-xl px-4 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                className="pointer-events-auto h-9 rounded-2xl border border-slate-200 bg-white/95 px-4 text-xs font-bold text-slate-600 shadow-sm transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
               >
                 Download
               </button>

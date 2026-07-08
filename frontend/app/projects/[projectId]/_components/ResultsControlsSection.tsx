@@ -22,15 +22,6 @@ type ResultsControlsSectionProps = {
   edgeDisplayLimit: number;
   onChangeEdgeDisplayLimit: (value: number) => void;
   filteredEdgeCount: number;
-  resultScopes?: Array<{
-    id: string;
-    label: string;
-    type: string;
-    cellCount?: number;
-    skipped?: boolean;
-  }>;
-  selectedResultScopeId?: string;
-  onChangeSelectedResultScopeId?: (value: string) => void;
   compact?: boolean;
   projectId?: string;
   isGuideOpen?: boolean;
@@ -60,9 +51,6 @@ export default function ResultsControlsSection({
   edgeDisplayLimit,
   onChangeEdgeDisplayLimit,
   filteredEdgeCount,
-  resultScopes = [],
-  selectedResultScopeId = "global",
-  onChangeSelectedResultScopeId,
   compact = false,
   isGuideOpen = false,
   onOpenGuide,
@@ -253,7 +241,6 @@ export default function ResultsControlsSection({
     }
   };
   const matchingEdgesLabel = safeFilteredEdgeCount.toLocaleString();
-  const selectableResultScopes = resultScopes.filter((scope) => !scope.skipped);
 
   const inlinePercentControl = (
     value: number,
@@ -466,22 +453,6 @@ export default function ResultsControlsSection({
       }
     >
       <div className="flex items-center gap-2">
-        {selectableResultScopes.length > 1 && (
-          <select
-            value={selectedResultScopeId}
-            onChange={(event) => onChangeSelectedResultScopeId?.(event.target.value)}
-            className="h-10 max-w-[220px] rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none transition hover:border-[#1b75a6]/30 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-            aria-label="Result scope"
-          >
-            {selectableResultScopes.map((scope) => (
-              <option key={scope.id} value={scope.id}>
-                {scope.type === "global"
-                  ? "Global"
-                  : `${scope.label}${scope.cellCount ? ` (${scope.cellCount})` : ""}`}
-              </option>
-            ))}
-          </select>
-        )}
         <button
           type="button"
           onClick={() => setIsSettingsMenuOpen((value) => !value)}
