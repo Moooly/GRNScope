@@ -1660,6 +1660,14 @@ useEffect(() => {
           setSelectedEdgeKey(null);
           setIsolatedGene(null);
         }}
+        resultScopes={availableResultScopes}
+        selectedResultScopeId={selectedResultScopeId}
+        onChangeSelectedResultScopeId={(value) => {
+          setSelectedResultScopeId(value);
+          setSelectedGene(null);
+          setSelectedEdgeKey(null);
+          setIsolatedGene(null);
+        }}
         evidenceThreshold={evidenceThreshold}
         onChangeEvidenceThreshold={(value) => {
           setEvidenceThreshold(value);
@@ -1770,14 +1778,6 @@ useEffect(() => {
                       setNetworkLayout={setNetworkLayout}
                       onExportNetwork={handleExportNetwork}
                       onExportCircosPng={handleExportCircosPng}
-                      resultScopes={availableResultScopes}
-                      selectedResultScopeId={selectedResultScopeId}
-                      onChangeSelectedResultScopeId={(value) => {
-                        setSelectedResultScopeId(value);
-                        setSelectedGene(null);
-                        setSelectedEdgeKey(null);
-                        setIsolatedGene(null);
-                      }}
                       onGraphReady={(cy) => {
                         networkGraphRef.current = cy;
                       }}

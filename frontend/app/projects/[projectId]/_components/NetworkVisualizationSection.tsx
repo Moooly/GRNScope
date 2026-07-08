@@ -38,15 +38,6 @@ type NetworkVisualizationSectionProps = {
   setNetworkLayout: (value: "force" | "hierarchical" | "concentric" | "circular" | "circos") => void;
   onExportNetwork: (format: "png" | "svg") => void;
   onExportCircosPng: (svgElement: SVGSVGElement) => void | Promise<void>;
-  resultScopes?: Array<{
-    id: string;
-    label: string;
-    type: string;
-    cellCount?: number;
-    skipped?: boolean;
-  }>;
-  selectedResultScopeId?: string;
-  onChangeSelectedResultScopeId?: (value: string) => void;
   onGraphReady?: (cy: import("cytoscape").Core | null) => void;
   networkNodes: NodeInfo[];
   filteredNetworkEdges: AggregatedEdge[];
@@ -73,9 +64,6 @@ export default function NetworkVisualizationSection({
   setNetworkLayout,
   onExportNetwork,
   onExportCircosPng,
-  resultScopes = [],
-  selectedResultScopeId = "global",
-  onChangeSelectedResultScopeId,
   onGraphReady,
   networkNodes,
   filteredNetworkEdges,
@@ -99,7 +87,6 @@ export default function NetworkVisualizationSection({
 
   const selectedEdge =
     filteredNetworkEdges.find((edge) => edge.key === selectedEdgeKey) ?? null;
-  const selectableResultScopes = resultScopes.filter((scope) => !scope.skipped);
   const effectiveEdgeLimit =
     filteredNetworkEdges.length === 0
       ? 0
@@ -226,30 +213,6 @@ export default function NetworkVisualizationSection({
               })}
             </div>
             <div className="relative -top-px inline-flex items-center gap-2">
-              {selectableResultScopes.length > 1 && (
-                <label className="pointer-events-auto relative inline-flex h-9 items-center">
-                  <span className="sr-only">Result scope</span>
-                  <select
-                    value={selectedResultScopeId}
-                    onChange={(event) => onChangeSelectedResultScopeId?.(event.target.value)}
-                    className="h-9 max-w-[220px] appearance-none rounded-2xl border border-slate-200 bg-white/95 py-0 pl-3 pr-8 text-xs font-bold text-slate-700 shadow-sm outline-none transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                    aria-label="Result scope"
-                    title="Result scope"
-                  >
-                    {selectableResultScopes.map((scope) => (
-                      <option key={scope.id} value={scope.id}>
-                        {scope.type === "global"
-                          ? "Global"
-                          : `${scope.label}${scope.cellCount ? ` (${scope.cellCount})` : ""}`}
-                      </option>
-                    ))}
-                  </select>
-                  <span
-                    className="pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-[65%] rotate-45 border-b-2 border-r-2 border-slate-500"
-                    aria-hidden="true"
-                  />
-                </label>
-              )}
               <button
                 type="button"
                 onClick={() => {

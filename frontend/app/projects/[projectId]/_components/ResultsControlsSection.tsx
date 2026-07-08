@@ -7,6 +7,15 @@ type ResultsControlsSectionProps = {
   algorithmCatalog?: AlgorithmCatalogItem[];
   selectedAlgorithmIds: string[];
   onChangeSelectedAlgorithmIds: (value: string[]) => void;
+  resultScopes?: Array<{
+    id: string;
+    label: string;
+    type: string;
+    cellCount?: number;
+    skipped?: boolean;
+  }>;
+  selectedResultScopeId?: string;
+  onChangeSelectedResultScopeId?: (value: string) => void;
   evidenceThreshold: number;
   onChangeEvidenceThreshold: (value: number) => void;
   confidenceThreshold: number;
@@ -37,6 +46,9 @@ export default function ResultsControlsSection({
   algorithmCatalog = [],
   selectedAlgorithmIds,
   onChangeSelectedAlgorithmIds,
+  resultScopes = [],
+  selectedResultScopeId = "global",
+  onChangeSelectedResultScopeId,
   evidenceThreshold = 0.8,
   onChangeEvidenceThreshold = () => {},
   confidenceThreshold = 0.8,
@@ -74,6 +86,7 @@ export default function ResultsControlsSection({
   const safeSignThreshold = Number.isFinite(signConfidenceThreshold)
     ? signConfidenceThreshold
     : 0;
+  const selectableResultScopes = resultScopes.filter((scope) => !scope.skipped);
   const safeConsensusThreshold = Math.max(
     1,
     Math.min(consensusThreshold, effectiveMaxConsensusThreshold)
@@ -324,6 +337,35 @@ export default function ResultsControlsSection({
         +
       </button>
     </div>
+  );
+
+  const resultScopeControl = () => (
+    <label
+      className="relative block h-9 w-[172px] shrink-0"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="sr-only">Result scope</span>
+      <select
+        value={selectedResultScopeId}
+        onChange={(event) => onChangeSelectedResultScopeId?.(event.target.value)}
+        className="h-full w-full appearance-none rounded-lg border border-slate-200 bg-white py-0 pl-3 pr-8 text-sm font-bold text-slate-900 outline-none transition hover:bg-slate-50 hover:text-[#1b75a6] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+        aria-label="Result scope"
+      >
+        {selectableResultScopes.map((scope) => (
+          <option key={scope.id} value={scope.id}>
+            {scope.type === "global"
+              ? "Global"
+              : `${scope.label}${scope.cellCount ? ` (${scope.cellCount})` : ""}`}
+          </option>
+        ))}
+      </select>
+      <span
+        className="pointer-events-none absolute right-2.5 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-[10px] font-bold leading-none text-slate-500"
+        aria-hidden="true"
+      >
+        ▾
+      </span>
+    </label>
   );
 
   const edgeDisplayControl = () => (
@@ -578,6 +620,8 @@ export default function ResultsControlsSection({
               </div>
             )}
 
+            {selectableResultScopes.length > 1 &&
+              inlineRow("Result scope", resultScopeControl())}
             {inlineRow(
               "Evidence",
               inlinePercentControl(
