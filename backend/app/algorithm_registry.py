@@ -155,7 +155,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     },
     {
         "id": "GRNBOOST2",
-        "name": "GRNBoost2",
+        "name": "GRNBOOST2",
         "description": "Fast tree-based alternative to GENIE3.",
         "long_description": (
             "GRNBoost2 uses gradient-boosted tree models through Arboreto to infer "
@@ -193,7 +193,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     },
     {
         "id": "CELLORACLE",
-        "name": "CellOracle",
+        "name": "CELLORACLE",
         "description": "Prior-informed GRN construction using promoter or atlas base-GRN candidates.",
         "long_description": (
             "CellOracle combines a TF-target base GRN with single-cell expression "
@@ -332,7 +332,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     },
     {
         "id": "PEARSON",
-        "name": "Pearson",
+        "name": "PEARSON",
         "description": "Simple Pearson-correlation baseline for gene-gene association.",
         "long_description": (
             "Pearson computes pairwise linear correlations between gene expression "
@@ -863,7 +863,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     },
     {
         "id": "JUMP3",
-        "name": "Jump3",
+        "name": "JUMP3",
         "description": "Hybrid dynamical-model and tree-based method for time-series GRN inference.",
         "long_description": (
             "Jump3 combines a formal dynamical model of gene expression with "
@@ -904,7 +904,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     },
     {
         "id": "SCSGL",
-        "name": "scSGL",
+        "name": "SCSGL",
         "description": "Kernelized signed graph-learning method that requires a ground-truth network file.",
         "long_description": (
             "scSGL learns signed gene regulatory networks from single-cell expression "
