@@ -1511,17 +1511,12 @@ export default function ProjectDetailPage() {
       selectedView === "consensus" ? "Consensus Rank" : "Rank",
       "Source Gene",
       "Target Gene",
-      "Supporting Method Count",
       selectedView === "consensus" ? "Consensus Evidence" : "Regulation Evidence",
       "Inferred Confidence",
       "Direction",
-      "Direction Confidence",
-      "Direction Coverage",
       "Sign",
-      "Sign Confidence",
-      "Sign Coverage",
-      ...activeAlgorithmIds,
       "Supporting Algorithms",
+      "Supporting Method Count",
     ];
 
     const lines = [
@@ -1531,21 +1526,12 @@ export default function ProjectDetailPage() {
           edge.rank,
           edge.source,
           edge.target,
-          edge.count,
           edge.score.toFixed(3),
           edge.confidence.toFixed(3),
           edge.direction === 1 ? "source_to_target" : edge.direction === -1 ? "reverse" : "unknown",
-          edge.directionConfidence === null ? "" : edge.directionConfidence.toFixed(3),
-          edge.directionCoverage.toFixed(3),
           edge.sign === 1 ? "positive" : edge.sign === -1 ? "negative" : "unknown",
-          edge.signConfidence === null ? "" : edge.signConfidence.toFixed(3),
-          edge.signCoverage.toFixed(3),
-          ...activeAlgorithmIds.map((algorithmId) =>
-            edge.perAlgorithmScores[algorithmId] !== undefined
-              ? edge.perAlgorithmScores[algorithmId].toFixed(3)
-              : ""
-          ),
           edge.supportingAlgorithms.join("; "),
+          edge.count,
         ];
 
         return row.map(escapeCsvValue).join(",");
