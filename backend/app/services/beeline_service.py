@@ -1319,8 +1319,6 @@ def plan_confidence_run_inputs(
     header, _expression_dialect = read_delimited_header(preprocessed_expression)
     gene_count = count_expression_gene_rows(preprocessed_expression)
     settings = resolve_confidence_settings(project_manifest, gene_count=gene_count)
-    if algorithm_id.upper() == "CELLORACLE":
-        settings["bootstrap_runs"] = 1
     bootstrap_runs = int(settings["bootstrap_runs"])
     subsample_fraction = float(settings["subsample_fraction"])
     max_regulators_per_target = resolve_ranked_edges_per_target_limit(

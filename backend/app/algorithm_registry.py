@@ -464,7 +464,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "supports_expression_matrix": True,
         "active": True,
         "recommended": False,
-        "estimated_runtime": "Slow for large gene sets; capped by default",
+        "estimated_runtime": "Slow for large gene sets",
         "strengths": [
             "Designed for time-stamped single-cell expression data.",
             "Can infer directed and signed edges.",
@@ -486,17 +486,6 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "required": False,
                 "value_type": "int",
             },
-            {
-                "name": "maxGenes",
-                "label": "SINCERITIES gene cap",
-                "description": (
-                    "Maximum number of high-variance genes passed to SINCERITIES. "
-                    "This method scales poorly with large gene sets."
-                ),
-                "default": 500,
-                "required": False,
-                "value_type": "int",
-            }
         ],
     },
     {
@@ -685,8 +674,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "num_replicates",
                 "label": "Number of replicates",
-                "description": "Number of SINGE replicates.",
-                "default": 6,
+                "description": "Number of SINGE ensemble replicates aggregated for the final network.",
+                "default": 3,
                 "required": False,
                 "value_type": "int",
             },
@@ -760,7 +749,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "supports_expression_matrix": True,
         "active": True,
         "recommended": False,
-        "estimated_runtime": "Slow for large gene or cell sets; capped by default",
+        "estimated_runtime": "Slow for large gene or cell sets",
         "strengths": [
             "ODE-based dynamic modeling approach.",
             "Designed for ordered single-cell data.",
@@ -785,8 +774,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "R",
                 "label": "R",
-                "description": "GRISLI R parameter.",
-                "default": 3000,
+                "description": "Number of stability-selection resampling iterations used by GRISLI.",
+                "default": 1000,
                 "required": False,
                 "value_type": "int",
             },
@@ -797,17 +786,6 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0.0,
                 "required": False,
                 "value_type": "float",
-            },
-            {
-                "name": "maxGenes",
-                "label": "GRISLI gene cap",
-                "description": (
-                    "Maximum number of high-variance genes passed to GRISLI. "
-                    "GRISLI can allocate very large cell-by-cell-by-gene arrays."
-                ),
-                "default": 500,
-                "required": False,
-                "value_type": "int",
             },
         ],
     },
@@ -834,7 +812,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "supports_expression_matrix": True,
         "active": True,
         "recommended": False,
-        "estimated_runtime": "Slow for large gene sets; capped by default",
+        "estimated_runtime": "Slow for large gene sets",
         "strengths": [
             "Bayesian modeling approach.",
             "Can infer directed and signed edges.",
@@ -847,19 +825,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Trajectory-based datasets.",
             "Comparing Bayesian GRN inference methods.",
         ],
-        "parameters": [
-            {
-                "name": "maxGenes",
-                "label": "GRNVBEM gene cap",
-                "description": (
-                    "Maximum number of high-variance genes passed to GRNVBEM. "
-                    "Large gene sets can make the Bayesian regression run out of memory."
-                ),
-                "default": 500,
-                "required": False,
-                "value_type": "int",
-            },
-        ],
+        "parameters": [],
     },
     {
         "id": "JUMP3",
