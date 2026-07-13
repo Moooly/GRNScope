@@ -419,8 +419,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "z",
                 "label": "Latent dimension",
-                "description": "Latent dimension used by SCODE.",
-                "default": 10,
+                "description": "Latent dimension used by SCODE (canonical paper value is 4).",
+                "default": 4,
                 "required": False,
                 "value_type": "int",
             },
@@ -435,8 +435,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "nRep",
                 "label": "Number of repeats",
-                "description": "Number of repeated SCODE runs.",
-                "default": 6,
+                "description": "Number of repeated SCODE runs averaged for the final network.",
+                "default": 3,
                 "required": False,
                 "value_type": "int",
             },

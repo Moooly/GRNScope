@@ -125,6 +125,29 @@ function signOf(value: number): -1 | 0 | 1 {
   return 0;
 }
 
+function assignAverageRanks<T extends { rank: number }>(
+  sortedRows: T[],
+  hasSameRank: (first: T, second: T) => boolean
+) {
+  const rows = [...sortedRows];
+  let index = 0;
+
+  while (index < rows.length) {
+    let tieEnd = index + 1;
+    while (tieEnd < rows.length && hasSameRank(rows[index], rows[tieEnd])) {
+      tieEnd += 1;
+    }
+
+    const rank = ((index + 1) + tieEnd) / 2;
+    for (let rankIndex = index; rankIndex < tieEnd; rankIndex += 1) {
+      rows[rankIndex] = { ...rows[rankIndex], rank };
+    }
+    index = tieEnd;
+  }
+
+  return rows;
+}
+
 const CIRCOS_EXPORT_STYLE_PROPERTIES = [
   "fill",
   "fill-opacity",
@@ -572,14 +595,26 @@ export default function ProjectDetailPage() {
       const rows: AggregatedEdge[] = [];
 
       entriesByTarget.forEach((entries) => {
-        entries
-          .sort((a, b) => {
-            const scoreDelta = Math.abs(b.rawScore) - Math.abs(a.rawScore);
-            if (scoreDelta !== 0) return scoreDelta;
-            return a.source.localeCompare(b.source);
-          })
-          .forEach((entry, index) => {
-            const rank = index + 1;
+        const sortedEntries = entries.sort((a, b) => {
+          const scoreDelta = Math.abs(b.rawScore) - Math.abs(a.rawScore);
+          if (scoreDelta !== 0) return scoreDelta;
+          return a.source.localeCompare(b.source);
+        });
+
+        let index = 0;
+        while (index < sortedEntries.length) {
+          const weight = Math.abs(sortedEntries[index].rawScore);
+          let tieEnd = index + 1;
+          while (
+            tieEnd < sortedEntries.length &&
+            Math.abs(sortedEntries[tieEnd].rawScore) === weight
+          ) {
+            tieEnd += 1;
+          }
+
+          const rank = ((index + 1) + tieEnd) / 2;
+
+          for (const entry of sortedEntries.slice(index, tieEnd)) {
             // Per-target percentile rank from the confidence-score pipeline:
             // pctl_ij = 1 - (rank_ij - 1) / (|T| - 1)
             // A value near 1 means this regulator is highly ranked for this target.
@@ -628,7 +663,10 @@ export default function ProjectDetailPage() {
               signConfidence: signVote === 0 ? null : 1,
               signCoverage: isSigned && signVote !== 0 ? 1 : 0,
             });
-          });
+          }
+
+          index = tieEnd;
+        }
       });
 
       next[algorithmId] = rows.sort(
@@ -668,8 +706,7 @@ export default function ProjectDetailPage() {
 
     completedAlgorithmIds.forEach((algorithmId) => {
       next[algorithmId] = (standardizedAlgorithmEdgeRows[algorithmId] ?? [])
-        .filter(meetsConfidenceFilters)
-        .map((edge, index) => ({ ...edge, rank: index + 1 }));
+        .filter(meetsConfidenceFilters);
     });
 
     return next;
@@ -747,8 +784,7 @@ export default function ProjectDetailPage() {
       });
 
       next[algorithmId] = Array.from(rowByPair.values())
-        .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
-        .map((edge, index) => ({ ...edge, rank: index + 1 }));
+        .sort((a, b) => b.confidence - a.confidence || b.score - a.score);
     });
 
     return next;
@@ -926,7 +962,7 @@ export default function ProjectDetailPage() {
       buckets.set(pairKey, accumulator);
     });
 
-    return Array.from(buckets.entries())
+    const sortedRows = Array.from(buckets.entries())
       .map(([key, edge]) => {
         const edgeEvidence = clamp(edge.totalEvidence / sumAlpha, 0, 1);
         const stability = edge.supportingAlgorithms.length / sumAlpha;
@@ -975,8 +1011,13 @@ export default function ProjectDetailPage() {
         } satisfies AggregatedEdge;
       })
       .filter((edge) => edge.score > 0 || edge.confidence > 0)
-      .sort((a, b) => b.confidence - a.confidence || b.score - a.score)
-      .map((edge, index) => ({ ...edge, rank: index + 1 }));
+      .sort((a, b) => b.confidence - a.confidence || b.score - a.score);
+
+    return assignAverageRanks(
+      sortedRows,
+      (first, second) =>
+        first.confidence === second.confidence && first.score === second.score
+    );
   }, [
     activeAlgorithmIds,
     algorithmMetaMap,
@@ -985,20 +1026,18 @@ export default function ProjectDetailPage() {
   ]);
 
   const consensusRows = useMemo(() => {
-    return consensusCandidateRows
-      .filter(
-        (edge) =>
-          edge.confidence >= confidenceThreshold &&
-          edge.score >= evidenceThreshold &&
-          edge.count >= consensusThreshold &&
-          (directionConfidenceThreshold <= 0 ||
-            (edge.directionConfidence !== null &&
-              edge.directionConfidence >= directionConfidenceThreshold)) &&
-          (signConfidenceThreshold <= 0 ||
-            (edge.signConfidence !== null &&
-              edge.signConfidence >= signConfidenceThreshold))
-      )
-      .map((edge, index) => ({ ...edge, rank: index + 1 }));
+    return consensusCandidateRows.filter(
+      (edge) =>
+        edge.confidence >= confidenceThreshold &&
+        edge.score >= evidenceThreshold &&
+        edge.count >= consensusThreshold &&
+        (directionConfidenceThreshold <= 0 ||
+          (edge.directionConfidence !== null &&
+            edge.directionConfidence >= directionConfidenceThreshold)) &&
+        (signConfidenceThreshold <= 0 ||
+          (edge.signConfidence !== null &&
+            edge.signConfidence >= signConfidenceThreshold))
+    );
   }, [
     consensusCandidateRows,
     evidenceThreshold,

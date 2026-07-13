@@ -1951,6 +1951,33 @@ def compute_population_sd(values: list[float]) -> float:
     return variance ** 0.5
 
 
+def assign_average_weight_ranks(edges: list[dict]) -> list[dict]:
+    ranked_edges = sorted(
+        edges,
+        key=lambda edge: (
+            -abs(float(edge.get("score", 0) or 0)),
+            str(edge.get("source", "")),
+            str(edge.get("target", "")),
+        ),
+    )
+    index = 0
+    while index < len(ranked_edges):
+        weight = abs(float(ranked_edges[index].get("score", 0) or 0))
+        tie_end = index + 1
+        while (
+            tie_end < len(ranked_edges)
+            and abs(float(ranked_edges[tie_end].get("score", 0) or 0)) == weight
+        ):
+            tie_end += 1
+
+        rank = ((index + 1) + tie_end) / 2.0
+        for edge in ranked_edges[index:tie_end]:
+            edge["rank"] = rank
+        index = tie_end
+
+    return ranked_edges
+
+
 def create_confidence_accumulator() -> dict:
     return {
         "edges": {},
@@ -2000,43 +2027,55 @@ def update_confidence_accumulator(
         sd_weight = compute_population_sd(weights)
         denominator = max(len(ranked_edges) - 1, 1)
 
-        for index, edge in enumerate(ranked_edges):
-            source = str(edge.get("source", "")).strip()
-            raw_score = float(edge.get("score", 0) or 0)
-            weight = abs(raw_score)
-            rank = index + 1
-            percentile = 1.0 if len(ranked_edges) <= 1 else 1 - ((rank - 1) / denominator)
-            z_score = 0.0 if sd_weight <= 0 else (weight - mean_weight) / sd_weight
-            key = (source, target)
-            current = edge_accumulator.setdefault(
-                key,
-                {
-                    "source": source,
-                    "target": target,
-                    "raw_score_sum": 0.0,
-                    "raw_score_max_abs": 0.0,
-                    "z_score_sum": 0.0,
-                    "percentile_sum": 0.0,
-                    "rank_sum": 0,
-                    "selected_runs": 0,
-                    "observed_runs": 0,
-                    "best_rank": None,
-                },
-            )
+        index = 0
+        while index < len(ranked_edges):
+            weight = abs(float(ranked_edges[index].get("score", 0) or 0))
+            tie_end = index + 1
+            while (
+                tie_end < len(ranked_edges)
+                and abs(float(ranked_edges[tie_end].get("score", 0) or 0)) == weight
+            ):
+                tie_end += 1
 
-            current["raw_score_sum"] += raw_score
-            current["raw_score_max_abs"] = max(current["raw_score_max_abs"], weight)
-            current["z_score_sum"] += z_score
-            current["percentile_sum"] += percentile
-            current["rank_sum"] += rank
-            current["observed_runs"] += 1
-            current["best_rank"] = (
-                rank
-                if current["best_rank"] is None
-                else min(current["best_rank"], rank)
-            )
-            if rank <= stability_top_k:
-                current["selected_runs"] += 1
+            rank = ((index + 1) + tie_end) / 2.0
+            percentile = 1.0 if len(ranked_edges) <= 1 else 1 - ((rank - 1) / denominator)
+
+            for edge in ranked_edges[index:tie_end]:
+                source = str(edge.get("source", "")).strip()
+                raw_score = float(edge.get("score", 0) or 0)
+                z_score = 0.0 if sd_weight <= 0 else (weight - mean_weight) / sd_weight
+                key = (source, target)
+                current = edge_accumulator.setdefault(
+                    key,
+                    {
+                        "source": source,
+                        "target": target,
+                        "raw_score_sum": 0.0,
+                        "raw_score_max_abs": 0.0,
+                        "z_score_sum": 0.0,
+                        "percentile_sum": 0.0,
+                        "rank_sum": 0.0,
+                        "selected_runs": 0,
+                        "observed_runs": 0,
+                        "best_rank": None,
+                    },
+                )
+
+                current["raw_score_sum"] += raw_score
+                current["raw_score_max_abs"] = max(current["raw_score_max_abs"], weight)
+                current["z_score_sum"] += z_score
+                current["percentile_sum"] += percentile
+                current["rank_sum"] += rank
+                current["observed_runs"] += 1
+                current["best_rank"] = (
+                    rank
+                    if current["best_rank"] is None
+                    else min(current["best_rank"], rank)
+                )
+                if rank <= stability_top_k:
+                    current["selected_runs"] += 1
+
+            index = tie_end
 
     accumulator["processed_runs"] = int(accumulator.get("processed_runs", 0)) + 1
 
@@ -2093,8 +2132,21 @@ def finalize_confidence_accumulator(
             str(edge["target"]),
         )
     )
-    for index, edge in enumerate(aggregated_edges, start=1):
-        edge["rank"] = index
+    index = 0
+    while index < len(aggregated_edges):
+        current = aggregated_edges[index]
+        tie_end = index + 1
+        while (
+            tie_end < len(aggregated_edges)
+            and float(aggregated_edges[tie_end]["confidence"]) == float(current["confidence"])
+            and float(aggregated_edges[tie_end]["mean_percentile"]) == float(current["mean_percentile"])
+        ):
+            tie_end += 1
+
+        rank = ((index + 1) + tie_end) / 2.0
+        for edge in aggregated_edges[index:tie_end]:
+            edge["rank"] = rank
+        index = tie_end
 
     return aggregated_edges, {
         "edge_count": len(aggregated_edges),
@@ -2370,8 +2422,8 @@ def parse_single_run_raw_output(
             f"{algorithm_id} produced an edge result, but GRNScope could not read it: {sanitize_error_message(str(exc))}"
         ) from exc
 
-    for index, edge in enumerate(top_edges, start=1):
-        edge["rank"] = index
+    top_edges = assign_average_weight_ranks(top_edges)
+    for edge in top_edges:
         edge["mean_raw_score"] = edge["score"]
 
     network_summary.update(
