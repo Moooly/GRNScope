@@ -291,7 +291,7 @@ export default function AlgorithmSettingsPopover({
     const options = parameter.options ?? [];
     const fieldId = `popover-${algorithm.id}-${parameter.name}`;
     const errorId = `${fieldId}-error`;
-    const controlClass = `w-full rounded-lg border bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:ring-2 ${
+    const controlClass = `box-border h-9 w-full rounded-lg border bg-white px-2.5 py-0 text-sm text-slate-900 outline-none transition focus:ring-2 ${
       error
         ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
         : "border-slate-200 focus:border-[#1b75a6]/50 focus:ring-[#1b75a6]/15"
@@ -304,58 +304,62 @@ export default function AlgorithmSettingsPopover({
       >
         <label
           htmlFor={fieldId}
-          className="self-center text-xs font-semibold leading-4 text-slate-800"
+          className="mt-2 text-sm font-semibold leading-5 text-slate-800"
         >
           {parameter.label ?? parameter.name}
         </label>
 
         <div>
-          {isBoolParam(parameter) ? (
-            <button
-              id={fieldId}
-              type="button"
-              role="switch"
-              aria-checked={Boolean(value)}
-              onClick={() => setField(parameter.name, !Boolean(value))}
-              className={`relative ml-auto inline-flex h-5 w-9 items-center rounded-full transition ${
-                value ? "bg-[#1b75a6]" : "bg-slate-300"
-              }`}
-            >
-              <span
-                className={`h-4 w-4 rounded-full bg-white shadow-sm transition ${
-                  value ? "translate-x-[1.1rem]" : "translate-x-0.5"
+          <div className="flex h-9 items-center">
+            {isBoolParam(parameter) ? (
+              <button
+                id={fieldId}
+                type="button"
+                role="switch"
+                aria-checked={Boolean(value)}
+                onClick={() => setField(parameter.name, !Boolean(value))}
+                className={`relative ml-auto inline-flex h-5 w-9 items-center rounded-full transition ${
+                  value ? "bg-[#1b75a6]" : "bg-slate-300"
                 }`}
+              >
+                <span
+                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition ${
+                    value ? "translate-x-[1.1rem]" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            ) : options.length > 0 ? (
+              <select
+                id={fieldId}
+                value={String(value ?? "")}
+                onChange={(event) =>
+                  setField(parameter.name, event.target.value)
+                }
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? errorId : undefined}
+                className={controlClass}
+              >
+                {options.map((option) => (
+                  <option key={String(option)} value={String(option)}>
+                    {String(option)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={fieldId}
+                type={isNumberParam(parameter) ? "number" : "text"}
+                value={String(value ?? "")}
+                min={isNumberParam(parameter) ? parameter.minimum : undefined}
+                max={isNumberParam(parameter) ? parameter.maximum : undefined}
+                step={isNumberParam(parameter) ? parameter.step : undefined}
+                onChange={(event) => setField(parameter.name, event.target.value)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? errorId : undefined}
+                className={controlClass}
               />
-            </button>
-          ) : options.length > 0 ? (
-            <select
-              id={fieldId}
-              value={String(value ?? "")}
-              onChange={(event) => setField(parameter.name, event.target.value)}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? errorId : undefined}
-              className={controlClass}
-            >
-              {options.map((option) => (
-                <option key={String(option)} value={String(option)}>
-                  {String(option)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id={fieldId}
-              type={isNumberParam(parameter) ? "number" : "text"}
-              value={String(value ?? "")}
-              min={isNumberParam(parameter) ? parameter.minimum : undefined}
-              max={isNumberParam(parameter) ? parameter.maximum : undefined}
-              step={isNumberParam(parameter) ? parameter.step : undefined}
-              onChange={(event) => setField(parameter.name, event.target.value)}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? errorId : undefined}
-              className={controlClass}
-            />
-          )}
+            )}
+          </div>
           {error ? (
             <p id={errorId} className="text-[10px] font-medium text-rose-600">
               {error}
@@ -393,9 +397,9 @@ export default function AlgorithmSettingsPopover({
             href={`/algorithms?algorithm=${encodeURIComponent(algorithm.id)}`}
             target="_blank"
             rel="noreferrer"
-            className="min-w-0 truncate text-xs font-semibold text-[#1b75a6] transition hover:text-[#155f87] hover:underline"
+            className="min-w-0 truncate rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
           >
-            About {algorithm.name} ↗
+            About {algorithm.name}
           </a>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
