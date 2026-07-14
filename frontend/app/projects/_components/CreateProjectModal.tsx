@@ -697,9 +697,8 @@ export default function CreateProjectModal({
                         Max edges per target
                       </span>
                       <input
-                        type="number"
-                        min={1}
-                        max={maxEdgesLimit}
+                        type="text"
+                        inputMode="numeric"
                         value={maxEdgesPerTarget}
                         onChange={(e) => {
                           const nextValue = e.target.value;
@@ -824,11 +823,14 @@ export default function CreateProjectModal({
 
             <div className="mt-5 space-y-4 text-sm leading-6 text-slate-600">
               <p>
-                These settings control how the uploaded expression matrix is prepared before running the selected GRN inference algorithms.
+                These settings control how the uploaded expression matrix is prepared for the selected GRN inference algorithms, and how the resulting network is filtered.
               </p>
               <div className="space-y-3">
                 <p>
                   <span className="font-bold text-slate-950">Gene filtering:</span> defaults to the uploaded matrix gene count. Enter a smaller number when you want to retain only the most variable genes.
+                </p>
+                <p>
+                  <span className="font-bold text-slate-950">Max edges per target:</span> the number of strongest regulators kept for each target gene in the final ranked network. Higher values give a denser network; the maximum adapts to your gene count (up to 100).
                 </p>
                 <p>
                   <span className="font-bold text-slate-950">Known TFs:</span> keeps known transcription factors even if they are outside the variable-gene cutoff.
