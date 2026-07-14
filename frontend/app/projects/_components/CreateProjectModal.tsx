@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmDetailModal from "./AlgorithmDetailModal";
+import AlgorithmSettingsModal from "./AlgorithmSettingsModal";
 import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 
@@ -56,6 +57,11 @@ interface CreateProjectModalProps {
   cellOracleSpecies: string;
   hasCellOracleSettingsConfigured: boolean;
   selectedIds: string[];
+  algorithmParameters: Record<string, Record<string, unknown>>;
+  onApplyAlgorithmParameters: (
+    algorithmId: string,
+    overrides: Record<string, unknown>,
+  ) => void;
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
   ensembleEnabled: boolean;
@@ -109,6 +115,8 @@ export default function CreateProjectModal({
   cellOracleSpecies,
   hasCellOracleSettingsConfigured,
   selectedIds,
+  algorithmParameters,
+  onApplyAlgorithmParameters,
   compatibleAlgorithms,
   selectedAlgorithms,
   ensembleEnabled,
@@ -157,8 +165,11 @@ export default function CreateProjectModal({
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [algorithmDetailToShow, setAlgorithmDetailToShow] = useState<ProjectAlgorithm | null>(null);
   const [isAlgorithmDetailClosing, setIsAlgorithmDetailClosing] = useState(false);
+  const [algorithmToConfigure, setAlgorithmToConfigure] = useState<ProjectAlgorithm | null>(null);
+  const [isAlgorithmConfigureClosing, setIsAlgorithmConfigureClosing] = useState(false);
   const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const algorithmDetailCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const algorithmConfigureCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
   const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
@@ -244,6 +255,24 @@ export default function CreateProjectModal({
     algorithmDetailCloseTimeoutRef.current = setTimeout(() => {
       setAlgorithmDetailToShow(null);
       setIsAlgorithmDetailClosing(false);
+    }, 280);
+  };
+
+  const handleConfigureAlgorithm = (algorithm: ProjectAlgorithm) => {
+    if (algorithmConfigureCloseTimeoutRef.current) {
+      clearTimeout(algorithmConfigureCloseTimeoutRef.current);
+      algorithmConfigureCloseTimeoutRef.current = null;
+    }
+    setIsAlgorithmConfigureClosing(false);
+    setAlgorithmToConfigure(algorithm);
+  };
+
+  const handleCloseAlgorithmConfigure = () => {
+    if (!algorithmToConfigure || isAlgorithmConfigureClosing) return;
+    setIsAlgorithmConfigureClosing(true);
+    algorithmConfigureCloseTimeoutRef.current = setTimeout(() => {
+      setAlgorithmToConfigure(null);
+      setIsAlgorithmConfigureClosing(false);
     }, 280);
   };
 
@@ -620,6 +649,8 @@ export default function CreateProjectModal({
                 onRecommended={onRecommended}
                 onSelectAll={onSelectAll}
                 onShowAlgorithmDetails={handleShowAlgorithmDetails}
+                onConfigureAlgorithm={handleConfigureAlgorithm}
+                customizedIds={Object.keys(algorithmParameters)}
               />
 
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
@@ -888,6 +919,18 @@ export default function CreateProjectModal({
         algorithm={algorithmDetailToShow}
         isClosing={isAlgorithmDetailClosing}
         onClose={handleCloseAlgorithmDetails}
+      />
+
+      <AlgorithmSettingsModal
+        algorithm={algorithmToConfigure}
+        currentOverrides={
+          algorithmToConfigure
+            ? algorithmParameters[algorithmToConfigure.id] ?? {}
+            : {}
+        }
+        isClosing={isAlgorithmConfigureClosing}
+        onApply={onApplyAlgorithmParameters}
+        onClose={handleCloseAlgorithmConfigure}
       />
     </div>
   );

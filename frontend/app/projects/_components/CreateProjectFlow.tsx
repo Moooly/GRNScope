@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import CreateProjectModal from "./CreateProjectModal";
-import type { ProjectAlgorithm } from "../page";
+import type { AlgorithmParameter, ProjectAlgorithm } from "../page";
 import type { Project } from "../_types/project";
 import { getApiBase } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
@@ -32,6 +32,7 @@ type BackendAlgorithmEntry = {
   strengths: string[];
   limitations: string[];
   recommended_use_cases: string[];
+  parameters: AlgorithmParameter[];
 };
 
 const DEFAULT_TOP_VARIABLE_GENES = "";
@@ -167,6 +168,7 @@ function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): ProjectAlgorithm
     detail: algorithm.long_description,
     recommended: algorithm.recommended,
     runner: algorithm.runner,
+    parameters: algorithm.parameters ?? [],
   };
 }
 
@@ -224,6 +226,12 @@ export default function CreateProjectFlow({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasUserAdjustedAlgorithms, setHasUserAdjustedAlgorithms] = useState(false);
+  // Per-algorithm parameter overrides ({ algorithmId: { paramName: value } }).
+  // Only holds values the user changed from the recommended default; an
+  // algorithm absent here runs entirely on platform defaults.
+  const [algorithmParameters, setAlgorithmParameters] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
   const [ensembleEnabled, setEnsembleEnabled] = useState(true);
   const [algorithms, setAlgorithms] = useState<ProjectAlgorithm[]>([]);
   const [isLoadingAlgorithms, setIsLoadingAlgorithms] = useState(true);
@@ -259,6 +267,7 @@ export default function CreateProjectFlow({
     setHasCellOracleSettingsConfigured(false);
     setSelectedIds([]);
     setHasUserAdjustedAlgorithms(false);
+    setAlgorithmParameters({});
     setEnsembleEnabled(true);
     setIsSubmitting(false);
     lastAutoProjectNameRef.current = "";
@@ -473,6 +482,23 @@ export default function CreateProjectFlow({
     });
   };
 
+  // Store only non-default parameter overrides for an algorithm. Passing an
+  // empty map removes the entry so the algorithm reverts to platform defaults.
+  const applyAlgorithmParameters = (
+    algorithmId: string,
+    overrides: Record<string, unknown>,
+  ) => {
+    setAlgorithmParameters((current) => {
+      const next = { ...current };
+      if (Object.keys(overrides).length === 0) {
+        delete next[algorithmId];
+      } else {
+        next[algorithmId] = overrides;
+      }
+      return next;
+    });
+  };
+
   const handleRecommended = () => {
     setHasUserAdjustedAlgorithms(true);
     const compatibleRecommended = compatibleAlgorithms
@@ -508,6 +534,15 @@ export default function CreateProjectFlow({
     formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
     formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
+    // Only submit overrides for algorithms that are actually selected.
+    const selectedParameterOverrides: Record<string, Record<string, unknown>> = {};
+    for (const algorithmId of safeSelectedIds) {
+      const overrides = algorithmParameters[algorithmId];
+      if (overrides && Object.keys(overrides).length > 0) {
+        selectedParameterOverrides[algorithmId] = overrides;
+      }
+    }
+    formData.append("algorithm_parameters", JSON.stringify(selectedParameterOverrides));
     formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
     formData.append("celloracle_species", cellOracleSpecies);
     formData.append("celloracle_base_grn", CELLORACLE_INTERNAL_BASE_GRN);
@@ -713,6 +748,8 @@ export default function CreateProjectFlow({
       cellOracleSpecies={cellOracleSpecies}
       hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}
+      algorithmParameters={algorithmParameters}
+      onApplyAlgorithmParameters={applyAlgorithmParameters}
       compatibleAlgorithms={compatibleAlgorithms}
       selectedAlgorithms={selectedAlgorithms}
       ensembleEnabled={ensembleEnabled}

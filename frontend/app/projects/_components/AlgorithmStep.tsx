@@ -20,6 +20,8 @@ interface AlgorithmStepProps {
   onRecommended: () => void;
   onSelectAll: () => void;
   onShowAlgorithmDetails?: (algorithm: ProjectAlgorithm) => void;
+  onConfigureAlgorithm?: (algorithm: ProjectAlgorithm) => void;
+  customizedIds?: string[];
 }
 
 export default function AlgorithmStep({
@@ -35,6 +37,8 @@ export default function AlgorithmStep({
   onRecommended,
   onSelectAll,
   onShowAlgorithmDetails,
+  onConfigureAlgorithm,
+  customizedIds,
 }: AlgorithmStepProps) {
   const getUnavailableReason = (algorithm: ProjectAlgorithm) => {
     if (algorithm.id === "SCSGL" && !datasetSummary.hasGroundTruth) {
@@ -147,6 +151,12 @@ export default function AlgorithmStep({
                           ? () => onShowAlgorithmDetails(algorithm)
                           : undefined
                       }
+                      onConfigure={
+                        onConfigureAlgorithm
+                          ? () => onConfigureAlgorithm(algorithm)
+                          : undefined
+                      }
+                      isCustomized={customizedIds?.includes(algorithm.id)}
                     />
                   ))}
                 </div>

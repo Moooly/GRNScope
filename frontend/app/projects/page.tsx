@@ -10,6 +10,20 @@ import EmptyProjectHistory from "./_components/EmptyProjectHistory";
 import { API_BASE } from "../_lib/apiConfig";
 import { apiFetch } from "../_lib/clientIdentity";
 
+export type AlgorithmParameter = {
+  name: string;
+  label?: string;
+  description?: string;
+  default?: unknown;
+  required?: boolean;
+  value_type?: string;
+  options?: unknown[];
+  minimum?: number;
+  maximum?: number;
+  step?: number;
+  advanced?: boolean;
+};
+
 export type ProjectAlgorithm = {
   id: string;
   name: string;
@@ -30,6 +44,7 @@ export type ProjectAlgorithm = {
   detail: string;
   recommended: boolean;
   runner: string;
+  parameters: AlgorithmParameter[];
 };
 
 function ProjectsPageContent() {
