@@ -8,7 +8,6 @@ import { getApiBase } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
 import {
   registerPendingProjectUpload,
-  startPendingProjectUpload,
 } from "../_lib/pendingProjectUpload";
 
 type BackendAlgorithmEntry = {
@@ -630,12 +629,15 @@ export default function CreateProjectFlow({
         throw new Error("Upload an expression matrix CSV to continue.");
       }
 
+      // Register the dataset files, then navigate immediately. The detail page
+      // starts the upload in the background (the pending-upload store lives on
+      // window, so it survives navigation) and surfaces validation errors once
+      // it finishes — so "Start analysis" no longer blocks on the upload.
       registerPendingProjectUpload(data.project_id, {
         expressionFile,
         pseudotimeFile,
         clusterLabelsFile,
       });
-      await startPendingProjectUpload(data.project_id, API_BASE);
 
       const now = new Date();
       const createdProject: Project = {
