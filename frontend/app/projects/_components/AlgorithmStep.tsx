@@ -77,7 +77,7 @@ export default function AlgorithmStep({
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
           {title}
         </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13.5rem,1fr))]">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {unavailableGroupAlgorithms.map((algorithm) => (
             <AlgorithmCard
               key={algorithm.id}
@@ -109,7 +109,7 @@ export default function AlgorithmStep({
           </div>
 
           {isLoadingAlgorithms ? (
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13.5rem,1fr))]">
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {Array.from({ length: 8 }).map((_, index) => (
                 <div
                   key={index}
@@ -124,7 +124,7 @@ export default function AlgorithmStep({
           ) : (
             <div className="mt-5 space-y-8">
               <div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13.5rem,1fr))]">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                   {availableAlgorithms.map((algorithm) => (
                     <AlgorithmCard
                       key={algorithm.id}

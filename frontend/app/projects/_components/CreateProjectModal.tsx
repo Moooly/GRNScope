@@ -436,7 +436,8 @@ export default function CreateProjectModal({
       }
     >
       <div
-        className={`max-h-[calc(100vh-5rem)] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
+        data-create-project-modal
+        className={`relative max-h-[calc(100vh-5rem)] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
           isModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}

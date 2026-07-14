@@ -117,7 +117,7 @@ export default function AlgorithmSettingsPopover({
 }: AlgorithmSettingsPopoverProps) {
   const parameters = useMemo(() => algorithm?.parameters ?? [], [algorithm]);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const arrowRef = useRef<HTMLDivElement | null>(null);
+  const arrowRef = useRef<SVGSVGElement | null>(null);
   const [draft, setDraft] = useState<Draft>({});
 
   useEffect(() => {
@@ -145,44 +145,75 @@ export default function AlgorithmSettingsPopover({
 
     const margin = 12;
     const gap = 10;
+    const arrowExtent = 7;
     const anchorRect = anchorElement.getBoundingClientRect();
+    const modalElement = anchorElement.closest<HTMLElement>(
+      "[data-create-project-modal]",
+    );
+    const modalRect = modalElement?.getBoundingClientRect();
+    const boundaryTop = Math.max(margin, modalRect?.top ?? margin);
+    const boundaryRight = Math.min(
+      window.innerWidth - margin,
+      modalRect?.right ?? window.innerWidth - margin,
+    );
+    const boundaryBottom = Math.min(
+      window.innerHeight - margin,
+      modalRect?.bottom ?? window.innerHeight - margin,
+    );
+    const boundaryLeft = Math.max(margin, modalRect?.left ?? margin);
+    panel.style.maxHeight = `${Math.max(
+      0,
+      boundaryBottom - boundaryTop - arrowExtent,
+    )}px`;
+
     const panelWidth = panel.offsetWidth;
     const panelHeight = panel.offsetHeight;
-    const roomBelow = window.innerHeight - anchorRect.bottom;
+    const roomBelow = boundaryBottom - anchorRect.bottom;
+    const roomAbove = anchorRect.top - boundaryTop;
     const opensBelow =
-      roomBelow >= panelHeight + gap || roomBelow >= anchorRect.top;
+      roomBelow >= panelHeight + gap || roomBelow >= roomAbove;
     const unclampedTop = opensBelow
       ? anchorRect.bottom + gap
       : anchorRect.top - panelHeight - gap;
-    const top = clamp(
-      unclampedTop,
-      margin,
-      window.innerHeight - panelHeight - margin,
-    );
-    const left = clamp(
+    const viewportLeft = clamp(
       anchorRect.right - panelWidth,
-      margin,
-      window.innerWidth - panelWidth - margin,
+      boundaryLeft,
+      boundaryRight - panelWidth,
     );
+    const viewportTop = modalElement
+      ? unclampedTop
+      : clamp(
+          unclampedTop,
+          boundaryTop + (opensBelow ? arrowExtent : 0),
+          boundaryBottom - panelHeight - (opensBelow ? 0 : arrowExtent),
+        );
     const arrowLeft = clamp(
-      anchorRect.left + anchorRect.width / 2 - left - 6,
+      anchorRect.left + anchorRect.width / 2 - viewportLeft - 8,
       18,
-      panelWidth - 30,
+      panelWidth - 34,
     );
 
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
+    panel.style.left = modalElement
+      ? `${
+          viewportLeft -
+          (modalRect?.left ?? 0) -
+          modalElement.clientLeft +
+          modalElement.scrollLeft
+        }px`
+      : `${viewportLeft}px`;
+    panel.style.top = modalElement
+      ? `${
+          viewportTop -
+          (modalRect?.top ?? 0) -
+          modalElement.clientTop +
+          modalElement.scrollTop
+        }px`
+      : `${viewportTop}px`;
     panel.style.visibility = "visible";
     arrow.style.left = `${arrowLeft}px`;
-    arrow.style.top = opensBelow ? "-6px" : "auto";
-    arrow.style.bottom = opensBelow ? "auto" : "-6px";
-    arrow.style.borderTopWidth = opensBelow ? "1px" : "0";
-    arrow.style.borderLeftWidth = opensBelow ? "1px" : "0";
-    arrow.style.borderRightWidth = opensBelow ? "0" : "1px";
-    arrow.style.borderBottomWidth = opensBelow ? "0" : "1px";
-    arrow.style.filter = opensBelow
-      ? "drop-shadow(0 -3px 2px rgb(15 23 42 / 0.16))"
-      : "drop-shadow(0 3px 2px rgb(15 23 42 / 0.16))";
+    arrow.style.top = opensBelow ? "-7px" : "auto";
+    arrow.style.bottom = opensBelow ? "auto" : "-7px";
+    arrow.style.transform = opensBelow ? "rotate(180deg)" : "none";
   }, [anchorElement, onClose]);
 
   useLayoutEffect(() => {
@@ -196,12 +227,19 @@ export default function AlgorithmSettingsPopover({
         : null;
     if (panel) resizeObserver?.observe(panel);
 
+    const modalElement = anchorElement.closest<HTMLElement>(
+      "[data-create-project-modal]",
+    );
     window.addEventListener("resize", positionPopover);
-    document.addEventListener("scroll", positionPopover, true);
+    if (!modalElement) {
+      document.addEventListener("scroll", positionPopover, true);
+    }
     return () => {
       resizeObserver?.disconnect();
       window.removeEventListener("resize", positionPopover);
-      document.removeEventListener("scroll", positionPopover, true);
+      if (!modalElement) {
+        document.removeEventListener("scroll", positionPopover, true);
+      }
     };
   }, [algorithm, anchorElement, positionPopover]);
 
@@ -380,21 +418,35 @@ export default function AlgorithmSettingsPopover({
   };
 
   const hasErrors = Object.keys(fieldErrors).length > 0;
+  const modalElement = anchorElement.closest<HTMLElement>(
+    "[data-create-project-modal]",
+  );
   return createPortal(
     <div
       ref={panelRef}
       role="dialog"
       aria-modal="false"
       aria-label={`${algorithm.name} settings`}
-      className="fixed z-[140] w-[min(27rem,calc(100vw-1.5rem))] text-slate-900"
+      className={`${modalElement ? "absolute" : "fixed"} z-[140] w-[min(27rem,calc(100vw-1.5rem))] text-slate-900`}
       style={{ visibility: "hidden" }}
     >
-      <div
+      <svg
         ref={arrowRef}
         aria-hidden="true"
-        className="absolute z-20 h-3 w-3 rotate-45 border-solid border-slate-200 bg-white"
-      />
-      <div className="relative z-10 flex max-h-[min(32rem,calc(100vh-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
+        viewBox="0 0 16 8"
+        className="absolute z-20 h-2 w-4 overflow-visible"
+      >
+        <rect x="0" y="-1" width="16" height="2" fill="white" />
+        <path
+          d="M 0 0 L 8 8 L 16 0"
+          fill="white"
+          stroke="#e2e8f0"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <div className="relative z-10 flex max-h-[inherit] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           <div>{parameters.map(renderField)}</div>
         </div>
@@ -404,7 +456,7 @@ export default function AlgorithmSettingsPopover({
             href={`/algorithms?algorithm=${encodeURIComponent(algorithm.id)}`}
             target="_blank"
             rel="noreferrer"
-            className="min-w-0 truncate rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
+            className="-ml-3 min-w-0 truncate rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
           >
             About {algorithm.name}
           </a>
@@ -428,6 +480,6 @@ export default function AlgorithmSettingsPopover({
         </div>
       </div>
     </div>,
-    document.body,
+    modalElement ?? document.body,
   );
 }

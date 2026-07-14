@@ -22,9 +22,6 @@ export default function AlgorithmCard({
 }: AlgorithmCardProps) {
   const hasParameters = (algorithm.parameters?.length ?? 0) > 0;
   const showGear = hasParameters && Boolean(onConfigure);
-  // Keep the gear visible when the card is selected or has been customized so
-  // the control (and the "customized" dot) is discoverable without hovering.
-  const gearAlwaysVisible = checked || isCustomized;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return;
@@ -76,7 +73,7 @@ export default function AlgorithmCard({
 
       <div className="min-w-0 flex-1">
         <h3
-          className="whitespace-nowrap text-sm font-semibold text-slate-950"
+          className="truncate text-sm font-semibold text-slate-950"
           title={algorithm.name}
         >
           {algorithm.name}
@@ -84,7 +81,7 @@ export default function AlgorithmCard({
       </div>
 
       {showGear ? (
-        <div className="flex h-7 w-8 shrink-0 items-center justify-end border-l border-slate-200/80 pl-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-end">
           <button
             type="button"
             onClick={(event) => {
@@ -99,11 +96,7 @@ export default function AlgorithmCard({
             }}
             aria-label={`Configure ${algorithm.name}`}
             title={`Configure ${algorithm.name}`}
-            className={`relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent text-slate-400 transition hover:border-[#1b75a6]/30 hover:bg-[#e8f5fb] hover:text-[#1b75a6] focus-visible:border-[#1b75a6]/30 focus-visible:bg-[#e8f5fb] focus-visible:text-[#1b75a6] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 ${
-              gearAlwaysVisible
-                ? "opacity-100"
-                : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-            }`}
+            className="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition hover:border-[#1b75a6]/30 hover:bg-[#e8f5fb] hover:text-[#1b75a6] focus-visible:border-[#1b75a6]/30 focus-visible:bg-[#e8f5fb] focus-visible:text-[#1b75a6] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 group-hover:opacity-100 group-focus-within:opacity-100"
           >
             <svg
               viewBox="0 0 24 24"
