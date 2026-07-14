@@ -329,7 +329,7 @@ export default function AlgorithmSettingsModal({
         }`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+        <div className="border-b border-slate-200 pb-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               {algorithm.name} settings
@@ -338,14 +338,6 @@ export default function AlgorithmSettingsModal({
               {algorithm.tagline}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="shrink-0 cursor-pointer rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-          >
-            <span className="block h-4 w-4 leading-none">×</span>
-          </button>
         </div>
 
         <p className="mt-4 text-xs font-medium text-slate-500">
