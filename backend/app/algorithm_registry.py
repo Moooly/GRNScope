@@ -241,14 +241,6 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "options": CELLORACLE_SPECIES_OPTIONS,
             },
             {
-                "name": "maxGenes",
-                "label": "CellOracle gene cap",
-                "description": "Maximum number of genes passed to CellOracle after variance ranking.",
-                "default": 3000,
-                "required": False,
-                "value_type": "integer",
-            },
-            {
                 "name": "maxCells",
                 "label": "CellOracle cell cap",
                 "description": "Maximum number of cells per CellOracle scope.",

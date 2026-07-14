@@ -148,6 +148,21 @@ def normalize_celloracle_settings(
     return normalized_species, normalized_base_grn
 
 
+# Bounds for the project "Max edges per target" setting. The upper bound matches
+# the frontend cap; the backend still clamps to the actual gene count at run time.
+RANKED_EDGES_PER_TARGET_DEFAULT = 20
+RANKED_EDGES_PER_TARGET_MAX = 100
+
+
+def normalize_ranked_edges_per_target(raw: str) -> int:
+    """Parse and bound the 'Max edges per target' form value to [1, 100]."""
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return RANKED_EDGES_PER_TARGET_DEFAULT
+    return max(1, min(value, RANKED_EDGES_PER_TARGET_MAX))
+
+
 def build_queued_task(algorithm_id: str, progress_label: str = "Queued") -> dict:
     return {
         "algorithm_id": algorithm_id,
@@ -222,6 +237,7 @@ async def create_pending_project(
     include_all_tfs: str = Form(...),
     normalize_enabled: str = Form(...),
     log_transform_enabled: str = Form(...),
+    ranked_edges_per_target: str = Form("20"),
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
     celloracle_species: str = Form("human"),
@@ -266,6 +282,7 @@ async def create_pending_project(
         "include_all_tfs": include_all_tfs,
         "normalize_enabled": normalize_enabled,
         "log_transform_enabled": log_transform_enabled,
+        "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
         "selected_algorithms": selected_algorithms_list,
         "ensemble_enabled": ensemble_enabled,
         "expression_path": None,
@@ -527,6 +544,7 @@ async def create_project_from_temp(
     include_all_tfs: str = Form(...),
     normalize_enabled: str = Form(...),
     log_transform_enabled: str = Form(...),
+    ranked_edges_per_target: str = Form("20"),
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
     celloracle_species: str = Form("human"),
@@ -614,6 +632,7 @@ async def create_project_from_temp(
             "include_all_tfs": include_all_tfs,
             "normalize_enabled": normalize_enabled,
             "log_transform_enabled": log_transform_enabled,
+            "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
             "selected_algorithms": selected_algorithms_list,
             "ensemble_enabled": ensemble_enabled,
             "expression_path": move_result["expression_path"],

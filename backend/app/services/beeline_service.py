@@ -28,7 +28,7 @@ from ..repositories.project_repository import read_project_manifest
 # Confidence bootstrap run bounds. Applied uniformly to every dataset size:
 # never stop before MIN runs (protects the resolution of the stability
 # fraction that the website's confidence filter uses), never exceed MAX runs.
-DEFAULT_CONFIDENCE_MIN_RUNS = 5
+DEFAULT_CONFIDENCE_MIN_RUNS = 3
 DEFAULT_CONFIDENCE_MAX_RUNS = 15
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = DEFAULT_CONFIDENCE_MAX_RUNS
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 0.8
@@ -478,10 +478,8 @@ def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
 
 
 def resolve_confidence_min_runs() -> int:
-    return (
-        parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_MIN_RUNS"))
-        or DEFAULT_CONFIDENCE_MIN_RUNS
-    )
+    # Confidence-run bounds are fixed in code (min 3, max 15); no env override.
+    return DEFAULT_CONFIDENCE_MIN_RUNS
 
 
 def confidence_runs_enabled(project_manifest: dict) -> bool:
@@ -512,9 +510,10 @@ def resolve_confidence_settings(
 ) -> dict:
     confidence_enabled = confidence_runs_enabled(project_manifest)
     if confidence_enabled:
-        configured_run_count = (
-            parse_positive_int(project_manifest.get("confidence_bootstrap_runs"))
-            or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_BOOTSTRAP_RUNS"))
+        # Max/ceiling run count is fixed in code (DEFAULT_CONFIDENCE_MAX_RUNS = 15
+        # via resolve_adaptive_confidence_bootstrap_runs); no env override.
+        configured_run_count = parse_positive_int(
+            project_manifest.get("confidence_bootstrap_runs")
         )
         run_count = (
             configured_run_count
@@ -577,6 +576,11 @@ def resolve_confidence_settings(
         "stop_rho": stop_rho,
         "stop_streak": max(1, stop_streak),
         "gene_count": gene_count,
+        # Project-level cap on edges kept per target (the "Max edges per target"
+        # setting). None -> fall back to env / the default of 20.
+        "ranked_edges_per_target_limit": parse_positive_int(
+            project_manifest.get("ranked_edges_per_target_limit")
+        ),
     }
 
 
@@ -587,8 +591,15 @@ def resolve_ranked_edges_per_target_limit(
     gene_count: int | None = None,
 ) -> int | None:
     normalized_algorithm_id = algorithm_id.upper()
+    # Priority: project setting (manifest) > per-algorithm env > global env > default.
+    manifest_limit = (
+        parse_positive_int(confidence_settings.get("ranked_edges_per_target_limit"))
+        if confidence_settings
+        else None
+    )
     configured_limit = (
-        parse_positive_int(
+        manifest_limit
+        or parse_positive_int(
             os.environ.get(f"GRNSCOPE_{normalized_algorithm_id}_MAX_EDGES_PER_TARGET")
         )
         or parse_positive_int(os.environ.get("GRNSCOPE_RANKED_EDGES_PER_TARGET_LIMIT"))

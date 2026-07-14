@@ -38,6 +38,8 @@ type BackendAlgorithmEntry = {
 const DEFAULT_TOP_VARIABLE_GENES = "";
 const ALL_GENES_VALUE = "all";
 const MAX_PREPROCESSED_GENES = 8000;
+const RANKED_EDGES_HARD_MAX = 100;
+const DEFAULT_MAX_EDGES_PER_TARGET = "20";
 const CELLORACLE_INTERNAL_BASE_GRN = "auto";
 
 function formatTopVariableGenes(value: string) {
@@ -217,6 +219,7 @@ export default function CreateProjectFlow({
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [normalizeEnabled, setNormalizeEnabled] = useState(true);
   const [logTransformEnabled, setLogTransformEnabled] = useState(true);
+  const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
@@ -252,6 +255,7 @@ export default function CreateProjectFlow({
     setIncludeAllTFs(true);
     setNormalizeEnabled(true);
     setLogTransformEnabled(true);
+    setMaxEdgesPerTarget(DEFAULT_MAX_EDGES_PER_TARGET);
     setCellOracleSpecies("human");
     setHasCellOracleSettingsConfigured(false);
     setSelectedIds([]);
@@ -300,6 +304,38 @@ export default function CreateProjectFlow({
       isCancelled = true;
     };
   }, [API_BASE]);
+
+  // Effective gene count after the gene-filtering setting (used to bound the
+  // "Max edges per target" input: max = min(effectiveGenes, 100)).
+  const effectiveGeneCount = useMemo(() => {
+    if (geneCount === null) return null;
+    const trimmed = topVariableGenes.trim().toLowerCase();
+    if (!trimmed || trimmed === ALL_GENES_VALUE) {
+      return Math.min(geneCount, MAX_PREPROCESSED_GENES);
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return Math.min(geneCount, MAX_PREPROCESSED_GENES);
+    }
+    return Math.min(parsed, geneCount, MAX_PREPROCESSED_GENES);
+  }, [geneCount, topVariableGenes]);
+
+  const maxEdgesLimit = useMemo(
+    () =>
+      effectiveGeneCount === null
+        ? RANKED_EDGES_HARD_MAX
+        : Math.max(1, Math.min(effectiveGeneCount, RANKED_EDGES_HARD_MAX)),
+    [effectiveGeneCount],
+  );
+
+  // Keep the edge cap within its dynamic max as gene filtering changes; this also
+  // lowers the default to the gene count when there are fewer than 20 genes.
+  useEffect(() => {
+    const parsed = Number(maxEdgesPerTarget);
+    if (Number.isInteger(parsed) && parsed > maxEdgesLimit) {
+      setMaxEdgesPerTarget(String(maxEdgesLimit));
+    }
+  }, [maxEdgesLimit, maxEdgesPerTarget]);
 
   const datasetSummary = useMemo(
     () => ({
@@ -471,6 +507,7 @@ export default function CreateProjectFlow({
     formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
     formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
     formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
+    formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
     formData.append("ensemble_enabled", JSON.stringify(ensembleEnabled));
     formData.append("celloracle_species", cellOracleSpecies);
@@ -557,6 +594,16 @@ export default function CreateProjectFlow({
     } else if (!useAllGenes && parsedTopGenes > MAX_PREPROCESSED_GENES) {
       validationErrors.push(
         `Gene filtering cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()} when using a numeric cutoff.`,
+      );
+    }
+
+    const trimmedMaxEdges = maxEdgesPerTarget.trim();
+    const parsedMaxEdges = Number(trimmedMaxEdges);
+    if (!trimmedMaxEdges || !Number.isInteger(parsedMaxEdges) || parsedMaxEdges < 1) {
+      validationErrors.push("Max edges per target must be a positive integer.");
+    } else if (parsedMaxEdges > maxEdgesLimit) {
+      validationErrors.push(
+        `Max edges per target cannot be larger than ${maxEdgesLimit.toLocaleString()}.`,
       );
     }
 
@@ -659,6 +706,8 @@ export default function CreateProjectFlow({
       includeAllTFs={includeAllTFs}
       normalizeEnabled={normalizeEnabled}
       logTransformEnabled={logTransformEnabled}
+      maxEdgesPerTarget={maxEdgesPerTarget}
+      maxEdgesLimit={maxEdgesLimit}
       cellOracleSpecies={cellOracleSpecies}
       hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}
@@ -688,6 +737,7 @@ export default function CreateProjectFlow({
       setIncludeAllTFs={setIncludeAllTFs}
       setNormalizeEnabled={setNormalizeEnabled}
       setLogTransformEnabled={setLogTransformEnabled}
+      setMaxEdgesPerTarget={setMaxEdgesPerTarget}
       setCellOracleSpecies={setCellOracleSpecies}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}

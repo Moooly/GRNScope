@@ -51,6 +51,8 @@ interface CreateProjectModalProps {
   includeAllTFs: boolean;
   normalizeEnabled: boolean;
   logTransformEnabled: boolean;
+  maxEdgesPerTarget: string;
+  maxEdgesLimit: number;
   cellOracleSpecies: string;
   hasCellOracleSettingsConfigured: boolean;
   selectedIds: string[];
@@ -80,6 +82,7 @@ interface CreateProjectModalProps {
   setIncludeAllTFs: (value: boolean) => void;
   setNormalizeEnabled: (value: boolean) => void;
   setLogTransformEnabled: (value: boolean) => void;
+  setMaxEdgesPerTarget: (value: string) => void;
   setCellOracleSpecies: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
@@ -101,6 +104,8 @@ export default function CreateProjectModal({
   includeAllTFs,
   normalizeEnabled,
   logTransformEnabled,
+  maxEdgesPerTarget,
+  maxEdgesLimit,
   cellOracleSpecies,
   hasCellOracleSettingsConfigured,
   selectedIds,
@@ -130,6 +135,7 @@ export default function CreateProjectModal({
   setIncludeAllTFs,
   setNormalizeEnabled,
   setLogTransformEnabled,
+  setMaxEdgesPerTarget,
   setCellOracleSpecies,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
@@ -620,7 +626,7 @@ export default function CreateProjectModal({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-black">
-                      Preprocessing
+                      Analysis settings
                     </p>
                     <button
                       type="button"
@@ -636,8 +642,8 @@ export default function CreateProjectModal({
                   </div>
                 </div>
 
-                <div className="mt-5">
-                  <div className="grid items-center gap-6 lg:grid-cols-[1.55fr_0.9fr_0.9fr_0.9fr]">
+                <div className="mt-5 space-y-5">
+                  <div className="grid items-center gap-6 sm:grid-cols-2">
                     <div className="flex items-center gap-3">
                       <span className="whitespace-nowrap text-sm font-semibold text-slate-950">
                         Gene filtering
@@ -686,6 +692,49 @@ export default function CreateProjectModal({
                       />
                     </div>
 
+                    <div className="flex items-center gap-3">
+                      <span className="whitespace-nowrap text-sm font-semibold text-slate-950">
+                        Max edges per target
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={maxEdgesLimit}
+                        value={maxEdgesPerTarget}
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
+                          if (nextValue === "") {
+                            setMaxEdgesPerTarget("");
+                            return;
+                          }
+                          const parsedValue = Number(nextValue);
+                          if (
+                            Number.isNaN(parsedValue) ||
+                            !Number.isInteger(parsedValue) ||
+                            parsedValue < 1
+                          ) {
+                            return;
+                          }
+                          if (parsedValue > maxEdgesLimit) {
+                            setMaxEdgesPerTarget(String(maxEdgesLimit));
+                            return;
+                          }
+                          setMaxEdgesPerTarget(nextValue);
+                        }}
+                        onBlur={() => {
+                          const trimmed = maxEdgesPerTarget.trim();
+                          const parsed = Number(trimmed);
+                          if (!trimmed || Number.isNaN(parsed) || parsed < 1) {
+                            setMaxEdgesPerTarget(String(Math.min(20, maxEdgesLimit)));
+                          }
+                        }}
+                        aria-label="Max edges per target"
+                        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid items-center gap-6 border-t border-slate-100 pt-5 sm:grid-cols-3">
                     <PreprocessingToggle
                       label="Known TFs"
                       enabled={includeAllTFs}
