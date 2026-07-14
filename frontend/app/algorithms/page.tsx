@@ -6,15 +6,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE } from "../_lib/apiConfig";
 
 type MethodologyCategory =
+  | "Partial information decomposition"
   | "Random forest"
-  | "Mutual information"
-  | "Correlation"
-  | "ODE + regression"
-  | "Regression"
-  | "Granger causality"
-  | "Graphical model"
-  | "Tree-based dynamical system"
-  | "Graph learning";
+  | "Gradient boosting"
+  | "Bayesian ridge regression"
+  | "Partial correlation"
+  | "Pearson correlation"
+  | "Linear ODE"
+  | "Ridge regression"
+  | "Directed information"
+  | "Kernel Granger causality"
+  | "Lagged correlation"
+  | "Linear ODE + velocity"
+  | "Bayesian ARMA"
+  | "Dynamical model + trees"
+  | "Signed graph learning";
 
 type AlgorithmParameter = {
   name: string;
@@ -591,9 +597,6 @@ export default function AlgorithmsPage() {
                           <div className="flex items-baseline justify-between gap-3">
                             <p className="text-sm font-semibold text-slate-900">
                               {parameter.label ?? parameter.name}
-                              <span className="ml-2 font-mono text-xs font-normal text-slate-400">
-                                {parameter.name}
-                              </span>
                             </p>
                             <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600">
                               Default: {formatParameterDefault(parameter)}

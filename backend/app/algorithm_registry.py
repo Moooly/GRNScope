@@ -6,15 +6,21 @@ from typing import Any, Literal, TypedDict
 
 
 AlgorithmCategory = Literal[
-    "Mutual information",
+    "Partial information decomposition",
     "Random forest",
-    "Correlation",
-    "ODE + regression",
-    "Regression",
-    "Granger causality",
-    "Tree-based dynamical system",
-    "Graph learning",
-    "Prior-informed regression",
+    "Gradient boosting",
+    "Bayesian ridge regression",
+    "Partial correlation",
+    "Pearson correlation",
+    "Linear ODE",
+    "Ridge regression",
+    "Directed information",
+    "Kernel Granger causality",
+    "Lagged correlation",
+    "Linear ODE + velocity",
+    "Bayesian ARMA",
+    "Dynamical model + trees",
+    "Signed graph learning",
 ]
 
 
@@ -89,12 +95,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "PIDC",
         "name": "PIDC",
-        "description": "Information-theory method for undirected GRN inference.",
+        "description": "Partial-information-decomposition method for undirected GRN inference.",
         "long_description": (
             "PIDC uses multivariate information measures to infer statistical dependency "
             "relationships between genes from single-cell expression data."
         ),
-        "category": "Mutual information",
+        "category": "Partial information decomposition",
         "year": "2017",
         "journal": "Cell Systems",
         "publication_title": "Gene regulatory network inference from single-cell data using multivariate information measures",
@@ -128,7 +134,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "GENIE3",
         "name": "GENIE3",
-        "description": "Tree-based method for predicting regulators of target genes.",
+        "description": "Random-forest method for predicting regulators of target genes.",
         "long_description": (
             "GENIE3 predicts the expression of each target gene from candidate regulators "
             "using tree-based ensemble models and uses feature importance as edge weight."
@@ -194,12 +200,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "GRNBOOST2",
         "name": "GRNBOOST2",
-        "description": "Fast tree-based alternative to GENIE3.",
+        "description": "Gradient-boosted tree method for fast regulator ranking.",
         "long_description": (
             "GRNBoost2 uses gradient-boosted tree models through Arboreto to infer "
             "regulatory links efficiently from expression data."
         ),
-        "category": "Random forest",
+        "category": "Gradient boosting",
         "year": "2018",
         "journal": "Bioinformatics",
         "publication_title": "GRNBoost2 and Arboreto: efficient and scalable inference of gene regulatory networks",
@@ -277,13 +283,13 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "CELLORACLE",
         "name": "CELLORACLE",
-        "description": "Prior-informed GRN construction using promoter or atlas base-GRN candidates.",
+        "description": "Prior-informed Bayesian ridge regression using promoter or atlas base-GRN candidates.",
         "long_description": (
             "CellOracle combines a TF-target base GRN with single-cell expression "
             "data to estimate directed, signed regulatory links. GRNScope runs it "
             "globally, and also per cluster when cluster labels are uploaded."
         ),
-        "category": "Prior-informed regression",
+        "category": "Bayesian ridge regression",
         "year": "2022",
         "journal": "Nature",
         "publication_title": "CellOracle: dissecting cell identity by network biology",
@@ -355,7 +361,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "other genes. The result is an association-based network rather than a "
             "causal regulatory network."
         ),
-        "category": "Correlation",
+        "category": "Partial correlation",
         "year": "2015",
         "journal": "Communications for Statistical Applications and Methods",
         "publication_title": "ppcor: An R package for a fast calculation to semi-partial correlation coefficients",
@@ -406,7 +412,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "profiles. In this platform, it is treated as a simple BEELINE baseline "
             "for gene-gene association, not as a dedicated GRN inference method."
         ),
-        "category": "Correlation",
+        "category": "Pearson correlation",
         "year": "Baseline",
         "journal": "Pearson correlation",
         "publication_title": "Pairwise Pearson correlation baseline",
@@ -448,7 +454,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "SCODE models gene expression dynamics using linear ordinary differential "
             "equations and low-dimensional latent variables."
         ),
-        "category": "ODE + regression",
+        "category": "Linear ODE",
         "year": "2017",
         "journal": "Bioinformatics",
         "publication_title": "SCODE: an efficient regulatory network inference algorithm from single-cell RNA-Seq during differentiation",
@@ -512,12 +518,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "SINCERITIES",
         "name": "SINCERITIES",
-        "description": "Regression method for time-ordered expression data.",
+        "description": "Ridge-regression method for time-ordered expression data.",
         "long_description": (
             "SINCERITIES infers regulatory relationships from time-stamped or "
             "pseudotime-ordered single-cell expression profiles."
         ),
-        "category": "Regression",
+        "category": "Ridge regression",
         "year": "2018",
         "journal": "Bioinformatics",
         "publication_title": "SINCERITIES: inferring gene regulatory networks from time-stamped single cell transcriptional expression profiles",
@@ -560,12 +566,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "SCRIBE",
         "name": "SCRIBE",
-        "description": "Information-theory method for directed regulatory links.",
+        "description": "Restricted-directed-information method for causal regulatory links.",
         "long_description": (
             "SCRIBE uses restricted directed information to estimate causal regulatory "
             "interactions between genes from coupled single-cell expression dynamics."
         ),
-        "category": "Mutual information",
+        "category": "Directed information",
         "year": "2020",
         "journal": "Cell Systems",
         "publication_title": "Inferring Causal Gene Regulatory Networks from Coupled Single-Cell Expression Dynamics Using Scribe",
@@ -661,7 +667,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "aggregation to infer directed regulatory relationships from ordered "
             "single-cell transcriptomic data."
         ),
-        "category": "Granger causality",
+        "category": "Kernel Granger causality",
         "year": "2022",
         "journal": "Cell Reports",
         "publication_title": "Network inference with Granger causality ensembles on single-cell transcriptomics",
@@ -792,7 +798,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "LEAP constructs gene co-expression networks using pseudotime ordering "
             "and lagged correlation relationships."
         ),
-        "category": "Correlation",
+        "category": "Lagged correlation",
         "year": "2017",
         "journal": "Bioinformatics",
         "publication_title": "LEAP: constructing gene co-expression networks for single-cell RNA-sequencing data using pseudotime ordering",
@@ -836,12 +842,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "GRISLI",
         "name": "GRISLI",
-        "description": "ODE-regression method for ordered single-cell data.",
+        "description": "Linear-ODE method with velocity inference for ordered single-cell data.",
         "long_description": (
             "GRISLI infers regulatory networks from single-cell data using linear "
             "differential equations and velocity information."
         ),
-        "category": "ODE + regression",
+        "category": "Linear ODE + velocity",
         "year": "2018",
         "journal": "bioRxiv preprint",
         "publication_title": "Gene regulation inference from single-cell RNA-seq data with linear differential equations and velocity inference",
@@ -906,13 +912,13 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "GRNVBEM",
         "name": "GRNVBEM",
-        "description": "Variational Bayesian method for directed signed GRNs.",
+        "description": "Variational Bayesian ARMA method for directed signed GRNs.",
         "long_description": (
             "GRNVBEM uses a first-order autoregressive moving-average model within "
             "a variational Bayesian expectation-maximization framework to infer gene "
             "regulatory networks from time-series or pseudo-time-series data."
         ),
-        "category": "Regression",
+        "category": "Bayesian ARMA",
         "year": "2018",
         "journal": "Bioinformatics",
         "publication_title": "A Bayesian framework for the inference of gene regulatory networks from time and pseudo-time series data",
@@ -950,7 +956,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "non-parametric decision-tree reconstruction. It uses time-series expression "
             "data to rank directed regulatory links."
         ),
-        "category": "Tree-based dynamical system",
+        "category": "Dynamical model + trees",
         "year": "2015",
         "journal": "Bioinformatics",
         "publication_title": "Combining tree-based and dynamical systems for the inference of gene regulatory networks",
@@ -991,7 +997,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "data using graph signal processing. Its kernelized version is designed "
             "to model non-linear co-expression and handle many zero values in scRNA-seq data."
         ),
-        "category": "Graph learning",
+        "category": "Signed graph learning",
         "year": "2022",
         "journal": "Bioinformatics",
         "publication_title": "scSGL: kernelized signed graph learning for single-cell gene regulatory network inference",
