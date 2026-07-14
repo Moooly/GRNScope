@@ -176,6 +176,13 @@ export default function AlgorithmSettingsPopover({
     arrow.style.left = `${arrowLeft}px`;
     arrow.style.top = opensBelow ? "-6px" : "auto";
     arrow.style.bottom = opensBelow ? "auto" : "-6px";
+    arrow.style.borderTopWidth = opensBelow ? "1px" : "0";
+    arrow.style.borderLeftWidth = opensBelow ? "1px" : "0";
+    arrow.style.borderRightWidth = opensBelow ? "0" : "1px";
+    arrow.style.borderBottomWidth = opensBelow ? "0" : "1px";
+    arrow.style.filter = opensBelow
+      ? "drop-shadow(0 -3px 2px rgb(15 23 42 / 0.16))"
+      : "drop-shadow(0 3px 2px rgb(15 23 42 / 0.16))";
   }, [anchorElement, onClose]);
 
   useLayoutEffect(() => {
@@ -304,7 +311,7 @@ export default function AlgorithmSettingsPopover({
       >
         <label
           htmlFor={fieldId}
-          className="mt-2 text-sm font-semibold leading-5 text-slate-800"
+          className="mt-2 whitespace-nowrap text-sm font-semibold leading-5 text-slate-800"
         >
           {parameter.label ?? parameter.name}
         </label>
@@ -379,13 +386,13 @@ export default function AlgorithmSettingsPopover({
       role="dialog"
       aria-modal="false"
       aria-label={`${algorithm.name} settings`}
-      className="fixed z-[140] w-[min(22rem,calc(100vw-1.5rem))] text-slate-900"
+      className="fixed z-[140] w-[min(27rem,calc(100vw-1.5rem))] text-slate-900"
       style={{ visibility: "hidden" }}
     >
       <div
         ref={arrowRef}
         aria-hidden="true"
-        className="absolute z-0 h-3 w-3 rotate-45 border border-slate-200 bg-white"
+        className="absolute z-20 h-3 w-3 rotate-45 border-solid border-slate-200 bg-white"
       />
       <div className="relative z-10 flex max-h-[min(32rem,calc(100vh-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
