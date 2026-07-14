@@ -377,23 +377,14 @@ export default function AlgorithmSettingsModal({
           </div>
         ) : null}
 
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <button
-              type="button"
-              onClick={resetToDefaults}
-              className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400 transition hover:text-[#1b75a6]"
-            >
-              Reset to defaults
-            </button>
-          </div>
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={resetToDefaults}
               className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
             >
-              Cancel
+              Reset to default
             </button>
             <button
               type="button"
