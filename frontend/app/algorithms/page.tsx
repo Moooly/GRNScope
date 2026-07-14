@@ -16,6 +16,20 @@ type MethodologyCategory =
   | "Tree-based dynamical system"
   | "Graph learning";
 
+type AlgorithmParameter = {
+  name: string;
+  label?: string;
+  description?: string;
+  default?: unknown;
+  required?: boolean;
+  value_type?: string;
+  options?: unknown[];
+  minimum?: number;
+  maximum?: number;
+  step?: number;
+  advanced?: boolean;
+};
+
 type BackendAlgorithmEntry = {
   id: string;
   name: string;
@@ -38,15 +52,7 @@ type BackendAlgorithmEntry = {
   strengths: string[];
   limitations: string[];
   recommended_use_cases: string[];
-  parameters: {
-    name: string;
-    label?: string;
-    description?: string;
-    default?: unknown;
-    required?: boolean;
-    value_type?: string;
-    options?: unknown[];
-  }[];
+  parameters: AlgorithmParameter[];
 };
 
 type AlgorithmEntry = {
@@ -69,6 +75,7 @@ type AlgorithmEntry = {
   detail: string;
   recommended: boolean;
   runner: string;
+  parameters: AlgorithmParameter[];
 };
 
 const API_BASE_URL = API_BASE;
@@ -99,7 +106,33 @@ function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): AlgorithmEntry {
     detail: algorithm.long_description,
     recommended: algorithm.recommended,
     runner: algorithm.runner,
+    parameters: algorithm.parameters ?? [],
   };
+}
+
+// Human-readable default for the read-only parameter list.
+function formatParameterDefault(parameter: AlgorithmParameter): string {
+  const { default: value, value_type } = parameter;
+  if (value === null || value === undefined) return "—";
+  if (value_type === "bool" || value_type === "boolean") {
+    return value ? "On" : "Off";
+  }
+  return String(value);
+}
+
+// Compact range / options hint shown under each parameter.
+function formatParameterRange(parameter: AlgorithmParameter): string | null {
+  if (parameter.options && parameter.options.length > 0) {
+    return parameter.options.map((option) => String(option)).join(" · ");
+  }
+  const { value_type, minimum, maximum } = parameter;
+  if (value_type === "bool" || value_type === "boolean") {
+    return "On / Off";
+  }
+  if (typeof minimum === "number" && typeof maximum === "number") {
+    return `Range ${minimum} – ${maximum}`;
+  }
+  return null;
 }
 
 
@@ -647,6 +680,47 @@ export default function AlgorithmsPage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Parameters</h3>
+                {selectedAlgorithm.parameters.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {selectedAlgorithm.parameters.map((parameter) => {
+                      const range = formatParameterRange(parameter);
+                      return (
+                        <div
+                          key={parameter.name}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                        >
+                          <div className="flex items-baseline justify-between gap-3">
+                            <p className="text-sm font-semibold text-slate-900">
+                              {parameter.label ?? parameter.name}
+                              <span className="ml-2 font-mono text-xs font-normal text-slate-400">
+                                {parameter.name}
+                              </span>
+                            </p>
+                            <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                              Default: {formatParameterDefault(parameter)}
+                            </span>
+                          </div>
+                          {parameter.description ? (
+                            <p className="mt-1 text-xs leading-5 text-slate-500">
+                              {parameter.description}
+                            </p>
+                          ) : null}
+                          {range ? (
+                            <p className="mt-1 text-xs text-slate-400">{range}</p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    No adjustable parameters — this method runs with platform defaults.
+                  </p>
+                )}
               </div>
 
             </div>

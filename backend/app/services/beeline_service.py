@@ -1621,17 +1621,29 @@ def build_algorithm_runtime_params(
     normalized_algorithm_id = algorithm_id.upper()
     runtime_params = {"matrixFormat": "sparse"}
 
-    if normalized_algorithm_id != "CELLORACLE":
-        return runtime_params
+    if normalized_algorithm_id == "CELLORACLE":
+        celloracle_settings = project_manifest.get("celloracle") or {}
+        scope = project_manifest.get("scope") or {}
+        runtime_params.update(
+            {
+                "species": str(celloracle_settings.get("species") or "human"),
+                "baseGrn": str(celloracle_settings.get("base_grn") or "auto"),
+                "clusterName": str(scope_label or scope.get("label") or "Global"),
+            }
+        )
 
-    celloracle_settings = project_manifest.get("celloracle") or {}
-    scope = project_manifest.get("scope") or {}
-    return {
-        **runtime_params,
-        "species": str(celloracle_settings.get("species") or "human"),
-        "baseGrn": str(celloracle_settings.get("base_grn") or "auto"),
-        "clusterName": str(scope_label or scope.get("label") or "Global"),
-    }
+    # User-selected parameter overrides, validated against the algorithm
+    # registry and persisted at project creation. They take precedence over the
+    # registry defaults resolved by build_beeline_config. Absent for algorithms
+    # the user left at defaults, keeping existing behaviour unchanged.
+    user_parameters = (project_manifest.get("algorithm_parameters") or {}).get(
+        normalized_algorithm_id
+    )
+    if isinstance(user_parameters, dict):
+        for name, value in user_parameters.items():
+            runtime_params[str(name)] = value
+
+    return runtime_params
 
 
 def build_missing_ranked_edges_error(

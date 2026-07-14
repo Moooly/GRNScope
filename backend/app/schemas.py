@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -22,6 +22,9 @@ class CreateProjectFromTempRequest(BaseModel):
     project_name: str
     project_description: Optional[str] = None
     selected_algorithms: list[str]
+    # Optional per-algorithm parameter overrides: {algorithm_id: {param: value}}.
+    # Validated against the algorithm registry at project creation.
+    algorithm_parameters: dict[str, dict[str, Any]] = {}
     top_variable_genes: int
     include_all_tfs: bool
     normalize_enabled: bool

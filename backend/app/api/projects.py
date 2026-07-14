@@ -21,6 +21,7 @@ from ..algorithm_registry import (
     CELLORACLE_BASE_GRN_OPTIONS,
     CELLORACLE_SPECIES_OPTIONS,
     sort_algorithm_ids_by_difficulty,
+    validate_selected_algorithm_parameters,
 )
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from .client_identity import (
@@ -131,6 +132,29 @@ def parse_selected_algorithms(selected_algorithms: str) -> list[str]:
     )
 
 
+def parse_algorithm_parameters(
+    raw_algorithm_parameters: str,
+    selected_algorithms_list: list[str],
+) -> dict[str, dict]:
+    """Parse and validate the per-algorithm parameter overrides form field.
+
+    ``raw_algorithm_parameters`` is a JSON object string of the shape
+    ``{"GENIE3": {"nEstimators": 500}, ...}``. Values are validated against the
+    algorithm registry (known params, types, options, numeric bounds) and only
+    kept for algorithms in ``selected_algorithms_list``. An empty or missing
+    field yields ``{}``. Raises ValueError on malformed JSON or invalid values.
+    """
+    if not raw_algorithm_parameters or not raw_algorithm_parameters.strip():
+        return {}
+    try:
+        parsed = json.loads(raw_algorithm_parameters)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid algorithm parameters: {exc}.") from exc
+    return validate_selected_algorithm_parameters(
+        selected_algorithms_list, parsed
+    )
+
+
 def normalize_celloracle_settings(
     celloracle_species: str,
     celloracle_base_grn: str,
@@ -187,12 +211,17 @@ def build_job_manifest(
     ensemble_enabled: str,
     overall_status: str = "Queued",
     progress_label: str = "Queued",
+    algorithm_parameters: dict | None = None,
 ) -> dict:
     return {
         "job_id": job_id,
         "project_id": project_id,
         "overall_status": overall_status,
         "ensemble_enabled": ensemble_enabled,
+        # Snapshot of the per-algorithm parameter overrides this job ran with,
+        # so a specific result can be reproduced even if the project's latest
+        # settings later change.
+        "algorithm_parameters": algorithm_parameters or {},
         "tasks": [
             build_queued_task(algorithm_id, progress_label=progress_label)
             for algorithm_id in selected_algorithms_list
@@ -242,6 +271,7 @@ async def create_pending_project(
     ensemble_enabled: str = Form(...),
     celloracle_species: str = Form("human"),
     celloracle_base_grn: str = Form("auto"),
+    algorithm_parameters: str = Form("{}"),
     expression_filename: str = Form(""),
     pseudotime_filename: str = Form(""),
     cluster_labels_filename: str = Form(""),
@@ -254,6 +284,9 @@ async def create_pending_project(
         selected_algorithms_list = parse_selected_algorithms(selected_algorithms)
         normalized_celloracle_species, normalized_celloracle_base_grn = (
             normalize_celloracle_settings(celloracle_species, celloracle_base_grn)
+        )
+        validated_algorithm_parameters = parse_algorithm_parameters(
+            algorithm_parameters, selected_algorithms_list
         )
     except Exception as exc:
         return CreateProjectResponse(ok=False, errors=[str(exc)])
@@ -268,6 +301,7 @@ async def create_pending_project(
         selected_algorithms_list,
         ensemble_enabled,
         progress_label="Waiting for dataset upload",
+        algorithm_parameters=validated_algorithm_parameters,
     )
 
     project_manifest = {
@@ -284,6 +318,7 @@ async def create_pending_project(
         "log_transform_enabled": log_transform_enabled,
         "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
         "selected_algorithms": selected_algorithms_list,
+        "algorithm_parameters": validated_algorithm_parameters,
         "ensemble_enabled": ensemble_enabled,
         "expression_path": None,
         "pseudotime_path": None,
@@ -330,6 +365,7 @@ async def create_pending_project(
             "base_grn": normalized_celloracle_base_grn,
         },
         "selected_algorithms": selected_algorithms_list,
+        "algorithm_parameters": validated_algorithm_parameters,
         "results_directory": str(project_dir / "results"),
         "ensemble_enabled": ensemble_enabled,
         "upload_status": "waiting_for_upload",
@@ -549,6 +585,7 @@ async def create_project_from_temp(
     ensemble_enabled: str = Form(...),
     celloracle_species: str = Form("human"),
     celloracle_base_grn: str = Form("auto"),
+    algorithm_parameters: str = Form("{}"),
 ):
     owner_id = get_or_create_client_id(request, response)
     meta_path = temp_metadata_path(temp_upload_id)
@@ -585,6 +622,10 @@ async def create_project_from_temp(
                 ],
             )
 
+        validated_algorithm_parameters = parse_algorithm_parameters(
+            algorithm_parameters, selected_algorithms_list
+        )
+
         move_result = move_temp_upload_to_project(temp_upload_id, project_id)
         project_dir = Path(move_result["project_dir"])
 
@@ -601,6 +642,7 @@ async def create_project_from_temp(
             "project_id": project_id,
             "overall_status": "Queued",
             "ensemble_enabled": ensemble_enabled,
+            "algorithm_parameters": validated_algorithm_parameters,
             "tasks": [
                 {
                     "algorithm_id": algorithm_id,
@@ -634,6 +676,7 @@ async def create_project_from_temp(
             "log_transform_enabled": log_transform_enabled,
             "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
             "selected_algorithms": selected_algorithms_list,
+            "algorithm_parameters": validated_algorithm_parameters,
             "ensemble_enabled": ensemble_enabled,
             "expression_path": move_result["expression_path"],
             "pseudotime_path": move_result.get("pseudotime_path"),
@@ -679,6 +722,7 @@ async def create_project_from_temp(
                 "base_grn": normalized_celloracle_base_grn,
             },
             "selected_algorithms": selected_algorithms_list,
+            "algorithm_parameters": validated_algorithm_parameters,
             "results_directory": str(project_dir / "results"),
             "ensemble_enabled": ensemble_enabled,
             "job": {

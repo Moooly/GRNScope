@@ -16,6 +16,7 @@ export default function RootLayout({
   const [contactContext, setContactContext] = useState<ContactSupportContext>({});
   const pathname = usePathname();
   const isHomeActive = pathname === "/";
+  const isAlgorithmsActive = pathname === "/algorithms";
 
   useEffect(() => {
     function handleOpenContact(event: Event) {
@@ -147,6 +148,17 @@ export default function RootLayout({
                 }`}
               >
                 Home
+              </Link>
+              <Link
+                href="/algorithms"
+                aria-current={isAlgorithmsActive ? "page" : undefined}
+                className={`cursor-pointer rounded-full px-4 py-2.5 text-base font-bold transition hover:text-white ${
+                  isAlgorithmsActive
+                    ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                    : "bg-transparent text-white/90"
+                }`}
+              >
+                Algorithms
               </Link>
               <button
                 type="button"

@@ -26,6 +26,17 @@ class AlgorithmParameter(TypedDict, total=False):
     required: bool
     value_type: str
     options: list[Any]
+    # Optional inclusive bounds for numeric parameters. When present they are
+    # enforced server-side (values are clamped) and can be read by the frontend
+    # to bound the input control.
+    minimum: float
+    maximum: float
+    # UI hints (not enforced server-side). 'step' is the numeric input
+    # increment; when absent the frontend uses 1 for integers. 'advanced' marks
+    # rarely-tuned parameters the settings modal groups under an "Advanced"
+    # section that is collapsed by default.
+    step: float
+    advanced: bool
 
 
 class AlgorithmInfo(TypedDict):
@@ -151,7 +162,34 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Datasets without pseudotime.",
             "Recommended preset selection.",
         ],
-        "parameters": [],
+        "parameters": [
+            {
+                "name": "nEstimators",
+                "label": "Number of trees",
+                "description": (
+                    "Number of trees in the random forest. More trees give more "
+                    "stable edge rankings but increase runtime roughly linearly."
+                ),
+                "default": 400,
+                "required": False,
+                "value_type": "int",
+                "minimum": 1,
+                "maximum": 2000,
+                "step": 50,
+            },
+            {
+                "name": "maxFeatures",
+                "label": "Candidate regulators per split",
+                "description": (
+                    "Candidate regulators considered at each tree split. 'sqrt' "
+                    "and 'log2' add randomness and speed; 'all' considers every gene."
+                ),
+                "default": "sqrt",
+                "required": False,
+                "value_type": "string",
+                "options": ["sqrt", "log2", "all"],
+            },
+        ],
     },
     {
         "id": "GRNBOOST2",
@@ -189,7 +227,52 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Large expression matrices.",
             "Recommended preset selection.",
         ],
-        "parameters": [],
+        "parameters": [
+            {
+                "name": "learningRate",
+                "label": "Learning rate",
+                "description": (
+                    "Boosting shrinkage. Lower values are more accurate but "
+                    "converge more slowly."
+                ),
+                "default": 0.01,
+                "required": False,
+                "value_type": "float",
+                "minimum": 0.0001,
+                "maximum": 1.0,
+                "step": 0.001,
+            },
+            {
+                "name": "nEstimators",
+                "label": "Max boosting rounds",
+                "description": (
+                    "Upper bound on boosting rounds. Early stopping usually halts "
+                    "well before this cap is reached."
+                ),
+                "default": 5000,
+                "required": False,
+                "value_type": "int",
+                "minimum": 1,
+                "maximum": 20000,
+                "step": 100,
+                "advanced": True,
+            },
+            {
+                "name": "maxFeatures",
+                "label": "Regulators sampled per round",
+                "description": (
+                    "Fraction of candidate regulators sampled per boosting round, "
+                    "between 0 and 1."
+                ),
+                "default": 0.1,
+                "required": False,
+                "value_type": "float",
+                "minimum": 0.01,
+                "maximum": 1.0,
+                "step": 0.05,
+                "advanced": True,
+            },
+        ],
     },
     {
         "id": "CELLORACLE",
@@ -230,40 +313,26 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Comparing global and cluster-specific regulation.",
             "Signed TF-target interpretation.",
         ],
+        # 'species' and 'base_grn' are chosen in the CellOracle config modal
+        # (project manifest -> runtime params), not here, to avoid a duplicate
+        # control. The per-target edge cap is the shared 'maxRegulatorsPerTarget'
+        # setting rather than a CellOracle-specific 'topK'.
         "parameters": [
             {
-                "name": "species",
-                "label": "Species",
-                "description": "Species used to select the matching CellOracle pre-built base GRN.",
-                "default": "human",
-                "required": True,
-                "value_type": "string",
-                "options": CELLORACLE_SPECIES_OPTIONS,
-            },
-            {
                 "name": "maxCells",
-                "label": "CellOracle cell cap",
+                "label": "Max cells per network",
                 "description": "Maximum number of cells per CellOracle scope.",
                 "default": 30000,
                 "required": False,
                 "value_type": "integer",
+                "minimum": 1,
+                "maximum": 200000,
+                "step": 1000,
             },
-            {
-                "name": "minClusterCells",
-                "label": "Minimum cluster cells",
-                "description": "Clusters below this size are skipped.",
-                "default": 50,
-                "required": False,
-                "value_type": "integer",
-            },
-            {
-                "name": "topK",
-                "label": "Top edges per target",
-                "description": "Maximum strongest CellOracle links to keep per target.",
-                "default": 20,
-                "required": False,
-                "value_type": "integer",
-            },
+            # 'minClusterCells' is intentionally not exposed here: the minimum
+            # cluster size is a platform-wide gate (MIN_CLUSTER_SCOPE_CELLS in
+            # job_service.py) applied when defining cluster scopes for every
+            # algorithm, not a CellOracle run parameter.
             {
                 "name": "pValueCutoff",
                 "label": "P-value cutoff",
@@ -271,6 +340,9 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0.05,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "step": 0.01,
             },
         ],
     },
@@ -319,6 +391,9 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0.01,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "step": 0.01,
             }
         ],
     },
@@ -361,16 +436,9 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Quick baseline comparison.",
             "Testing the pipeline with a lightweight local method.",
         ],
-        "parameters": [
-            {
-                "name": "topK",
-                "label": "Top edges per target",
-                "description": "Maximum number of strongest Pearson edges to keep for each target gene.",
-                "default": 20,
-                "required": False,
-                "value_type": "integer",
-            }
-        ],
+        # No algorithm-specific parameters: the per-target edge cap is the
+        # shared 'maxRegulatorsPerTarget' setting, applied to every algorithm.
+        "parameters": [],
     },
     {
         "id": "SCODE",
@@ -410,11 +478,13 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "z",
-                "label": "Latent dimension",
+                "label": "Latent dimension (z)",
                 "description": "Latent dimension used by SCODE (canonical paper value is 4).",
                 "default": 4,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 100,
             },
             {
                 "name": "nIter",
@@ -423,6 +493,9 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 1000,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 20000,
+                "step": 100,
             },
             {
                 "name": "nRep",
@@ -431,6 +504,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 3,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 20,
             },
         ],
     },
@@ -472,11 +547,13 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "nBins",
-                "label": "Number of bins",
-                "description": "Number of bins used by SINCERITIES.",
+                "label": "Number of time bins",
+                "description": "Time windows the trajectory is split into.",
                 "default": 10,
                 "required": False,
                 "value_type": "int",
+                "minimum": 2,
+                "maximum": 100,
             },
         ],
     },
@@ -519,15 +596,18 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "delay",
-                "label": "Delay",
-                "description": "Delay parameter used by SCRIBE.",
+                "label": "Time delay",
+                "description": "Lag between regulator and target expression.",
                 "default": 5,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 100,
+                "advanced": True,
             },
             {
                 "name": "method",
-                "label": "RDI method",
+                "label": "RDI variant",
                 "description": "Restricted directed information variant.",
                 "default": "ucRDI",
                 "required": False,
@@ -541,10 +621,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0,
                 "required": False,
                 "value_type": "float",
+                "step": 0.1,
+                "advanced": True,
             },
             {
                 "name": "expressionFamily",
-                "label": "Expression family",
+                "label": "Expression distribution",
                 "description": "Distribution family for expression values.",
                 "default": "uninormal",
                 "required": False,
@@ -553,11 +635,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
             },
             {
                 "name": "log",
-                "label": "Log transform",
+                "label": "Log-transform expression",
                 "description": "Whether SCRIBE should log-transform expression values.",
                 "default": False,
                 "required": False,
                 "value_type": "bool",
+                "advanced": True,
             },
             {
                 "name": "ignorePT",
@@ -609,59 +692,81 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "lambda",
-                "label": "Lambda",
-                "description": "Regularization parameter.",
+                "label": "Regularization strength",
+                "description": "Higher values give sparser, more conservative networks.",
                 "default": 0.01,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 10.0,
+                "step": 0.01,
             },
             {
                 "name": "dT",
-                "label": "Time step",
-                "description": "Time-step parameter.",
+                "label": "Time resolution (ΔT)",
+                "description": "Spacing of the resampled time grid.",
                 "default": 15,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 1000,
+                "advanced": True,
             },
             {
                 "name": "num_lags",
                 "label": "Number of lags",
-                "description": "Number of lag values.",
+                "description": "Past time points used to predict the present.",
                 "default": 5,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 50,
+                "advanced": True,
             },
             {
                 "name": "kernel_width",
-                "label": "Kernel width",
-                "description": "Kernel width parameter.",
+                "label": "Kernel width (smoothing)",
+                "description": "Temporal smoothing bandwidth.",
                 "default": 0.5,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 100.0,
+                "step": 0.1,
+                "advanced": True,
             },
             {
                 "name": "prob_zero_removal",
-                "label": "Zero removal probability",
-                "description": "Probability of zero removal.",
+                "label": "Zero-removal probability",
+                "description": "Chance a zero is dropped per replicate (0–1).",
                 "default": 0,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "step": 0.05,
+                "advanced": True,
             },
             {
                 "name": "prob_remove_samples",
-                "label": "Sample removal probability",
-                "description": "Probability of removing samples.",
+                "label": "Sample-removal probability",
+                "description": "Chance a cell is dropped per replicate (0–1).",
                 "default": 0.0,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "step": 0.05,
+                "advanced": True,
             },
             {
                 "name": "family",
-                "label": "Expression family",
-                "description": "Expression family used by SINGE.",
+                "label": "Expression distribution",
+                "description": "Statistical model for expression values.",
                 "default": "gaussian",
                 "required": False,
                 "value_type": "string",
+                "advanced": True,
             },
             {
                 "name": "num_replicates",
@@ -670,6 +775,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 3,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 20,
             },
         ],
     },
@@ -716,6 +823,9 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0.33,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "step": 0.01,
             }
         ],
     },
@@ -762,22 +872,30 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 10,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 100,
             },
             {
                 "name": "R",
-                "label": "R",
-                "description": "Number of stability-selection resampling iterations used by GRISLI.",
+                "label": "Stability iterations",
+                "description": "Resampling rounds for stability selection.",
                 "default": 1000,
                 "required": False,
                 "value_type": "int",
+                "minimum": 1,
+                "maximum": 20000,
+                "step": 100,
             },
             {
                 "name": "alphaMin",
                 "label": "Minimum alpha",
-                "description": "Minimum alpha value.",
+                "description": "Minimum regularization value (alpha) used by GRISLI.",
                 "default": 0.0,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "step": 0.01,
             },
         ],
     },
@@ -1011,3 +1129,137 @@ def get_algorithm_by_id(algorithm_id: str) -> AlgorithmInfo:
 
 def get_recommended_algorithms() -> list[AlgorithmInfo]:
     return [ALGORITHM_BY_ID[algorithm_id] for algorithm_id in RECOMMENDED_ALGORITHM_IDS]
+
+
+_INT_VALUE_TYPES = {"int", "integer"}
+_FLOAT_VALUE_TYPES = {"float", "number", "double"}
+_BOOL_VALUE_TYPES = {"bool", "boolean"}
+_BOOL_TRUE_STRINGS = {"true", "1", "yes", "on"}
+_BOOL_FALSE_STRINGS = {"false", "0", "no", "off"}
+
+
+def _coerce_parameter_value(parameter: AlgorithmParameter, value: Any) -> Any:
+    """Coerce a raw submitted value to the parameter's declared value_type.
+
+    Raises ValueError/TypeError on values that cannot be represented in the
+    target type (callers translate these into a user-facing error).
+    """
+    value_type = str(parameter.get("value_type", "string")).lower()
+
+    if value_type in _BOOL_VALUE_TYPES:
+        if isinstance(value, bool):
+            return value
+        normalized = str(value).strip().lower()
+        if normalized in _BOOL_TRUE_STRINGS:
+            return True
+        if normalized in _BOOL_FALSE_STRINGS:
+            return False
+        raise ValueError(f"expected a boolean, got {value!r}")
+
+    if value_type in _INT_VALUE_TYPES:
+        if isinstance(value, bool):
+            raise ValueError(f"expected an integer, got {value!r}")
+        return int(value)
+
+    if value_type in _FLOAT_VALUE_TYPES:
+        if isinstance(value, bool):
+            raise ValueError(f"expected a number, got {value!r}")
+        return float(value)
+
+    return str(value)
+
+
+def validate_algorithm_parameters(
+    algorithm_id: str,
+    raw_parameters: Any,
+) -> dict[str, Any]:
+    """Validate user-submitted parameter values for one algorithm.
+
+    Values are checked against the registry declaration for ``algorithm_id``:
+    unknown parameter names are rejected, values are coerced to the declared
+    ``value_type``, ``options`` are enforced, and numeric values are clamped to
+    any declared ``minimum``/``maximum``. Returns a cleaned name -> value dict
+    suitable for persisting in the project manifest. ``None`` values (a param
+    left at its default) are dropped. Raises ``ValueError`` on invalid input and
+    ``KeyError`` when the algorithm id is unknown.
+    """
+    algorithm_info = get_algorithm_by_id(algorithm_id)
+    spec = {
+        parameter["name"]: parameter
+        for parameter in algorithm_info.get("parameters", [])
+        if parameter.get("name")
+    }
+
+    if raw_parameters is None:
+        return {}
+    if not isinstance(raw_parameters, dict):
+        raise ValueError(
+            f"Parameters for {algorithm_info['id']} must be an object."
+        )
+
+    cleaned: dict[str, Any] = {}
+    for name, value in raw_parameters.items():
+        if name not in spec:
+            raise ValueError(
+                f"Unknown parameter '{name}' for {algorithm_info['id']}."
+            )
+        if value is None:
+            continue
+
+        parameter = spec[name]
+        try:
+            coerced = _coerce_parameter_value(parameter, value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid value for {algorithm_info['id']}.{name}: {value!r}."
+            )
+
+        options = parameter.get("options")
+        if options is not None and coerced not in options:
+            raise ValueError(
+                f"{algorithm_info['id']}.{name} must be one of {options}."
+            )
+
+        if isinstance(coerced, (int, float)) and not isinstance(coerced, bool):
+            minimum = parameter.get("minimum")
+            maximum = parameter.get("maximum")
+            if minimum is not None and coerced < minimum:
+                coerced = type(coerced)(minimum)
+            if maximum is not None and coerced > maximum:
+                coerced = type(coerced)(maximum)
+
+        cleaned[name] = coerced
+
+    return cleaned
+
+
+def validate_selected_algorithm_parameters(
+    selected_algorithm_ids: list[str],
+    raw_parameters_by_algorithm: Any,
+) -> dict[str, dict[str, Any]]:
+    """Validate a {algorithm_id: {param: value}} map for the selected algorithms.
+
+    Only entries whose algorithm is in ``selected_algorithm_ids`` are kept;
+    parameters for unselected algorithms are ignored. Each entry is validated
+    with :func:`validate_algorithm_parameters`. Algorithms with no submitted
+    overrides are simply absent from the result.
+    """
+    if raw_parameters_by_algorithm is None:
+        return {}
+    if not isinstance(raw_parameters_by_algorithm, dict):
+        raise ValueError("algorithm_parameters must be an object.")
+
+    selected = {str(algorithm_id).upper() for algorithm_id in selected_algorithm_ids}
+    cleaned: dict[str, dict[str, Any]] = {}
+    for algorithm_id, raw in raw_parameters_by_algorithm.items():
+        normalized_id = str(algorithm_id).upper()
+        if normalized_id not in selected:
+            continue
+        try:
+            validated = validate_algorithm_parameters(normalized_id, raw)
+        except KeyError:
+            raise ValueError(f"Unsupported algorithm: {algorithm_id}.")
+        if validated:
+            cleaned[normalized_id] = validated
+
+    return cleaned
