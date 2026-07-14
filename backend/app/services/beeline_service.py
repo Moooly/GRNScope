@@ -357,6 +357,48 @@ def terminate_algorithm_docker_containers(project_id: str, algorithm_id: str) ->
             terminate_runtime_docker_containers(space_free_root)
 
 
+def find_algorithm_runtime_roots(project_id: str, algorithm_id: str) -> list[Path]:
+    """Return every transient runtime directory owned by one algorithm.
+
+    Cluster-aware runs append ``__<scope>`` to the algorithm name. Local
+    workspaces whose paths contain spaces may also use the space-free runtime
+    mirror, so both locations must be considered when archiving or cleaning up.
+    """
+
+    normalized_algorithm_id = algorithm_id.upper()
+    project_runtime_parent = PROJECTS_ROOT / project_id / "_beeline_runtime"
+    candidate_parents = [project_runtime_parent]
+
+    mirrored_algorithm_root = space_free_runtime_root(
+        project_runtime_parent / normalized_algorithm_id,
+        project_id,
+        normalized_algorithm_id,
+    )
+    if mirrored_algorithm_root.parent != project_runtime_parent:
+        candidate_parents.append(mirrored_algorithm_root.parent)
+
+    runtime_roots: list[Path] = []
+    seen: set[str] = set()
+    for parent in candidate_parents:
+        if not parent.exists():
+            continue
+        for child in parent.iterdir():
+            child_name = child.name.upper()
+            if child_name != normalized_algorithm_id and not child_name.startswith(
+                f"{normalized_algorithm_id}__"
+            ):
+                continue
+            if not child.is_dir():
+                continue
+            marker = str(child.resolve())
+            if marker in seen:
+                continue
+            seen.add(marker)
+            runtime_roots.append(child)
+
+    return sorted(runtime_roots, key=lambda path: path.name)
+
+
 def space_free_beeline_root(beeline_root: Path) -> Path:
     beeline_root = beeline_root.resolve()
     if not path_contains_shell_sensitive_whitespace(beeline_root):

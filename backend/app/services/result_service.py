@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone
 import json
 import shutil
 from pathlib import Path
@@ -43,6 +44,130 @@ def copy_if_present(source: Path, destination: Path) -> bool:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return True
+
+
+def remove_runtime_and_empty_parent(runtime_root: Path) -> None:
+    shutil.rmtree(runtime_root, ignore_errors=True)
+    runtime_parent = runtime_root.parent
+    try:
+        if runtime_parent.name == "_beeline_runtime" and not any(runtime_parent.iterdir()):
+            runtime_parent.rmdir()
+    except OSError:
+        pass
+
+
+def ensure_diagnostics_dir(project_dir: Path) -> Path:
+    diagnostics_dir = project_dir / "diagnostics"
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+    return diagnostics_dir
+
+
+def diagnostic_attempt_name(started_at_timestamp: float) -> str:
+    started_at = datetime.fromtimestamp(started_at_timestamp, tz=timezone.utc)
+    return f"attempt-{started_at.strftime('%Y%m%dT%H%M%S')}-{started_at.microsecond // 1000:03d}Z"
+
+
+def copy_runtime_diagnostic_files(runtime_root: Path, destination: Path) -> list[str]:
+    """Copy useful, lightweight diagnostics without retaining runtime datasets."""
+
+    copied_files: list[str] = []
+    for filename in ("config.yaml", "run_timings.json", "stdout.log", "stderr.log"):
+        destination_path = destination / filename
+        if copy_if_present(runtime_root / filename, destination_path):
+            copied_files.append(str(destination_path))
+
+    outputs_dir = runtime_root / "outputs"
+    if outputs_dir.exists():
+        diagnostic_patterns = ("output.txt", "time*.txt", "*.log")
+        copied_sources: set[Path] = set()
+        for pattern in diagnostic_patterns:
+            for source in outputs_dir.rglob(pattern):
+                if source in copied_sources or not source.is_file():
+                    continue
+                copied_sources.add(source)
+                destination_path = destination / "outputs" / source.relative_to(outputs_dir)
+                if copy_if_present(source, destination_path):
+                    copied_files.append(str(destination_path))
+
+    return copied_files
+
+
+def archive_beeline_failure_diagnostics(
+    project_dir: Path,
+    job_id: str,
+    algorithm_id: str,
+    *,
+    error_message: str,
+    error_type: str,
+    started_at_timestamp: float,
+    completed_at_timestamp: float,
+    elapsed_seconds: int,
+    traceback_text: str | None,
+    runtime_roots: list[Path],
+) -> str:
+    """Persist a compact failure bundle and remove transient BEELINE runtimes."""
+
+    normalized_algorithm_id = algorithm_id.upper()
+    algorithm_diagnostics_dir = ensure_diagnostics_dir(project_dir) / normalized_algorithm_id
+    attempt_dir = (
+        algorithm_diagnostics_dir
+        / str(job_id)
+        / diagnostic_attempt_name(started_at_timestamp)
+    )
+    if attempt_dir.exists():
+        shutil.rmtree(attempt_dir, ignore_errors=True)
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+
+    copied_files: list[str] = []
+    runtime_segments: list[str] = []
+    for runtime_root in runtime_roots:
+        runtime_segments.append(runtime_root.name)
+        runtime_destination = attempt_dir / "runtime" / runtime_root.name
+        copied_files.extend(
+            copy_runtime_diagnostic_files(runtime_root, runtime_destination)
+        )
+
+    error_payload = {
+        "project_id": project_dir.name,
+        "job_id": job_id,
+        "algorithm_id": normalized_algorithm_id,
+        "status": "Failed",
+        "error_type": error_type,
+        "error_message": error_message,
+        "started_at": datetime.fromtimestamp(
+            started_at_timestamp, tz=timezone.utc
+        ).isoformat(),
+        "completed_at": datetime.fromtimestamp(
+            completed_at_timestamp, tz=timezone.utc
+        ).isoformat(),
+        "elapsed_seconds": elapsed_seconds,
+        "runtime_segments": runtime_segments,
+        "copied_files": [
+            str(Path(path).relative_to(attempt_dir)) for path in copied_files
+        ],
+    }
+    if traceback_text:
+        error_payload["traceback"] = traceback_text
+
+    error_path = attempt_dir / "error.json"
+    error_path.write_text(json.dumps(error_payload, indent=2), encoding="utf-8")
+
+    latest_payload = {
+        "job_id": job_id,
+        "algorithm_id": normalized_algorithm_id,
+        "error_path": str(error_path.relative_to(project_dir)),
+        "completed_at": error_payload["completed_at"],
+    }
+    algorithm_diagnostics_dir.mkdir(parents=True, exist_ok=True)
+    (algorithm_diagnostics_dir / "latest.json").write_text(
+        json.dumps(latest_payload, indent=2),
+        encoding="utf-8",
+    )
+
+    for runtime_root in runtime_roots:
+        remove_runtime_and_empty_parent(runtime_root)
+
+    return str(error_path)
 
 
 def archive_beeline_result_artifacts(
@@ -91,7 +216,7 @@ def archive_beeline_result_artifacts(
         copy_if_present(runtime_root / "stderr.log", artifact_dir / "logs" / "stderr.log")
 
         if runtime_root.exists():
-            shutil.rmtree(runtime_root, ignore_errors=True)
+            remove_runtime_and_empty_parent(runtime_root)
 
     archived_result["result_artifact_root"] = str(artifact_dir)
     archived_result["runtime_root"] = str(artifact_dir)

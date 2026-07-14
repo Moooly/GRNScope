@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import time
 import threading
+import traceback
 import csv
 import hashlib
 import json
@@ -29,6 +30,7 @@ from ..services.beeline_service import (
     count_expression_gene_rows,
     detect_csv_dialect_from_file,
     ensure_project_preprocessed_expression,
+    find_algorithm_runtime_roots,
     read_delimited_header,
     run_beeline_with_progress,
     terminate_algorithm_docker_containers,
@@ -40,6 +42,7 @@ from ..services.email_service import (
     smtp_is_configured,
 )
 from ..services.result_service import (
+    archive_beeline_failure_diagnostics,
     archive_beeline_result_artifacts,
     clear_algorithm_result_artifacts,
     write_algorithm_result,
@@ -439,9 +442,59 @@ def terminate_process(process: subprocess.Popen | None, fallback_pid: int | None
 
 
 def cleanup_algorithm_runtime(project_id: str, algorithm_id: str) -> None:
-    runtime_root = PROJECTS_ROOT / project_id / "_beeline_runtime" / algorithm_id
-    if runtime_root.exists():
+    for runtime_root in find_algorithm_runtime_roots(project_id, algorithm_id):
         shutil.rmtree(runtime_root, ignore_errors=True)
+
+    runtime_parent = PROJECTS_ROOT / project_id / "_beeline_runtime"
+    try:
+        if runtime_parent.exists() and not any(runtime_parent.iterdir()):
+            runtime_parent.rmdir()
+    except OSError:
+        pass
+
+
+def archive_task_failure_diagnostics(
+    project_dir: Path,
+    project_id: str,
+    job_id: str,
+    algorithm_id: str,
+    *,
+    error_message: str,
+    error_type: str,
+    started_at_timestamp: float,
+    completed_at_timestamp: float,
+    elapsed_seconds: int,
+) -> str | None:
+    try:
+        return archive_beeline_failure_diagnostics(
+            project_dir,
+            job_id,
+            algorithm_id,
+            error_message=error_message,
+            error_type=error_type,
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed_seconds,
+            traceback_text=traceback.format_exc(),
+            runtime_roots=find_algorithm_runtime_roots(project_id, algorithm_id),
+        )
+    except Exception:
+        # Never replace the original algorithm failure with a diagnostics error.
+        # If archiving fails, leave the runtime in place as a last-resort fallback.
+        return None
+
+
+def user_error_message_after_archiving(error_message: str, diagnostics_path: str | None) -> str:
+    """Remove references to transient paths once a diagnostic bundle exists."""
+
+    if not diagnostics_path or "_beeline_runtime" not in error_message:
+        return error_message
+
+    for marker in (" See ", "See "):
+        marker_index = error_message.find(marker)
+        if marker_index >= 0 and "_beeline_runtime" in error_message[marker_index:]:
+            return error_message[:marker_index].rstrip()
+    return error_message
 
 
 def update_job_state(
@@ -454,6 +507,7 @@ def update_job_state(
     elapsed_seconds: int | None = None,
     error_message: str | None = None,
     error_type: str | None = None,
+    diagnostics_path: str | None = None,
     result_path: str | None = None,
     progress_percent: int | None = None,
     progress_label: str | None = None,
@@ -490,6 +544,8 @@ def update_job_state(
                         task["error_type"] = error_type
                     elif task_status in {"Queued", "Running", "Completed", "Stopped"}:
                         task["error_type"] = None
+                    if diagnostics_path is not None:
+                        task["diagnostics_path"] = diagnostics_path
                     if result_path is not None:
                         task["result_path"] = result_path
                     if progress_percent is not None:
@@ -554,6 +610,7 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["error_message"] = None
                 task["error_type"] = None
                 task["result_path"] = None
+                task["diagnostics_path"] = None
                 task["started_at"] = None
                 task["started_at_timestamp"] = None
                 task["completed_at"] = None
@@ -948,6 +1005,22 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
     except MatrixValidationRuntimeError as exc:
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
+        error_message = str(exc)
+        diagnostics_path = archive_task_failure_diagnostics(
+            project_dir,
+            project_id,
+            job_id,
+            algorithm_id,
+            error_message=error_message,
+            error_type="matrix_validation",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+        )
+        error_message = user_error_message_after_archiving(
+            error_message,
+            diagnostics_path,
+        )
         update_job_state(
             project_dir,
             job_id,
@@ -956,8 +1029,9 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             elapsed_seconds=elapsed,
             progress_percent=0,
             progress_label="Matrix validation failed",
-            error_message=str(exc),
+            error_message=error_message,
             error_type="matrix_validation",
+            diagnostics_path=diagnostics_path,
             estimated_remaining_seconds=0,
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
@@ -966,6 +1040,22 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
     except Exception as exc:
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
+        error_message = str(exc)
+        diagnostics_path = archive_task_failure_diagnostics(
+            project_dir,
+            project_id,
+            job_id,
+            algorithm_id,
+            error_message=error_message,
+            error_type="algorithm",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+        )
+        error_message = user_error_message_after_archiving(
+            error_message,
+            diagnostics_path,
+        )
         update_job_state(
             project_dir,
             job_id,
@@ -974,8 +1064,9 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             elapsed_seconds=elapsed,
             progress_percent=0,
             progress_label="Failed",
-            error_message=str(exc),
+            error_message=error_message,
             error_type="algorithm",
+            diagnostics_path=diagnostics_path,
             estimated_remaining_seconds=0,
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
