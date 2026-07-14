@@ -10,7 +10,7 @@ from io import StringIO
 from fastapi import APIRouter, HTTPException, Query, Request, Response as FastAPIResponse
 from fastapi.responses import FileResponse, Response
 
-from ..algorithm_registry import get_algorithm_by_id
+from ..algorithm_registry import get_algorithm_by_id, resolve_algorithm_parameters
 from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..services.demo_service import (
@@ -355,8 +355,12 @@ async def download_analysis_metadata_file(
                 try:
                     algorithm_info = get_algorithm_by_id(str(algorithm_id))
                     docker_image = algorithm_info.get("docker_image")
+                    resolved_parameters = resolve_algorithm_parameters(
+                        str(algorithm_id)
+                    )
                 except KeyError:
                     docker_image = None
+                    resolved_parameters = {}
 
                 docker_version = None
                 if isinstance(docker_image, str) and docker_image:
@@ -366,6 +370,8 @@ async def download_analysis_metadata_file(
                     {
                         "algorithm_name": algorithm_id,
                         "docker_version": docker_version,
+                        "parameters": resolved_parameters,
+                        "customized_parameters": [],
                     }
                 )
 
@@ -431,6 +437,19 @@ async def download_analysis_metadata_file(
 
         latest_job = jobs[-1] if isinstance(jobs[-1], dict) else {}
         tasks = latest_job.get("tasks", []) if isinstance(latest_job, dict) else []
+        resolved_parameters_by_algorithm = latest_job.get(
+            "resolved_algorithm_parameters"
+        )
+        if not isinstance(resolved_parameters_by_algorithm, dict):
+            resolved_parameters_by_algorithm = {}
+
+        overrides_by_algorithm = latest_job.get("algorithm_parameter_overrides")
+        if not isinstance(overrides_by_algorithm, dict):
+            overrides_by_algorithm = latest_job.get("algorithm_parameters")
+        if not isinstance(overrides_by_algorithm, dict):
+            overrides_by_algorithm = project_manifest.get("algorithm_parameters")
+        if not isinstance(overrides_by_algorithm, dict):
+            overrides_by_algorithm = {}
 
         selected_algorithm_ids = [
             item.strip() for item in selected_algorithms.split(",") if item.strip()
@@ -525,10 +544,26 @@ async def download_analysis_metadata_file(
             if isinstance(docker_image, str) and docker_image:
                 docker_version = docker_image.rsplit(":", 1)[1] if ":" in docker_image else docker_image
 
+            algorithm_parameters = resolved_parameters_by_algorithm.get(
+                str(algorithm_name)
+            )
+            algorithm_overrides = overrides_by_algorithm.get(str(algorithm_name))
+            if not isinstance(algorithm_overrides, dict):
+                algorithm_overrides = {}
+            if not isinstance(algorithm_parameters, dict):
+                try:
+                    algorithm_parameters = resolve_algorithm_parameters(
+                        str(algorithm_name), algorithm_overrides
+                    )
+                except (KeyError, ValueError):
+                    algorithm_parameters = dict(algorithm_overrides)
+
             algorithms_summary.append(
                 {
                     "algorithm_name": algorithm_name,
                     "docker_version": docker_version,
+                    "parameters": algorithm_parameters,
+                    "customized_parameters": sorted(algorithm_overrides),
                     "status": task.get("status"),
                     "started_at": task.get("started_at"),
                     "completed_at": task.get("completed_at"),

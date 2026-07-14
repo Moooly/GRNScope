@@ -7,7 +7,6 @@ interface AlgorithmCardProps {
   disabled: boolean;
   onToggle: () => void;
   showCheckbox?: boolean;
-  onInfoClick?: () => void;
   onConfigure?: () => void;
   isCustomized?: boolean;
 }
@@ -18,7 +17,6 @@ export default function AlgorithmCard({
   disabled,
   onToggle,
   showCheckbox = true,
-  onInfoClick,
   onConfigure,
   isCustomized = false,
 }: AlgorithmCardProps) {
@@ -122,26 +120,6 @@ export default function AlgorithmCard({
               aria-hidden="true"
             />
           ) : null}
-        </button>
-      ) : onInfoClick ? (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onInfoClick();
-          }}
-          onKeyDown={(event) => {
-            // Don't let space/enter on the info button bubble up and toggle
-            // the card.
-            if (event.key === " " || event.key === "Enter") {
-              event.stopPropagation();
-            }
-          }}
-          aria-label={`View details for ${algorithm.name}`}
-          title={`View details for ${algorithm.name}`}
-          className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent text-xs font-semibold text-slate-400 opacity-0 transition group-hover:border-slate-200 group-hover:bg-white group-hover:text-slate-500 group-hover:opacity-100 group-focus-within:border-slate-200 group-focus-within:bg-white group-focus-within:text-slate-500 group-focus-within:opacity-100 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40"
-        >
-          i
         </button>
       ) : null}
     </div>

@@ -530,6 +530,14 @@ def get_task_state(project_dir: Path, job_id: str, algorithm_id: str) -> dict | 
     return None
 
 
+def get_job_state(project_dir: Path, job_id: str) -> dict | None:
+    jobs_manifest = read_jobs_manifest(project_dir)
+    for job in jobs_manifest:
+        if isinstance(job, dict) and job.get("job_id") == job_id:
+            return job
+    return None
+
+
 def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> None:
     with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
@@ -741,6 +749,28 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
 
     try:
         project_manifest = read_project_manifest(project_dir)
+        job_snapshot = get_job_state(project_dir, job_id) or {}
+        resolved_parameters = job_snapshot.get("resolved_algorithm_parameters")
+        if isinstance(resolved_parameters, dict):
+            # Execute from the immutable job snapshot. This prevents a later
+            # registry-default or project-setting change from altering reruns.
+            project_manifest = {
+                **project_manifest,
+                "algorithm_parameters": resolved_parameters,
+            }
+        else:
+            # Compatibility for jobs created before full snapshots existed.
+            legacy_overrides = job_snapshot.get("algorithm_parameters")
+            if isinstance(legacy_overrides, dict):
+                project_manifest = {
+                    **project_manifest,
+                    "algorithm_parameters": legacy_overrides,
+                }
+
+        algorithm_run_parameters = (
+            (project_manifest.get("algorithm_parameters") or {}).get(algorithm_id)
+            or {}
+        )
         update_job_state(
             project_dir,
             job_id,
@@ -856,6 +886,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "project_id": project_id,
             "job_id": job_id,
             "algorithm_id": algorithm_id,
+            "algorithm_parameters": algorithm_run_parameters,
             "status": "Completed",
             "started_at": started_at,
             "started_at_timestamp": started_at_timestamp,

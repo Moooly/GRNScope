@@ -14,6 +14,7 @@ type DraftValue = string | boolean;
 type Draft = Record<string, DraftValue>;
 
 const NUMBER_TYPES = new Set(["int", "integer", "float", "number", "double"]);
+const INTEGER_TYPES = new Set(["int", "integer"]);
 const BOOL_TYPES = new Set(["bool", "boolean"]);
 
 function isNumberParam(parameter: AlgorithmParameter) {
@@ -22,6 +23,47 @@ function isNumberParam(parameter: AlgorithmParameter) {
 
 function isBoolParam(parameter: AlgorithmParameter) {
   return BOOL_TYPES.has(String(parameter.value_type ?? "").toLowerCase());
+}
+
+function isIntegerParam(parameter: AlgorithmParameter) {
+  return INTEGER_TYPES.has(String(parameter.value_type ?? "").toLowerCase());
+}
+
+function validateDraftValue(
+  parameter: AlgorithmParameter,
+  raw: DraftValue | undefined,
+): string | null {
+  if (isBoolParam(parameter)) return null;
+
+  const text = String(raw ?? "").trim();
+  if (text === "") {
+    return parameter.required && parameter.default == null
+      ? "This setting is required."
+      : null;
+  }
+
+  if (isNumberParam(parameter)) {
+    const value = Number(text);
+    if (!Number.isFinite(value)) return "Enter a valid number.";
+    if (isIntegerParam(parameter) && !Number.isInteger(value)) {
+      return "Enter a whole number. Decimals are not allowed.";
+    }
+    if (typeof parameter.minimum === "number" && value < parameter.minimum) {
+      return `Enter a value of at least ${parameter.minimum}.`;
+    }
+    if (typeof parameter.maximum === "number" && value > parameter.maximum) {
+      return `Enter a value no greater than ${parameter.maximum}.`;
+    }
+  }
+
+  if (
+    parameter.options?.length &&
+    !parameter.options.some((option) => String(option) === text)
+  ) {
+    return "Choose one of the available options.";
+  }
+
+  return null;
 }
 
 // Initialise a draft field from an existing override, falling back to default.
@@ -116,6 +158,17 @@ export default function AlgorithmSettingsModal({
       .map((parameter) => parameter.name);
   }, [draft, parameters]);
 
+  const fieldErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    for (const parameter of parameters) {
+      const error = validateDraftValue(parameter, draft[parameter.name]);
+      if (error) errors[parameter.name] = error;
+    }
+    return errors;
+  }, [draft, parameters]);
+
+  const hasErrors = Object.keys(fieldErrors).length > 0;
+
   if (!algorithm) return null;
 
   const setField = (name: string, value: DraftValue) => {
@@ -131,6 +184,7 @@ export default function AlgorithmSettingsModal({
   };
 
   const handleApply = () => {
+    if (hasErrors) return;
     const overrides: Record<string, unknown> = {};
     for (const parameter of parameters) {
       const raw = draft[parameter.name];
@@ -169,6 +223,8 @@ export default function AlgorithmSettingsModal({
     const value = draft[parameter.name];
     const hint = rangeHint(parameter);
     const options = parameter.options ?? [];
+    const error = fieldErrors[parameter.name];
+    const errorId = `param-${parameter.name}-error`;
 
     return (
       <div
@@ -216,7 +272,13 @@ export default function AlgorithmSettingsModal({
               id={`param-${parameter.name}`}
               value={String(value ?? "")}
               onChange={(event) => setField(parameter.name, event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-[#1b75a6]/50 focus:ring-2 focus:ring-[#1b75a6]/20"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? errorId : undefined}
+              className={`w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:ring-2 ${
+                error
+                  ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
+                  : "border-slate-200 focus:border-[#1b75a6]/50 focus:ring-[#1b75a6]/20"
+              }`}
             >
               {options.map((option) => (
                 <option key={String(option)} value={String(option)}>
@@ -233,11 +295,22 @@ export default function AlgorithmSettingsModal({
               max={isNumberParam(parameter) ? parameter.maximum : undefined}
               step={isNumberParam(parameter) ? parameter.step : undefined}
               onChange={(event) => setField(parameter.name, event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-[#1b75a6]/50 focus:ring-2 focus:ring-[#1b75a6]/20"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? errorId : undefined}
+              className={`w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:ring-2 ${
+                error
+                  ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
+                  : "border-slate-200 focus:border-[#1b75a6]/50 focus:ring-[#1b75a6]/20"
+              }`}
             />
           )}
         </div>
 
+        {error ? (
+          <p id={errorId} className="mt-2 text-xs font-medium text-rose-600">
+            {error}
+          </p>
+        ) : null}
         {hint ? <p className="mt-2 text-xs text-slate-400">{hint}</p> : null}
       </div>
     );
@@ -313,14 +386,6 @@ export default function AlgorithmSettingsModal({
             >
               Reset to defaults
             </button>
-            <a
-              href={`/algorithms?algorithm=${encodeURIComponent(algorithm.id)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-semibold text-[#1b75a6] transition hover:text-[#155f87]"
-            >
-              View full details ↗
-            </a>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -333,7 +398,8 @@ export default function AlgorithmSettingsModal({
             <button
               type="button"
               onClick={handleApply}
-              className="cursor-pointer rounded-full bg-[#1b75a6] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
+              disabled={hasErrors}
+              className="cursor-pointer rounded-full bg-[#1b75a6] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
             >
               Apply
             </button>

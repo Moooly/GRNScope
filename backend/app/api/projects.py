@@ -20,6 +20,7 @@ from fastapi import (
 from ..algorithm_registry import (
     CELLORACLE_BASE_GRN_OPTIONS,
     CELLORACLE_SPECIES_OPTIONS,
+    resolve_selected_algorithm_parameters,
     sort_algorithm_ids_by_difficulty,
     validate_selected_algorithm_parameters,
 )
@@ -212,16 +213,18 @@ def build_job_manifest(
     overall_status: str = "Queued",
     progress_label: str = "Queued",
     algorithm_parameters: dict | None = None,
+    resolved_algorithm_parameters: dict | None = None,
 ) -> dict:
     return {
         "job_id": job_id,
         "project_id": project_id,
         "overall_status": overall_status,
         "ensemble_enabled": ensemble_enabled,
-        # Snapshot of the per-algorithm parameter overrides this job ran with,
-        # so a specific result can be reproduced even if the project's latest
-        # settings later change.
+        # Keep the compact overrides for display/backward compatibility and a
+        # complete immutable snapshot for reproducible execution and reruns.
         "algorithm_parameters": algorithm_parameters or {},
+        "algorithm_parameter_overrides": algorithm_parameters or {},
+        "resolved_algorithm_parameters": resolved_algorithm_parameters or {},
         "tasks": [
             build_queued_task(algorithm_id, progress_label=progress_label)
             for algorithm_id in selected_algorithms_list
@@ -288,6 +291,9 @@ async def create_pending_project(
         validated_algorithm_parameters = parse_algorithm_parameters(
             algorithm_parameters, selected_algorithms_list
         )
+        resolved_algorithm_parameters = resolve_selected_algorithm_parameters(
+            selected_algorithms_list, validated_algorithm_parameters
+        )
     except Exception as exc:
         return CreateProjectResponse(ok=False, errors=[str(exc)])
 
@@ -302,6 +308,7 @@ async def create_pending_project(
         ensemble_enabled,
         progress_label="Waiting for dataset upload",
         algorithm_parameters=validated_algorithm_parameters,
+        resolved_algorithm_parameters=resolved_algorithm_parameters,
     )
 
     project_manifest = {
@@ -319,6 +326,7 @@ async def create_pending_project(
         "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
         "selected_algorithms": selected_algorithms_list,
         "algorithm_parameters": validated_algorithm_parameters,
+        "resolved_algorithm_parameters": resolved_algorithm_parameters,
         "ensemble_enabled": ensemble_enabled,
         "expression_path": None,
         "pseudotime_path": None,
@@ -366,6 +374,7 @@ async def create_pending_project(
         },
         "selected_algorithms": selected_algorithms_list,
         "algorithm_parameters": validated_algorithm_parameters,
+        "resolved_algorithm_parameters": resolved_algorithm_parameters,
         "results_directory": str(project_dir / "results"),
         "ensemble_enabled": ensemble_enabled,
         "upload_status": "waiting_for_upload",
@@ -625,6 +634,9 @@ async def create_project_from_temp(
         validated_algorithm_parameters = parse_algorithm_parameters(
             algorithm_parameters, selected_algorithms_list
         )
+        resolved_algorithm_parameters = resolve_selected_algorithm_parameters(
+            selected_algorithms_list, validated_algorithm_parameters
+        )
 
         move_result = move_temp_upload_to_project(temp_upload_id, project_id)
         project_dir = Path(move_result["project_dir"])
@@ -643,6 +655,8 @@ async def create_project_from_temp(
             "overall_status": "Queued",
             "ensemble_enabled": ensemble_enabled,
             "algorithm_parameters": validated_algorithm_parameters,
+            "algorithm_parameter_overrides": validated_algorithm_parameters,
+            "resolved_algorithm_parameters": resolved_algorithm_parameters,
             "tasks": [
                 {
                     "algorithm_id": algorithm_id,
@@ -677,6 +691,7 @@ async def create_project_from_temp(
             "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
             "selected_algorithms": selected_algorithms_list,
             "algorithm_parameters": validated_algorithm_parameters,
+            "resolved_algorithm_parameters": resolved_algorithm_parameters,
             "ensemble_enabled": ensemble_enabled,
             "expression_path": move_result["expression_path"],
             "pseudotime_path": move_result.get("pseudotime_path"),
@@ -723,6 +738,7 @@ async def create_project_from_temp(
             },
             "selected_algorithms": selected_algorithms_list,
             "algorithm_parameters": validated_algorithm_parameters,
+            "resolved_algorithm_parameters": resolved_algorithm_parameters,
             "results_directory": str(project_dir / "results"),
             "ensemble_enabled": ensemble_enabled,
             "job": {

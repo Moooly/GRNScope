@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
-import AlgorithmDetailModal from "./AlgorithmDetailModal";
 import AlgorithmSettingsModal from "./AlgorithmSettingsModal";
 import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
@@ -64,7 +63,6 @@ interface CreateProjectModalProps {
   ) => void;
   compatibleAlgorithms: ProjectAlgorithm[];
   selectedAlgorithms: ProjectAlgorithm[];
-  ensembleEnabled: boolean;
   datasetSummary: DatasetSummary;
   errors: string[];
   isSubmitting: boolean;
@@ -73,7 +71,6 @@ interface CreateProjectModalProps {
   algorithmLoadError: string | null;
   onClose: () => void;
   onStartAnalysis: () => void;
-  onRecommended: () => void;
   onSelectAll: () => void;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
   setProjectName: (value: string) => void;
@@ -93,7 +90,6 @@ interface CreateProjectModalProps {
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
   clearClusterLabelsFile: () => void;
-  setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
 }
 
 export default function CreateProjectModal({
@@ -119,7 +115,6 @@ export default function CreateProjectModal({
   onApplyAlgorithmParameters,
   compatibleAlgorithms,
   selectedAlgorithms,
-  ensembleEnabled,
   datasetSummary,
   errors,
   isSubmitting,
@@ -128,7 +123,6 @@ export default function CreateProjectModal({
   algorithmLoadError,
   onClose,
   onStartAnalysis,
-  onRecommended,
   onSelectAll,
   onToggleAlgorithm,
   setProjectName,
@@ -148,7 +142,6 @@ export default function CreateProjectModal({
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
   clearClusterLabelsFile,
-  setEnsembleEnabled,
 }: CreateProjectModalProps) {
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSelectedDatasetRef = useRef<string | null>(null);
@@ -163,12 +156,9 @@ export default function CreateProjectModal({
   const [isClusterLabelsOpen, setIsClusterLabelsOpen] = useState(false);
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
-  const [algorithmDetailToShow, setAlgorithmDetailToShow] = useState<ProjectAlgorithm | null>(null);
-  const [isAlgorithmDetailClosing, setIsAlgorithmDetailClosing] = useState(false);
   const [algorithmToConfigure, setAlgorithmToConfigure] = useState<ProjectAlgorithm | null>(null);
   const [isAlgorithmConfigureClosing, setIsAlgorithmConfigureClosing] = useState(false);
   const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const algorithmDetailCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const algorithmConfigureCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
@@ -219,8 +209,8 @@ export default function CreateProjectModal({
       setIsClusterLabelsOpen(false);
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
-      setAlgorithmDetailToShow(null);
-      setIsAlgorithmDetailClosing(false);
+      setAlgorithmToConfigure(null);
+      setIsAlgorithmConfigureClosing(false);
       /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
     }
@@ -231,32 +221,14 @@ export default function CreateProjectModal({
       if (closeTimeoutRef.current) {
         clearTimeout(closeTimeoutRef.current);
       }
-      if (algorithmDetailCloseTimeoutRef.current) {
-        clearTimeout(algorithmDetailCloseTimeoutRef.current);
-      }
       if (cellOracleSettingsCloseTimeoutRef.current) {
         clearTimeout(cellOracleSettingsCloseTimeoutRef.current);
       }
+      if (algorithmConfigureCloseTimeoutRef.current) {
+        clearTimeout(algorithmConfigureCloseTimeoutRef.current);
+      }
     };
   }, []);
-
-  const handleShowAlgorithmDetails = (algorithm: ProjectAlgorithm) => {
-    if (algorithmDetailCloseTimeoutRef.current) {
-      clearTimeout(algorithmDetailCloseTimeoutRef.current);
-      algorithmDetailCloseTimeoutRef.current = null;
-    }
-    setIsAlgorithmDetailClosing(false);
-    setAlgorithmDetailToShow(algorithm);
-  };
-
-  const handleCloseAlgorithmDetails = () => {
-    if (!algorithmDetailToShow || isAlgorithmDetailClosing) return;
-    setIsAlgorithmDetailClosing(true);
-    algorithmDetailCloseTimeoutRef.current = setTimeout(() => {
-      setAlgorithmDetailToShow(null);
-      setIsAlgorithmDetailClosing(false);
-    }, 280);
-  };
 
   const handleConfigureAlgorithm = (algorithm: ProjectAlgorithm) => {
     if (algorithmConfigureCloseTimeoutRef.current) {
@@ -466,7 +438,7 @@ export default function CreateProjectModal({
         isPreprocessingHelpOpen ||
         isCellOracleSettingsOpen ||
         cellOracleHelpTopic ||
-        algorithmDetailToShow
+        algorithmToConfigure
           ? undefined
           : handleOutsideClose
       }
@@ -639,16 +611,10 @@ export default function CreateProjectModal({
               <AlgorithmStep
                 algorithms={algorithms}
                 selectedIds={selectedIds}
-                compatibleAlgorithms={compatibleAlgorithms}
                 datasetSummary={datasetSummary}
-                ensembleEnabled={ensembleEnabled}
                 isLoadingAlgorithms={isLoadingAlgorithms}
                 algorithmLoadError={algorithmLoadError}
-                setEnsembleEnabled={setEnsembleEnabled}
                 onToggleAlgorithm={onToggleAlgorithm}
-                onRecommended={onRecommended}
-                onSelectAll={onSelectAll}
-                onShowAlgorithmDetails={handleShowAlgorithmDetails}
                 onConfigureAlgorithm={handleConfigureAlgorithm}
                 customizedIds={Object.keys(algorithmParameters)}
               />
@@ -913,12 +879,6 @@ export default function CreateProjectModal({
         onClearClusterLabels={clearClusterLabelsFile}
         onShowHelp={handleOpenCellOracleHelp}
         onClose={handleCloseCellOracleSettings}
-      />
-
-      <AlgorithmDetailModal
-        algorithm={algorithmDetailToShow}
-        isClosing={isAlgorithmDetailClosing}
-        onClose={handleCloseAlgorithmDetails}
       />
 
       <AlgorithmSettingsModal

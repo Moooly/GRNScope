@@ -27,8 +27,8 @@ class AlgorithmParameter(TypedDict, total=False):
     value_type: str
     options: list[Any]
     # Optional inclusive bounds for numeric parameters. When present they are
-    # enforced server-side (values are clamped) and can be read by the frontend
-    # to bound the input control.
+    # enforced server-side and can be read by the frontend to bound the input
+    # control. Invalid values are rejected rather than silently changed.
     minimum: float
     maximum: float
     # UI hints (not enforced server-side). 'step' is the numeric input
@@ -762,10 +762,14 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "family",
                 "label": "Expression distribution",
-                "description": "Statistical model for expression values.",
+                "description": (
+                    "Gaussian is recommended for normalized or log-transformed data. "
+                    "Poisson is intended for raw count data and may require more memory."
+                ),
                 "default": "gaussian",
                 "required": False,
                 "value_type": "string",
+                "options": ["gaussian", "poisson"],
                 "advanced": True,
             },
             {
@@ -1159,12 +1163,24 @@ def _coerce_parameter_value(parameter: AlgorithmParameter, value: Any) -> Any:
     if value_type in _INT_VALUE_TYPES:
         if isinstance(value, bool):
             raise ValueError(f"expected an integer, got {value!r}")
-        return int(value)
+        if isinstance(value, float):
+            if not value.is_integer():
+                raise ValueError(f"expected an integer, got {value!r}")
+            return int(value)
+        if isinstance(value, int):
+            return value
+        text = str(value).strip()
+        if not text:
+            raise ValueError("expected an integer, got an empty value")
+        return int(text)
 
     if value_type in _FLOAT_VALUE_TYPES:
         if isinstance(value, bool):
             raise ValueError(f"expected a number, got {value!r}")
-        return float(value)
+        coerced = float(value)
+        if coerced != coerced or coerced in {float("inf"), float("-inf")}:
+            raise ValueError(f"expected a finite number, got {value!r}")
+        return coerced
 
     return str(value)
 
@@ -1177,8 +1193,8 @@ def validate_algorithm_parameters(
 
     Values are checked against the registry declaration for ``algorithm_id``:
     unknown parameter names are rejected, values are coerced to the declared
-    ``value_type``, ``options`` are enforced, and numeric values are clamped to
-    any declared ``minimum``/``maximum``. Returns a cleaned name -> value dict
+    ``value_type``, ``options`` are enforced, and numeric bounds are enforced.
+    Returns a cleaned name -> value dict
     suitable for persisting in the project manifest. ``None`` values (a param
     left at its default) are dropped. Raises ``ValueError`` on invalid input and
     ``KeyError`` when the algorithm id is unknown.
@@ -1224,9 +1240,13 @@ def validate_algorithm_parameters(
             minimum = parameter.get("minimum")
             maximum = parameter.get("maximum")
             if minimum is not None and coerced < minimum:
-                coerced = type(coerced)(minimum)
+                raise ValueError(
+                    f"{algorithm_info['id']}.{name} must be at least {minimum}."
+                )
             if maximum is not None and coerced > maximum:
-                coerced = type(coerced)(maximum)
+                raise ValueError(
+                    f"{algorithm_info['id']}.{name} must be at most {maximum}."
+                )
 
         cleaned[name] = coerced
 
@@ -1263,3 +1283,55 @@ def validate_selected_algorithm_parameters(
             cleaned[normalized_id] = validated
 
     return cleaned
+
+
+def resolve_algorithm_parameters(
+    algorithm_id: str,
+    overrides: Any = None,
+) -> dict[str, Any]:
+    """Return the complete parameter set for one algorithm.
+
+    Registry defaults are copied first, then validated user overrides are
+    applied. Required parameters without either a default or an override are
+    rejected. The returned mapping is suitable for a durable job snapshot.
+    """
+    algorithm_info = get_algorithm_by_id(algorithm_id)
+    validated_overrides = validate_algorithm_parameters(algorithm_id, overrides or {})
+    resolved: dict[str, Any] = {}
+
+    for parameter in algorithm_info.get("parameters", []):
+        name = parameter.get("name")
+        if not name:
+            continue
+        if name in validated_overrides:
+            resolved[name] = validated_overrides[name]
+            continue
+        default = parameter.get("default")
+        if default is not None:
+            resolved[name] = default
+            continue
+        if parameter.get("required"):
+            raise ValueError(
+                f"{algorithm_info['id']}.{name} is required."
+            )
+
+    return resolved
+
+
+def resolve_selected_algorithm_parameters(
+    selected_algorithm_ids: list[str],
+    overrides_by_algorithm: Any = None,
+) -> dict[str, dict[str, Any]]:
+    """Resolve complete parameter snapshots for all selected algorithms."""
+    overrides = overrides_by_algorithm or {}
+    if not isinstance(overrides, dict):
+        raise ValueError("algorithm_parameters must be an object.")
+
+    resolved: dict[str, dict[str, Any]] = {}
+    for algorithm_id in selected_algorithm_ids:
+        normalized_id = str(algorithm_id).upper()
+        resolved[normalized_id] = resolve_algorithm_parameters(
+            normalized_id,
+            overrides.get(normalized_id, {}),
+        )
+    return resolved

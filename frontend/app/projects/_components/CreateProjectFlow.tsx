@@ -499,15 +499,6 @@ export default function CreateProjectFlow({
     });
   };
 
-  const handleRecommended = () => {
-    setHasUserAdjustedAlgorithms(true);
-    const compatibleRecommended = compatibleAlgorithms
-      .filter((algorithm) => algorithm.recommended)
-      .map((algorithm) => algorithm.id);
-    setSelectedIds(compatibleRecommended);
-    setEnsembleEnabled(compatibleRecommended.length >= 2);
-  };
-
   const handleSelectAll = () => {
     const allCompatibleIds = compatibleAlgorithms.map((algorithm) => algorithm.id);
     setSelectedIds(allCompatibleIds);
@@ -752,7 +743,6 @@ export default function CreateProjectFlow({
       onApplyAlgorithmParameters={applyAlgorithmParameters}
       compatibleAlgorithms={compatibleAlgorithms}
       selectedAlgorithms={selectedAlgorithms}
-      ensembleEnabled={ensembleEnabled}
       datasetSummary={datasetSummary}
       errors={errors}
       isSubmitting={isSubmitting}
@@ -761,7 +751,6 @@ export default function CreateProjectFlow({
       algorithmLoadError={algorithmLoadError}
       onClose={onClose}
       onStartAnalysis={handleStartAnalysis}
-      onRecommended={handleRecommended}
       onSelectAll={handleSelectAll}
       onToggleAlgorithm={toggleAlgorithm}
       setProjectName={setProjectName}
@@ -781,7 +770,6 @@ export default function CreateProjectFlow({
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
       clearClusterLabelsFile={clearClusterLabelsFile}
-      setEnsembleEnabled={setEnsembleEnabled}
     />
   );
 }

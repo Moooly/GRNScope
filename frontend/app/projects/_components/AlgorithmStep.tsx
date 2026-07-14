@@ -10,16 +10,10 @@ interface DatasetSummary {
 interface AlgorithmStepProps {
   algorithms: ProjectAlgorithm[];
   selectedIds: string[];
-  compatibleAlgorithms: ProjectAlgorithm[];
   datasetSummary: DatasetSummary;
-  ensembleEnabled: boolean;
   isLoadingAlgorithms: boolean;
   algorithmLoadError: string | null;
-  setEnsembleEnabled: (value: boolean | ((current: boolean) => boolean)) => void;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
-  onRecommended: () => void;
-  onSelectAll: () => void;
-  onShowAlgorithmDetails?: (algorithm: ProjectAlgorithm) => void;
   onConfigureAlgorithm?: (algorithm: ProjectAlgorithm) => void;
   customizedIds?: string[];
 }
@@ -27,16 +21,10 @@ interface AlgorithmStepProps {
 export default function AlgorithmStep({
   algorithms,
   selectedIds,
-  compatibleAlgorithms,
   datasetSummary,
-  ensembleEnabled,
   isLoadingAlgorithms,
   algorithmLoadError,
-  setEnsembleEnabled,
   onToggleAlgorithm,
-  onRecommended,
-  onSelectAll,
-  onShowAlgorithmDetails,
   onConfigureAlgorithm,
   customizedIds,
 }: AlgorithmStepProps) {
@@ -94,11 +82,6 @@ export default function AlgorithmStep({
               checked={false}
               disabled={true}
               onToggle={() => onToggleAlgorithm(algorithm.id, true)}
-              onInfoClick={
-                onShowAlgorithmDetails
-                  ? () => onShowAlgorithmDetails(algorithm)
-                  : undefined
-              }
             />
           ))}
         </div>
@@ -146,11 +129,6 @@ export default function AlgorithmStep({
                       checked={availableAlgorithmIds.has(algorithm.id) && selectedIds.includes(algorithm.id)}
                       disabled={false}
                       onToggle={() => onToggleAlgorithm(algorithm.id, false)}
-                      onInfoClick={
-                        onShowAlgorithmDetails
-                          ? () => onShowAlgorithmDetails(algorithm)
-                          : undefined
-                      }
                       onConfigure={
                         onConfigureAlgorithm
                           ? () => onConfigureAlgorithm(algorithm)
