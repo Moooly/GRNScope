@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from .api import algorithm, contact, downloads, jobs, projects, results, uploads
+from .api import algorithm, contact, downloads, jobs, perturbations, projects, results, uploads
 
 app = FastAPI()
 
@@ -28,6 +28,7 @@ app.include_router(algorithm.router, prefix="/api")
 app.include_router(contact.router)
 app.include_router(downloads.router)
 app.include_router(jobs.router)
+app.include_router(perturbations.router)
 app.include_router(projects.router)
 app.include_router(results.router)
 app.include_router(uploads.router)

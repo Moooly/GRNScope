@@ -168,3 +168,23 @@ def enqueue_algorithm_rerun(
         failure_ttl=7 * 24 * 60 * 60,
     )
     return str(queued_job.id)
+
+
+def enqueue_perturbation_run(project_id: str, run_id: str) -> str:
+    from .perturbation_service import run_perturbation_task
+
+    queued_job = get_rq_queue().enqueue(
+        run_perturbation_task,
+        project_id,
+        run_id,
+        job_id=safe_rq_job_id(
+            "project",
+            project_id,
+            "perturbation",
+            run_id,
+        ),
+        job_timeout=worker_job_timeout_seconds(),
+        result_ttl=24 * 60 * 60,
+        failure_ttl=7 * 24 * 60 * 60,
+    )
+    return str(queued_job.id)

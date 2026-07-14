@@ -524,12 +524,6 @@ def resolve_confidence_min_runs() -> int:
     return DEFAULT_CONFIDENCE_MIN_RUNS
 
 
-def confidence_runs_enabled(project_manifest: dict) -> bool:
-    return parse_bool(project_manifest.get("enable_confidence_runs")) or parse_bool(
-        os.environ.get("GRNSCOPE_ENABLE_CONFIDENCE_RUNS")
-    )
-
-
 def resolve_max_preprocessed_genes() -> int:
     return (
         parse_positive_int(os.environ.get("GRNSCOPE_MAX_PREPROCESSED_GENES"))
@@ -550,37 +544,32 @@ def resolve_confidence_settings(
     *,
     gene_count: int | None = None,
 ) -> dict:
-    confidence_enabled = confidence_runs_enabled(project_manifest)
-    if confidence_enabled:
-        # Max/ceiling run count is fixed in code (DEFAULT_CONFIDENCE_MAX_RUNS = 15
-        # via resolve_adaptive_confidence_bootstrap_runs); no env override.
-        configured_run_count = parse_positive_int(
-            project_manifest.get("confidence_bootstrap_runs")
-        )
-        run_count = (
-            configured_run_count
-            if configured_run_count is not None
-            else resolve_adaptive_confidence_bootstrap_runs(gene_count)
-        )
-    else:
-        run_count = 1
+    # Confidence bootstrapping is part of every inference run. Activation is not
+    # configurable, so a missing/legacy manifest flag or environment variable
+    # cannot accidentally reduce an analysis to a single run.
+    # Max/ceiling run count is fixed in code (DEFAULT_CONFIDENCE_MAX_RUNS = 15
+    # via resolve_adaptive_confidence_bootstrap_runs); no env override.
+    configured_run_count = parse_positive_int(
+        project_manifest.get("confidence_bootstrap_runs")
+    )
+    run_count = (
+        configured_run_count
+        if configured_run_count is not None
+        else resolve_adaptive_confidence_bootstrap_runs(gene_count)
+    )
     stability_top_k = (
         parse_positive_int(project_manifest.get("confidence_stability_top_k"))
         or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_STABILITY_TOP_K"))
         or DEFAULT_CONFIDENCE_STABILITY_TOP_K
     )
     subsample_fraction = (
-        (
-            parse_positive_float(project_manifest.get("confidence_subsample_fraction"))
-            or parse_positive_float(os.environ.get("GRNSCOPE_CONFIDENCE_SUBSAMPLE_FRACTION"))
-            or DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
-        )
-        if confidence_enabled
-        else 1.0
+        parse_positive_float(project_manifest.get("confidence_subsample_fraction"))
+        or parse_positive_float(os.environ.get("GRNSCOPE_CONFIDENCE_SUBSAMPLE_FRACTION"))
+        or DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
     )
     # Spearman early stopping is on by default whenever confidence runs are
     # enabled. It can be explicitly disabled to force the full run_count.
-    early_stopping_enabled = confidence_enabled and not (
+    early_stopping_enabled = not (
         parse_bool(project_manifest.get("disable_confidence_early_stopping"))
         or parse_bool(os.environ.get("GRNSCOPE_DISABLE_CONFIDENCE_EARLY_STOPPING"))
     )
@@ -601,15 +590,14 @@ def resolve_confidence_settings(
 
     # Clamp the run ceiling to [min_runs, MAX] so an early-stop floor can never
     # exceed the ceiling.
-    bounded_run_count = max(1, run_count)
-    if confidence_enabled:
-        bounded_min_runs = max(1, min(min_runs, DEFAULT_CONFIDENCE_MAX_RUNS))
-        bounded_run_count = max(bounded_min_runs, min(bounded_run_count, DEFAULT_CONFIDENCE_MAX_RUNS))
-    else:
-        bounded_min_runs = 1
+    bounded_min_runs = max(1, min(min_runs, DEFAULT_CONFIDENCE_MAX_RUNS))
+    bounded_run_count = max(
+        bounded_min_runs,
+        min(max(1, run_count), DEFAULT_CONFIDENCE_MAX_RUNS),
+    )
 
     return {
-        "confidence_enabled": confidence_enabled,
+        "confidence_enabled": True,
         "bootstrap_runs": bounded_run_count,
         "subsample_fraction": min(max(subsample_fraction, 0.01), 1.0),
         "stability_top_k": max(1, stability_top_k),

@@ -40,7 +40,7 @@ export default function AlgorithmCard({
       aria-pressed={checked}
       onClick={disabled ? undefined : onToggle}
       onKeyDown={handleKeyDown}
-      className={`group relative flex h-14 w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition duration-150 outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 focus-visible:ring-offset-1 ${
+      className={`group relative flex h-14 w-full items-center gap-2 rounded-2xl border px-3 py-3.5 text-left transition duration-150 outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 focus-visible:ring-offset-1 ${
         disabled
           ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
           : checked
@@ -73,7 +73,7 @@ export default function AlgorithmCard({
 
       <div className="min-w-0 flex-1">
         <h3
-          className="truncate text-sm font-semibold text-slate-950"
+          className="whitespace-nowrap text-xs font-semibold tracking-[-0.01em] text-slate-950"
           title={algorithm.name}
         >
           {algorithm.name}

@@ -220,3 +220,68 @@ export type BenchmarkMetrics = {
   auprc: number;
   auprcRatio: number;
 };
+
+export type PerturbationRun = {
+  run_id: string;
+  gene: string;
+  perturbation_value: number;
+  n_propagation: number;
+  clip_delta_x: boolean;
+  status: "Queued" | "Preparing" | "Running" | "Completed" | "Failed" | string;
+  progress_label?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  created_at_timestamp?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  elapsed_seconds?: number;
+};
+
+export type PerturbationResult = {
+  run_id: string;
+  gene: string;
+  perturbation_value: number;
+  n_propagation: number;
+  clip_delta_x: boolean;
+  celloracle_version?: string;
+  model_reused?: boolean;
+  input_cells?: number;
+  cells_analyzed: number;
+  genes_analyzed: number;
+  ood_warning_gene_count: number;
+  max_ood_exceeding_ratio: number;
+  mean_shift_magnitude: number;
+  mean_random_shift_magnitude: number;
+  completed_at?: string | null;
+  top_affected_genes: Array<{
+    gene: string;
+    mean_change: number;
+    mean_absolute_change: number;
+  }>;
+  cluster_effects: Array<{
+    cluster: string;
+    gene: string;
+    mean_change: number;
+  }>;
+  embedding_points: Array<{
+    x: number;
+    y: number;
+    cluster: string;
+  }>;
+  vectors: Array<{
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+    random_dx: number;
+    random_dy: number;
+  }>;
+};
+
+export type PerturbationState = {
+  available: boolean;
+  reason?: string | null;
+  eligible_genes: string[];
+  runs: PerturbationRun[];
+  latest_result?: PerturbationResult | null;
+};
