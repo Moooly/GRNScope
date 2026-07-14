@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
-import AlgorithmSettingsModal from "./AlgorithmSettingsModal";
+import AlgorithmSettingsPopover from "./AlgorithmSettingsPopover";
 import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 
@@ -157,9 +157,9 @@ export default function CreateProjectModal({
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [algorithmToConfigure, setAlgorithmToConfigure] = useState<ProjectAlgorithm | null>(null);
-  const [isAlgorithmConfigureClosing, setIsAlgorithmConfigureClosing] = useState(false);
+  const [algorithmConfigureAnchor, setAlgorithmConfigureAnchor] =
+    useState<HTMLButtonElement | null>(null);
   const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const algorithmConfigureCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
   const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
@@ -210,7 +210,7 @@ export default function CreateProjectModal({
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
       setAlgorithmToConfigure(null);
-      setIsAlgorithmConfigureClosing(false);
+      setAlgorithmConfigureAnchor(null);
       /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
     }
@@ -224,29 +224,21 @@ export default function CreateProjectModal({
       if (cellOracleSettingsCloseTimeoutRef.current) {
         clearTimeout(cellOracleSettingsCloseTimeoutRef.current);
       }
-      if (algorithmConfigureCloseTimeoutRef.current) {
-        clearTimeout(algorithmConfigureCloseTimeoutRef.current);
-      }
     };
   }, []);
 
-  const handleConfigureAlgorithm = (algorithm: ProjectAlgorithm) => {
-    if (algorithmConfigureCloseTimeoutRef.current) {
-      clearTimeout(algorithmConfigureCloseTimeoutRef.current);
-      algorithmConfigureCloseTimeoutRef.current = null;
-    }
-    setIsAlgorithmConfigureClosing(false);
+  const handleConfigureAlgorithm = (
+    algorithm: ProjectAlgorithm,
+    anchorElement: HTMLButtonElement,
+  ) => {
     setAlgorithmToConfigure(algorithm);
+    setAlgorithmConfigureAnchor(anchorElement);
   };
 
-  const handleCloseAlgorithmConfigure = () => {
-    if (!algorithmToConfigure || isAlgorithmConfigureClosing) return;
-    setIsAlgorithmConfigureClosing(true);
-    algorithmConfigureCloseTimeoutRef.current = setTimeout(() => {
-      setAlgorithmToConfigure(null);
-      setIsAlgorithmConfigureClosing(false);
-    }, 280);
-  };
+  const handleCloseAlgorithmConfigure = useCallback(() => {
+    setAlgorithmToConfigure(null);
+    setAlgorithmConfigureAnchor(null);
+  }, []);
 
   useEffect(() => {
     if (!datasetReady || isLoadingAlgorithms || compatibleAlgorithms.length === 0) {
@@ -881,14 +873,14 @@ export default function CreateProjectModal({
         onClose={handleCloseCellOracleSettings}
       />
 
-      <AlgorithmSettingsModal
+      <AlgorithmSettingsPopover
         algorithm={algorithmToConfigure}
+        anchorElement={algorithmConfigureAnchor}
         currentOverrides={
           algorithmToConfigure
             ? algorithmParameters[algorithmToConfigure.id] ?? {}
             : {}
         }
-        isClosing={isAlgorithmConfigureClosing}
         onApply={onApplyAlgorithmParameters}
         onClose={handleCloseAlgorithmConfigure}
       />

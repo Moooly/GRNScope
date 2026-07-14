@@ -7,7 +7,7 @@ interface AlgorithmCardProps {
   disabled: boolean;
   onToggle: () => void;
   showCheckbox?: boolean;
-  onConfigure?: () => void;
+  onConfigure?: (anchorElement: HTMLButtonElement) => void;
   isCustomized?: boolean;
 }
 
@@ -89,7 +89,7 @@ export default function AlgorithmCard({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onConfigure?.();
+              onConfigure?.(event.currentTarget);
             }}
             onKeyDown={(event) => {
               // Don't let space/enter on the gear bubble up and toggle the card.

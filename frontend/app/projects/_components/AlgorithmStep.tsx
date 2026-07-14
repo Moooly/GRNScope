@@ -14,7 +14,10 @@ interface AlgorithmStepProps {
   isLoadingAlgorithms: boolean;
   algorithmLoadError: string | null;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
-  onConfigureAlgorithm?: (algorithm: ProjectAlgorithm) => void;
+  onConfigureAlgorithm?: (
+    algorithm: ProjectAlgorithm,
+    anchorElement: HTMLButtonElement,
+  ) => void;
   customizedIds?: string[];
 }
 
@@ -131,7 +134,8 @@ export default function AlgorithmStep({
                       onToggle={() => onToggleAlgorithm(algorithm.id, false)}
                       onConfigure={
                         onConfigureAlgorithm
-                          ? () => onConfigureAlgorithm(algorithm)
+                          ? (anchorElement) =>
+                              onConfigureAlgorithm(algorithm, anchorElement)
                           : undefined
                       }
                       isCustomized={customizedIds?.includes(algorithm.id)}
