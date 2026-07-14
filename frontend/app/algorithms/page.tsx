@@ -136,44 +136,24 @@ function formatParameterRange(parameter: AlgorithmParameter): string | null {
 }
 
 
-const CATEGORY_OPTIONS: MethodologyCategory[] = [
-  "Random forest",
-  "Mutual information",
-  "Correlation",
-  "ODE + regression",
-  "Regression",
-  "Granger causality",
-  "Graphical model",
-  "Tree-based dynamical system",
-  "Graph learning"
-];
-
 function badgeClass(active: boolean) {
   return active
     ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
     : "border-slate-200 bg-white text-slate-600";
 }
 
-function cardBadgeClass() {
-  return "border-slate-200 bg-white text-slate-600";
-}
-
 export default function AlgorithmsPage() {
   const [algorithms, setAlgorithms] = useState<AlgorithmEntry[]>([]);
   const [isLoadingAlgorithms, setIsLoadingAlgorithms] = useState(true);
   const [algorithmLoadError, setAlgorithmLoadError] = useState<string | null>(null);
-  const [selectedCategories, setSelectedCategories] = useState<MethodologyCategory[]>([]);
   const [requiresPseudotimeOnly, setRequiresPseudotimeOnly] = useState(false);
   const [directedOnly, setDirectedOnly] = useState(false);
   const [signedOnly, setSignedOnly] = useState(false);
   const [selectedAlgorithmId, setSelectedAlgorithmId] = useState<string>("");
   const [isAlgorithmGuideOpen, setIsAlgorithmGuideOpen] = useState(false);
   const [closingAlgorithmId, setClosingAlgorithmId] = useState<string | null>(null);
-  const [isMethodologyMenuOpen, setIsMethodologyMenuOpen] = useState(false);
   const [isPropertiesMenuOpen, setIsPropertiesMenuOpen] = useState(false);
-  const methodologyMenuRef = useRef<HTMLDivElement | null>(null);
   const propertiesMenuRef = useRef<HTMLDivElement | null>(null);
-  const methodologyButtonRef = useRef<HTMLButtonElement | null>(null);
   const propertiesButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -225,12 +205,6 @@ export default function AlgorithmsPage() {
 
   const filteredAlgorithms = useMemo(() => {
     return algorithms.filter((algorithm) => {
-      if (
-        selectedCategories.length > 0 &&
-        !selectedCategories.includes(algorithm.category)
-      ) {
-        return false;
-      }
       if (requiresPseudotimeOnly && !algorithm.requiresPseudotime) {
         return false;
       }
@@ -242,7 +216,7 @@ export default function AlgorithmsPage() {
       }
       return true;
     });
-  }, [algorithms, directedOnly, requiresPseudotimeOnly, selectedCategories, signedOnly]);
+  }, [algorithms, directedOnly, requiresPseudotimeOnly, signedOnly]);
 
   const activeAlgorithmId = closingAlgorithmId ?? selectedAlgorithmId;
 
@@ -264,15 +238,6 @@ export default function AlgorithmsPage() {
       }
 
       if (
-        isMethodologyMenuOpen &&
-        methodologyMenuRef.current &&
-        !methodologyMenuRef.current.contains(target) &&
-        !(methodologyButtonRef.current && methodologyButtonRef.current.contains(target))
-      ) {
-        setIsMethodologyMenuOpen(false);
-      }
-
-      if (
         isPropertiesMenuOpen &&
         propertiesMenuRef.current &&
         !propertiesMenuRef.current.contains(target) &&
@@ -286,7 +251,7 @@ export default function AlgorithmsPage() {
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
     };
-  }, [isMethodologyMenuOpen, isPropertiesMenuOpen]);
+  }, [isPropertiesMenuOpen]);
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
@@ -305,7 +270,7 @@ export default function AlgorithmsPage() {
               </h1>
               <p className="mt-6 max-w-3xl text-[1.05rem] leading-8 text-slate-700">
                 Browse the gene regulatory network inference methods available in the platform.
-                Filter by methodology, pseudotime requirements, directionality, and signed output.
+                Filter by pseudotime requirements, directionality, and signed output.
               </p>
             </div>
           </div>
@@ -333,34 +298,10 @@ export default function AlgorithmsPage() {
 
             <div className="relative flex shrink-0 items-center gap-3 self-start sm:self-auto">
               <button
-                ref={methodologyButtonRef}
-                type="button"
-                onClick={() => {
-                  setIsMethodologyMenuOpen((current) => !current);
-                  setIsPropertiesMenuOpen(false);
-                }}
-                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
-                  isMethodologyMenuOpen || selectedCategories.length > 0
-                    ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                }`}
-              >
-                <span>Methodology</span>
-                <span
-                  className={`text-xs transition ${
-                    isMethodologyMenuOpen ? "rotate-180" : ""
-                  }`}
-                >
-                  ▾
-                </span>
-              </button>
-
-              <button
                 ref={propertiesButtonRef}
                 type="button"
                 onClick={() => {
                   setIsPropertiesMenuOpen((current) => !current);
-                  setIsMethodologyMenuOpen(false);
                 }}
                 className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
                   isPropertiesMenuOpen || requiresPseudotimeOnly || directedOnly || signedOnly
@@ -377,61 +318,6 @@ export default function AlgorithmsPage() {
                   ▾
                 </span>
               </button>
-
-              {isMethodologyMenuOpen ? (
-                <div
-                  ref={methodologyMenuRef}
-                  className="absolute right-0 top-full z-20 mt-3 w-[320px] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold text-slate-950">Methodology</p>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCategories([])}
-                      className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition hover:text-[#1b75a6]"
-                    >
-                      Select all
-                    </button>
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm text-slate-700">
-                    {CATEGORY_OPTIONS.map((option) => {
-                      const isChecked = selectedCategories.length === 0
-                        ? true
-                        : selectedCategories.includes(option);
-                      return (
-                        <label
-                          key={option}
-                          className={`flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition ${badgeClass(isChecked)}`}
-                        >
-                          <span>{option}</span>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() =>
-                              setSelectedCategories((current) => {
-                                if (current.length === 0) {
-                                  return CATEGORY_OPTIONS.filter((item) => item !== option);
-                                }
-
-                                const next = current.includes(option)
-                                  ? current.filter((item) => item !== option)
-                                  : [...current, option];
-
-                                if (next.length === CATEGORY_OPTIONS.length) {
-                                  return [];
-                                }
-
-                                return next;
-                              })
-                            }
-                            className="h-4 w-4 rounded border-white/20 bg-transparent"
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
 
               {isPropertiesMenuOpen ? (
                 <div
@@ -513,39 +399,35 @@ export default function AlgorithmsPage() {
                     setClosingAlgorithmId(null);
                     setSelectedAlgorithmId(algorithm.id);
                   }}
-                  className="group flex min-h-[11.25rem] flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#1b75a6]/25 hover:shadow-xl hover:shadow-slate-200/70"
+                  className="group flex h-full flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left transition duration-200 hover:border-[#1b75a6]/30 hover:shadow-lg hover:shadow-slate-200/60"
                 >
-                  <div className="flex flex-1 flex-col">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h3 className="text-2xl font-bold tracking-tight text-slate-950">
-                          {algorithm.name}
-                        </h3>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                        {algorithm.year}
-                      </span>
-                    </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-xl font-bold tracking-tight text-slate-950">
+                      {algorithm.name}
+                    </h3>
+                    <span className="mt-1 shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      {algorithm.year}
+                    </span>
+                  </div>
 
-                    <div className="mt-4 rounded-[1.1rem] border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="truncate text-sm font-bold text-slate-800">
-                        {algorithm.category}
-                      </p>
-                    </div>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
+                    {algorithm.category}
+                  </p>
 
-                    <div className="mt-auto pt-4">
-                      <div className="flex flex-wrap gap-2">
-                        <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
-                          {algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}
-                        </span>
-                        <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
-                          {algorithm.directed ? "Directed" : "Undirected"}
-                        </span>
-                        <span className={`rounded-full border px-3 py-1 text-xs font-medium leading-none ${cardBadgeClass()}`}>
-                          {algorithm.signed ? "Signed" : "Unsigned"}
-                        </span>
-                      </div>
-                    </div>
+                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                    {algorithm.tagline}
+                  </p>
+
+                  <div className="mt-auto flex flex-wrap gap-1.5 pt-5">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                      {algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                      {algorithm.directed ? "Directed" : "Undirected"}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                      {algorithm.signed ? "Signed" : "Unsigned"}
+                    </span>
                   </div>
                 </button>
               );
