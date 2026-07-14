@@ -54,11 +54,6 @@ function defaultAsString(parameter: AlgorithmParameter): string {
     : String(parameter.default);
 }
 
-function defaultHint(parameter: AlgorithmParameter): string {
-  if (isBoolParam(parameter)) return Boolean(parameter.default) ? "On" : "Off";
-  return defaultAsString(parameter) || "—";
-}
-
 function numericHint(parameter: AlgorithmParameter): string | null {
   if (!isNumberParam(parameter)) return null;
   if (
@@ -121,12 +116,9 @@ export default function AlgorithmSettingsPopover({
   onClose,
 }: AlgorithmSettingsPopoverProps) {
   const parameters = useMemo(() => algorithm?.parameters ?? [], [algorithm]);
-  const basicParameters = parameters.filter((parameter) => !parameter.advanced);
-  const advancedParameters = parameters.filter((parameter) => parameter.advanced);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const arrowRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<Draft>({});
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (!algorithm) return;
@@ -138,12 +130,6 @@ export default function AlgorithmSettingsPopover({
       );
     }
     setDraft(next);
-    setShowAdvanced(
-      (algorithm.parameters ?? []).some(
-        (parameter) =>
-          parameter.advanced && currentOverrides[parameter.name] !== undefined,
-      ),
-    );
     // Re-seed only when a different algorithm opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [algorithm]);
@@ -237,20 +223,6 @@ export default function AlgorithmSettingsPopover({
     };
   }, [algorithm, anchorElement, onClose]);
 
-  const changedNames = useMemo(
-    () =>
-      parameters
-        .filter((parameter) => {
-          const current = draft[parameter.name];
-          return (
-            current !== undefined &&
-            String(current) !== defaultAsString(parameter)
-          );
-        })
-        .map((parameter) => parameter.name),
-    [draft, parameters],
-  );
-
   const fieldErrors = useMemo(() => {
     const errors: Record<string, string> = {};
     for (const parameter of parameters) {
@@ -326,17 +298,18 @@ export default function AlgorithmSettingsPopover({
     }`;
 
     return (
-      <div key={parameter.name} className="py-2.5 first:pt-0 last:pb-0">
-        <div className="flex items-center justify-between gap-3">
-          <label htmlFor={fieldId} className="text-xs font-semibold text-slate-800">
-            {parameter.label ?? parameter.name}
-          </label>
-          <span className="shrink-0 text-[10px] text-slate-400">
-            Default {defaultHint(parameter)}
-          </span>
-        </div>
+      <div
+        key={parameter.name}
+        className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-start gap-3 py-2"
+      >
+        <label
+          htmlFor={fieldId}
+          className="self-center text-xs font-semibold leading-4 text-slate-800"
+        >
+          {parameter.label ?? parameter.name}
+        </label>
 
-        <div className="mt-1.5">
+        <div>
           {isBoolParam(parameter) ? (
             <button
               id={fieldId}
@@ -344,7 +317,7 @@ export default function AlgorithmSettingsPopover({
               role="switch"
               aria-checked={Boolean(value)}
               onClick={() => setField(parameter.name, !Boolean(value))}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+              className={`relative ml-auto inline-flex h-5 w-9 items-center rounded-full transition ${
                 value ? "bg-[#1b75a6]" : "bg-slate-300"
               }`}
             >
@@ -383,31 +356,25 @@ export default function AlgorithmSettingsPopover({
               className={controlClass}
             />
           )}
-        </div>
-
-        <div className="mt-1 flex min-h-3 items-start justify-between gap-2">
           {error ? (
             <p id={errorId} className="text-[10px] font-medium text-rose-600">
               {error}
             </p>
-          ) : (
-            <span />
-          )}
-          {hint ? <p className="shrink-0 text-[10px] text-slate-400">{hint}</p> : null}
+          ) : hint ? (
+            <p className="mt-0.5 text-right text-[10px] text-slate-400">{hint}</p>
+          ) : null}
         </div>
       </div>
     );
   };
 
   const hasErrors = Object.keys(fieldErrors).length > 0;
-  const titleId = `algorithm-settings-${algorithm.id}`;
-
   return createPortal(
     <div
       ref={panelRef}
       role="dialog"
       aria-modal="false"
-      aria-labelledby={titleId}
+      aria-label={`${algorithm.name} settings`}
       className="fixed z-[140] w-[min(22rem,calc(100vw-1.5rem))] text-slate-900"
       style={{ visibility: "hidden" }}
     >
@@ -417,63 +384,36 @@ export default function AlgorithmSettingsPopover({
         className="absolute z-0 h-3 w-3 rotate-45 border border-slate-200 bg-white"
       />
       <div className="relative z-10 flex max-h-[min(32rem,calc(100vh-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <p id={titleId} className="text-sm font-bold text-slate-900">
-            {algorithm.name} settings
-          </p>
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-            {changedNames.length === 0
-              ? "Defaults"
-              : `${changedNames.length} changed`}
-          </span>
-        </div>
-
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <div className="divide-y divide-slate-100">
-            {basicParameters.map(renderField)}
-          </div>
-
-          {advancedParameters.length > 0 ? (
-            <div className="mt-2 border-t border-slate-200 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((current) => !current)}
-                className="flex w-full items-center justify-between py-1.5 text-xs font-semibold text-slate-600 transition hover:text-[#1b75a6]"
-                aria-expanded={showAdvanced}
-              >
-                <span>Advanced ({advancedParameters.length})</span>
-                <span
-                  className={`transition ${showAdvanced ? "rotate-180" : ""}`}
-                  aria-hidden="true"
-                >
-                  ▾
-                </span>
-              </button>
-              {showAdvanced ? (
-                <div className="mt-1 divide-y divide-slate-100">
-                  {advancedParameters.map(renderField)}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <div>{parameters.map(renderField)}</div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/70 px-4 py-2.5">
-          <button
-            type="button"
-            onClick={resetToDefaults}
-            className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
+        <div className="flex shrink-0 items-center justify-between gap-3 bg-slate-50/70 px-4 py-2.5">
+          <a
+            href={`/algorithms?algorithm=${encodeURIComponent(algorithm.id)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 truncate text-xs font-semibold text-[#1b75a6] transition hover:text-[#155f87] hover:underline"
           >
-            Reset
-          </button>
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={hasErrors}
-            className="rounded-full bg-[#1b75a6] px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-          >
-            Apply
-          </button>
+            About {algorithm.name} ↗
+          </a>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={resetToDefaults}
+              className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={hasErrors}
+              className="rounded-full bg-[#1b75a6] px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+            >
+              Apply
+            </button>
+          </div>
         </div>
       </div>
     </div>,

@@ -203,6 +203,19 @@ export default function AlgorithmsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (algorithms.length === 0) return;
+    const requestedAlgorithmId = new URLSearchParams(window.location.search)
+      .get("algorithm")
+      ?.trim()
+      .toUpperCase();
+    if (!requestedAlgorithmId) return;
+    if (!algorithms.some((algorithm) => algorithm.id === requestedAlgorithmId)) {
+      return;
+    }
+    setSelectedAlgorithmId(requestedAlgorithmId);
+  }, [algorithms]);
+
   const filteredAlgorithms = useMemo(() => {
     return algorithms.filter((algorithm) => {
       if (requiresPseudotimeOnly && !algorithm.requiresPseudotime) {
