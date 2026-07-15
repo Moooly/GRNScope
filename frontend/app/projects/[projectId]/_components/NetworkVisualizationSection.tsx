@@ -220,28 +220,128 @@ export default function NetworkVisualizationSection({
 
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
-      <div className="flex items-center gap-2">
-        <h3 className="text-base font-semibold text-slate-900">Network</h3>
-        <button
-          type="button"
-          onClick={() => {
-            setIsVisualGuideClosing(false);
-            setIsVisualGuideOpen(true);
-          }}
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-          aria-label="Open network visual guide"
-          title="Open network visual guide"
-        >
-          ?
-        </button>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Network</h3>
+            <button
+              type="button"
+              onClick={() => {
+                setIsVisualGuideClosing(false);
+                setIsVisualGuideOpen(true);
+              }}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+              aria-label="Open network visual guide"
+              title="Open network visual guide"
+            >
+              ?
+            </button>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Click a node or edge to open its inspection panel and explore the network in more detail.
+          </p>
+        </div>
+
+        <div ref={exportMenuRef} className="relative z-40 w-full shrink-0 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setIsExportConfirmOpen((current) => !current)}
+            aria-label="Download current network"
+            aria-expanded={isExportConfirmOpen}
+            aria-haspopup="dialog"
+            title="Download current network"
+            className="w-full whitespace-nowrap rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] sm:w-auto"
+          >
+            Download
+          </button>
+          {isExportConfirmOpen && (
+            <>
+              <span
+                aria-hidden="true"
+                className="absolute right-8 top-[calc(100%+0.375rem)] z-50 h-3 w-3 rotate-45 border-l border-t border-slate-200 bg-white"
+              />
+              <div
+                className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(28rem,calc(100vw-3rem))] text-slate-900"
+                role="dialog"
+                aria-modal="false"
+                aria-labelledby="network-download-title"
+              >
+                <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
+                  <div className="px-4 pb-3 pt-4">
+                    <h5 id="network-download-title" className="text-sm font-bold text-slate-950">
+                      Download current network
+                    </h5>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      {networkLayout === "circos"
+                        ? "Choose the image file for the current filtered Circos view."
+                        : "Choose a file for the network currently shown on the canvas."}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-slate-100 p-2">
+                    {networkLayout !== "circos" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onExportNetwork("svg");
+                          closeExportConfirm();
+                        }}
+                        className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
+                      >
+                        <span>
+                          <span className="block text-sm font-bold text-slate-950 group-hover:text-[#1b75a6]">
+                            Vector image
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                            Scalable network with the current layout and node positions.
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                          SVG
+                        </span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (networkLayout === "circos") {
+                          if (circosSvgRef.current) {
+                            void Promise.resolve(onExportCircosPng(circosSvgRef.current)).catch(
+                              () => undefined
+                            );
+                          }
+                        } else {
+                          onExportNetwork("png");
+                        }
+                        closeExportConfirm();
+                      }}
+                      className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
+                    >
+                      <span>
+                        <span className="block text-sm font-bold text-slate-950 group-hover:text-[#1b75a6]">
+                          Raster image
+                        </span>
+                        <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                          {networkLayout === "circos"
+                            ? "Current filtered Circos view as a ready-to-use image."
+                            : "Current canvas view, including zoom and any isolated sub-network."}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                        PNG
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        Click a node or edge to open its inspection panel and explore the network in more detail.
-      </p>
 
       <div className="relative mt-5">
         <div className="relative min-w-0">
-          <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-between gap-3">
+          <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-start gap-3">
             <div className="pointer-events-auto inline-flex min-h-9 flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 p-0.5 shadow-sm">
               {layoutOptions.map(({ value, label }) => {
                 const isActive = networkLayout === value;
@@ -261,101 +361,6 @@ export default function NetworkVisualizationSection({
                   </button>
                 );
               })}
-            </div>
-            <div ref={exportMenuRef} className="pointer-events-auto relative -top-px inline-flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsExportConfirmOpen((current) => !current)}
-                aria-label="Download current network"
-                aria-expanded={isExportConfirmOpen}
-                aria-haspopup="dialog"
-                title="Download current network"
-                className="pointer-events-auto h-9 rounded-2xl border border-slate-200 bg-white/95 px-4 text-xs font-bold text-slate-600 shadow-sm transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-              >
-                Download
-              </button>
-              {isExportConfirmOpen && (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-1/2 top-[calc(100%+0.375rem)] z-50 h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-slate-200 bg-white"
-                  />
-                  <div
-                    className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(28rem,calc(100vw-3rem))] text-slate-900"
-                    role="dialog"
-                    aria-modal="false"
-                    aria-labelledby="network-download-title"
-                  >
-                    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-                      <div className="px-4 pb-3 pt-4">
-                        <h5 id="network-download-title" className="text-sm font-bold text-slate-950">
-                          Download current network
-                        </h5>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {networkLayout === "circos"
-                            ? "Choose the image file for the current filtered Circos view."
-                            : "Choose a file for the network currently shown on the canvas."}
-                        </p>
-                      </div>
-
-                      <div className="border-t border-slate-100 p-2">
-                        {networkLayout !== "circos" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onExportNetwork("svg");
-                              closeExportConfirm();
-                            }}
-                            className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
-                          >
-                            <span>
-                              <span className="block text-sm font-bold text-slate-950 group-hover:text-[#1b75a6]">
-                                Vector image
-                              </span>
-                              <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                                Scalable network with the current layout and node positions.
-                              </span>
-                            </span>
-                            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                              SVG
-                            </span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (networkLayout === "circos") {
-                              if (circosSvgRef.current) {
-                                void Promise.resolve(onExportCircosPng(circosSvgRef.current)).catch(
-                                  () => undefined
-                                );
-                              }
-                            } else {
-                              onExportNetwork("png");
-                            }
-                            closeExportConfirm();
-                          }}
-                          className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
-                        >
-                          <span>
-                            <span className="block text-sm font-bold text-slate-950 group-hover:text-[#1b75a6]">
-                              Raster image
-                            </span>
-                            <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                              {networkLayout === "circos"
-                                ? "Current filtered Circos view as a ready-to-use image."
-                                : "Current canvas view, including zoom and any isolated sub-network."}
-                            </span>
-                          </span>
-                          <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                            PNG
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           </div>
           {networkLayout === "circos" ? (
@@ -396,7 +401,7 @@ export default function NetworkVisualizationSection({
         </div>
         {(selectedNode || selectedEdge) && (
           <aside
-            className="animate-inspector-panel absolute inset-x-4 bottom-4 z-30 max-h-[70%] min-w-0 overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-slate-50/95 p-5 shadow-2xl shadow-slate-900/20 backdrop-blur-sm xl:bottom-4 xl:left-auto xl:right-4 xl:top-16 xl:max-h-none xl:w-[25rem]"
+            className="animate-inspector-panel absolute inset-x-4 bottom-4 z-30 max-h-[70%] min-w-0 overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-slate-50/95 p-5 shadow-2xl shadow-slate-900/20 backdrop-blur-sm xl:bottom-4 xl:left-auto xl:right-4 xl:top-4 xl:max-h-none xl:w-[25rem]"
             aria-label={selectedEdge ? "Regulation inspection" : "Node inspection"}
           >
           <div className="flex items-center justify-between gap-3">
