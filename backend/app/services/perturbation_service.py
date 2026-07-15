@@ -670,8 +670,17 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
         )
         if not source_script.exists():
             raise FileNotFoundError("CellOracle perturbation runner is missing.")
+        distribution_helper_source = source_script.with_name(
+            "perturbation_distributions.py"
+        )
+        if not distribution_helper_source.exists():
+            raise FileNotFoundError("CellOracle distribution helper is missing.")
         script_copy = runtime_dir / source_script.name
         shutil.copy2(source_script, script_copy)
+        shutil.copy2(
+            distribution_helper_source,
+            runtime_dir / distribution_helper_source.name,
+        )
 
         max_cells = max(100, int(os.environ.get("GRNSCOPE_PERTURBATION_MAX_CELLS", "2000")))
         has_cluster_labels = cluster_path is not None

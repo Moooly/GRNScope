@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
@@ -8,6 +8,7 @@ import type {
 import { API_BASE } from "../../../_lib/apiConfig";
 import { apiFetch } from "../../../_lib/clientIdentity";
 import type {
+  GeneExpressionDistribution,
   GeneExpressionProfile,
   PerturbationResult,
   PerturbationRun,
@@ -1013,6 +1014,145 @@ function ClusterResponseView({
   );
 }
 
+function describeGeneExpressionResponse(distribution: GeneExpressionDistribution) {
+  const increasedPercent = Math.round(distribution.increased_cell_fraction * 100);
+  const decreasedPercent = Math.round(distribution.decreased_cell_fraction * 100);
+  if (Math.abs(distribution.mean_change) <= DISPLAY_CHANGE_EPSILON) {
+    return "Average expression remains broadly stable after the perturbation.";
+  }
+  if (distribution.mean_change > 0) {
+    return increasedPercent >= 50
+      ? `Expression is higher in ${increasedPercent}% of modeled cells.`
+      : `Average expression increases, with higher values in ${increasedPercent}% of modeled cells.`;
+  }
+  return decreasedPercent >= 50
+    ? `Expression is lower in ${decreasedPercent}% of modeled cells.`
+    : `Average expression decreases, with lower values in ${decreasedPercent}% of modeled cells.`;
+}
+
+function GeneExpressionDistributionInspector({
+  gene,
+  distribution,
+}: {
+  gene: string;
+  distribution: GeneExpressionDistribution | null;
+}) {
+  if (!distribution) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4">
+        <p className="text-sm font-bold text-slate-800">Expression distribution unavailable for this saved run</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">
+          This result was created before model-scale distributions were stored. Rerun the perturbation to compare baseline and simulated expression for {gene}.
+        </p>
+      </div>
+    );
+  }
+
+  const maxBinCount = Math.max(
+    1,
+    ...distribution.histogram.flatMap((bin) => [bin.baseline_count, bin.simulated_count])
+  );
+  const histogramMinimum = distribution.histogram[0]?.start ?? 0;
+  const histogramMaximum = distribution.histogram.at(-1)?.end ?? 0;
+  const increasedPercent = Math.round(distribution.increased_cell_fraction * 100);
+  const decreasedPercent = Math.round(distribution.decreased_cell_fraction * 100);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-slate-950">{gene} expression response</h4>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            {describeGeneExpressionResponse(distribution)}
+          </p>
+        </div>
+        <span className="shrink-0 text-[11px] font-semibold text-slate-500">
+          {distribution.cell_count.toLocaleString()} modeled cells
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-end">
+        <div>
+          <div
+            className="flex h-24 items-end gap-1 rounded-lg border border-slate-200 bg-white px-3 pt-3"
+            role="img"
+            aria-label={`Baseline and simulated CellOracle expression distributions for ${gene}`}
+          >
+            {distribution.histogram.map((bin, index) => (
+              <span
+                key={`${bin.start}-${index}`}
+                className="flex h-full min-w-0 flex-1 items-end justify-center gap-px"
+                title={`${formatScientific(bin.start)}–${formatScientific(bin.end)}: baseline ${bin.baseline_count}, simulated ${bin.simulated_count}`}
+              >
+                <span
+                  className="w-[42%] rounded-t-sm bg-slate-300"
+                  style={{
+                    height: bin.baseline_count
+                      ? `${Math.max(2, (bin.baseline_count / maxBinCount) * 78)}px`
+                      : 0,
+                  }}
+                  aria-hidden="true"
+                />
+                <span
+                  className="w-[42%] rounded-t-sm bg-[#1688b4]"
+                  style={{
+                    height: bin.simulated_count
+                      ? `${Math.max(2, (bin.simulated_count / maxBinCount) * 78)}px`
+                      : 0,
+                  }}
+                  aria-hidden="true"
+                />
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-slate-400">
+            <span>{formatScientific(histogramMinimum)}</span>
+            <span>CellOracle expression</span>
+            <span>{formatScientific(histogramMaximum)}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] font-semibold text-slate-600" aria-label="Distribution legend">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-slate-300" aria-hidden="true" />
+              Baseline
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-[#1688b4]" aria-hidden="true" />
+              Simulated
+            </span>
+          </div>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-200 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Mean</dt>
+            <dd className="mt-1 text-sm font-bold text-slate-900">
+              {formatScientific(distribution.baseline_mean)} <span className="text-slate-400">→</span> {formatScientific(distribution.simulated_mean)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Median</dt>
+            <dd className="mt-1 text-sm font-bold text-slate-900">
+              {formatScientific(distribution.baseline_median)} <span className="text-slate-400">→</span> {formatScientific(distribution.simulated_median)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Higher cells</dt>
+            <dd className="mt-1 text-sm font-bold text-emerald-700">{increasedPercent}%</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Lower cells</dt>
+            <dd className="mt-1 text-sm font-bold text-rose-600">{decreasedPercent}%</dd>
+          </div>
+        </dl>
+      </div>
+
+      <p className="mt-3 border-t border-slate-200 pt-3 text-[11px] leading-5 text-slate-500">
+        Both distributions use CellOracle&apos;s imputed-expression scale, so their shift is directly comparable.
+      </p>
+    </div>
+  );
+}
+
 function ResultSummary({
   projectId,
   result,
@@ -1034,6 +1174,7 @@ function ResultSummary({
   const [plotViewport, setPlotViewport] = useState<PlotViewport>(DEFAULT_PLOT_VIEWPORT);
   const [expandedPlot, setExpandedPlot] = useState<PlotKind | null>(null);
   const [showAllOodGenes, setShowAllOodGenes] = useState(false);
+  const [expandedGene, setExpandedGene] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const globalGridVectorFields = useMemo(
     () => resolveGridVectorFields(result),
@@ -1141,6 +1282,16 @@ function ResultSummary({
     : result.top_affected_genes
       .filter((row) => row.mean_absolute_change > DISPLAY_CHANGE_EPSILON)
       .slice(0, 15);
+  const expressionDistributions = useMemo(() => {
+    const byGene = new Map<string, GeneExpressionDistribution>();
+    for (const distribution of result.gene_expression_distributions ?? []) {
+      const matchesScope = isClusterScope
+        ? distribution.scope_type === "cluster" && distribution.scope_label === resultScope
+        : distribution.scope_type === "global";
+      if (matchesScope) byGene.set(distribution.gene, distribution);
+    }
+    return byGene;
+  }, [isClusterScope, result.gene_expression_distributions, resultScope]);
   const oodGenes = result.ood_genes ?? [];
   const visibleOodGenes = showAllOodGenes ? oodGenes : oodGenes.slice(0, 5);
 
@@ -1275,9 +1426,14 @@ function ResultSummary({
 
       <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-base font-bold text-slate-950">
-            Genes ranked by predicted change{isClusterScope ? ` · ${resultScope}` : ""}
-          </h3>
+          <div>
+            <h3 className="text-base font-bold text-slate-950">
+              Genes ranked by predicted change{isClusterScope ? ` · ${resultScope}` : ""}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Select a gene to compare its baseline and simulated expression.
+            </p>
+          </div>
           <div ref={downloadMenuRef} className="relative shrink-0">
             <button
               type="button"
@@ -1308,18 +1464,58 @@ function ResultSummary({
               </tr>
             </thead>
             <tbody>
-              {rankedChangedGenes.map((row, index) => (
-                <tr key={`${row.gene}-${index}`} className="border-b border-slate-100 last:border-0">
-                  <td className="px-3 py-3 text-slate-500">{index + 1}</td>
-                  <td className="px-3 py-3 font-bold text-slate-950">{row.gene}</td>
-                  <td className={`px-3 py-3 text-right font-semibold ${row.mean_change < 0 ? "text-rose-600" : "text-emerald-700"}`}>
-                    {row.mean_change > 0 ? "+" : ""}{formatScientific(row.mean_change)}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {formatScientific(row.mean_absolute_change)}
-                  </td>
-                </tr>
-              ))}
+              {rankedChangedGenes.map((row, index) => {
+                const isExpanded = expandedGene === row.gene;
+                const inspectorId = `gene-distribution-${result.run_id}-${resultScope}-${index}`;
+                const distribution = expressionDistributions.get(row.gene) ?? null;
+                return (
+                  <Fragment key={`${row.gene}-${index}`}>
+                    <tr
+                      onClick={() => setExpandedGene((current) => current === row.gene ? null : row.gene)}
+                      className={`cursor-pointer border-b transition ${
+                        isExpanded
+                          ? "border-slate-200 bg-[#f4f9fc]"
+                          : "border-slate-100 hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="px-3 py-3 text-slate-500">{index + 1}</td>
+                      <td className="px-3 py-3 font-bold text-slate-950">
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          aria-controls={inspectorId}
+                          aria-label={`${isExpanded ? "Hide" : "Inspect"} ${row.gene} expression distribution`}
+                          className="inline-flex items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"
+                        >
+                          <span>{row.gene}</span>
+                          <span
+                            className={`h-1.5 w-1.5 border-b-2 border-r-2 border-slate-400 transition ${
+                              isExpanded ? "rotate-[225deg] translate-y-0.5" : "rotate-45 -translate-y-0.5"
+                            }`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </td>
+                      <td className={`px-3 py-3 text-right font-semibold ${row.mean_change < 0 ? "text-rose-600" : "text-emerald-700"}`}>
+                        {row.mean_change > 0 ? "+" : ""}{formatScientific(row.mean_change)}
+                      </td>
+                      <td className="px-3 py-3 text-right text-slate-700">
+                        {formatScientific(row.mean_absolute_change)}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr id={inspectorId} className="border-b border-slate-200">
+                        <td colSpan={4} className="bg-white px-3 py-3">
+                          <GeneExpressionDistributionInspector
+                            gene={row.gene}
+                            distribution={distribution}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
               {rankedChangedGenes.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-slate-500">

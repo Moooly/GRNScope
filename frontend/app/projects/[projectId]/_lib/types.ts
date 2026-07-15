@@ -237,6 +237,28 @@ export type PerturbationRun = {
   elapsed_seconds?: number;
 };
 
+export type GeneExpressionDistribution = {
+  gene: string;
+  scope_type: "global" | "cluster" | string;
+  scope_label?: string | null;
+  expression_layer: "celloracle_imputed_count" | string;
+  cell_count: number;
+  baseline_mean: number;
+  simulated_mean: number;
+  baseline_median: number;
+  simulated_median: number;
+  mean_change: number;
+  mean_absolute_change: number;
+  increased_cell_fraction: number;
+  decreased_cell_fraction: number;
+  histogram: Array<{
+    start: number;
+    end: number;
+    baseline_count: number;
+    simulated_count: number;
+  }>;
+};
+
 export type PerturbationResult = {
   run_id: string;
   gene: string;
@@ -268,6 +290,8 @@ export type PerturbationResult = {
     gene: string;
     mean_change: number;
     mean_absolute_change: number;
+    original_mean?: number;
+    simulated_mean?: number;
   }>;
   cluster_effects: Array<{
     cluster: string;
@@ -286,6 +310,7 @@ export type PerturbationResult = {
       mean_change: number;
     }>;
   }>;
+  gene_expression_distributions?: GeneExpressionDistribution[];
   embedding_points: Array<{
     x: number;
     y: number;
