@@ -97,6 +97,40 @@ body {
   }
 }
 
+.animate-inspector-panel {
+  animation: inspectorPanelIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes inspectorPanelIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 79.999rem) {
+  @keyframes inspectorPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-inspector-panel {
+    animation: none;
+  }
+}
+
 @keyframes shimmer {
   100% {
     transform: translateX(100%);

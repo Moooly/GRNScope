@@ -772,10 +772,10 @@ function SelectedResultHeader({
   ];
 
   return (
-    <div className="rounded-[1.1rem] border border-[#087ead]/20 bg-gradient-to-r from-[#eef8fc] to-white p-4 sm:p-5">
+    <div className="rounded-[1.1rem] border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#087ead]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
             Selected result
           </p>
           <h3 className="mt-1 text-lg font-bold text-slate-950">
@@ -792,7 +792,7 @@ function SelectedResultHeader({
             {resultScope !== "global" ? ` · Showing ${resultScope}` : ""}
           </p>
         </div>
-        <label className="relative flex h-10 w-full shrink-0 items-center overflow-hidden rounded-full border border-sky-200 bg-white text-xs font-bold text-slate-700 shadow-sm focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10 sm:w-[15rem]">
+        <label className="relative flex h-10 w-full shrink-0 items-center overflow-hidden rounded-full border border-slate-300 bg-white text-xs font-bold text-slate-700 shadow-sm focus-within:border-slate-500 focus-within:ring-4 focus-within:ring-slate-200 sm:w-[15rem]">
           <select
             value={resultScope}
             onChange={(event) => onScopeChange(event.target.value)}
@@ -810,7 +810,7 @@ function SelectedResultHeader({
         </label>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-[#087ead]/10 pt-4 md:grid-cols-4 md:gap-0 md:divide-x md:divide-[#087ead]/10">
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-200 pt-4 md:grid-cols-4 md:gap-0 md:divide-x md:divide-slate-200">
         {metrics.map((metric) => (
           <div
             key={metric.label}
@@ -819,7 +819,7 @@ function SelectedResultHeader({
             <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
               {metric.label}
             </dt>
-            <dd className={`mt-1 text-lg font-bold ${metric.warning ? "text-amber-700" : "text-slate-950"}`}>
+            <dd className="mt-1 text-lg font-bold text-slate-950">
               {metric.value}
             </dd>
           </div>
@@ -1197,10 +1197,10 @@ function ResultSummary({
   return (
     <div className="space-y-5">
       {!isClusterScope && result.ood_warning_gene_count > 0 && (
-        <section className="rounded-[1.1rem] border border-amber-200/90 bg-gradient-to-r from-amber-50/90 to-white p-4 text-slate-900">
+        <section className="rounded-[1.1rem] border border-slate-200 bg-slate-50 p-4 text-slate-900">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700" aria-hidden="true">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700" aria-hidden="true">
                 <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5">
                   <path d="M10 3.2 17 16H3L10 3.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
                   <path d="M10 7.4v4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -1221,33 +1221,33 @@ function ResultSummary({
                 type="button"
                 onClick={onRerunWithClipping}
                 disabled={rerunDisabled}
-                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-amber-800 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Rerun with clipping
               </button>
             )}
           </div>
           {oodGenes.length ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-amber-200/80 bg-white/75">
-              <div className="hidden grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] bg-amber-50/70 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 sm:grid">
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="hidden grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] bg-slate-100 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 sm:grid">
                 <span className="px-3 py-2">Gene</span>
-                <span className="border-l border-amber-100 px-3 py-2">Affected cells</span>
-                <span className="border-l border-amber-100 px-3 py-2">Largest exceedance</span>
+                <span className="border-l border-slate-200 px-3 py-2">Affected cells</span>
+                <span className="border-l border-slate-200 px-3 py-2">Largest exceedance</span>
               </div>
               <div className={showAllOodGenes ? "max-h-72 overflow-y-auto" : ""}>
                 {visibleOodGenes.map((row) => (
                   <div
                     key={row.gene}
-                    className="grid gap-2 border-t border-amber-100 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] sm:gap-0 sm:px-0 sm:py-0 sm:first:border-t"
+                    className="grid gap-2 border-t border-slate-200 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] sm:gap-0 sm:px-0 sm:py-0 sm:first:border-t"
                   >
                     <span className="truncate text-sm font-bold text-slate-950 sm:px-3 sm:py-2.5">
                       {row.gene}
                     </span>
-                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-amber-100 sm:px-3 sm:py-2.5">
+                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
                       <span className="sm:hidden">Affected cells</span>
                       <strong className="text-slate-900">{(row.ood_cell_ratio * 100).toFixed(1)}%</strong>
                     </span>
-                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-amber-100 sm:px-3 sm:py-2.5">
+                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
                       <span className="sm:hidden">Largest exceedance</span>
                       <strong className="text-slate-900">{(row.max_exceeding_ratio * 100).toFixed(1)}% beyond range</strong>
                     </span>
@@ -1258,7 +1258,7 @@ function ResultSummary({
                 <button
                   type="button"
                   onClick={() => setShowAllOodGenes((current) => !current)}
-                  className="flex w-full items-center justify-center border-t border-amber-100 bg-white px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-50"
+                  className="flex w-full items-center justify-center border-t border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                   aria-expanded={showAllOodGenes}
                 >
                   {showAllOodGenes ? "Show highest 5 only" : `Show all ${oodGenes.length} OOD genes`}
@@ -1266,7 +1266,7 @@ function ResultSummary({
               )}
             </div>
           ) : (
-            <p className="mt-3 border-t border-amber-100 pt-3 text-xs leading-5 text-slate-500">
+            <p className="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
               This saved run predates gene-level OOD diagnostics. Its count is available, but the affected gene names were not stored.
             </p>
           )}

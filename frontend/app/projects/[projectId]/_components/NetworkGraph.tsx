@@ -401,6 +401,45 @@ export default function NetworkGraph({
   }, [labelSignature, nodes]);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheelCapture = (event: WheelEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !container.contains(target)) return;
+
+      // Trackpad pinch is reported as a ctrl-modified wheel event on desktop
+      // browsers. Let Cytoscape handle that gesture, while keeping ordinary
+      // two-finger vertical movement available for scrolling the page.
+      if (event.ctrlKey) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const deltaScale =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? window.innerHeight
+            : 1;
+
+      window.scrollBy({
+        top: event.deltaY * deltaScale,
+        behavior: "auto",
+      });
+    };
+
+    window.addEventListener("wheel", handleWheelCapture, {
+      capture: true,
+      passive: false,
+    });
+
+    return () => {
+      window.removeEventListener("wheel", handleWheelCapture, true);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!containerRef.current || cyRef.current) {
       return;
     }

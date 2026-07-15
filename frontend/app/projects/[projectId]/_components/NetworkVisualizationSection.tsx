@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import NetworkGraph from "./NetworkGraph";
 import CircosNetworkGraph from "./CircosNetworkGraph";
@@ -194,6 +194,30 @@ export default function NetworkVisualizationSection({
     }, 280);
   };
 
+  const closeInspection = useCallback(() => {
+    setSelectedGene(null);
+    setSelectedEdgeKey(null);
+  }, [setSelectedEdgeKey, setSelectedGene]);
+
+  useEffect(() => {
+    if (!selectedNode && !selectedEdge) return;
+    if (isExportConfirmOpen || isVisualGuideOpen || isInspectionGuideOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeInspection();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [
+    isExportConfirmOpen,
+    isInspectionGuideOpen,
+    isVisualGuideOpen,
+    closeInspection,
+    selectedEdge,
+    selectedNode,
+  ]);
+
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
       <div className="flex items-center gap-2">
@@ -211,9 +235,12 @@ export default function NetworkVisualizationSection({
           ?
         </button>
       </div>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        Click a node or edge to open its inspection panel and explore the network in more detail.
+      </p>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
-        <div className="relative min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-[#f3f4f6]">
+      <div className="relative mt-5">
+        <div className="relative min-w-0">
           <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-between gap-3">
             <div className="pointer-events-auto inline-flex min-h-9 flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 p-0.5 shadow-sm">
               {layoutOptions.map(({ value, label }) => {
@@ -367,8 +394,11 @@ export default function NetworkVisualizationSection({
           )}
 
         </div>
-
-        <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+        {(selectedNode || selectedEdge) && (
+          <aside
+            className="animate-inspector-panel absolute inset-x-4 bottom-4 z-30 max-h-[70%] min-w-0 overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-slate-50/95 p-5 shadow-2xl shadow-slate-900/20 backdrop-blur-sm xl:bottom-4 xl:left-auto xl:right-4 xl:top-16 xl:max-h-none xl:w-[25rem]"
+            aria-label={selectedEdge ? "Regulation inspection" : "Node inspection"}
+          >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <h4 className="text-base font-bold text-slate-950">
@@ -389,18 +419,15 @@ export default function NetworkVisualizationSection({
                 </button>
               )}
             </div>
-            {selectedNode && !selectedEdge && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedGene(null);
-                  setSelectedEdgeKey(null);
-                }}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-              >
-                Clear
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={closeInspection}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-bold text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+              aria-label="Close inspection panel"
+              title="Close inspection panel"
+            >
+              ×
+            </button>
           </div>
 
           {selectedEdge ? (
@@ -663,12 +690,9 @@ export default function NetworkVisualizationSection({
                 </div>
               </div>
             </>
-          ) : (
-            <div className="mt-4 rounded-[1.25rem] border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
-              Click a node to inspect gene details, or click an edge to inspect evidence, confidence, sign, and supporting algorithms.
-            </div>
-          )}
-        </div>
+          ) : null}
+          </aside>
+        )}
       </div>
       {portalRoot &&
         isVisualGuideOpen &&
