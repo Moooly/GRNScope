@@ -18,6 +18,7 @@ import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
 import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSection";
 import JobProgressBanner from "./_components/JobProgressBanner";
 import ResultsHubSection from "./_components/ResultsHubSection";
+import ResultsHubViewSelector from "./_components/ResultsHubViewSelector";
 import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSection";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
 import { API_BASE } from "../../_lib/apiConfig";
@@ -1780,52 +1781,12 @@ useEffect(() => {
               resultsHubView === "network" ? renderResultsControls() : null
             }
             navigation={
-              <div
-                className="flex min-h-12 items-end gap-7 overflow-x-auto"
-                role="tablist"
-                aria-label="Results hub view"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={resultsHubView === "network"}
-                  onClick={() => setResultsHubView("network")}
-                  className={`relative min-h-12 shrink-0 px-1 pb-3 pt-2 text-sm font-bold transition ${
-                    resultsHubView === "network"
-                      ? "text-[#087ead] after:absolute after:inset-x-0 after:bottom-[-1px] after:h-0.5 after:rounded-full after:bg-[#087ead]"
-                      : "text-slate-500 hover:text-slate-900"
-                  }`}
-                >
-                  Network results
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={resultsHubView === "perturbation"}
-                  aria-disabled={!cellOracleReady}
-                  disabled={!cellOracleReady}
-                  title={
-                    cellOracleReady
-                      ? "Run CellOracle perturbation analysis"
-                      : cellOracleTask
-                        ? "Available when CellOracle completes"
-                        : "Requires CellOracle"
-                  }
-                  onClick={() => setResultsHubView("perturbation")}
-                  className={`relative flex min-h-12 shrink-0 items-center gap-2 px-1 pb-3 pt-2 text-sm font-bold transition ${
-                    resultsHubView === "perturbation"
-                      ? "text-[#087ead] after:absolute after:inset-x-0 after:bottom-[-1px] after:h-0.5 after:rounded-full after:bg-[#087ead]"
-                      : "text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400"
-                  }`}
-                >
-                  <span>Perturbation</span>
-                  {!cellOracleReady && (
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                      {cellOracleTask?.status || "Requires CellOracle"}
-                    </span>
-                  )}
-                </button>
-              </div>
+              <ResultsHubViewSelector
+                view={resultsHubView}
+                onChange={setResultsHubView}
+                cellOracleReady={cellOracleReady}
+                cellOracleStatus={cellOracleTask?.status}
+              />
             }
           >
                 {resultsHubView === "perturbation" && projectId ? (
