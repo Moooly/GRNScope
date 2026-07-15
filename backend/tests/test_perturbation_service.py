@@ -7,6 +7,8 @@ from app.services.perturbation_service import (
     celloracle_availability,
     create_perturbation_run,
     eligible_perturbation_genes,
+    get_gene_expression_profile,
+    get_perturbation_result,
     get_perturbation_state,
 )
 
@@ -22,6 +24,26 @@ class PerturbationServiceTests(unittest.TestCase):
             "GATA1\tKLF1\t0.82\n"
             "GATA1\tHBB\t0.44\n"
             "SPI1\tCEBPA\t-0.61\n",
+            encoding="utf-8",
+        )
+        expression_path = project_dir / "ExpressionData.csv"
+        expression_path.write_text(
+            "gene,cell-1,cell-2,cell-3,cell-4\n"
+            "GATA1,0,1,2,5\n"
+            "SPI1,0,0,3,3\n"
+            "KLF1,1,2,3,4\n"
+            "HBB,2,2,2,2\n"
+            "CEBPA,1,1,1,1\n",
+            encoding="utf-8",
+        )
+        (project_dir / "project.json").write_text(
+            json.dumps(
+                {
+                    "project_id": "project-123",
+                    "expression_path": str(expression_path),
+                    "cluster_labels_path": None,
+                }
+            ),
             encoding="utf-8",
         )
         (result_dir / "result.json").write_text(
@@ -62,6 +84,67 @@ class PerturbationServiceTests(unittest.TestCase):
                 ["GATA1", "SPI1"],
             )
 
+    def test_expression_profile_reports_observed_distribution_for_regulator(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+
+            profile = get_gene_expression_profile(project_dir, "GATA1")
+
+            self.assertEqual(profile["minimum"], 0)
+            self.assertEqual(profile["maximum"], 5)
+            self.assertEqual(profile["safe_upper_limit"], 10)
+            self.assertEqual(profile["median"], 1.5)
+            self.assertEqual(profile["nonzero_fraction"], 0.75)
+            self.assertEqual(sum(row["count"] for row in profile["histogram"]), 4)
+
+    def test_expression_profile_prefers_celloracle_imputed_safe_limit(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+            model_dir = project_dir / "perturbations" / "model"
+            model_dir.mkdir(parents=True)
+            (model_dir / "expression_limits.json").write_text(
+                json.dumps(
+                    {
+                        "source": "celloracle_imputed_count",
+                        "genes": {"GATA1": {"safe_upper_limit": 7.25}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            profile = get_gene_expression_profile(project_dir, "GATA1")
+
+            self.assertEqual(profile["safe_upper_limit"], 7.25)
+            self.assertEqual(profile["limit_source"], "celloracle_imputed_count")
+
+    def test_cluster_network_regulators_are_included_in_eligible_genes(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+            result_path = project_dir / "results" / "CELLORACLE" / "result.json"
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            cluster_edges = result_path.parent / "cluster-a.csv"
+            cluster_edges.write_text(
+                "Gene1\tGene2\tEdgeWeight\nRUNX1\tKLF1\t0.7\n",
+                encoding="utf-8",
+            )
+            result["scopes"] = {
+                "global": {
+                    "scope_type": "global",
+                    "scope_label": "Global",
+                    "status": "Completed",
+                    "ranked_edges_path": result["ranked_edges_path"],
+                },
+                "cluster-a": {
+                    "scope_type": "cluster",
+                    "scope_label": "Cluster A",
+                    "status": "Completed",
+                    "ranked_edges_path": str(cluster_edges),
+                },
+            }
+            result_path.write_text(json.dumps(result), encoding="utf-8")
+
+            self.assertIn("RUNX1", eligible_perturbation_genes(project_dir))
+
     def test_creates_queued_run_and_reports_it_in_state(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             project_dir = self.make_completed_project(Path(temporary_directory))
@@ -92,6 +175,44 @@ class PerturbationServiceTests(unittest.TestCase):
                     n_propagation=3,
                     clip_delta_x=False,
                 )
+
+    def test_rejects_target_expression_above_gene_specific_safe_limit(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+
+            with self.assertRaisesRegex(ValueError, "safe upper limit"):
+                create_perturbation_run(
+                    project_dir,
+                    gene="GATA1",
+                    perturbation_value=10.01,
+                    n_propagation=3,
+                    clip_delta_x=False,
+                )
+
+    def test_loads_a_completed_saved_result_by_run_id(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+            run = create_perturbation_run(
+                project_dir,
+                gene="GATA1",
+                perturbation_value=0,
+                n_propagation=3,
+                clip_delta_x=False,
+            )
+            run_dir = project_dir / "perturbations" / "runs" / run["run_id"]
+            status = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
+            status.update({"status": "Completed", "completed_at": "2026-07-14T21:00:00+00:00"})
+            (run_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+            (run_dir / "result.json").write_text(
+                json.dumps({"gene": "GATA1", "perturbation_value": 0}),
+                encoding="utf-8",
+            )
+
+            result = get_perturbation_result(project_dir, run["run_id"])
+
+            self.assertEqual(result["run_id"], run["run_id"])
+            self.assertEqual(result["gene"], "GATA1")
+            self.assertEqual(result["completed_at"], "2026-07-14T21:00:00+00:00")
 
 
 if __name__ == "__main__":

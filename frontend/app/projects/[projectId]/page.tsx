@@ -254,6 +254,8 @@ export default function ProjectDetailPage() {
   const [edgeDisplayLimit, setEdgeDisplayLimit] = useState(20);
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
+  const [perturbationEntryGene, setPerturbationEntryGene] = useState<string | null>(null);
+  const [perturbationGenes, setPerturbationGenes] = useState<string[]>([]);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [visibleAlgorithmColumns, setVisibleAlgorithmColumns] = useState<string[]>([]);
@@ -340,6 +342,29 @@ export default function ProjectDetailPage() {
     [allJobTasks]
   );
   const cellOracleReady = cellOracleTask?.status === "Completed" && !isDemoProject;
+
+  useEffect(() => {
+    if (!cellOracleReady || !projectId) {
+      setPerturbationGenes([]);
+      return;
+    }
+    const controller = new AbortController();
+    void apiFetch(`${API_BASE}/projects/${projectId}/perturbations`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const payload = await response.json();
+        return Array.isArray(payload?.perturbations?.eligible_genes)
+          ? payload.perturbations.eligible_genes as string[]
+          : [];
+      })
+      .then((genes) => {
+        if (!controller.signal.aborted) setPerturbationGenes(genes);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setPerturbationGenes([]);
+      });
+    return () => controller.abort();
+  }, [cellOracleReady, projectId]);
 
   useEffect(() => {
     if (!cellOracleReady && resultsHubView === "perturbation") {
@@ -1677,6 +1702,10 @@ useEffect(() => {
     setTablePage((current) => Math.min(current, totalTablePages));
   }, [totalTablePages]);
 
+  const handleOpenPerturbation = useCallback((gene: string) => {
+    setPerturbationEntryGene(gene);
+    setResultsHubView("perturbation");
+  }, []);
 
   const renderResultsControls = () => (
     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
@@ -1793,6 +1822,7 @@ useEffect(() => {
                   <PerturbationAnalysisSection
                     projectId={projectId}
                     cellOracleStatus={cellOracleTask?.status}
+                    initialGene={perturbationEntryGene}
                   />
                 ) : (
                   <>
@@ -1845,6 +1875,9 @@ useEffect(() => {
                       isolatedGene={isolatedGene}
                       setIsolatedGene={setIsolatedGene}
                       edgeDisplayLimit={edgeDisplayLimit}
+                      cellOracleReady={cellOracleReady}
+                      perturbationGenes={perturbationGenes}
+                      onOpenPerturbation={handleOpenPerturbation}
                     />
 
                     <EdgeAnalysisTableSection
@@ -1906,6 +1939,23 @@ useEffect(() => {
               if (!projectId) return;
               setIsFileDownloadMenuOpen(true);
             }}
+            onCloseDownloadMenu={() => setIsFileDownloadMenuOpen(false)}
+            isDownloadMenuOpen={isFileDownloadMenuOpen}
+            downloadMenu={(
+              <FileDownloadMenuModal
+                open={isFileDownloadMenuOpen}
+                projectId={projectId}
+                apiBase={API_BASE}
+                expressionFilename={metadata?.expression_filename || project?.expression_filename}
+                pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
+                hasPseudotime={metadata?.has_pseudotime}
+                activeAlgorithmIds={activeAlgorithmIds}
+                confidenceThreshold={evidenceThreshold}
+                consensusThreshold={consensusThreshold}
+                onClose={() => setIsFileDownloadMenuOpen(false)}
+                onOpenDownload={openDownloadModal}
+              />
+            )}
           />
 
           <ResultsGuideModal
@@ -1915,19 +1965,6 @@ useEffect(() => {
           <DatasetHelpModal
             open={isDatasetHelpOpen}
             onClose={() => setIsDatasetHelpOpen(false)}
-          />
-          <FileDownloadMenuModal
-            open={isFileDownloadMenuOpen}
-            projectId={projectId}
-            apiBase={API_BASE}
-            expressionFilename={metadata?.expression_filename || project?.expression_filename}
-            pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
-            hasPseudotime={metadata?.has_pseudotime}
-            activeAlgorithmIds={activeAlgorithmIds}
-            confidenceThreshold={evidenceThreshold}
-            consensusThreshold={consensusThreshold}
-            onClose={() => setIsFileDownloadMenuOpen(false)}
-            onOpenDownload={openDownloadModal}
           />
           <ConfirmDownloadModal
             pendingDownload={pendingDownload}

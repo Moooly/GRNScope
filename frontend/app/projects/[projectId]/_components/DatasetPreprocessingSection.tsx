@@ -2,6 +2,8 @@
 
 "use client";
 
+import { useEffect, useRef, type ReactNode } from "react";
+
 type DatasetPreprocessingSectionProps = {
   expressionMatrixLabel: string;
   topVariableGenesLabel: string | number;
@@ -10,6 +12,9 @@ type DatasetPreprocessingSectionProps = {
   logTransformLabel: string;
   onOpenHelp: () => void;
   onOpenDownloadMenu: () => void;
+  onCloseDownloadMenu: () => void;
+  isDownloadMenuOpen: boolean;
+  downloadMenu: ReactNode;
 };
 
 export default function DatasetPreprocessingSection({
@@ -20,7 +25,33 @@ export default function DatasetPreprocessingSection({
   logTransformLabel,
   onOpenHelp,
   onOpenDownloadMenu,
+  onCloseDownloadMenu,
+  isDownloadMenuOpen,
+  downloadMenu,
 }: DatasetPreprocessingSectionProps) {
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isDownloadMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !downloadMenuRef.current?.contains(target)) {
+        onCloseDownloadMenu();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseDownloadMenu();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isDownloadMenuOpen, onCloseDownloadMenu]);
+
   return (
     <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white/95 p-6 text-slate-900">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -38,13 +69,18 @@ export default function DatasetPreprocessingSection({
             </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onOpenDownloadMenu}
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-        >
-          Download files
-        </button>
+        <div ref={downloadMenuRef} className="relative shrink-0">
+          <button
+            type="button"
+            onClick={isDownloadMenuOpen ? onCloseDownloadMenu : onOpenDownloadMenu}
+            aria-expanded={isDownloadMenuOpen}
+            aria-haspopup="dialog"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+          >
+            Download files
+          </button>
+          {downloadMenu}
+        </div>
       </div>
 
       <div className="mt-6">

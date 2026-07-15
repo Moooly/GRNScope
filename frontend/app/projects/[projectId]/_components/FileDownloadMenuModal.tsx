@@ -33,100 +33,90 @@ export default function FileDownloadMenuModal({
 
   const expressionFileLabel = expressionFilename || "ExpressionData.csv";
   const pseudotimeFileLabel = pseudotimeFilename || "PseudoTime.csv";
+  const selectedView =
+    activeAlgorithmIds.length >= 2
+      ? "consensus"
+      : activeAlgorithmIds[0] ?? "consensus";
+  const metadataQuery = new URLSearchParams({
+    selected_view: selectedView,
+    confidence_threshold: String(confidenceThreshold),
+    consensus_threshold: String(consensusThreshold),
+    selected_algorithms: activeAlgorithmIds.join(","),
+  });
+  const files = [
+    {
+      label: "Expression matrix",
+      description: expressionFileLabel,
+      type: "CSV",
+      disabled: !projectId,
+      href: projectId ? `${apiBase}/projects/${projectId}/download/expression` : "",
+      filename: expressionFileLabel,
+    },
+    {
+      label: "Pseudotime file",
+      description: hasPseudotime ? pseudotimeFileLabel : "Not provided for this project",
+      type: "CSV",
+      disabled: !projectId || !hasPseudotime,
+      href: projectId ? `${apiBase}/projects/${projectId}/download/pseudotime` : "",
+      filename: pseudotimeFileLabel,
+    },
+    {
+      label: "Analysis metadata",
+      description: "Dataset, preprocessing, algorithms, and current export settings.",
+      type: "JSON",
+      disabled: !projectId,
+      href: projectId
+        ? `${apiBase}/projects/${projectId}/download/metadata?${metadataQuery.toString()}`
+        : "",
+      filename: `${projectId ?? "project"}-analysis-metadata.json`,
+    },
+  ];
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm animate-modal-overlay"
-      onClick={onClose}
+      className="absolute bottom-[calc(100%+0.75rem)] right-0 z-40 w-[min(28rem,calc(100vw-3rem))] text-slate-900"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="project-download-title"
     >
-      <div
-        className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-              Project downloads
-            </p>
-            <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
-              Choose a file to download
-            </h3>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Download the input files or the current analysis metadata.
-            </p>
-          </div>
+      <span
+        aria-hidden="true"
+        className="absolute -bottom-1.5 right-8 z-20 h-3 w-3 rotate-45 border-b border-r border-slate-200 bg-white"
+      />
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
+        <div className="px-4 pb-3 pt-4">
+          <h3 id="project-download-title" className="text-sm font-bold text-slate-950">
+            Download project files
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Choose an input file or analysis metadata.
+          </p>
         </div>
 
-        <div className="mt-6 grid gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (!projectId) return;
-              onClose();
-              onOpenDownload(
-                "Expression matrix",
-                `${apiBase}/projects/${projectId}/download/expression`,
-                expressionFileLabel
-              );
-            }}
-            className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
-          >
-            <p className="text-sm font-bold text-slate-950">Expression matrix</p>
-            <p className="mt-1 text-sm text-slate-600">{expressionFileLabel}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (!projectId || !hasPseudotime) return;
-              onClose();
-              onOpenDownload(
-                "Pseudotime file",
-                `${apiBase}/projects/${projectId}/download/pseudotime`,
-                pseudotimeFileLabel
-              );
-            }}
-            className={`rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] ${
-              hasPseudotime ? "" : "pointer-events-none opacity-50"
-            }`}
-          >
-            <p className="text-sm font-bold text-slate-950">Pseudotime file</p>
-            <p className="mt-1 text-sm text-slate-600">
-              {hasPseudotime ? pseudotimeFileLabel : "Not provided"}
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (!projectId) return;
-
-              const selectedView =
-                activeAlgorithmIds.length >= 2
-                  ? "consensus"
-                  : activeAlgorithmIds[0] ?? "consensus";
-
-              const query = new URLSearchParams({
-                selected_view: selectedView,
-                confidence_threshold: String(confidenceThreshold),
-                consensus_threshold: String(consensusThreshold),
-                selected_algorithms: activeAlgorithmIds.join(","),
-              });
-
-              onClose();
-              onOpenDownload(
-                "Analysis metadata",
-                `${apiBase}/projects/${projectId}/download/metadata?${query.toString()}`,
-                `${projectId ?? "project"}-analysis-metadata.json`
-              );
-            }}
-            className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
-          >
-            <p className="text-sm font-bold text-slate-950">Analysis metadata</p>
-            <p className="mt-1 text-sm text-slate-600">
-              JSON summary of dataset, preprocessing, algorithms, and current export settings.
-            </p>
-          </button>
+        <div className="border-t border-slate-100 p-2">
+          {files.map((file) => (
+            <button
+              key={file.label}
+              type="button"
+              disabled={file.disabled}
+              onClick={() => {
+                if (file.disabled) return;
+                onClose();
+                onOpenDownload(file.label, file.href, file.filename);
+              }}
+              className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
+            >
+              <div>
+                <p className="text-sm font-bold text-slate-950 group-hover:text-[#1b75a6] group-disabled:text-slate-500">
+                  {file.label}
+                </p>
+                <p className="mt-0.5 text-xs leading-5 text-slate-500">{file.description}</p>
+              </div>
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                {file.type}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
     </div>

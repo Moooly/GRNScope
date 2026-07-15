@@ -153,7 +153,6 @@ export default function CreateProjectModal({
   const [isCellOracleSettingsClosing, setIsCellOracleSettingsClosing] = useState(false);
   const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] =
     useState<CellOracleBaseGrnSource>("built-in");
-  const [isClusterLabelsOpen, setIsClusterLabelsOpen] = useState(false);
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [algorithmToConfigure, setAlgorithmToConfigure] = useState<ProjectAlgorithm | null>(null);
@@ -189,13 +188,6 @@ export default function CreateProjectModal({
     setClusterLabelsFileName(file?.name ?? "");
   };
 
-  const handleClusterLabelsDrop = (event: DragEvent<HTMLLabelElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const file = event.dataTransfer.files?.[0] ?? null;
-    selectClusterLabelsFile(file);
-  };
-
   useEffect(() => {
     if (isCreateVisible) {
       /* eslint-disable react-hooks/set-state-in-effect -- reset modal-local state on open */
@@ -206,7 +198,6 @@ export default function CreateProjectModal({
       setIsCellOracleSettingsOpen(false);
       setIsCellOracleSettingsClosing(false);
       setCellOracleBaseGrnSource("built-in");
-      setIsClusterLabelsOpen(false);
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
       setAlgorithmToConfigure(null);
@@ -849,7 +840,6 @@ export default function CreateProjectModal({
         baseGrnSource={cellOracleBaseGrnSource}
         cellOracleSpecies={cellOracleSpecies}
         clusterLabelsFileName={clusterLabelsFileName}
-        isClusterLabelsOpen={isClusterLabelsOpen}
         onBaseGrnSourceChange={(value) => {
           setCellOracleBaseGrnSource(value);
           setHasCellOracleSettingsConfigured(value === "built-in");
@@ -858,17 +848,12 @@ export default function CreateProjectModal({
           setHasCellOracleSettingsConfigured(true);
           setCellOracleSpecies(value);
         }}
-        onToggleClusterLabels={() =>
-          setIsClusterLabelsOpen((current) => !current)
-        }
         onSelectClusterLabels={(file) => {
           if (file && cellOracleBaseGrnSource === "built-in") {
             setHasCellOracleSettingsConfigured(true);
           }
           selectClusterLabelsFile(file);
-          if (file) setIsClusterLabelsOpen(true);
         }}
-        onDropClusterLabels={handleClusterLabelsDrop}
         onClearClusterLabels={clearClusterLabelsFile}
         onShowHelp={handleOpenCellOracleHelp}
         onClose={handleCloseCellOracleSettings}
@@ -966,12 +951,9 @@ function CellOracleSettingsModal({
   baseGrnSource,
   cellOracleSpecies,
   clusterLabelsFileName,
-  isClusterLabelsOpen,
   onBaseGrnSourceChange,
   onSetCellOracleSpecies,
-  onToggleClusterLabels,
   onSelectClusterLabels,
-  onDropClusterLabels,
   onClearClusterLabels,
   onShowHelp,
   onClose,
@@ -981,16 +963,15 @@ function CellOracleSettingsModal({
   baseGrnSource: CellOracleBaseGrnSource;
   cellOracleSpecies: string;
   clusterLabelsFileName: string;
-  isClusterLabelsOpen: boolean;
   onBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
   onSetCellOracleSpecies: (value: string) => void;
-  onToggleClusterLabels: () => void;
   onSelectClusterLabels: (file: File | null) => void;
-  onDropClusterLabels: (event: DragEvent<HTMLLabelElement>) => void;
   onClearClusterLabels: () => void;
   onShowHelp: (topic: CellOracleHelpTopic) => void;
   onClose: () => void;
 }) {
+  const clusterLabelsInputRef = useRef<HTMLInputElement | null>(null);
+
   if (!open) return null;
 
   const isBuiltInGrn = baseGrnSource === "built-in";
@@ -1127,28 +1108,49 @@ function CellOracleSettingsModal({
                   Add cluster labels for cluster-specific networks. Leave empty for one global network.
                 </p>
               </div>
+              <input
+                ref={clusterLabelsInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  onSelectClusterLabels(file);
+                  event.currentTarget.value = "";
+                }}
+              />
               <button
                 type="button"
-                onClick={onToggleClusterLabels}
-                aria-expanded={isClusterLabelsOpen}
+                onClick={() => clusterLabelsInputRef.current?.click()}
                 className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
               >
-                {isClusterLabelsOpen ? "Hide labels" : "Add labels"}
+                {clusterLabelsFileName ? "Replace labels" : "Add labels"}
               </button>
             </div>
 
-            {isClusterLabelsOpen && (
-              <div className="mt-4">
-                <AdditionalInputCard
-                  title=""
-                  fileName={clusterLabelsFileName}
-                  placeholder="Upload cluster labels CSV"
-                  helperText="cell_id, cluster"
-                  onDrop={onDropClusterLabels}
-                  onSelect={onSelectClusterLabels}
-                  onClear={onClearClusterLabels}
-                  compact
-                />
+            {clusterLabelsFileName && (
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-sky-100 bg-[#f7fbff] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#1b75a6] shadow-sm ring-1 ring-sky-100" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5">
+                      <path d="M5 2.75h6l4 4v10.5H5V2.75Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                      <path d="M11 2.75v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900" title={clusterLabelsFileName}>
+                      {formatFileNameForDisplay(clusterLabelsFileName, 52)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">Cluster labels CSV selected</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClearClusterLabels}
+                  className="self-start text-xs font-semibold text-slate-500 transition hover:text-rose-600 sm:self-auto"
+                >
+                  Remove
+                </button>
               </div>
             )}
           </div>

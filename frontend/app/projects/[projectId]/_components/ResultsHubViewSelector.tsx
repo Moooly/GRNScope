@@ -72,7 +72,7 @@ export default function ResultsHubViewSelector({
         className="group inline-flex max-w-full items-center gap-3 rounded-lg py-1 text-left transition focus:outline-none focus:ring-4 focus:ring-[#087ead]/10"
       >
         <span className="truncate text-xl font-bold text-slate-950 transition group-hover:text-[#087ead]">
-          {view === "network" ? "Results" : "Perturbation"}
+          {view === "network" ? "Results Visualization" : "Perturbation"}
         </span>
         <span
           className={`h-2.5 w-2.5 shrink-0 border-b-2 border-r-2 border-slate-500 transition group-hover:border-[#087ead] ${
@@ -96,7 +96,7 @@ export default function ResultsHubViewSelector({
             className="flex w-full items-center gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-base font-semibold text-slate-950">Results</span>
+              <span className="block text-base font-semibold text-slate-950">Results Visualization</span>
               <span className="mt-0.5 block text-sm leading-5 text-slate-500">
                 Explore inferred networks, ensemble evidence, and gene relationships.
               </span>

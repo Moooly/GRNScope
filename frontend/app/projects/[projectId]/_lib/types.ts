@@ -245,11 +245,22 @@ export type PerturbationResult = {
   clip_delta_x: boolean;
   celloracle_version?: string;
   model_reused?: boolean;
+  model_scope?: "cluster_specific" | "global" | string;
+  grn_unit?: "cluster" | "whole" | string;
+  cluster_count?: number;
+  cluster_specific_topology_count?: number;
+  cluster_specific_topology_labels?: string[];
+  global_topology_fallback_labels?: string[];
   input_cells?: number;
   cells_analyzed: number;
   genes_analyzed: number;
   ood_warning_gene_count: number;
   max_ood_exceeding_ratio: number;
+  ood_genes?: Array<{
+    gene: string;
+    max_exceeding_ratio: number;
+    ood_cell_ratio: number;
+  }>;
   mean_shift_magnitude: number;
   mean_random_shift_magnitude: number;
   completed_at?: string | null;
@@ -263,12 +274,44 @@ export type PerturbationResult = {
     gene: string;
     mean_change: number;
   }>;
+  cluster_summary?: Array<{
+    cluster: string;
+    cell_count: number;
+    mean_shift_magnitude: number;
+    mean_random_shift_magnitude: number;
+    shift_ratio?: number | null;
+    ood_warning_gene_count?: number | null;
+    top_genes?: Array<{
+      gene: string;
+      mean_change: number;
+    }>;
+  }>;
   embedding_points: Array<{
     x: number;
     y: number;
     cluster: string;
+    shift_x?: number;
+    shift_y?: number;
+    random_shift_x?: number;
+    random_shift_y?: number;
   }>;
-  vectors: Array<{
+  grid_vectors?: Array<{
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+    random_dx: number;
+    random_dy: number;
+    density: number;
+  }>;
+  grid_settings?: {
+    source: string;
+    smooth: number;
+    steps: [number, number] | number[];
+    min_mass: number;
+    n_neighbors: number;
+  };
+  vectors?: Array<{
     x: number;
     y: number;
     dx: number;
@@ -282,6 +325,32 @@ export type PerturbationState = {
   available: boolean;
   reason?: string | null;
   eligible_genes: string[];
+  model_scope?: {
+    mode: "cluster_specific" | "global" | string;
+    cluster_labels_available: boolean;
+    cluster_specific_topology_count: number;
+    cluster_specific_topology_labels: string[];
+    global_topology_fallback_labels: string[];
+  } | null;
   runs: PerturbationRun[];
   latest_result?: PerturbationResult | null;
+};
+
+export type GeneExpressionProfile = {
+  gene: string;
+  minimum: number;
+  q1: number;
+  median: number;
+  q3: number;
+  maximum: number;
+  mean: number;
+  nonzero_fraction: number;
+  cell_count: number;
+  safe_upper_limit: number;
+  limit_source?: "observed_expression" | "celloracle_imputed_count" | string;
+  histogram: Array<{
+    start: number;
+    end: number;
+    count: number;
+  }>;
 };

@@ -9,6 +9,8 @@ from .client_identity import get_or_create_client_id, require_project_owner
 from ..services.demo_service import is_demo_project
 from ..services.perturbation_service import (
     create_perturbation_run,
+    get_gene_expression_profile,
+    get_perturbation_result,
     get_perturbation_state,
     launch_perturbation_thread,
     perturbation_download_path,
@@ -54,6 +56,52 @@ async def get_project_perturbations(
             "project_id": project_id,
             "perturbations": get_perturbation_state(project_dir),
         }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/perturbations/expression-profile/{gene}")
+async def get_project_perturbation_expression_profile(
+    project_id: str,
+    gene: str,
+    request: Request,
+    response: Response,
+):
+    owner_id = get_or_create_client_id(request, response)
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+    try:
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "profile": get_gene_expression_profile(project_dir, gene),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/perturbations/{run_id}")
+async def get_project_perturbation_result(
+    project_id: str,
+    run_id: str,
+    request: Request,
+    response: Response,
+):
+    owner_id = get_or_create_client_id(request, response)
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+    try:
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "result": get_perturbation_result(project_dir, run_id),
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
