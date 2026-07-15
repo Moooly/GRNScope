@@ -11,6 +11,19 @@ type ResultsHubViewSelectorProps = {
   cellOracleStatus?: string | null;
 };
 
+function SelectionCheck({ visible }: { visible: boolean }) {
+  return (
+    <span
+      className={`flex h-5 w-5 shrink-0 items-center justify-center transition-opacity ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+      aria-hidden="true"
+    >
+      <span className="h-3.5 w-2 rotate-45 border-b-[3px] border-r-[3px] border-slate-700" />
+    </span>
+  );
+}
+
 export default function ResultsHubViewSelector({
   view,
   onChange,
@@ -44,10 +57,10 @@ export default function ResultsHubViewSelector({
   };
 
   const perturbationDescription = cellOracleReady
-    ? "Simulate CellOracle gene knockouts and inspect predicted cell-state shifts."
+    ? "Simulate gene knockouts and predicted cell-state shifts. Available only with a completed CellOracle result."
     : cellOracleStatus
-      ? `Available when CellOracle completes. Current status: ${cellOracleStatus}.`
-      : "Run CellOracle first to enable gene-knockout simulation.";
+      ? `Available only when the CellOracle result is complete. Current status: ${cellOracleStatus}.`
+      : "Available only when a completed CellOracle result is available.";
 
   return (
     <div ref={selectorRef} className="relative min-w-0">
@@ -80,7 +93,7 @@ export default function ResultsHubViewSelector({
             role="menuitemradio"
             aria-checked={view === "network"}
             onClick={() => chooseView("network")}
-            className="flex w-full items-start gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+            className="flex w-full items-center gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
           >
             <span className="min-w-0 flex-1">
               <span className="block text-base font-semibold text-slate-950">Results</span>
@@ -88,12 +101,7 @@ export default function ResultsHubViewSelector({
                 Explore inferred networks, ensemble evidence, and gene relationships.
               </span>
             </span>
-            <span
-              className={`pt-1 text-xl font-semibold ${view === "network" ? "text-slate-700" : "text-transparent"}`}
-              aria-hidden="true"
-            >
-              ✓
-            </span>
+            <SelectionCheck visible={view === "network"} />
           </button>
 
           <button
@@ -103,7 +111,7 @@ export default function ResultsHubViewSelector({
             aria-disabled={!cellOracleReady}
             disabled={!cellOracleReady}
             onClick={() => chooseView("perturbation")}
-            className="flex w-full items-start gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none disabled:cursor-not-allowed disabled:bg-transparent"
+            className="flex w-full items-center gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none disabled:cursor-not-allowed disabled:bg-transparent"
           >
             <span className="min-w-0 flex-1">
               <span
@@ -117,12 +125,7 @@ export default function ResultsHubViewSelector({
                 {perturbationDescription}
               </span>
             </span>
-            <span
-              className={`pt-1 text-xl font-semibold ${view === "perturbation" ? "text-slate-700" : "text-transparent"}`}
-              aria-hidden="true"
-            >
-              ✓
-            </span>
+            <SelectionCheck visible={view === "perturbation"} />
           </button>
         </div>
       )}
