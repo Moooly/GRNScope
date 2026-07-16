@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
+  RefObject,
 } from "react";
 import { API_BASE } from "../../../_lib/apiConfig";
 import { apiFetch } from "../../../_lib/clientIdentity";
@@ -20,6 +20,9 @@ const ACTIVE_STATUSES = new Set(["Queued", "Preparing", "Running"]);
 const PLOT_WIDTH = 520;
 const PLOT_HEIGHT = 330;
 const PLOT_PADDING = 24;
+const FIGURE_WIDTH = 1600;
+const FIGURE_HEIGHT = 700;
+const FIGURE_SCALE = 2;
 const DISPLAY_CHANGE_EPSILON = 1e-6;
 const DEFAULT_PLOT_VIEWPORT = { x: 0, y: 0, width: PLOT_WIDTH, height: PLOT_HEIGHT };
 const PROPAGATION_OPTIONS = [
@@ -60,6 +63,11 @@ type GridVectorFields = {
 };
 type PlotViewport = typeof DEFAULT_PLOT_VIEWPORT;
 type PlotKind = "predicted" | "randomized";
+type SafariGestureEvent = Event & {
+  clientX: number;
+  clientY: number;
+  scale: number;
+};
 
 function formatElapsed(seconds?: number) {
   const value = Math.max(0, Number(seconds ?? 0));
@@ -93,6 +101,128 @@ function formatPerturbation(gene: string, value: number) {
   return value === 0
     ? `${gene} knockout`
     : `${gene} set to ${formatScientific(value)}`;
+}
+
+function sanitizeFilenamePart(value: string) {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "figure";
+}
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function cleanPlotSvgContents(svg: SVGSVGElement) {
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  clone.querySelector("title")?.remove();
+  clone.querySelectorAll("[data-export-ignore]").forEach((node) => node.remove());
+  clone.querySelectorAll<SVGGElement>("[data-vector]").forEach((group) => {
+    const color = group.dataset.exportColor ?? "#087ead";
+    const opacity = group.dataset.exportOpacity ?? "0.78";
+    const strokeWidth = group.dataset.exportStrokeWidth ?? "1.35";
+    group.setAttribute("opacity", opacity);
+    group.querySelectorAll<SVGElement>("line, path").forEach((element) => {
+      element.setAttribute("stroke", color);
+      element.setAttribute("stroke-width", strokeWidth);
+    });
+  });
+  return clone.innerHTML;
+}
+
+function buildComparisonFigureSvg({
+  predictedSvg,
+  randomizedSvg,
+  predictedTitle,
+  randomizedTitle,
+  subtitle,
+}: {
+  predictedSvg: SVGSVGElement;
+  randomizedSvg: SVGSVGElement;
+  predictedTitle: string;
+  randomizedTitle: string;
+  subtitle: string;
+}) {
+  const predictedViewBox = predictedSvg.getAttribute("viewBox") ?? `0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`;
+  const randomizedViewBox = randomizedSvg.getAttribute("viewBox") ?? `0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`;
+  const predictedContents = cleanPlotSvgContents(predictedSvg);
+  const randomizedContents = cleanPlotSvgContents(randomizedSvg);
+  const panelWidth = 740;
+  const panelHeight = 470;
+  const leftX = 40;
+  const rightX = 820;
+  const panelY = 158;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_WIDTH}" height="${FIGURE_HEIGHT}" viewBox="0 0 ${FIGURE_WIDTH} ${FIGURE_HEIGHT}" role="img" aria-label="Cell-state shift comparison">
+  <rect width="${FIGURE_WIDTH}" height="${FIGURE_HEIGHT}" fill="#ffffff"/>
+  <text x="40" y="46" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Cell-state shift</text>
+  <text x="40" y="76" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="16">${escapeXml(subtitle)}</text>
+  <g transform="translate(1130 40)" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600" fill="#64748b">
+    <circle cx="5" cy="31" r="5" fill="#9fb6c8"/><text x="18" y="36">Cells</text>
+    <line x1="94" y1="31" x2="124" y2="31" stroke="#087ead" stroke-width="2"/>
+    <path d="M 116 25 L 124 31 L 116 37" fill="none" stroke="#087ead" stroke-width="2"/>
+    <text x="136" y="36">Average local shift</text>
+  </g>
+  <text x="${leftX}" y="137" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(predictedTitle)}</text>
+  <text x="${rightX}" y="137" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(randomizedTitle)}</text>
+  <rect x="${leftX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" rx="18" fill="#f7fbff" stroke="#e2e8f0" stroke-width="2"/>
+  <rect x="${rightX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" rx="18" fill="#f7fbff" stroke="#e2e8f0" stroke-width="2"/>
+  <svg x="${leftX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" viewBox="${escapeXml(predictedViewBox)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">${predictedContents}</svg>
+  <svg x="${rightX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" viewBox="${escapeXml(randomizedViewBox)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">${randomizedContents}</svg>
+  <line x1="40" y1="658" x2="1560" y2="658" stroke="#e2e8f0"/>
+  <text x="40" y="682" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="13">Current synchronized view · CellOracle density-smoothed grid field · Shared arrow scale</text>
+</svg>`;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function svgToPngBlob(svgMarkup: string) {
+  return new Promise<Blob>((resolve, reject) => {
+    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = FIGURE_WIDTH * FIGURE_SCALE;
+        canvas.height = FIGURE_HEIGHT * FIGURE_SCALE;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Canvas is unavailable.");
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          if (blob) resolve(blob);
+          else reject(new Error("PNG export failed."));
+        }, "image/png");
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        reject(error);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("The exported SVG could not be rendered as PNG."));
+    };
+    image.src = url;
+  });
 }
 
 function statusClasses(status: string) {
@@ -130,16 +260,21 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
-function zoomViewportFromCenter(viewport: PlotViewport, factor: number): PlotViewport {
-  const centerX = viewport.x + viewport.width / 2;
-  const centerY = viewport.y + viewport.height / 2;
-  const width = clamp(viewport.width * factor, PLOT_WIDTH * 0.36, PLOT_WIDTH);
-  const height = width * (PLOT_HEIGHT / PLOT_WIDTH);
+function zoomViewportAtPoint(
+  viewport: PlotViewport,
+  factor: number,
+  pointerX: number,
+  pointerY: number
+): PlotViewport {
+  const nextWidth = clamp(viewport.width * factor, PLOT_WIDTH * 0.36, PLOT_WIDTH);
+  const nextHeight = nextWidth * (PLOT_HEIGHT / PLOT_WIDTH);
+  const worldX = viewport.x + pointerX * viewport.width;
+  const worldY = viewport.y + pointerY * viewport.height;
   return {
-    x: clamp(centerX - width / 2, 0, PLOT_WIDTH - width),
-    y: clamp(centerY - height / 2, 0, PLOT_HEIGHT - height),
-    width,
-    height,
+    x: clamp(worldX - pointerX * nextWidth, 0, PLOT_WIDTH - nextWidth),
+    y: clamp(worldY - pointerY * nextHeight, 0, PLOT_HEIGHT - nextHeight),
+    width: nextWidth,
+    height: nextHeight,
   };
 }
 
@@ -262,8 +397,7 @@ function VectorFieldPlot({
   onViewportChange,
   onHoverVector,
   onTogglePin,
-  onExpand,
-  isExpanded = false,
+  svgRef,
   randomized = false,
 }: {
   title: string;
@@ -278,17 +412,24 @@ function VectorFieldPlot({
   onViewportChange: (viewport: PlotViewport) => void;
   onHoverVector: (index: number | null) => void;
   onTogglePin: (index: number) => void;
-  onExpand?: () => void;
-  isExpanded?: boolean;
+  svgRef?: RefObject<SVGSVGElement | null>;
   randomized?: boolean;
 }) {
+  const localSvgRef = useRef<SVGSVGElement | null>(null);
+  const viewportRef = useRef(viewport);
   const dragRef = useRef<{
     pointerId: number;
     clientX: number;
     clientY: number;
     viewport: PlotViewport;
   } | null>(null);
+  const gestureStartViewportRef = useRef<PlotViewport | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+
   const allX = [...points.map((point) => point.x), ...vectors.map((vector) => vector.x)];
   const allY = [...points.map((point) => point.y), ...vectors.map((vector) => vector.y)];
   const minX = allX.length > 0 ? Math.min(...allX) : 0;
@@ -326,26 +467,71 @@ function VectorFieldPlot({
   const tooltipTranslateX = tooltipX < 25 ? "0%" : tooltipX > 75 ? "-100%" : "-50%";
   const tooltipTranslateY = tooltipY < 38 ? "14px" : "calc(-100% - 14px)";
 
-  const handleWheel = (event: ReactWheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const pointerX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
-    const pointerY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
-    const factor = event.deltaY > 0 ? 1.14 : 0.86;
-    const nextWidth = clamp(viewport.width * factor, PLOT_WIDTH * 0.36, PLOT_WIDTH);
-    const nextHeight = nextWidth * (PLOT_HEIGHT / PLOT_WIDTH);
-    const worldX = viewport.x + pointerX * viewport.width;
-    const worldY = viewport.y + pointerY * viewport.height;
-    onViewportChange({
-      x: clamp(worldX - pointerX * nextWidth, 0, PLOT_WIDTH - nextWidth),
-      y: clamp(worldY - pointerY * nextHeight, 0, PLOT_HEIGHT - nextHeight),
-      width: nextWidth,
-      height: nextHeight,
-    });
-  };
+  const setSvgElement = useCallback((node: SVGSVGElement | null) => {
+    localSvgRef.current = node;
+    if (svgRef) svgRef.current = node;
+  }, [svgRef]);
 
+  useEffect(() => {
+    const svg = localSvgRef.current;
+    if (!svg) return;
+
+    const pointerPosition = (clientX: number, clientY: number) => {
+      const bounds = svg.getBoundingClientRect();
+      return {
+        x: clamp((clientX - bounds.left) / bounds.width, 0, 1),
+        y: clamp((clientY - bounds.top) / bounds.height, 0, 1),
+      };
+    };
+    const updateViewport = (nextViewport: PlotViewport) => {
+      viewportRef.current = nextViewport;
+      onViewportChange(nextViewport);
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      const pointer = pointerPosition(event.clientX, event.clientY);
+      const pixelDelta = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 16
+        : event.deltaY;
+      const factor = Math.exp(clamp(pixelDelta, -120, 120) * 0.008);
+      updateViewport(zoomViewportAtPoint(viewportRef.current, factor, pointer.x, pointer.y));
+    };
+    const handleGestureStart = (event: Event) => {
+      event.preventDefault();
+      gestureStartViewportRef.current = viewportRef.current;
+    };
+    const handleGestureChange = (event: Event) => {
+      event.preventDefault();
+      const gestureEvent = event as SafariGestureEvent;
+      const startViewport = gestureStartViewportRef.current ?? viewportRef.current;
+      const pointer = pointerPosition(gestureEvent.clientX, gestureEvent.clientY);
+      const scale = Number.isFinite(gestureEvent.scale) && gestureEvent.scale > 0
+        ? gestureEvent.scale
+        : 1;
+      updateViewport(zoomViewportAtPoint(startViewport, 1 / scale, pointer.x, pointer.y));
+    };
+    const handleGestureEnd = (event: Event) => {
+      event.preventDefault();
+      gestureStartViewportRef.current = null;
+    };
+
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    svg.addEventListener("gesturestart", handleGestureStart, { passive: false });
+    svg.addEventListener("gesturechange", handleGestureChange, { passive: false });
+    svg.addEventListener("gestureend", handleGestureEnd, { passive: false });
+    return () => {
+      svg.removeEventListener("wheel", handleWheel);
+      svg.removeEventListener("gesturestart", handleGestureStart);
+      svg.removeEventListener("gesturechange", handleGestureChange);
+      svg.removeEventListener("gestureend", handleGestureEnd);
+    };
+  }, [onViewportChange]);
+
+  const canPan = viewport.width < PLOT_WIDTH - 0.01;
   const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (event.button !== 0) return;
+    if (!canPan || event.button !== 0 || event.pointerType !== "mouse") return;
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
@@ -384,51 +570,16 @@ function VectorFieldPlot({
         <span className="text-sm font-bold text-slate-950">{title}</span>
       </figcaption>
       <div className="relative">
-        <div className="absolute right-3 top-3 z-20 inline-flex h-8 overflow-hidden rounded-lg border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-          <button
-            type="button"
-            onClick={() => onViewportChange(zoomViewportFromCenter(viewport, 1.25))}
-            disabled={viewport.width >= PLOT_WIDTH - 0.01}
-            className="inline-flex w-8 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
-            aria-label={`Zoom out ${title}`}
-            title="Zoom out"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            onClick={() => onViewportChange(zoomViewportFromCenter(viewport, 0.8))}
-            disabled={viewport.width <= PLOT_WIDTH * 0.36 + 0.01}
-            className="inline-flex w-8 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
-            aria-label={`Zoom in ${title}`}
-            title="Zoom in"
-          >
-            +
-          </button>
-          {onExpand && (
-            <button
-              type="button"
-              onClick={onExpand}
-              className="inline-flex w-8 items-center justify-center text-[15px] font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead]"
-              aria-label={`${isExpanded ? "Exit expanded" : "Expand"} ${title}`}
-              title={isExpanded ? "Exit expanded view" : "Expand"}
-            >
-              ⛶
-            </button>
-          )}
-        </div>
         <svg
+          ref={setSvgElement}
           viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
-          className={`h-auto w-full rounded-xl border border-slate-100 bg-[#f7fbff] ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+          className={`h-auto w-full rounded-xl border border-slate-100 bg-[#f7fbff] ${canPan ? isDragging ? "cursor-grabbing" : "cursor-grab" : ""}`}
           role="img"
-          aria-label={`${title}. Scroll to zoom and drag to pan.`}
-          style={{ touchAction: "none" }}
-          onWheel={handleWheel}
+          aria-label={`${title}. Pinch to zoom. When zoomed in, drag with a mouse to pan.`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={finishPointerDrag}
           onPointerCancel={finishPointerDrag}
-          onDoubleClick={() => onViewportChange(DEFAULT_PLOT_VIEWPORT)}
         >
           <title>{title}</title>
           {points.map((point, index) => (
@@ -459,9 +610,16 @@ function VectorFieldPlot({
             const color = isActive ? "#0f172a" : randomized ? "#94a3b8" : "#087ead";
             const strokeWidth = isActive ? 2.25 : 1.35;
             return (
-              <g key={`vector-${index}`} opacity={isActive ? "1" : randomized ? "0.58" : "0.78"}>
+              <g
+                key={`vector-${index}`}
+                opacity={isActive ? "1" : randomized ? "0.58" : "0.78"}
+                data-vector
+                data-export-color={randomized ? "#94a3b8" : "#087ead"}
+                data-export-opacity={randomized ? "0.58" : "0.78"}
+                data-export-stroke-width="1.35"
+              >
                 {isActive && (
-                  <circle cx={startX} cy={startY} r="4.5" fill="white" stroke={color} strokeWidth="1.5" />
+                  <circle data-export-ignore cx={startX} cy={startY} r="4.5" fill="white" stroke={color} strokeWidth="1.5" />
                 )}
                 <line x1={startX} y1={startY} x2={endX} y2={endY} stroke={color} strokeWidth={strokeWidth} />
                 <path
@@ -478,6 +636,7 @@ function VectorFieldPlot({
                   stroke="transparent"
                   strokeWidth="12"
                   className="cursor-pointer"
+                  data-export-ignore
                   onPointerEnter={() => onHoverVector(index)}
                   onPointerLeave={() => onHoverVector(null)}
                   onClick={(event) => {
@@ -527,6 +686,146 @@ function VectorFieldPlot({
         )}
       </div>
     </figure>
+  );
+}
+
+function PlotZoomControls({
+  viewport,
+  onViewportChange,
+  connected = false,
+}: {
+  viewport: PlotViewport;
+  onViewportChange: (viewport: PlotViewport) => void;
+  connected?: boolean;
+}) {
+  const isFullyZoomedOut = viewport.width >= PLOT_WIDTH - 0.01;
+  const isFullyZoomedIn = viewport.width <= PLOT_WIDTH * 0.36 + 0.01;
+  return (
+    <div
+      className={connected
+        ? "inline-flex h-full"
+        : "inline-flex h-9 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"}
+      aria-label="Shared plot zoom"
+    >
+      <button
+        type="button"
+        onClick={() => onViewportChange(zoomViewportAtPoint(viewport, 1.2, 0.5, 0.5))}
+        disabled={isFullyZoomedOut}
+        className="inline-flex w-9 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
+        aria-label="Zoom out both plots"
+        title="Zoom out"
+      >
+        −
+      </button>
+      <button
+        type="button"
+        onClick={() => onViewportChange(zoomViewportAtPoint(viewport, 0.84, 0.5, 0.5))}
+        disabled={isFullyZoomedIn}
+        className={`inline-flex w-9 items-center justify-center text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600 ${connected ? "border-r border-slate-200" : ""}`}
+        aria-label="Zoom in both plots"
+        title="Zoom in"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+function ExpandComparisonButton({
+  onClick,
+  connected = false,
+}: {
+  onClick: () => void;
+  connected?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={connected
+        ? "inline-flex h-full items-center gap-2 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"
+        : "inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"}
+    >
+      <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+        <path d="M7 3.5H3.5V7M13 3.5h3.5V7M7 16.5H3.5V13M13 16.5h3.5V13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Expand
+    </button>
+  );
+}
+
+function FigureExportMenu({
+  menuRef,
+  isOpen,
+  isExporting,
+  error,
+  onToggle,
+  onExport,
+}: {
+  menuRef: RefObject<HTMLDivElement | null>;
+  isOpen: boolean;
+  isExporting: boolean;
+  error: string | null;
+  onToggle: () => void;
+  onExport: (format: "svg" | "png") => void;
+}) {
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={isExporting}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-wait disabled:opacity-60"
+      >
+        <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+          <path d="M10 3v9m0 0 3.3-3.3M10 12 6.7 8.7M4 14v2.5h12V14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {isExporting ? "Preparing…" : "Download"}
+        <SelectChevron />
+      </button>
+      {isOpen && (
+        <div
+          role="menu"
+          aria-label="Figure export formats"
+          className="absolute right-0 top-[calc(100%+0.6rem)] z-50 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/20"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => onExport("svg")}
+            className="flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
+          >
+            <span>
+              <span className="block text-sm font-bold text-slate-950">Vector figure</span>
+              <span className="mt-0.5 block text-xs leading-5 text-slate-500">Best for papers and editing.</span>
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">SVG</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => onExport("png")}
+            className="flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
+          >
+            <span>
+              <span className="block text-sm font-bold text-slate-950">High-resolution image</span>
+              <span className="mt-0.5 block text-xs leading-5 text-slate-500">Best for slides and documents.</span>
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">PNG</span>
+          </button>
+          <p className="border-t border-slate-100 px-3 pb-1 pt-2 text-[11px] leading-5 text-slate-500">
+            Exports both plots in the current synchronized view.
+          </p>
+          {error && (
+            <p className="mx-2 mb-1 rounded-lg bg-rose-50 px-2.5 py-2 text-[11px] leading-4 text-rose-700" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1172,10 +1471,17 @@ function ResultSummary({
   const [pinnedVectorIndex, setPinnedVectorIndex] = useState<number | null>(null);
   const [pinnedVectorPlot, setPinnedVectorPlot] = useState<PlotKind | null>(null);
   const [plotViewport, setPlotViewport] = useState<PlotViewport>(DEFAULT_PLOT_VIEWPORT);
-  const [expandedPlot, setExpandedPlot] = useState<PlotKind | null>(null);
+  const [isComparisonExpanded, setIsComparisonExpanded] = useState(false);
+  const [figureExportMenu, setFigureExportMenu] = useState<"main" | "expanded" | null>(null);
+  const [isFigureExporting, setIsFigureExporting] = useState(false);
+  const [figureExportError, setFigureExportError] = useState<string | null>(null);
   const [showAllOodGenes, setShowAllOodGenes] = useState(false);
   const [expandedGene, setExpandedGene] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+  const figureExportMenuRef = useRef<HTMLDivElement | null>(null);
+  const expandedFigureExportMenuRef = useRef<HTMLDivElement | null>(null);
+  const predictedPlotSvgRef = useRef<SVGSVGElement | null>(null);
+  const randomizedPlotSvgRef = useRef<SVGSVGElement | null>(null);
   const globalGridVectorFields = useMemo(
     () => resolveGridVectorFields(result),
     [result]
@@ -1255,6 +1561,8 @@ function ResultSummary({
     [selectedClusterPoints, selectedClusterVectors]
   );
   const isClusterScope = resultScope !== "global";
+  const predictedPlotTitle = isClusterScope ? `${resultScope} predicted response` : "Predicted response";
+  const randomizedPlotTitle = isClusterScope ? `${resultScope} randomized control` : "Randomized control";
   const displayPoints = isClusterScope ? selectedClusterPoints : result.embedding_points;
   const gridVectorFields = isClusterScope ? selectedClusterGridVectorFields : globalGridVectorFields;
   const sharedVectorReferenceMagnitude = useMemo(
@@ -1310,19 +1618,68 @@ function ResultSummary({
     setPinnedVectorPlot(plot);
   };
 
+  const handleFigureExport = async (format: "svg" | "png") => {
+    const predictedSvg = predictedPlotSvgRef.current;
+    const randomizedSvg = randomizedPlotSvgRef.current;
+    if (!predictedSvg || !randomizedSvg) {
+      setFigureExportError("The plots are not ready to export yet.");
+      return;
+    }
+
+    setIsFigureExporting(true);
+    setFigureExportError(null);
+    try {
+      const subtitle = `${formatPerturbation(result.gene, result.perturbation_value)} · ${isClusterScope ? resultScope : "Global"} · ${result.n_propagation} propagation steps`;
+      const svgMarkup = buildComparisonFigureSvg({
+        predictedSvg,
+        randomizedSvg,
+        predictedTitle: predictedPlotTitle,
+        randomizedTitle: randomizedPlotTitle,
+        subtitle,
+      });
+      const perturbationLabel = result.perturbation_value === 0
+        ? "knockout"
+        : `set-${formatScientific(result.perturbation_value)}`;
+      const filename = [
+        "celloracle",
+        result.gene,
+        perturbationLabel,
+        isClusterScope ? resultScope : "global",
+        "predicted-vs-control",
+      ].map(sanitizeFilenamePart).join("_");
+
+      if (format === "svg") {
+        downloadBlob(new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" }), `${filename}.svg`);
+      } else {
+        downloadBlob(await svgToPngBlob(svgMarkup), `${filename}.png`);
+      }
+      setFigureExportMenu(null);
+    } catch (error) {
+      setFigureExportError(error instanceof Error ? error.message : "Figure export failed.");
+    } finally {
+      setIsFigureExporting(false);
+    }
+  };
+
   useEffect(() => {
-    if (!expandedPlot) return;
+    if (!isComparisonExpanded) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setExpandedPlot(null);
+      if (event.key !== "Escape") return;
+      const exportMenuIsOpen = Boolean(
+        figureExportMenuRef.current?.querySelector('[role="menu"]') ||
+        expandedFigureExportMenuRef.current?.querySelector('[role="menu"]')
+      );
+      if (exportMenuIsOpen) setFigureExportMenu(null);
+      else setIsComparisonExpanded(false);
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [expandedPlot]);
+  }, [isComparisonExpanded]);
 
   useEffect(() => {
     if (!isDownloadDialogOpen) return;
@@ -1344,6 +1701,28 @@ function ResultSummary({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isDownloadDialogOpen]);
+
+  useEffect(() => {
+    if (!figureExportMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      const activeMenuRef = figureExportMenu === "expanded"
+        ? expandedFigureExportMenuRef
+        : figureExportMenuRef;
+      if (target instanceof Node && !activeMenuRef.current?.contains(target)) {
+        setFigureExportMenu(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isComparisonExpanded) setFigureExportMenu(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [figureExportMenu, isComparisonExpanded]);
 
   return (
     <div className="space-y-5">
@@ -1529,30 +1908,59 @@ function ResultSummary({
       </div>
 
       <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-base font-bold text-slate-950">Cell-state shift</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Compare the predicted response to {formatPerturbation(result.gene, result.perturbation_value)} with a randomized-network control.
-            </p>
+        <div className="min-w-0">
+          <h3 className="text-base font-bold text-slate-950">Cell-state shift</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Compare the predicted response to {formatPerturbation(result.gene, result.perturbation_value)} with a randomized-network control.
+          </p>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
+          <div className="flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
+              Cells
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
+              Average local shift
+            </span>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-4">
-            <div className="flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
-                Cells
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
-                Average local shift
-              </span>
+          <div className="ml-auto flex items-center gap-2">
+            <div
+              className="inline-flex h-9 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+              aria-label="Plot view controls"
+            >
+              <PlotZoomControls
+                viewport={plotViewport}
+                onViewportChange={setPlotViewport}
+                connected
+              />
+              <ExpandComparisonButton
+                connected
+                onClick={() => {
+                  setFigureExportMenu(null);
+                  setIsComparisonExpanded(true);
+                }}
+              />
             </div>
+            <FigureExportMenu
+              menuRef={figureExportMenuRef}
+              isOpen={figureExportMenu === "main"}
+              isExporting={isFigureExporting}
+              error={figureExportError}
+              onToggle={() => {
+                setFigureExportError(null);
+                setFigureExportMenu((current) => current === "main" ? null : "main");
+              }}
+              onExport={handleFigureExport}
+            />
           </div>
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <div className="mt-4 grid gap-5 xl:grid-cols-2">
           <VectorFieldPlot
-            title={isClusterScope ? `${resultScope} predicted response` : "Predicted response"}
+            title={predictedPlotTitle}
             points={displayPoints}
             vectors={gridVectorFields.predicted}
             comparisonVectors={gridVectorFields.randomized}
@@ -1564,10 +1972,10 @@ function ResultSummary({
             onViewportChange={setPlotViewport}
             onHoverVector={(index) => handleVectorHover("predicted", index)}
             onTogglePin={(index) => handleVectorPin("predicted", index)}
-            onExpand={() => setExpandedPlot("predicted")}
+            svgRef={predictedPlotSvgRef}
           />
           <VectorFieldPlot
-            title={isClusterScope ? `${resultScope} randomized control` : "Randomized control"}
+            title={randomizedPlotTitle}
             points={displayPoints}
             vectors={gridVectorFields.randomized}
             comparisonVectors={gridVectorFields.predicted}
@@ -1579,7 +1987,7 @@ function ResultSummary({
             onViewportChange={setPlotViewport}
             onHoverVector={(index) => handleVectorHover("randomized", index)}
             onTogglePin={(index) => handleVectorPin("randomized", index)}
-            onExpand={() => setExpandedPlot("randomized")}
+            svgRef={randomizedPlotSvgRef}
             randomized
           />
         </div>
@@ -1589,38 +1997,88 @@ function ResultSummary({
         </p>
       </section>
 
-      {expandedPlot && (
+      {isComparisonExpanded && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm animate-modal-overlay"
-          onClick={() => setExpandedPlot(null)}
+          onClick={() => {
+            setFigureExportMenu(null);
+            setIsComparisonExpanded(false);
+          }}
           role="presentation"
         >
           <div
-            className="max-h-[94vh] w-[min(92vw,1100px)] overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl shadow-slate-950/25 animate-modal-panel"
+            className="max-h-[96vh] w-[calc(100vw-2rem)] max-w-[1500px] overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl shadow-slate-950/25 animate-modal-panel"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={expandedPlot === "predicted" ? "Expanded predicted response" : "Expanded randomized control"}
+            aria-label="Expanded predicted and randomized comparison"
           >
-            <VectorFieldPlot
-              title={expandedPlot === "predicted"
-                ? (isClusterScope ? `${resultScope} predicted response` : "Predicted response")
-                : (isClusterScope ? `${resultScope} randomized control` : "Randomized control")}
-              points={displayPoints}
-              vectors={expandedPlot === "predicted" ? gridVectorFields.predicted : gridVectorFields.randomized}
-              comparisonVectors={expandedPlot === "predicted" ? gridVectorFields.randomized : gridVectorFields.predicted}
-              referenceMagnitude={sharedVectorReferenceMagnitude}
-              viewport={plotViewport}
-              activeVectorIndex={activeVectorPlot === expandedPlot ? activeVectorIndex : null}
-              pinnedVectorIndex={pinnedVectorPlot === expandedPlot ? pinnedVectorIndex : null}
-              tooltipVisible={activeVectorPlot === expandedPlot}
-              onViewportChange={setPlotViewport}
-              onHoverVector={(index) => handleVectorHover(expandedPlot, index)}
-              onTogglePin={(index) => handleVectorPin(expandedPlot, index)}
-              onExpand={() => setExpandedPlot(null)}
-              isExpanded
-              randomized={expandedPlot === "randomized"}
-            />
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-950">Cell-state shift comparison</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {formatPerturbation(result.gene, result.perturbation_value)} · {isClusterScope ? resultScope : "Global"} · synchronized view
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <PlotZoomControls viewport={plotViewport} onViewportChange={setPlotViewport} />
+                <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden="true" />
+                <FigureExportMenu
+                  menuRef={expandedFigureExportMenuRef}
+                  isOpen={figureExportMenu === "expanded"}
+                  isExporting={isFigureExporting}
+                  error={figureExportError}
+                  onToggle={() => {
+                    setFigureExportError(null);
+                    setFigureExportMenu((current) => current === "expanded" ? null : "expanded");
+                  }}
+                  onExport={handleFigureExport}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFigureExportMenu(null);
+                    setIsComparisonExpanded(false);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200"
+                  aria-label="Close expanded comparison"
+                  title="Close"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <VectorFieldPlot
+                title={predictedPlotTitle}
+                points={displayPoints}
+                vectors={gridVectorFields.predicted}
+                comparisonVectors={gridVectorFields.randomized}
+                referenceMagnitude={sharedVectorReferenceMagnitude}
+                viewport={plotViewport}
+                activeVectorIndex={activeVectorPlot === "predicted" ? activeVectorIndex : null}
+                pinnedVectorIndex={pinnedVectorPlot === "predicted" ? pinnedVectorIndex : null}
+                tooltipVisible={activeVectorPlot === "predicted"}
+                onViewportChange={setPlotViewport}
+                onHoverVector={(index) => handleVectorHover("predicted", index)}
+                onTogglePin={(index) => handleVectorPin("predicted", index)}
+              />
+              <VectorFieldPlot
+                title={randomizedPlotTitle}
+                points={displayPoints}
+                vectors={gridVectorFields.randomized}
+                comparisonVectors={gridVectorFields.predicted}
+                referenceMagnitude={sharedVectorReferenceMagnitude}
+                viewport={plotViewport}
+                activeVectorIndex={activeVectorPlot === "randomized" ? activeVectorIndex : null}
+                pinnedVectorIndex={pinnedVectorPlot === "randomized" ? pinnedVectorIndex : null}
+                tooltipVisible={activeVectorPlot === "randomized"}
+                onViewportChange={setPlotViewport}
+                onHoverVector={(index) => handleVectorHover("randomized", index)}
+                onTogglePin={(index) => handleVectorPin("randomized", index)}
+                randomized
+              />
+            </div>
           </div>
         </div>
       )}
