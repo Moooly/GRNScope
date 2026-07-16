@@ -1,3 +1,4 @@
+import csv
 import json
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from app.services.perturbation_service import (
     get_gene_expression_profile,
     get_perturbation_result,
     get_perturbation_state,
+    perturbation_download_path,
 )
 
 
@@ -213,6 +215,36 @@ class PerturbationServiceTests(unittest.TestCase):
             self.assertEqual(result["run_id"], run["run_id"])
             self.assertEqual(result["gene"], "GATA1")
             self.assertEqual(result["completed_at"], "2026-07-14T21:00:00+00:00")
+
+    def test_cell_shift_download_adds_predicted_to_randomized_distance(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+            run_id = "run-with-shifts"
+            run_dir = project_dir / "perturbations" / "runs" / run_id
+            run_dir.mkdir(parents=True)
+            shifts_path = run_dir / "cell_shifts.csv"
+            shifts_path.write_text(
+                "cell_id,cluster,embedding_x,embedding_y,shift_x,shift_y,random_shift_x,random_shift_y\n"
+                "cell-1,A,10,20,3,4,0,0\n"
+                "cell-2,B,-2,5,2,1,5,5\n",
+                encoding="utf-8",
+            )
+
+            path = perturbation_download_path(project_dir, run_id, "cell_shifts.csv")
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                rows = list(reader)
+
+            self.assertEqual(reader.fieldnames[-1], "shift_distance")
+            self.assertAlmostEqual(float(rows[0]["shift_distance"]), 5.0)
+            self.assertAlmostEqual(float(rows[1]["shift_distance"]), 5.0)
+
+            perturbation_download_path(project_dir, run_id, "cell_shifts.csv")
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                self.assertEqual(
+                    csv.DictReader(handle).fieldnames.count("shift_distance"),
+                    1,
+                )
 
 
 if __name__ == "__main__":

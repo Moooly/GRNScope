@@ -871,7 +871,7 @@ function PerturbationDownloadPopover({
     {
       label: "Cell shifts",
       filename: "cell_shifts.csv",
-      description: "Per-cell embedding coordinates and predicted shift vectors.",
+      description: "Per-cell predicted and randomized shifts, including their distance.",
     },
     {
       label: "Cluster effects",

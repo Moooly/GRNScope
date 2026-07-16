@@ -33,6 +33,12 @@ DOWNLOAD_FILENAMES = {
     "cluster_effects.csv",
     "ood_diagnostics.csv",
 }
+CELL_SHIFT_COMPONENT_COLUMNS = (
+    "shift_x",
+    "shift_y",
+    "random_shift_x",
+    "random_shift_y",
+)
 
 
 def utc_now() -> str:
@@ -811,10 +817,49 @@ def launch_perturbation_thread(project_id: str, run_id: str) -> None:
     worker.start()
 
 
+def ensure_cell_shift_distance_column(path: Path) -> Path:
+    """Append the predicted-to-randomized destination distance to older exports."""
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = list(reader.fieldnames or [])
+            if "shift_distance" in fieldnames:
+                return path
+            if not all(column in fieldnames for column in CELL_SHIFT_COMPONENT_COLUMNS):
+                return path
+            rows = list(reader)
+    except OSError:
+        return path
+
+    for row in rows:
+        try:
+            row["shift_distance"] = str(
+                math.hypot(
+                    float(row["shift_x"]) - float(row["random_shift_x"]),
+                    float(row["shift_y"]) - float(row["random_shift_y"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            row["shift_distance"] = ""
+
+    temporary = path.with_suffix(f"{path.suffix}.tmp-{os.getpid()}-{threading.get_ident()}")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=[*fieldnames, "shift_distance"])
+            writer.writeheader()
+            writer.writerows(rows)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return path
+
+
 def perturbation_download_path(project_dir: Path, run_id: str, filename: str) -> Path:
     if filename not in DOWNLOAD_FILENAMES:
         raise FileNotFoundError("Perturbation download not found.")
     path = run_directory(project_dir, run_id) / filename
     if not path.exists() or not path.is_file():
         raise FileNotFoundError("Perturbation download not found.")
+    if filename == "cell_shifts.csv":
+        ensure_cell_shift_distance_column(path)
     return path
