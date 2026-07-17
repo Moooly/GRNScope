@@ -27,9 +27,8 @@ import type {
 coseBilkent(cytoscape);
 
 let hasRegisteredCytoscapeSvg = false;
-const MIN_NETWORK_ZOOM = 0.3;
-const MAX_NETWORK_ZOOM = 2.4;
-const NETWORK_ZOOM_FACTOR = 1.2;
+export const MIN_NETWORK_ZOOM = 0.3;
+export const MAX_NETWORK_ZOOM = 2.4;
 
 function getNodeDisplayLabel(node: NetworkNode) {
   if (node.showLabel === false) return "";
@@ -51,7 +50,6 @@ export default function NetworkGraph({
   const activeLayoutRef = useRef<ReturnType<Core["layout"]> | null>(null);
   const outerRafRef = useRef<number | null>(null);
   const innerRafRef = useRef<number | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
 
   const lastAppliedSignatureRef = useRef<string>("");
   const lastLayoutRef = useRef<NetworkLayoutMode>(layout);
@@ -481,11 +479,6 @@ export default function NetworkGraph({
       });
 
       cy = graph;
-
-      graph.on("zoom", () => {
-        setZoomLevel(graph.zoom());
-      });
-      setZoomLevel(graph.zoom());
 
       graph.on("tap", "node", (event) => {
         const nodeId = event.target.id();
@@ -990,23 +983,6 @@ export default function NetworkGraph({
       )
     : tooltipPadding;
 
-  const changeZoom = (factor: number) => {
-    const cy = cyRef.current;
-    if (!cy || cy.destroyed()) return;
-    const nextZoom = Math.min(
-      MAX_NETWORK_ZOOM,
-      Math.max(MIN_NETWORK_ZOOM, cy.zoom() * factor)
-    );
-    cy.stop(true, false);
-    cy.zoom({
-      level: nextZoom,
-      renderedPosition: {
-        x: cy.width() / 2,
-        y: cy.height() / 2,
-      },
-    });
-  };
-
   return (
     <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[#f8fbff]">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-45" />
@@ -1017,32 +993,6 @@ export default function NetworkGraph({
         className="absolute inset-0 z-10 h-full w-full"
         style={{ filter: "saturate(0.94) contrast(0.98)" }}
       />
-
-      <div
-        className="absolute right-4 top-4 z-20 inline-flex h-9 overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-sm backdrop-blur-sm"
-        aria-label="Network zoom"
-      >
-        <button
-          type="button"
-          onClick={() => changeZoom(1 / NETWORK_ZOOM_FACTOR)}
-          disabled={zoomLevel <= MIN_NETWORK_ZOOM + 0.001}
-          className="inline-flex w-9 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
-          aria-label="Zoom out network"
-          title="Zoom out"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          onClick={() => changeZoom(NETWORK_ZOOM_FACTOR)}
-          disabled={zoomLevel >= MAX_NETWORK_ZOOM - 0.001}
-          className="inline-flex w-9 items-center justify-center text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
-          aria-label="Zoom in network"
-          title="Zoom in"
-        >
-          +
-        </button>
-      </div>
 
       {edgeTooltip && (
         <div

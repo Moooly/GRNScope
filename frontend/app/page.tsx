@@ -288,38 +288,54 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
       <section className="relative overflow-hidden bg-[#f7fbff]">
-        <div className="relative mx-auto max-w-[1180px] px-6 pb-10 pt-16 lg:px-10 lg:pb-12 lg:pt-18">
-          <div className="grid gap-10 lg:grid-cols-[0.9fr_0.55fr] lg:items-center">
+        <div className="relative mx-auto max-w-[1180px] px-6 pb-8 pt-12 lg:px-10 lg:pb-10 lg:pt-14">
+          <div className="grid gap-8 lg:grid-cols-[1fr_0.48fr] lg:items-center lg:gap-12">
             <div className="max-w-none">
               <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
                 Gene regulatory network analysis
               </p>
 
-              <h1 className="text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[4.15rem] lg:leading-[1.02]">
+              <h1 className="text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[3.75rem] lg:leading-[1.02]">
                 GRNScope
               </h1>
 
-              <div className="mt-6 max-w-4xl text-[1.05rem] leading-8 text-slate-700">
+              <div className="mt-5 max-w-2xl text-[1.05rem] leading-8 text-slate-700">
                 <p>
-                  GRNScope turns single-cell RNA-seq expression matrices into predicted gene regulatory networks. It runs multiple inference algorithms, compares ranked edges, and provides interactive results for network inspection and export.
+                  Infer, compare, and explore gene regulatory networks from single-cell RNA-seq data. Run multiple algorithms and inspect their predictions in one interactive workspace.
                 </p>
+              </div>
+
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-[#1b75a6] px-6 text-sm font-bold text-white transition hover:bg-[#155f87]"
+                >
+                  Create new project
+                </button>
+                <Link
+                  href="/algorithms"
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                >
+                  Browse algorithms
+                </Link>
               </div>
             </div>
 
             <Link
               href="/projects/demo"
-              className="group flex w-full flex-col rounded-[1.75rem] border border-slate-200 bg-[#f7fbff] p-6 text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30"
+              className="group flex w-full flex-col rounded-[1.5rem] border border-slate-200 bg-white/60 p-5 text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:bg-white"
             >
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                  Demo project
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
+                  Try the demo
                 </p>
-                <h3 className="mt-3 text-xl font-bold tracking-tight text-slate-950">
-                  Explore a completed GRN result
+                <h3 className="mt-2.5 text-lg font-bold tracking-tight text-slate-950">
+                  See a completed analysis
                 </h3>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                Open the prepared example to inspect the network, edge table, method overlap, and export tools.
+              <p className="mt-2.5 text-sm leading-6 text-slate-600">
+                Inspect a prepared network, edge table, method overlap, and export workflow.
               </p>
               <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4">
                 <span className="text-sm font-bold text-[#1b75a6]">Open demo</span>
@@ -341,37 +357,23 @@ export default function HomePage() {
       </section>
 
       <section className="bg-[#f7fbff]">
-        <div className="mx-auto max-w-[1180px] px-6 py-10 lg:px-10 lg:py-12">
+        <div className="mx-auto max-w-[1180px] px-6 py-8 lg:px-10 lg:py-10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold tracking-tight text-slate-950">Recent projects</h2>
+              {!isProjectHistoryLoading ? (
+                <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 text-xs font-bold text-slate-500">
+                  {visibleProjectHistory.length}
+                </span>
+              ) : null}
+            </div>
             <Link
               href="/projects"
-              className="group inline-flex items-center gap-1.5 text-2xl font-bold tracking-tight text-slate-950 transition hover:text-slate-800"
+              className="group inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-[#1b75a6]"
             >
-              My projects
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 16 28"
-                className="mt-0.5 h-5 w-3 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-500"
-                fill="none"
-              >
-                <path
-                  d="M2.5 3.5 12.5 14 2.5 24.5"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              View all
+              <span aria-hidden="true" className="transition group-hover:translate-x-0.5">→</span>
             </Link>
-            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                className="inline-flex h-10 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
-              >
-                Create new project
-              </button>
-            </div>
           </div>
 
           {isProjectHistoryLoading ? (
@@ -467,7 +469,7 @@ function HomeProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition hover:border-[#1b75a6]/25"
+      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

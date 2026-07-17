@@ -20,6 +20,7 @@ import JobProgressBanner from "./_components/JobProgressBanner";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector from "./_components/ResultsHubViewSelector";
 import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSection";
+import AnalysisSetupSection from "./_components/AnalysisSetupSection";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
 import { API_BASE } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
@@ -1709,13 +1710,21 @@ useEffect(() => {
 
   const renderResultsControls = () => (
     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-      <input
-        value={tableSearch}
-        onChange={(event) => setTableSearch(event.target.value)}
-        placeholder="Search gene name"
-        aria-label="Search gene name"
-        className="h-10 w-full min-w-0 rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:w-[260px] lg:w-[320px]"
-      />
+      <label className="relative block w-full sm:w-[220px] lg:w-[240px]">
+        <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400" aria-hidden="true">
+          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+            <circle cx="8.5" cy="8.5" r="5.25" stroke="currentColor" strokeWidth="1.8" />
+            <path d="m12.4 12.4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </span>
+        <input
+          value={tableSearch}
+          onChange={(event) => setTableSearch(event.target.value)}
+          placeholder="Search genes"
+          aria-label="Search genes"
+          className="h-10 w-full min-w-0 rounded-full border border-slate-200 bg-white pl-11 pr-5 text-sm font-semibold text-slate-700 outline-none transition placeholder:font-medium placeholder:text-slate-400 hover:border-[#1b75a6]/30 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+        />
+      </label>
       <ResultsControlsSection
         compact
         projectId={projectId}
@@ -1794,6 +1803,60 @@ useEffect(() => {
           <ProjectHeader
             projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
             projectId={projectId}
+            projectContext={(
+              <AnalysisSetupSection
+                summary={`${allJobTasks.length.toLocaleString()} ${allJobTasks.length === 1 ? "algorithm" : "algorithms"} · ${expressionMatrixLabel}`}
+              >
+                <AlgorithmCardsSection
+                  tasks={latestJob?.tasks ?? []}
+                  algorithmMetaMap={algorithmMetaMap}
+                  onOpenAlgorithmError={setActiveAlgorithmErrorTask}
+                  onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
+                  onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
+                  compact
+                />
+
+                <DatasetPreprocessingSection
+                  expressionMatrixLabel={expressionMatrixLabel}
+                  topVariableGenesLabel={topVariableGenesLabel}
+                  tfOverrideLabel={tfOverrideLabel}
+                  normalizationLabel={normalizationLabel}
+                  logTransformLabel={logTransformLabel}
+                  onOpenHelp={() => setIsDatasetHelpOpen(true)}
+                  onOpenDownloadMenu={() => {
+                    if (!projectId) return;
+                    setIsFileDownloadMenuOpen(true);
+                  }}
+                  onCloseDownloadMenu={() => setIsFileDownloadMenuOpen(false)}
+                  isDownloadMenuOpen={isFileDownloadMenuOpen}
+                  divided={allJobTasks.length > 0}
+                  compact
+                  downloadMenu={(
+                    <FileDownloadMenuModal
+                      open={isFileDownloadMenuOpen}
+                      projectId={projectId}
+                      apiBase={API_BASE}
+                      expressionFilename={metadata?.expression_filename || project?.expression_filename}
+                      pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
+                      hasPseudotime={metadata?.has_pseudotime}
+                      activeAlgorithmIds={activeAlgorithmIds}
+                      confidenceThreshold={evidenceThreshold}
+                      consensusThreshold={consensusThreshold}
+                      onClose={() => setIsFileDownloadMenuOpen(false)}
+                      onOpenDownload={openDownloadModal}
+                    />
+                  )}
+                />
+              </AnalysisSetupSection>
+            )}
+            viewSelector={(
+              <ResultsHubViewSelector
+                view={resultsHubView}
+                onChange={setResultsHubView}
+                cellOracleReady={cellOracleReady}
+                cellOracleStatus={cellOracleTask?.status}
+              />
+            )}
           />
 
           <JobProgressBanner
@@ -1805,19 +1868,7 @@ useEffect(() => {
             }
           />
 
-          <ResultsHubSection
-            controls={
-              resultsHubView === "network" ? renderResultsControls() : null
-            }
-            navigation={
-              <ResultsHubViewSelector
-                view={resultsHubView}
-                onChange={setResultsHubView}
-                cellOracleReady={cellOracleReady}
-                cellOracleStatus={cellOracleTask?.status}
-              />
-            }
-          >
+          <ResultsHubSection>
                 {resultsHubView === "perturbation" && projectId ? (
                   <PerturbationAnalysisSection
                     projectId={projectId}
@@ -1855,9 +1906,10 @@ useEffect(() => {
                       {resultsAvailabilityNotice.description}
                     </p>
                   </div>
-                ) : (
-                  <>
-                    <NetworkVisualizationSection
+                  ) : (
+                  <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
+                    <div className="space-y-6">
+                      <NetworkVisualizationSection
                       networkLayout={networkLayout}
                       setNetworkLayout={setNetworkLayout}
                       onExportNetwork={handleExportNetwork}
@@ -1878,9 +1930,10 @@ useEffect(() => {
                       cellOracleReady={cellOracleReady}
                       perturbationGenes={perturbationGenes}
                       onOpenPerturbation={handleOpenPerturbation}
-                    />
+                      resultsControls={renderResultsControls()}
+                      />
 
-                    <EdgeAnalysisTableSection
+                      <EdgeAnalysisTableSection
                       onExportEdgeList={handleExportEdgeList}
                       columnMenuRef={columnMenuRef}
                       isColumnMenuOpen={isColumnMenuOpen}
@@ -1901,10 +1954,9 @@ useEffect(() => {
                       totalTablePages={totalTablePages}
                       sortedTableRows={sortedTableRows}
                       tablePage={tablePage}
-                    />
+                      />
 
-                    {activeAlgorithmIds.length >= 2 && (
-                      <div className="w-full">
+                      {activeAlgorithmIds.length >= 2 && (
                         <ResultsSummarySection
                           perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
                           maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
@@ -1912,55 +1964,13 @@ useEffect(() => {
                           overlapEntries={overlapEntries}
                           maxOverlapCount={maxOverlapCount}
                         />
-                      </div>
-                    )}
-                  </>
+                      )}
+                    </div>
+                  </div>
                 )}
                   </>
                 )}
           </ResultsHubSection>
-
-          {resultsHubView === "network" && (
-          <>
-          <AlgorithmCardsSection
-            tasks={latestJob?.tasks ?? []}
-            algorithmMetaMap={algorithmMetaMap}
-            onOpenAlgorithmError={setActiveAlgorithmErrorTask}
-            onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
-            onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
-          />
-
-          <DatasetPreprocessingSection
-            expressionMatrixLabel={expressionMatrixLabel}
-            topVariableGenesLabel={topVariableGenesLabel}
-            tfOverrideLabel={tfOverrideLabel}
-            normalizationLabel={normalizationLabel}
-            logTransformLabel={logTransformLabel}
-            onOpenHelp={() => setIsDatasetHelpOpen(true)}
-            onOpenDownloadMenu={() => {
-              if (!projectId) return;
-              setIsFileDownloadMenuOpen(true);
-            }}
-            onCloseDownloadMenu={() => setIsFileDownloadMenuOpen(false)}
-            isDownloadMenuOpen={isFileDownloadMenuOpen}
-            downloadMenu={(
-              <FileDownloadMenuModal
-                open={isFileDownloadMenuOpen}
-                projectId={projectId}
-                apiBase={API_BASE}
-                expressionFilename={metadata?.expression_filename || project?.expression_filename}
-                pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
-                hasPseudotime={metadata?.has_pseudotime}
-                activeAlgorithmIds={activeAlgorithmIds}
-                confidenceThreshold={evidenceThreshold}
-                consensusThreshold={consensusThreshold}
-                onClose={() => setIsFileDownloadMenuOpen(false)}
-                onOpenDownload={openDownloadModal}
-              />
-            )}
-          />
-          </>
-          )}
 
           <ResultsGuideModal
             open={isResultsGuideOpen}

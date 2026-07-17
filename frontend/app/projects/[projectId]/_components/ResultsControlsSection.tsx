@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import type { AlgorithmCatalogItem } from "../_lib/types";
 
@@ -64,10 +65,11 @@ export default function ResultsControlsSection({
   onChangeEdgeDisplayLimit,
   filteredEdgeCount,
   compact = false,
-  isGuideOpen = false,
   onOpenGuide,
 }: ResultsControlsSectionProps) {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const [isSettingsClosing, setIsSettingsClosing] = useState(false);
+  const settingsCloseTimeoutRef = useRef<number | null>(null);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
   const [edgeDisplayDraft, setEdgeDisplayDraft] = useState<string | null>(null);
   const [algorithmDirectionFilter, setAlgorithmDirectionFilter] =
@@ -177,22 +179,24 @@ export default function ResultsControlsSection({
     onChangeConsensusThreshold(nextValue);
   };
 
-  useEffect(() => {
-    if (!isSettingsMenuOpen) return;
+  const openSettings = () => {
+    if (settingsCloseTimeoutRef.current) {
+      window.clearTimeout(settingsCloseTimeoutRef.current);
+      settingsCloseTimeoutRef.current = null;
+    }
+    setIsSettingsClosing(false);
+    setIsSettingsMenuOpen(true);
+  };
 
-    const handlePointerDown = (event: MouseEvent) => {
-      if (isGuideOpen) return;
-      if (!settingsMenuRef.current) return;
-      if (!settingsMenuRef.current.contains(event.target as Node)) {
-        setIsSettingsMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [isGuideOpen, isSettingsMenuOpen]);
+  const closeSettings = () => {
+    if (settingsCloseTimeoutRef.current) return;
+    setIsSettingsClosing(true);
+    settingsCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsSettingsMenuOpen(false);
+      setIsSettingsClosing(false);
+      settingsCloseTimeoutRef.current = null;
+    }, 240);
+  };
 
   const panelHeader = (
     panel: SettingsPanel,
@@ -498,7 +502,7 @@ export default function ResultsControlsSection({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setIsSettingsMenuOpen((value) => !value)}
+          onClick={() => (isSettingsMenuOpen ? closeSettings() : openSettings())}
           className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 ${
             isSettingsMenuOpen
               ? "border-[#1b75a6]/40 bg-[#f2f9fc] text-[#1b75a6]"
@@ -522,23 +526,43 @@ export default function ResultsControlsSection({
         </button>
       </div>
 
-      {isSettingsMenuOpen && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-40 max-h-[78vh] w-[min(92vw,540px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-300 bg-white p-3 pb-5 shadow-2xl shadow-slate-900/20">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between px-2 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                Results settings
-              </p>
-              <button
-                type="button"
-                onClick={onOpenGuide}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-                aria-label="Open results controls guide"
-                title="Open results controls guide"
-              >
-                ?
-              </button>
+      {isSettingsMenuOpen && createPortal(
+        <div className="fixed inset-0 z-[80]">
+          <div
+            className={`absolute inset-0 bg-slate-950/40 backdrop-blur-sm ${
+              isSettingsClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
+            }`}
+            onMouseDown={closeSettings}
+          />
+          <div
+            className={`absolute inset-y-0 right-0 w-[440px] max-w-[92vw] overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 ${
+              isSettingsClosing ? "animate-slide-out-right" : "animate-slide-in-right"
+            }`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-slate-950">Results settings</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onOpenGuide}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                  aria-label="Open results controls guide"
+                  title="Open results controls guide"
+                >
+                  ?
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSettings}
+                  aria-label="Close panel"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
+          <div className="space-y-1.5">
             {sectionLabel("Filters", matchingEdgesBadge)}
             {panelHeader("algorithms", "Algorithms")}
             {openPanel === "algorithms" && (
@@ -657,7 +681,9 @@ export default function ResultsControlsSection({
             )}
             {edgeDisplayRow}
           </div>
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

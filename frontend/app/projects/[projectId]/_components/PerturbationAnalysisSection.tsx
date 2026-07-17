@@ -15,6 +15,7 @@ import type {
   PerturbationRun,
   PerturbationState,
 } from "../_lib/types";
+import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 
 const ACTIVE_STATUSES = new Set(["Queued", "Preparing", "Running"]);
@@ -1083,16 +1084,27 @@ function SelectedResultHeader({
         : null;
   const metrics = [
     {
+      label: "Predicted / control",
+      value: shiftRatio === null ? "—" : `${shiftRatio.toFixed(2)}×`,
+      primary: true,
+    },
+    {
+      label: "Perturbation score",
+      value: perturbationScore === null ? "—" : formatScientific(perturbationScore),
+      primary: true,
+    },
+    {
+      label: "PS p-value",
+      value: perturbationScorePValue === null ? "—" : formatPValue(perturbationScorePValue),
+      primary: true,
+    },
+    {
       label: "Mean shift",
       value: meanShift === null ? "—" : formatScientific(meanShift),
     },
     {
       label: "Randomized control",
       value: meanRandomShift === null ? "—" : formatScientific(meanRandomShift),
-    },
-    {
-      label: "Predicted / control",
-      value: shiftRatio === null ? "—" : `${shiftRatio.toFixed(2)}×`,
     },
     {
       label: "OOD genes",
@@ -1104,14 +1116,6 @@ function SelectedResultHeader({
       warning: resultScope === "global"
         ? result.ood_warning_gene_count > 0
         : (selectedCluster?.ood_warning_gene_count ?? 0) > 0,
-    },
-    {
-      label: "Perturbation score",
-      value: perturbationScore === null ? "—" : formatScientific(perturbationScore),
-    },
-    {
-      label: "PS p-value",
-      value: perturbationScorePValue === null ? "—" : formatPValue(perturbationScorePValue),
     },
   ];
 
@@ -1139,12 +1143,16 @@ function SelectedResultHeader({
       <dl className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {metrics.map((metric) => {
           const isWarning = "warning" in metric && metric.warning;
+          const isPrimary = "primary" in metric && metric.primary;
           return (
-            <div key={metric.label} className="flex min-h-[76px] flex-col rounded-xl bg-[#f8fafc] p-3">
-              <dt className="text-[10px] font-bold uppercase leading-4 tracking-[0.12em] text-slate-500">
+            <div
+              key={metric.label}
+              className="flex min-h-[76px] flex-col rounded-xl bg-[#f8fafc] p-3"
+            >
+              <dt className={`text-[10px] font-bold uppercase leading-4 tracking-[0.12em] ${isPrimary ? "text-[#087ead]" : "text-slate-500"}`}>
                 {metric.label}
               </dt>
-              <dd className={`mt-auto pt-2 text-xl font-extrabold ${isWarning ? "text-amber-700" : "text-slate-950"}`}>
+              <dd className={`mt-auto pt-2 font-extrabold ${isPrimary ? "text-2xl text-slate-950" : "text-xl"} ${isWarning ? "text-amber-700" : "text-slate-950"}`}>
                 {metric.value}
               </dd>
             </div>
@@ -1336,7 +1344,7 @@ function ClusterResponseView({
     <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-base font-bold text-slate-950">Response by cluster</h3>
+          <h3 className={RESULT_SECTION_HEADING_CLASS}>Response by cluster</h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
             Choose one cluster to inspect its gene response and cell-state shift. The perturbation is applied to every modeled cell, with cluster-specific GRN coefficients used for each group.
           </p>
@@ -1855,7 +1863,7 @@ function ResultSummary({
       <div className="mt-5 border-t border-slate-100 pt-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-950">
+            <h3 className={RESULT_SECTION_HEADING_CLASS}>
               Predicted gene changes{isClusterScope ? ` · ${resultScope}` : ""}
             </h3>
             <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -2028,7 +2036,7 @@ function ResultSummary({
       <section className="mt-5 border-t border-slate-100 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-base font-bold text-slate-950">Cell-state shift</h3>
+            <h3 className={RESULT_SECTION_HEADING_CLASS}>Cell-state shift</h3>
             <div className="mt-1.5 flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />

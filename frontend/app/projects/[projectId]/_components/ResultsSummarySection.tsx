@@ -1,3 +1,5 @@
+import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
+
 type OverlapEntry = {
   key: string;
   methods: string[];
@@ -381,11 +383,11 @@ export default function ResultsSummarySection({
   maxOverlapCount,
 }: ResultsSummarySectionProps) {
   return (
-    <div className="w-full">
+    <section className="w-full border-t border-slate-200 pt-6">
       <div className="hidden rounded-[1.5rem] border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="text-base font-bold text-slate-950">Per-Algorithm Edge Count</h4>
+            <h4 className={RESULT_SECTION_HEADING_CLASS}>Per-Algorithm Edge Count</h4>
             <p className="mt-1 text-sm text-slate-600">
               Number of unique edges retained for each method within the current Top-N cutoff.
             </p>
@@ -416,10 +418,10 @@ export default function ResultsSummarySection({
         </div>
       </div>
 
-      <div className="w-full rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
+      <div className="w-full text-slate-900">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="text-base font-bold text-slate-950">Method Overlap Visualization</h4>
+            <h4 className={RESULT_SECTION_HEADING_CLASS}>Method Overlap Visualization</h4>
           </div>
         </div>
 
@@ -439,6 +441,6 @@ export default function ResultsSummarySection({
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

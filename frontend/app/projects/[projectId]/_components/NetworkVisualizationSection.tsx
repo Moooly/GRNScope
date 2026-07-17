@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import NetworkGraph from "./NetworkGraph";
+import type { Core } from "cytoscape";
+import NetworkGraph, {
+  MAX_NETWORK_ZOOM,
+  MIN_NETWORK_ZOOM,
+} from "./NetworkGraph";
 import CircosNetworkGraph from "./CircosNetworkGraph";
+import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 type NodeInfo = {
   id: string;
@@ -52,6 +57,7 @@ type NetworkVisualizationSectionProps = {
   cellOracleReady: boolean;
   perturbationGenes: string[];
   onOpenPerturbation: (gene: string) => void;
+  resultsControls?: ReactNode;
 };
 
 const layoutOptions = [
@@ -61,6 +67,8 @@ const layoutOptions = [
   { value: "circular", label: "Circular" },
   { value: "circos", label: "Circos" },
 ] as const;
+
+const NETWORK_ZOOM_FACTOR = 1.2;
 
 export default function NetworkVisualizationSection({
   networkLayout,
@@ -81,13 +89,17 @@ export default function NetworkVisualizationSection({
   cellOracleReady,
   perturbationGenes,
   onOpenPerturbation,
+  resultsControls,
 }: NetworkVisualizationSectionProps) {
   const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
   const [isVisualGuideOpen, setIsVisualGuideOpen] = useState(false);
   const [isVisualGuideClosing, setIsVisualGuideClosing] = useState(false);
   const [isInspectionGuideOpen, setIsInspectionGuideOpen] = useState(false);
   const [isInspectionGuideClosing, setIsInspectionGuideClosing] = useState(false);
+  const [networkZoom, setNetworkZoom] = useState(1);
   const circosSvgRef = useRef<SVGSVGElement | null>(null);
+  const graphCoreRef = useRef<Core | null>(null);
+  const graphZoomHandlerRef = useRef<(() => void) | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const portalRoot = typeof document === "undefined" ? null : document.body;
 
@@ -218,12 +230,57 @@ export default function NetworkVisualizationSection({
     selectedNode,
   ]);
 
+  const handleGraphReady = useCallback(
+    (graph: Core | null) => {
+      const previousGraph = graphCoreRef.current;
+      const previousZoomHandler = graphZoomHandlerRef.current;
+
+      if (previousGraph && previousZoomHandler && !previousGraph.destroyed()) {
+        previousGraph.off("zoom", previousZoomHandler);
+      }
+
+      graphCoreRef.current = graph;
+      graphZoomHandlerRef.current = null;
+
+      if (graph && !graph.destroyed()) {
+        const handleZoom = () => setNetworkZoom(graph.zoom());
+        graphZoomHandlerRef.current = handleZoom;
+        graph.on("zoom", handleZoom);
+        setNetworkZoom(graph.zoom());
+      } else {
+        setNetworkZoom(1);
+      }
+
+      onGraphReady?.(graph);
+    },
+    [onGraphReady]
+  );
+
+  const changeNetworkZoom = useCallback((factor: number) => {
+    const graph = graphCoreRef.current;
+    if (!graph || graph.destroyed()) return;
+
+    const nextZoom = Math.min(
+      MAX_NETWORK_ZOOM,
+      Math.max(MIN_NETWORK_ZOOM, graph.zoom() * factor)
+    );
+
+    graph.stop(true, false);
+    graph.zoom({
+      level: nextZoom,
+      renderedPosition: {
+        x: graph.width() / 2,
+        y: graph.height() / 2,
+      },
+    });
+  }, []);
+
   return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <section className="text-slate-900">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Network</h3>
+            <h3 className={RESULT_SECTION_HEADING_CLASS}>Network</h3>
             <button
               type="button"
               onClick={() => {
@@ -237,31 +294,86 @@ export default function NetworkVisualizationSection({
               ?
             </button>
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+          <p className="mt-2 text-sm leading-6 text-slate-600 lg:whitespace-nowrap">
             Click a node or edge to open its inspection panel and explore the network in more detail.
           </p>
         </div>
+        {resultsControls ? (
+          <div className="sticky top-[calc(var(--grnscope-header-height)+12px)] z-50 w-full self-start lg:w-auto">
+            {resultsControls}
+          </div>
+        ) : null}
 
-        <div ref={exportMenuRef} className="relative z-40 w-full shrink-0 sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setIsExportConfirmOpen((current) => !current)}
-            aria-label="Download current network"
-            aria-expanded={isExportConfirmOpen}
-            aria-haspopup="dialog"
-            title="Download current network"
-            className="w-full whitespace-nowrap rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] sm:w-auto"
-          >
-            Download
-          </button>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 lg:col-span-2">
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white p-1" aria-label="Network layout">
+          {layoutOptions.map(({ value, label }) => {
+            const isActive = networkLayout === value;
+
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setNetworkLayout(value)}
+                className={`h-8 rounded-full px-3.5 text-xs font-semibold transition ${
+                  isActive
+                    ? "bg-[#1b75a6] text-white"
+                    : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {networkLayout !== "circos" && (
+            <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Network zoom">
+              <button
+                type="button"
+                onClick={() => changeNetworkZoom(1 / NETWORK_ZOOM_FACTOR)}
+                disabled={networkZoom <= MIN_NETWORK_ZOOM + 0.001}
+                className="inline-flex h-full w-10 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-600"
+                aria-label="Zoom out network"
+                title="Zoom out"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                onClick={() => changeNetworkZoom(NETWORK_ZOOM_FACTOR)}
+                disabled={networkZoom >= MAX_NETWORK_ZOOM - 0.001}
+                className="inline-flex h-full w-10 items-center justify-center text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-600"
+                aria-label="Zoom in network"
+                title="Zoom in"
+              >
+                +
+              </button>
+            </div>
+          )}
+          <div ref={exportMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsExportConfirmOpen((current) => !current)}
+              aria-label="Download current network"
+              aria-expanded={isExportConfirmOpen}
+              aria-haspopup="dialog"
+              title="Download current network"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10"
+            >
+              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+                <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Download
+            </button>
           {isExportConfirmOpen && (
             <>
               <span
                 aria-hidden="true"
-                className="absolute right-8 top-[calc(100%+0.375rem)] z-50 h-3 w-3 rotate-45 border-l border-t border-slate-200 bg-white"
+                className="absolute right-2 top-[calc(100%+0.375rem)] z-50 h-3 w-3 rotate-45 border-l border-t border-slate-200 bg-white"
               />
               <div
-                className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(28rem,calc(100vw-3rem))] text-slate-900"
+                className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(22rem,calc(100vw-3rem))] text-slate-900"
                 role="dialog"
                 aria-modal="false"
                 aria-labelledby="network-download-title"
@@ -336,33 +448,12 @@ export default function NetworkVisualizationSection({
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
 
-      <div className="relative mt-5">
+      <div className="relative -mt-1 lg:col-span-2">
         <div className="relative min-w-0">
-          <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-center justify-start gap-3">
-            <div className="pointer-events-auto inline-flex min-h-9 flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 p-0.5 shadow-sm">
-              {layoutOptions.map(({ value, label }) => {
-                const isActive = networkLayout === value;
-
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setNetworkLayout(value)}
-                    className={`h-8 rounded-xl px-2.5 text-[11px] font-semibold transition ${
-                      isActive
-                        ? "bg-[#1b75a6] text-white"
-                        : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
           {networkLayout === "circos" ? (
             <CircosNetworkGraph
               nodes={visualNodes}
@@ -394,7 +485,7 @@ export default function NetworkVisualizationSection({
                 setSelectedEdgeKey(edgeKey);
                 setSelectedGene(null);
               }}
-              onGraphReady={onGraphReady}
+              onGraphReady={handleGraphReady}
             />
           )}
 
@@ -699,6 +790,7 @@ export default function NetworkVisualizationSection({
           </aside>
         )}
       </div>
+      </div>
       {portalRoot &&
         isVisualGuideOpen &&
         createPortal(
@@ -866,6 +958,6 @@ export default function NetworkVisualizationSection({
           </div>,
           portalRoot
         )}
-    </div>
+    </section>
   );
 }

@@ -1,3 +1,5 @@
+import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
+
 type AggregatedEdge = {
   key: string;
   source: string;
@@ -86,9 +88,9 @@ export default function EdgeAnalysisTableSection({
     value === null ? null : Math.round(value * 100);
 
   return (
-    <div className="rounded-[1.75rem] border border-slate-200 bg-white/95 p-6 text-slate-900">
+    <section className="border-t border-slate-200 pt-6 text-slate-900">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <h3 className="text-base font-semibold text-slate-900">
+        <h3 className={RESULT_SECTION_HEADING_CLASS}>
           Edge Analysis Table
         </h3>
 
@@ -289,6 +291,6 @@ export default function EdgeAnalysisTableSection({
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

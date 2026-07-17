@@ -1,6 +1,7 @@
 "use client";
 
 import { runtimeLabel, runtimeTitle } from "../_lib/runtime";
+import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 type AlgorithmTask = {
   algorithm_id: string;
@@ -30,6 +31,7 @@ type AlgorithmCardsSectionProps = {
   onOpenAlgorithmError: (task: AlgorithmErrorTask) => void;
   onStopAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   onRerunAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
+  compact?: boolean;
 };
 
 /**
@@ -44,14 +46,23 @@ export default function AlgorithmCardsSection({
   onOpenAlgorithmError,
   onStopAlgorithm,
   onRerunAlgorithm,
+  compact = false,
 }: AlgorithmCardsSectionProps) {
   if (tasks.length === 0) return null;
 
   return (
-    <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900">
-      <h2 className="text-xl font-bold tracking-tight text-slate-950">Algorithms Executed</h2>
+    <section className={compact
+      ? "py-6 text-slate-900"
+      : "text-slate-900"
+    }>
+      <h2 className={compact ? "text-lg font-bold tracking-tight text-slate-950" : RESULT_SECTION_HEADING_CLASS}>
+        Algorithms executed
+      </h2>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className={compact
+        ? "mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+        : "mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),17rem))]"
+      }>
         {tasks.map((task) => {
           const meta = algorithmMetaMap.get(task.algorithm_id);
           const name = meta?.name ?? task.algorithm_id;
@@ -75,13 +86,21 @@ export default function AlgorithmCardsSection({
           return (
             <div
               key={task.algorithm_id}
-              className={`group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
-                isFailed
-                  ? "border-rose-200 bg-rose-50/50"
-                  : isCompleted
-                    ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                    : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
-              }`}
+              className={compact
+                ? `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
+                    isFailed
+                      ? "border-rose-200 bg-rose-50/50"
+                      : isCompleted
+                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
+                        : "border-slate-200 bg-white"
+                  }`
+                : `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
+                    isFailed
+                      ? "border-rose-200 bg-rose-50/50"
+                      : isCompleted
+                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
+                        : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
+                  }`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <StatusGlyph
@@ -129,7 +148,7 @@ export default function AlgorithmCardsSection({
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 
