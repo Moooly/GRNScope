@@ -7,6 +7,8 @@ export type ProjectTask = {
   progress_percent?: number;
   progress_label?: string | null;
   estimated_remaining_seconds?: number | null;
+  estimated_remaining_min_seconds?: number | null;
+  estimated_remaining_max_seconds?: number | null;
   result_path?: string | null;
   started_at?: string | null;
   started_at_timestamp?: number | null;

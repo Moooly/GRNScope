@@ -512,6 +512,8 @@ def update_job_state(
     progress_percent: int | None = None,
     progress_label: str | None = None,
     estimated_remaining_seconds: int | None = None,
+    estimated_remaining_min_seconds: int | None = None,
+    estimated_remaining_max_seconds: int | None = None,
     started_at: str | None = None,
     started_at_timestamp: float | None = None,
     completed_at: str | None = None,
@@ -554,6 +556,17 @@ def update_job_state(
                         task["progress_label"] = progress_label
                     if estimated_remaining_seconds is not None:
                         task["estimated_remaining_seconds"] = estimated_remaining_seconds
+                    if estimated_remaining_min_seconds is not None:
+                        task["estimated_remaining_min_seconds"] = estimated_remaining_min_seconds
+                    if estimated_remaining_max_seconds is not None:
+                        task["estimated_remaining_max_seconds"] = estimated_remaining_max_seconds
+                    if estimated_remaining_seconds == 0 and task_status in {
+                        "Completed",
+                        "Failed",
+                        "Stopped",
+                    }:
+                        task["estimated_remaining_min_seconds"] = 0
+                        task["estimated_remaining_max_seconds"] = 0
                     if started_at is not None:
                         task["started_at"] = started_at
                     if started_at_timestamp is not None:
@@ -618,6 +631,8 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["progress_percent"] = 0
                 task["progress_label"] = "Queued"
                 task.pop("estimated_remaining_seconds", None)
+                task.pop("estimated_remaining_min_seconds", None)
+                task.pop("estimated_remaining_max_seconds", None)
                 task.pop("process_pid", None)
                 clear_algorithm_result_artifacts(project_dir, algorithm_id)
                 break

@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { formatAlgorithmRuntime } from "../_lib/runtime";
-
 type JobTask = {
   algorithm_id: string;
   status: string;
@@ -10,6 +8,8 @@ type JobTask = {
   progress_percent?: number | null;
   progress_label?: string | null;
   estimated_remaining_seconds?: number | null;
+  estimated_remaining_min_seconds?: number | null;
+  estimated_remaining_max_seconds?: number | null;
   started_at?: string | null;
   completed_at?: string | null;
 };
@@ -79,39 +79,40 @@ export default function JobProgressBanner({
     algorithmMetaMap?.get(algorithmId)?.name ?? algorithmId;
   const runningItems = running.map((task) => {
     const algorithmName = getAlgorithmName(task.algorithm_id);
-    const remainingSeconds = Number(task.estimated_remaining_seconds);
-    const fallbackRemainingSeconds = estimateRemainingSecondsFromProgress(
-      task.elapsed_seconds,
-      task.progress_percent,
-    );
+    const rawMinimumRemainingSeconds = task.estimated_remaining_min_seconds;
+    const rawMaximumRemainingSeconds = task.estimated_remaining_max_seconds;
+    const minimumRemainingSeconds = Number(rawMinimumRemainingSeconds);
+    const maximumRemainingSeconds = Number(rawMaximumRemainingSeconds);
+    const hasRemainingRange =
+      rawMinimumRemainingSeconds != null &&
+      rawMaximumRemainingSeconds != null &&
+      Number.isFinite(minimumRemainingSeconds) &&
+      Number.isFinite(maximumRemainingSeconds) &&
+      minimumRemainingSeconds >= 0 &&
+      maximumRemainingSeconds >= minimumRemainingSeconds;
 
-    if (Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
+    if (hasRemainingRange && maximumRemainingSeconds > 0) {
       return {
         name: algorithmName,
-        detail: `${formatAlgorithmRuntime(remainingSeconds)} left`,
-        remainingSeconds,
+        detail: `Estimated time remaining: ${formatRemainingRange(
+          minimumRemainingSeconds,
+          maximumRemainingSeconds,
+        )}`,
+        remainingSeconds: maximumRemainingSeconds,
       };
     }
 
-    if (Number.isFinite(remainingSeconds) && remainingSeconds === 0) {
+    if (hasRemainingRange && maximumRemainingSeconds === 0) {
       return {
         name: algorithmName,
-        detail: "finishing up",
-        remainingSeconds,
-      };
-    }
-
-    if (fallbackRemainingSeconds !== null) {
-      return {
-        name: algorithmName,
-        detail: `about ${formatAlgorithmRuntime(fallbackRemainingSeconds)} left`,
-        remainingSeconds: fallbackRemainingSeconds,
+        detail: "Finishing up",
+        remainingSeconds: 0,
       };
     }
 
     return {
       name: algorithmName,
-      detail: "estimating time",
+      detail: "Estimating time remaining",
       remainingSeconds: null,
     };
   });
@@ -290,19 +291,13 @@ function clampPercent(value: number | null | undefined): number {
   return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
-function estimateRemainingSecondsFromProgress(
-  elapsedSeconds: number | null | undefined,
-  progressPercent: number | null | undefined,
-): number | null {
-  const elapsed = Number(elapsedSeconds ?? 0);
-  const progress = Number(progressPercent ?? 0);
-
-  if (!Number.isFinite(elapsed) || elapsed < 10) return null;
-  if (!Number.isFinite(progress) || progress <= 0 || progress >= 100) return null;
-
-  const estimatedTotalSeconds = elapsed / (progress / 100);
-  const remainingSeconds = Math.round(estimatedTotalSeconds - elapsed);
-  return remainingSeconds > 0 ? remainingSeconds : null;
+function formatRemainingRange(minimumSeconds: number, maximumSeconds: number): string {
+  const minimumMinutes = Math.max(1, Math.ceil(minimumSeconds / 60));
+  const maximumMinutes = Math.max(minimumMinutes, Math.ceil(maximumSeconds / 60));
+  if (minimumMinutes === maximumMinutes) {
+    return `about ${maximumMinutes} ${maximumMinutes === 1 ? "minute" : "minutes"}`;
+  }
+  return `${minimumMinutes}–${maximumMinutes} minutes`;
 }
 
 function formatNameList(names: string[]): string {

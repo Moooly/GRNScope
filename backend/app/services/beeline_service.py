@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from itertools import chain
 from math import fsum, isfinite, log2
 from pathlib import Path
+from statistics import median
 
 from ..algorithm_registry import get_algorithm_by_id
 from ..config import BEELINE_ROOT_CANDIDATES, PROJECTS_ROOT
@@ -1677,24 +1678,58 @@ def completed_run_durations(run_metadata: dict[str, dict]) -> list[int]:
     return durations
 
 
-def estimate_remaining_seconds_from_run_timings(
+def estimate_remaining_seconds_range_from_run_timings(
     run_metadata: dict[str, dict],
     *,
-    total_run_count: int,
+    minimum_run_count: int,
+    maximum_run_count: int,
+    current_streak: int,
+    required_streak: int,
     current_run_elapsed_seconds: int = 0,
-) -> int | None:
+    adaptive_stopping_enabled: bool = True,
+) -> tuple[int, int] | None:
+    """Estimate the earliest and latest adaptive-confidence completion times."""
+
     completed_durations = completed_run_durations(run_metadata)
     completed_count = len(completed_durations)
     if completed_count == 0:
         return None
 
-    average_completed_run_seconds = fsum(completed_durations) / completed_count
-    unfinished_run_count = max(0, total_run_count - completed_count)
-    remaining_seconds = round(
-        average_completed_run_seconds * unfinished_run_count
-        - max(0, current_run_elapsed_seconds)
+    typical_run_seconds = float(median(completed_durations[-3:]))
+    bounded_maximum_run_count = min(
+        DEFAULT_CONFIDENCE_MAX_RUNS,
+        max(1, int(maximum_run_count)),
     )
-    return max(0, int(remaining_seconds))
+    latest_remaining_runs = max(
+        0,
+        bounded_maximum_run_count - completed_count,
+    )
+    if latest_remaining_runs == 0:
+        return 0, 0
+
+    if adaptive_stopping_enabled:
+        earliest_remaining_runs = max(
+            1,
+            int(minimum_run_count) - completed_count,
+            int(required_streak) - int(current_streak),
+        )
+        earliest_remaining_runs = min(
+            earliest_remaining_runs,
+            latest_remaining_runs,
+        )
+    else:
+        earliest_remaining_runs = latest_remaining_runs
+
+    current_elapsed = max(0, int(current_run_elapsed_seconds))
+    earliest_seconds = max(
+        0,
+        round(typical_run_seconds * earliest_remaining_runs - current_elapsed),
+    )
+    latest_seconds = max(
+        earliest_seconds,
+        round(typical_run_seconds * latest_remaining_runs - current_elapsed),
+    )
+    return int(earliest_seconds), int(latest_seconds)
 
 
 def materialize_confidence_run_input(
@@ -3204,11 +3239,26 @@ def run_beeline_with_progress(
                     run_ids,
                     algorithm_id,
                 )
-                estimated_remaining_seconds = estimate_remaining_seconds_from_run_timings(
+                remaining_range = estimate_remaining_seconds_range_from_run_timings(
                     run_metadata,
-                    total_run_count=total_run_count,
+                    minimum_run_count=int(early_stopping["min_runs"]),
+                    maximum_run_count=total_run_count,
+                    current_streak=int(early_stopping["streak"]),
+                    required_streak=int(early_stopping["stop_streak"]),
                     current_run_elapsed_seconds=current_run_elapsed,
+                    adaptive_stopping_enabled=bool(early_stopping["enabled"]),
                 )
+                if remaining_range is not None:
+                    (
+                        estimated_remaining_min_seconds,
+                        estimated_remaining_max_seconds,
+                    ) = remaining_range
+                    # Preserve the legacy scalar as the conservative upper bound.
+                    estimated_remaining_seconds = estimated_remaining_max_seconds
+                else:
+                    estimated_remaining_min_seconds = None
+                    estimated_remaining_max_seconds = None
+                    estimated_remaining_seconds = None
                 progress_percent = min(
                     85,
                     20 + round((completed_run_count / total_run_count) * 65),
@@ -3220,11 +3270,7 @@ def run_beeline_with_progress(
                         elapsed,
                         progress_percent,
                     )
-                progress_label = (
-                    f"Running confidence run {run_index} of {total_run_count}"
-                    if total_run_count > 1
-                    else "Starting analysis"
-                )
+                progress_label = "Analysis running"
 
                 update_job_state_fn(
                     project_dir,
@@ -3234,6 +3280,8 @@ def run_beeline_with_progress(
                     progress_percent=progress_percent,
                     progress_label=progress_label,
                     estimated_remaining_seconds=estimated_remaining_seconds,
+                    estimated_remaining_min_seconds=estimated_remaining_min_seconds,
+                    estimated_remaining_max_seconds=estimated_remaining_max_seconds,
                     run_metadata=run_metadata,
                 )
                 time.sleep(1)
