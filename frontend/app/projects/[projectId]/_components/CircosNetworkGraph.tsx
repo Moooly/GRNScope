@@ -713,8 +713,8 @@ export default function CircosNetworkGraph({
               y1={tickStart.y}
               x2={tickEnd.x}
               y2={tickEnd.y}
-              stroke={isSelected ? "#0f172a" : "#475569"}
-              strokeWidth={isSelected ? 2.4 : 1.2}
+              stroke={isSelected ? "#0f766e" : "#475569"}
+              strokeWidth={isSelected ? 4 : 1.2}
               strokeOpacity={isDimmed ? 0.18 : 1}
               className="cursor-pointer"
               onClick={(event) => {
@@ -767,10 +767,10 @@ export default function CircosNetworkGraph({
               <path
                 key={edgeKey}
                 d={getRibbonPath(sourceStart, sourceEnd, targetStart, targetEnd)}
-                fill={ribbonColor}
+                fill={isActive ? "#0f766e" : ribbonColor}
                 fillOpacity={isDimmed ? 0.05 : isActive ? 0.88 : ribbonOpacity}
-                stroke={ribbonColor}
-                strokeWidth={isActive ? 1.9 : 0.45 + score * 1.05}
+                stroke={isActive ? "#5eead4" : ribbonColor}
+                strokeWidth={isActive ? 3.2 : 0.45 + score * 1.05}
                 strokeOpacity={isDimmed ? 0.1 : isActive ? 0.95 : Math.min(0.72, ribbonOpacity + 0.08)}
                 className="cursor-pointer transition"
                 onClick={(event) => {
@@ -800,8 +800,12 @@ export default function CircosNetworkGraph({
                 textAnchor={gene.labelAnchor}
                 dominantBaseline="middle"
                 transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
-                className="cursor-pointer select-none fill-slate-950 font-semibold"
-                style={{ fontSize: gene.labelFontSize }}
+                className="cursor-pointer select-none font-semibold"
+                fill={isSelected ? "#0f766e" : "#0f172a"}
+                style={{
+                  fontSize: gene.labelFontSize,
+                  fontWeight: isSelected ? 800 : 600,
+                }}
                 opacity={isDimmed ? 0.3 : 1}
                 onClick={(event) => {
                   event.stopPropagation();

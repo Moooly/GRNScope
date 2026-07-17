@@ -56,15 +56,19 @@ function defaultAsString(parameter: AlgorithmParameter): string {
 
 function numericHint(parameter: AlgorithmParameter): string | null {
   if (!isNumberParam(parameter)) return null;
-  if (
-    typeof parameter.minimum === "number" &&
-    typeof parameter.maximum === "number"
-  ) {
-    return `${parameter.minimum}–${parameter.maximum}`;
-  }
-  if (typeof parameter.minimum === "number") return `≥ ${parameter.minimum}`;
-  if (typeof parameter.maximum === "number") return `≤ ${parameter.maximum}`;
-  return null;
+  const lower =
+    typeof parameter.exclusive_minimum === "number"
+      ? `> ${parameter.exclusive_minimum}`
+      : typeof parameter.minimum === "number"
+        ? `≥ ${parameter.minimum}`
+        : null;
+  const upper =
+    typeof parameter.exclusive_maximum === "number"
+      ? `< ${parameter.exclusive_maximum}`
+      : typeof parameter.maximum === "number"
+        ? `≤ ${parameter.maximum}`
+        : null;
+  return [lower, upper].filter(Boolean).join(" and ") || null;
 }
 
 function validateDraftValue(
@@ -92,6 +96,18 @@ function validateDraftValue(
     if (typeof parameter.maximum === "number" && value > parameter.maximum) {
       return `Maximum ${parameter.maximum}.`;
     }
+    if (
+      typeof parameter.exclusive_minimum === "number" &&
+      value <= parameter.exclusive_minimum
+    ) {
+      return `Must be greater than ${parameter.exclusive_minimum}.`;
+    }
+    if (
+      typeof parameter.exclusive_maximum === "number" &&
+      value >= parameter.exclusive_maximum
+    ) {
+      return `Must be less than ${parameter.exclusive_maximum}.`;
+    }
   }
 
   if (
@@ -117,7 +133,6 @@ export default function AlgorithmSettingsPopover({
 }: AlgorithmSettingsPopoverProps) {
   const parameters = useMemo(() => algorithm?.parameters ?? [], [algorithm]);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const arrowRef = useRef<SVGSVGElement | null>(null);
   const [draft, setDraft] = useState<Draft>({});
 
   useEffect(() => {
@@ -136,8 +151,7 @@ export default function AlgorithmSettingsPopover({
 
   const positionPopover = useCallback(() => {
     const panel = panelRef.current;
-    const arrow = arrowRef.current;
-    if (!panel || !arrow || !anchorElement) return;
+    if (!panel || !anchorElement) return;
     if (!anchorElement.isConnected) {
       onClose();
       return;
@@ -145,7 +159,6 @@ export default function AlgorithmSettingsPopover({
 
     const margin = 12;
     const gap = 10;
-    const arrowExtent = 7;
     const anchorRect = anchorElement.getBoundingClientRect();
     const modalElement = anchorElement.closest<HTMLElement>(
       "[data-create-project-modal]",
@@ -163,7 +176,7 @@ export default function AlgorithmSettingsPopover({
     const boundaryLeft = Math.max(margin, modalRect?.left ?? margin);
     panel.style.maxHeight = `${Math.max(
       0,
-      boundaryBottom - boundaryTop - arrowExtent,
+      boundaryBottom - boundaryTop,
     )}px`;
 
     const panelWidth = panel.offsetWidth;
@@ -175,8 +188,16 @@ export default function AlgorithmSettingsPopover({
     const unclampedTop = opensBelow
       ? anchorRect.bottom + gap
       : anchorRect.top - panelHeight - gap;
+    const rightAlignedX = anchorRect.right - panelWidth;
+    const leftAlignedX = anchorRect.left;
+    // Right-align popover to the anchor by default (current behaviour), but
+    // flip to left-align when there isn't enough room to the anchor's left —
+    // this avoids the popover being clamped flush against the modal edge for
+    // cards near the left side.
+    const preferredLeft =
+      rightAlignedX >= boundaryLeft ? rightAlignedX : leftAlignedX;
     const viewportLeft = clamp(
-      anchorRect.right - panelWidth,
+      preferredLeft,
       boundaryLeft,
       boundaryRight - panelWidth,
     );
@@ -184,14 +205,9 @@ export default function AlgorithmSettingsPopover({
       ? unclampedTop
       : clamp(
           unclampedTop,
-          boundaryTop + (opensBelow ? arrowExtent : 0),
-          boundaryBottom - panelHeight - (opensBelow ? 0 : arrowExtent),
+          boundaryTop,
+          boundaryBottom - panelHeight,
         );
-    const arrowLeft = clamp(
-      anchorRect.left + anchorRect.width / 2 - viewportLeft - 8,
-      18,
-      panelWidth - 34,
-    );
 
     panel.style.left = modalElement
       ? `${
@@ -210,10 +226,6 @@ export default function AlgorithmSettingsPopover({
         }px`
       : `${viewportTop}px`;
     panel.style.visibility = "visible";
-    arrow.style.left = `${arrowLeft}px`;
-    arrow.style.top = opensBelow ? "-7px" : "auto";
-    arrow.style.bottom = opensBelow ? "auto" : "-7px";
-    arrow.style.transform = opensBelow ? "rotate(180deg)" : "none";
   }, [anchorElement, onClose]);
 
   useLayoutEffect(() => {
@@ -274,8 +286,20 @@ export default function AlgorithmSettingsPopover({
       const error = validateDraftValue(parameter, draft[parameter.name]);
       if (error) errors[parameter.name] = error;
     }
+
+    if (algorithm?.id === "SINGE") {
+      const timeResolution = Number(draft.dT);
+      const lagCount = Number(draft.num_lags);
+      if (
+        Number.isFinite(timeResolution) &&
+        Number.isFinite(lagCount) &&
+        timeResolution * lagCount >= 100
+      ) {
+        errors.num_lags = "ΔT × lags must be less than 100.";
+      }
+    }
     return errors;
-  }, [draft, parameters]);
+  }, [algorithm?.id, draft, parameters]);
 
   if (!algorithm || !anchorElement || typeof document === "undefined") {
     return null;
@@ -313,7 +337,9 @@ export default function AlgorithmSettingsPopover({
         const text = String(raw).trim();
         if (text === "") continue;
         const value = Number(text);
-        if (String(value) !== String(Number(defaultAsString(parameter)))) {
+        const hasDefault =
+          parameter.default !== null && parameter.default !== undefined;
+        if (!hasDefault || value !== Number(parameter.default)) {
           overrides[parameter.name] = value;
         }
         continue;
@@ -336,83 +362,93 @@ export default function AlgorithmSettingsPopover({
     const options = parameter.options ?? [];
     const fieldId = `popover-${algorithm.id}-${parameter.name}`;
     const errorId = `${fieldId}-error`;
-    const controlClass = `box-border h-9 w-full rounded-lg border bg-white px-2.5 py-0 text-sm text-slate-900 outline-none transition focus:ring-2 ${
+    const controlClass = `box-border h-10 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
       error
         ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
-        : "border-slate-200 focus:border-[#1b75a6]/50 focus:ring-[#1b75a6]/15"
+        : "border-slate-200 hover:border-slate-300 focus:border-[#087ead] focus:ring-[#087ead]/15"
     }`;
 
-    return (
-      <div
-        key={parameter.name}
-        className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-start gap-3 py-2"
-      >
-        <label
-          htmlFor={fieldId}
-          className="mt-2 whitespace-nowrap text-sm font-semibold leading-5 text-slate-800"
+    if (isBoolParam(parameter)) {
+      return (
+        <div
+          key={parameter.name}
+          className="flex items-center justify-between gap-3 py-3"
         >
-          {parameter.label ?? parameter.name}
-        </label>
+          <label
+            htmlFor={fieldId}
+            className="text-sm font-semibold text-slate-800"
+          >
+            {parameter.label ?? parameter.name}
+          </label>
+          <button
+            id={fieldId}
+            type="button"
+            role="switch"
+            aria-checked={Boolean(value)}
+            onClick={() => setField(parameter.name, !Boolean(value))}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
+              value ? "bg-[#1b75a6]" : "bg-slate-300"
+            }`}
+          >
+            <span
+              className={`h-4 w-4 rounded-full bg-white shadow-sm transition ${
+                value ? "translate-x-[1.1rem]" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+      );
+    }
 
-        <div>
-          <div className="flex h-9 items-center">
-            {isBoolParam(parameter) ? (
-              <button
-                id={fieldId}
-                type="button"
-                role="switch"
-                aria-checked={Boolean(value)}
-                onClick={() => setField(parameter.name, !Boolean(value))}
-                className={`relative ml-auto inline-flex h-5 w-9 items-center rounded-full transition ${
-                  value ? "bg-[#1b75a6]" : "bg-slate-300"
-                }`}
-              >
-                <span
-                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition ${
-                    value ? "translate-x-[1.1rem]" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-            ) : options.length > 0 ? (
-              <select
-                id={fieldId}
-                value={String(value ?? "")}
-                onChange={(event) =>
-                  setField(parameter.name, event.target.value)
-                }
-                aria-invalid={Boolean(error)}
-                aria-describedby={error ? errorId : undefined}
-                className={controlClass}
-              >
-                {options.map((option) => (
-                  <option key={String(option)} value={String(option)}>
-                    {String(option)}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={fieldId}
-                type={isNumberParam(parameter) ? "number" : "text"}
-                value={String(value ?? "")}
-                min={isNumberParam(parameter) ? parameter.minimum : undefined}
-                max={isNumberParam(parameter) ? parameter.maximum : undefined}
-                step={isNumberParam(parameter) ? parameter.step : undefined}
-                onChange={(event) => setField(parameter.name, event.target.value)}
-                aria-invalid={Boolean(error)}
-                aria-describedby={error ? errorId : undefined}
-                className={controlClass}
-              />
-            )}
-          </div>
-          {error ? (
-            <p id={errorId} className="text-[10px] font-medium text-rose-600">
-              {error}
-            </p>
-          ) : hint ? (
-            <p className="mt-0.5 text-right text-[10px] text-slate-400">{hint}</p>
+    return (
+      <div key={parameter.name} className="py-3">
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+          <label
+            htmlFor={fieldId}
+            className="text-sm font-semibold text-slate-800"
+          >
+            {parameter.label ?? parameter.name}
+          </label>
+          {hint && !error ? (
+            <span className="text-[11px] font-medium text-slate-400">{hint}</span>
           ) : null}
         </div>
+        {options.length > 0 ? (
+          <select
+            id={fieldId}
+            value={String(value ?? "")}
+            onChange={(event) =>
+              setField(parameter.name, event.target.value)
+            }
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            className={controlClass}
+          >
+            {options.map((option) => (
+              <option key={String(option)} value={String(option)}>
+                {String(option)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={fieldId}
+            type={isNumberParam(parameter) ? "number" : "text"}
+            value={String(value ?? "")}
+            min={isNumberParam(parameter) ? parameter.minimum : undefined}
+            max={isNumberParam(parameter) ? parameter.maximum : undefined}
+            step={isNumberParam(parameter) ? parameter.step : undefined}
+            onChange={(event) => setField(parameter.name, event.target.value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            className={controlClass}
+          />
+        )}
+        {error ? (
+          <p id={errorId} className="mt-1.5 text-[11px] font-medium text-rose-600">
+            {error}
+          </p>
+        ) : null}
       </div>
     );
   };
@@ -430,53 +466,44 @@ export default function AlgorithmSettingsPopover({
       className={`${modalElement ? "absolute" : "fixed"} z-[140] w-[min(27rem,calc(100vw-1.5rem))] text-slate-900`}
       style={{ visibility: "hidden" }}
     >
-      <svg
-        ref={arrowRef}
-        aria-hidden="true"
-        viewBox="0 0 16 8"
-        className="absolute z-20 h-2 w-4 overflow-visible"
-      >
-        <rect x="0" y="-1" width="16" height="2" fill="white" />
-        <path
-          d="M 0 0 L 8 8 L 16 0"
-          fill="white"
-          stroke="#e2e8f0"
-          strokeWidth="1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <div className="relative z-10 flex max-h-[inherit] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <div>{parameters.map(renderField)}</div>
-        </div>
-
-        <div className="flex shrink-0 items-center justify-between gap-3 bg-slate-50/70 px-4 py-2.5">
+      <div className="relative z-10 flex max-h-[inherit] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-4">
+          <h3 className="truncate text-sm font-bold text-slate-900">
+            {algorithm.name} parameters
+          </h3>
           <a
             href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
             target="_blank"
             rel="noreferrer"
-            className="-ml-3 min-w-0 truncate rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
+            className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-slate-500 transition hover:text-[#1b75a6]"
           >
-            About {algorithm.name}
+            About
+            <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" aria-hidden="true">
+              <path d="M3 9 9 3M4.5 3H9v4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </a>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={resetToDefaults}
-              className="rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={handleApply}
-              disabled={hasErrors}
-              className="rounded-full bg-[#1b75a6] px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-            >
-              Apply
-            </button>
-          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+          {parameters.map(renderField)}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <button
+            type="button"
+            onClick={resetToDefaults}
+            className="rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+          >
+            Reset to defaults
+          </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={hasErrors}
+            className="rounded-full bg-[#1b75a6] px-5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+          >
+            Apply
+          </button>
         </div>
       </div>
     </div>,

@@ -27,6 +27,8 @@ export type AlgorithmParameter = {
   options?: unknown[];
   minimum?: number;
   maximum?: number;
+  exclusive_minimum?: number;
+  exclusive_maximum?: number;
   step?: number;
   advanced?: boolean;
 };
@@ -153,8 +155,20 @@ export function formatParameterRange(parameter: AlgorithmParameter): string | nu
     return parameter.options.map((option) => String(option)).join(" · ");
   }
   if (parameter.value_type === "bool" || parameter.value_type === "boolean") return "On / Off";
-  if (typeof parameter.minimum === "number" && typeof parameter.maximum === "number") {
-    return `Range ${parameter.minimum} – ${parameter.maximum}`;
-  }
+  const lower =
+    typeof parameter.exclusive_minimum === "number"
+      ? `greater than ${parameter.exclusive_minimum}`
+      : typeof parameter.minimum === "number"
+        ? `at least ${parameter.minimum}`
+        : null;
+  const upper =
+    typeof parameter.exclusive_maximum === "number"
+      ? `less than ${parameter.exclusive_maximum}`
+      : typeof parameter.maximum === "number"
+        ? `at most ${parameter.maximum}`
+        : null;
+  if (lower && upper) return `Range: ${lower} and ${upper}`;
+  if (lower) return `Value must be ${lower}`;
+  if (upper) return `Value must be ${upper}`;
   return null;
 }

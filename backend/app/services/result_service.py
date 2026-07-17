@@ -71,14 +71,25 @@ def copy_runtime_diagnostic_files(runtime_root: Path, destination: Path) -> list
     """Copy useful, lightweight diagnostics without retaining runtime datasets."""
 
     copied_files: list[str] = []
-    for filename in ("config.yaml", "run_timings.json", "stdout.log", "stderr.log"):
+    for filename in (
+        "config.yaml",
+        "run_timings.json",
+        "stdout.log",
+        "stderr.log",
+        "celloracle-worker.log",
+    ):
         destination_path = destination / filename
         if copy_if_present(runtime_root / filename, destination_path):
             copied_files.append(str(destination_path))
 
     outputs_dir = runtime_root / "outputs"
     if outputs_dir.exists():
-        diagnostic_patterns = ("output.txt", "time*.txt", "*.log")
+        diagnostic_patterns = (
+            "output.txt",
+            "time*.txt",
+            "phase_timings.json",
+            "*.log",
+        )
         copied_sources: set[Path] = set()
         for pattern in diagnostic_patterns:
             for source in outputs_dir.rglob(pattern):
@@ -214,6 +225,10 @@ def archive_beeline_result_artifacts(
         copy_if_present(runtime_root / "run_timings.json", artifact_dir / "run_timings.json")
         copy_if_present(runtime_root / "stdout.log", artifact_dir / "logs" / "stdout.log")
         copy_if_present(runtime_root / "stderr.log", artifact_dir / "logs" / "stderr.log")
+        copy_if_present(
+            runtime_root / "celloracle-worker.log",
+            artifact_dir / "logs" / "celloracle-worker.log",
+        )
 
         if runtime_root.exists():
             remove_runtime_and_empty_parent(runtime_root)

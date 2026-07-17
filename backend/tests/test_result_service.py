@@ -3,7 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.services.result_service import archive_beeline_failure_diagnostics
+from app.services.result_service import (
+    archive_beeline_failure_diagnostics,
+    archive_beeline_result_artifacts,
+)
 
 
 class FailureDiagnosticsArchiveTests(unittest.TestCase):
@@ -81,6 +84,54 @@ class FailureDiagnosticsArchiveTests(unittest.TestCase):
                 latest_payload["error_path"],
                 str(error_path.relative_to(project_dir)),
             )
+
+    def test_success_archive_preserves_each_confidence_run_ranked_edges(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = Path(temporary_directory) / "project-123"
+            runtime_root = project_dir / "_beeline_runtime" / "GENIE3"
+            final_ranked = runtime_root / "rankedEdges_confidence.csv"
+            final_ranked.parent.mkdir(parents=True)
+            final_ranked.write_text(
+                "Gene1\tGene2\tEdgeWeight\na\tb\t0.9\n",
+                encoding="utf-8",
+            )
+            run_paths = {}
+            for run_id, weight in (("run-1", "0.8"), ("run-2", "0.7")):
+                run_path = (
+                    runtime_root
+                    / "outputs"
+                    / "dataset"
+                    / run_id
+                    / "GENIE3"
+                    / "rankedEdges.csv"
+                )
+                run_path.parent.mkdir(parents=True)
+                run_path.write_text(
+                    f"Gene1\tGene2\tEdgeWeight\na\tb\t{weight}\n",
+                    encoding="utf-8",
+                )
+                run_paths[run_id] = str(run_path)
+
+            archived = archive_beeline_result_artifacts(
+                project_dir,
+                "GENIE3",
+                {
+                    "runtime_root": str(runtime_root),
+                    "ranked_edges_path": str(final_ranked),
+                    "run_ranked_edges_paths": run_paths,
+                },
+            )
+
+            self.assertFalse(runtime_root.exists())
+            self.assertEqual(
+                set(archived["run_ranked_edges_paths"]),
+                {"run-1", "run-2"},
+            )
+            for run_id, archived_path in archived["run_ranked_edges_paths"].items():
+                path = Path(archived_path)
+                self.assertTrue(path.is_file())
+                self.assertEqual(path.name, "rankedEdges.csv")
+                self.assertIn(f"runs/{run_id}/rankedEdges.csv", str(path))
 
 
 if __name__ == "__main__":

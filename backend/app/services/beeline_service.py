@@ -36,7 +36,7 @@ DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
 # Spearman-based early stopping: stop once the aggregate edge ordering has
 # stabilised. rho >= STOP_RHO for STREAK consecutive runs (after MIN runs)
 # ends the loop early. Replaces the former R `coin` hypothesis test.
-DEFAULT_CONFIDENCE_STOP_RHO = 0.99
+DEFAULT_CONFIDENCE_STOP_RHO = 0.95
 DEFAULT_CONFIDENCE_STOP_STREAK = 2
 DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
 DEFAULT_MAX_PREPROCESSED_GENES = 8000
@@ -49,6 +49,8 @@ PROJECT_PREPROCESSED_EXPRESSION_FILENAME = "ExpressionData.csv"
 PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
 PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
 RUN_TIMINGS_FILENAME = "run_timings.json"
+RUNNER_PHASE_TIMINGS_FILENAME = "phase_timings.json"
+SELECTED_CELLS_FILENAME = "selected_cells.json"
 CSV_SNIFF_SAMPLE_BYTES = 65536
 MISSING_MATRIX_VALUE_TOKENS = {"", "NA", "N/A", "NaN", "nan", "null", "NULL"}
 
@@ -503,6 +505,64 @@ def parse_stop_rho(value: object) -> float | None:
     if parsed is None or parsed > 1:
         return None
     return parsed
+
+
+def read_configured_positive_int(name: str) -> int | None:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return None
+    return parse_positive_int(raw_value)
+
+
+def resolve_system_memory_mb() -> int | None:
+    try:
+        page_count = int(os.sysconf("SC_PHYS_PAGES"))
+        page_size = int(os.sysconf("SC_PAGE_SIZE"))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+    total_bytes = page_count * page_size
+    return max(1, total_bytes // (1024 * 1024)) if total_bytes > 0 else None
+
+
+def resolve_algorithm_resource_settings() -> dict:
+    cpu_count = (
+        read_configured_positive_int("GRNSCOPE_TOTAL_CPU_CORES")
+        or max(1, os.cpu_count() or 1)
+    )
+    configured_concurrency = [
+        value
+        for value in (
+            read_configured_positive_int("GRNSCOPE_MAX_CONCURRENT_ALGORITHMS"),
+            read_configured_positive_int("GRNSCOPE_WORKER_COUNT"),
+        )
+        if value is not None
+    ]
+    # Keep the fallback aligned with both the local task semaphore and the RQ
+    # worker-count defaults. Explicit service values take precedence.
+    effective_concurrency = max(configured_concurrency, default=2)
+    cpu_budget = (
+        read_configured_positive_int("GRNSCOPE_ALGORITHM_CPU_BUDGET")
+        or max(1, cpu_count // effective_concurrency)
+    )
+
+    total_memory_mb = resolve_system_memory_mb()
+    configured_memory_mb = read_configured_positive_int(
+        "GRNSCOPE_ALGORITHM_MEMORY_MB"
+    )
+    memory_budget_mb = configured_memory_mb
+    if memory_budget_mb is None and total_memory_mb is not None:
+        reserved_memory_mb = max(1024, round(total_memory_mb * 0.1))
+        usable_memory_mb = max(512, total_memory_mb - reserved_memory_mb)
+        memory_budget_mb = max(512, usable_memory_mb // effective_concurrency)
+
+    return {
+        "host_cpu_count": cpu_count,
+        "host_memory_mb": total_memory_mb,
+        "effective_concurrency": effective_concurrency,
+        "cpu_budget": cpu_budget,
+        "memory_budget_mb": memory_budget_mb,
+        "trajectory_workers": max(1, cpu_budget),
+    }
 
 
 def format_run_timestamp(timestamp: float | None = None) -> str:
@@ -1430,6 +1490,9 @@ def write_run_timings(runtime_root: Path, run_metadata: dict[str, dict]) -> None
                 "cell_count",
                 "total_cell_count",
                 "subsample_fraction",
+                "stages_seconds",
+                "runner_observability",
+                "resource_allocation",
             }
         }
         for run_id, metadata in run_metadata.items()
@@ -1438,6 +1501,169 @@ def write_run_timings(runtime_root: Path, run_metadata: dict[str, dict]) -> None
         json.dumps(timing_payload, indent=2),
         encoding="utf-8",
     )
+
+
+def load_runner_observability(
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    algorithm_id: str,
+) -> dict | None:
+    observability_path = (
+        output_dir
+        / dataset_id
+        / run_id
+        / algorithm_id.upper()
+        / "working_dir"
+        / RUNNER_PHASE_TIMINGS_FILENAME
+    )
+    if not observability_path.is_file():
+        return None
+
+    try:
+        payload = json.loads(observability_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+class PersistentBLRunnerWorker:
+    """Long-lived BLRunner process used by all confidence runs in one job."""
+
+    def __init__(
+        self,
+        *,
+        python_executable: str,
+        beeline_root: Path,
+        runtime_root: Path,
+        stdout_log_path: Path,
+        stderr_log_path: Path,
+        on_process_start=None,
+    ) -> None:
+        self.python_executable = python_executable
+        self.beeline_root = beeline_root
+        self.runtime_root = runtime_root
+        self.stdout_log_path = stdout_log_path
+        self.stderr_log_path = stderr_log_path
+        self.on_process_start = on_process_start
+        self.process: subprocess.Popen | None = None
+        self.stdout_file = None
+        self.stderr_file = None
+        self.started_at: float | None = None
+        self.started_wall_time: float | None = None
+        self.ready_file = runtime_root / "blrunner-worker" / "ready.json"
+        self.response_dir = runtime_root / "blrunner-worker" / "responses"
+
+    def start(self) -> None:
+        if self.process is not None:
+            return
+
+        self.ready_file.parent.mkdir(parents=True, exist_ok=True)
+        self.ready_file.unlink(missing_ok=True)
+        self.response_dir.mkdir(parents=True, exist_ok=True)
+        self.stdout_file = self.stdout_log_path.open("a", encoding="utf-8")
+        self.stderr_file = self.stderr_log_path.open("a", encoding="utf-8")
+        self.started_at = time.perf_counter()
+        self.started_wall_time = time.time()
+        self.process = subprocess.Popen(
+            [
+                self.python_executable,
+                "BLRunner.py",
+                "--worker",
+                "--ready-file",
+                str(self.ready_file),
+            ],
+            cwd=self.beeline_root,
+            stdin=subprocess.PIPE,
+            stdout=self.stdout_file,
+            stderr=self.stderr_file,
+            text=True,
+            start_new_session=True,
+        )
+        if self.on_process_start is not None:
+            self.on_process_start(self.process)
+
+    def submit(self, config_path: Path, run_id: str) -> Path:
+        self.start()
+        if self.process is None or self.process.stdin is None:
+            raise RuntimeError("Persistent BLRunner worker did not start.")
+        if self.process.poll() is not None:
+            raise RuntimeError(
+                f"Persistent BLRunner worker exited with code {self.process.returncode}."
+            )
+
+        response_path = self.response_dir / f"{run_id}.json"
+        response_path.unlink(missing_ok=True)
+        self.stdout_file.write(f"\n===== {run_id} =====\n")
+        self.stderr_file.write(f"\n===== {run_id} =====\n")
+        self.stdout_file.flush()
+        self.stderr_file.flush()
+        request = {
+            "request_id": run_id,
+            "config_path": str(config_path),
+            "response_path": str(response_path),
+        }
+        try:
+            self.process.stdin.write(json.dumps(request) + "\n")
+            self.process.stdin.flush()
+        except BrokenPipeError as exc:
+            raise RuntimeError("Persistent BLRunner worker closed unexpectedly.") from exc
+        return response_path
+
+    def read_response(self, response_path: Path) -> dict | None:
+        if not response_path.is_file():
+            return None
+        try:
+            payload = json.loads(response_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def startup_seconds(self) -> float | None:
+        if self.started_wall_time is None or not self.ready_file.is_file():
+            return None
+        try:
+            ready_timestamp = self.ready_file.stat().st_mtime
+        except OSError:
+            return None
+        return max(0.0, ready_timestamp - self.started_wall_time)
+
+    def stop(self, *, force: bool = False) -> None:
+        process = self.process
+        if process is None:
+            return
+
+        if force and process.poll() is None:
+            terminate_runtime_docker_containers(self.runtime_root)
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        elif process.stdin is not None and not process.stdin.closed:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+
+        if process.stdin is not None and not process.stdin.closed:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+
+        for handle in (self.stdout_file, self.stderr_file):
+            if handle is not None and not handle.closed:
+                handle.close()
+        self.process = None
 
 
 def completed_run_durations(run_metadata: dict[str, dict]) -> list[int]:
@@ -1480,10 +1706,23 @@ def materialize_confidence_run_input(
     header: list[str],
     selected_column_indices: list[int],
     source_pseudotime: Path | None,
+    defer_matrix_materialization: bool = False,
 ) -> Path:
     run_dir = input_dir / dataset_id / run_id
     shutil.rmtree(run_dir, ignore_errors=True)
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    if defer_matrix_materialization:
+        selected_cell_names = [
+            str(header[index])
+            for index in selected_column_indices
+            if index < len(header) and str(header[index]).strip()
+        ]
+        (run_dir / SELECTED_CELLS_FILENAME).write_text(
+            json.dumps(selected_cell_names),
+            encoding="utf-8",
+        )
+        return run_dir
 
     all_cell_column_indices = list(range(1, len(header)))
     if selected_column_indices == all_cell_column_indices:
@@ -1799,6 +2038,10 @@ def build_beeline_config(
     include_pseudotime: bool,
     max_regulators_per_target: int | None = None,
     extra_params: dict | None = None,
+    expression_source: Path | None = None,
+    pseudotime_source: Path | None = None,
+    selected_cells_files: dict[str, Path] | None = None,
+    resource_settings: dict | None = None,
 ) -> str:
     normalized_algorithm_id = algorithm_id.upper()
     image_name = resolve_algorithm_image(algorithm_id)
@@ -1811,8 +2054,23 @@ def build_beeline_config(
                 '          exprData: "ExpressionData.csv"',
             ]
         )
+        if expression_source is not None:
+            run_lines.append(
+                f"          expressionSource: {yaml_scalar(expression_source)}"
+            )
+        selected_cells_file = (
+            selected_cells_files.get(run_id) if selected_cells_files else None
+        )
+        if selected_cells_file is not None:
+            run_lines.append(
+                f"          selectedCellsFile: {yaml_scalar(selected_cells_file)}"
+            )
         if include_pseudotime:
             run_lines.append('          pseudoTimeData: "PseudoTime.csv"')
+            if pseudotime_source is not None:
+                run_lines.append(
+                    f"          pseudoTimeSource: {yaml_scalar(pseudotime_source)}"
+                )
 
     params = resolve_algorithm_default_params(normalized_algorithm_id)
     if extra_params:
@@ -1833,8 +2091,15 @@ def build_beeline_config(
         f"    - algorithm_id: {yaml_scalar(normalized_algorithm_id)}",
         f"      image: {yaml_scalar(image_name)}",
         "      should_run: [True]",
-        "      params:",
     ]
+
+    if resource_settings:
+        config_lines.append("      resources:")
+        for key, value in resource_settings.items():
+            if value is not None:
+                config_lines.append(f"        {key}: {json.dumps(value)}")
+
+    config_lines.append("      params:")
 
     if params:
         for key, value in params.items():
@@ -2751,6 +3016,7 @@ def run_beeline_with_progress(
     if stop_event is not None and stop_event.is_set():
         raise AlgorithmStoppedError("Algorithm run was stopped.")
 
+    runtime_initialization_started = time.perf_counter()
     (
         runtime_root,
         input_dir,
@@ -2764,7 +3030,11 @@ def run_beeline_with_progress(
         project_manifest,
         runtime_key=runtime_key,
     )
+    runtime_initialization_seconds = (
+        time.perf_counter() - runtime_initialization_started
+    )
 
+    confidence_planning_started = time.perf_counter()
     (
         run_ids,
         run_metadata,
@@ -2777,6 +3047,23 @@ def run_beeline_with_progress(
         project_manifest=project_manifest,
         preprocessed_expression=preprocessed_expression,
     )
+    confidence_planning_seconds = time.perf_counter() - confidence_planning_started
+    resource_settings = resolve_algorithm_resource_settings()
+    for metadata in run_metadata.values():
+        metadata["resource_allocation"] = resource_settings
+    if run_ids:
+        run_metadata[run_ids[0]].setdefault("stages_seconds", {}).update(
+            {
+                "job_runtime_initialization": round(
+                    runtime_initialization_seconds,
+                    6,
+                ),
+                "job_confidence_planning": round(
+                    confidence_planning_seconds,
+                    6,
+                ),
+            }
+        )
 
     update_job_state_fn(
         project_dir,
@@ -2816,35 +3103,69 @@ def run_beeline_with_progress(
         "streak": 0,
         "checks": [],
     }
+    persistent_worker = PersistentBLRunnerWorker(
+        python_executable=python_executable,
+        beeline_root=beeline_root,
+        runtime_root=runtime_root,
+        stdout_log_path=stdout_log_path,
+        stderr_log_path=stderr_log_path,
+        on_process_start=on_process_start,
+    )
 
     for run_index, run_id in enumerate(run_ids, start=1):
         if stop_event is not None and stop_event.is_set():
+            persistent_worker.stop(force=True)
             raise AlgorithmStoppedError("Algorithm run was stopped.")
 
-        run_dir = materialize_confidence_run_input(
-            input_dir=input_dir,
-            dataset_id=dataset_id,
-            run_id=run_id,
-            preprocessed_expression=preprocessed_expression,
-            header=header,
-            selected_column_indices=run_column_indices[run_id],
-            source_pseudotime=source_pseudotime,
+        stage_timings = run_metadata[run_id].setdefault("stages_seconds", {})
+        input_materialization_started = time.perf_counter()
+        try:
+            run_dir = materialize_confidence_run_input(
+                input_dir=input_dir,
+                dataset_id=dataset_id,
+                run_id=run_id,
+                preprocessed_expression=preprocessed_expression,
+                header=header,
+                selected_column_indices=run_column_indices[run_id],
+                source_pseudotime=source_pseudotime,
+                defer_matrix_materialization=True,
+            )
+        except Exception:
+            persistent_worker.stop(force=True)
+            raise
+        stage_timings["input_materialization"] = round(
+            time.perf_counter() - input_materialization_started,
+            6,
         )
 
-        config_text = build_beeline_config(
-            input_dir=input_dir,
-            output_dir=output_dir,
-            dataset_id=dataset_id,
-            run_ids=[run_id],
-            algorithm_id=algorithm_id,
-            include_pseudotime=source_pseudotime is not None,
-            max_regulators_per_target=ranked_edges_per_target_limit,
-            extra_params=algorithm_runtime_params,
+        config_generation_started = time.perf_counter()
+        try:
+            config_text = build_beeline_config(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                dataset_id=dataset_id,
+                run_ids=[run_id],
+                algorithm_id=algorithm_id,
+                include_pseudotime=source_pseudotime is not None,
+                max_regulators_per_target=ranked_edges_per_target_limit,
+                extra_params=algorithm_runtime_params,
+                expression_source=preprocessed_expression,
+                pseudotime_source=source_pseudotime,
+                selected_cells_files={
+                    run_id: run_dir / SELECTED_CELLS_FILENAME,
+                },
+                resource_settings=resource_settings,
+            )
+            config_path.write_text(config_text, encoding="utf-8")
+        except Exception:
+            persistent_worker.stop(force=True)
+            shutil.rmtree(run_dir, ignore_errors=True)
+            raise
+        stage_timings["config_generation"] = round(
+            time.perf_counter() - config_generation_started,
+            6,
         )
-        config_path.write_text(config_text, encoding="utf-8")
 
-        command = [python_executable, "BLRunner.py", "-c", str(config_path)]
-        process: subprocess.Popen | None = None
         run_started_at_timestamp = time.time()
         run_metadata[run_id].update(
             {
@@ -2859,92 +3180,84 @@ def run_beeline_with_progress(
         write_run_timings(runtime_root, run_metadata)
 
         try:
-            with stdout_log_path.open("a", encoding="utf-8") as stdout_file, (
-                stderr_log_path.open("a", encoding="utf-8")
-            ) as stderr_file:
-                stdout_file.write(f"\n===== {run_id} =====\n")
-                stderr_file.write(f"\n===== {run_id} =====\n")
-                stdout_file.flush()
-                stderr_file.flush()
-                process = subprocess.Popen(
-                    command,
-                    cwd=beeline_root,
-                    stdout=stdout_file,
-                    stderr=stderr_file,
-                    text=True,
-                    start_new_session=True,
+            blrunner_request_started = time.perf_counter()
+            response_path = persistent_worker.submit(config_path, run_id)
+            worker_response = persistent_worker.read_response(response_path)
+            while worker_response is None:
+                process = persistent_worker.process
+                if process is None or process.poll() is not None:
+                    return_code = process.returncode if process is not None else None
+                    raise RuntimeError(
+                        "Persistent BLRunner worker exited before completing "
+                        f"{run_id} (code {return_code})."
+                    )
+                if stop_event is not None and stop_event.is_set():
+                    persistent_worker.stop(force=True)
+                    break
+
+                elapsed = int(time.time() - started_at)
+                current_run_elapsed = int(time.time() - run_started_at_timestamp)
+                run_metadata[run_id]["elapsed_seconds"] = current_run_elapsed
+                completed_run_count = count_completed_confidence_run_outputs(
+                    output_dir,
+                    dataset_id,
+                    run_ids,
+                    algorithm_id,
+                )
+                estimated_remaining_seconds = estimate_remaining_seconds_from_run_timings(
+                    run_metadata,
+                    total_run_count=total_run_count,
+                    current_run_elapsed_seconds=current_run_elapsed,
+                )
+                progress_percent = min(
+                    85,
+                    20 + round((completed_run_count / total_run_count) * 65),
+                )
+                if completed_run_count == 0:
+                    progress_percent = min(25, 20 + elapsed // 10)
+                if estimated_remaining_seconds is None:
+                    estimated_remaining_seconds = estimate_remaining_seconds_from_progress(
+                        elapsed,
+                        progress_percent,
+                    )
+                progress_label = (
+                    f"Running confidence run {run_index} of {total_run_count}"
+                    if total_run_count > 1
+                    else "Starting analysis"
                 )
 
-                if on_process_start is not None:
-                    on_process_start(process)
+                update_job_state_fn(
+                    project_dir,
+                    job_id,
+                    algorithm_id=algorithm_id,
+                    elapsed_seconds=elapsed,
+                    progress_percent=progress_percent,
+                    progress_label=progress_label,
+                    estimated_remaining_seconds=estimated_remaining_seconds,
+                    run_metadata=run_metadata,
+                )
+                time.sleep(1)
+                worker_response = persistent_worker.read_response(response_path)
 
-                while process.poll() is None:
-                    if stop_event is not None and stop_event.is_set():
-                        terminate_runtime_docker_containers(runtime_root)
-                        try:
-                            os.killpg(process.pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass
-                        try:
-                            process.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            try:
-                                os.killpg(process.pid, signal.SIGKILL)
-                            except ProcessLookupError:
-                                pass
-                        break
-
-                    elapsed = int(time.time() - started_at)
-                    current_run_elapsed = int(time.time() - run_started_at_timestamp)
-                    run_metadata[run_id]["elapsed_seconds"] = current_run_elapsed
-                    completed_run_count = count_completed_confidence_run_outputs(
-                        output_dir,
-                        dataset_id,
-                        run_ids,
-                        algorithm_id,
+            stage_timings["blrunner_request"] = round(
+                time.perf_counter() - blrunner_request_started,
+                6,
+            )
+            if run_index == 1:
+                startup_seconds = persistent_worker.startup_seconds()
+                if startup_seconds is not None:
+                    stage_timings["persistent_worker_startup"] = round(
+                        startup_seconds,
+                        6,
                     )
-                    estimated_remaining_seconds = estimate_remaining_seconds_from_run_timings(
-                        run_metadata,
-                        total_run_count=total_run_count,
-                        current_run_elapsed_seconds=current_run_elapsed,
-                    )
-                    progress_percent = min(
-                        85,
-                        20 + round((completed_run_count / total_run_count) * 65),
-                    )
-                    if completed_run_count == 0:
-                        progress_percent = min(25, 20 + elapsed // 10)
-                    if estimated_remaining_seconds is None:
-                        estimated_remaining_seconds = (
-                            estimate_remaining_seconds_from_progress(
-                                elapsed,
-                                progress_percent,
-                            )
-                        )
-                    progress_label = (
-                        f"Running confidence run {run_index} of {total_run_count}"
-                        if total_run_count > 1
-                        else "Starting analysis"
-                    )
-
-                    update_job_state_fn(
-                        project_dir,
-                        job_id,
-                        algorithm_id=algorithm_id,
-                        elapsed_seconds=elapsed,
-                        progress_percent=progress_percent,
-                        progress_label=progress_label,
-                        estimated_remaining_seconds=estimated_remaining_seconds,
-                        run_metadata=run_metadata,
-                    )
-                    time.sleep(1)
-
-                if process.returncode is None:
-                    process.wait()
 
             run_completed_at_timestamp = time.time()
             run_elapsed = int(run_completed_at_timestamp - run_started_at_timestamp)
-            run_status = "Completed" if process.returncode == 0 else "Failed"
+            run_status = (
+                "Completed"
+                if worker_response and worker_response.get("status") == "Completed"
+                else "Failed"
+            )
             if stop_event is not None and stop_event.is_set():
                 run_status = "Stopped"
             run_metadata[run_id].update(
@@ -2961,14 +3274,37 @@ def run_beeline_with_progress(
                 project_dir,
                 job_id,
                 algorithm_id=algorithm_id,
-                process_pid=0,
                 run_metadata=run_metadata,
             )
 
             if stop_event is not None and stop_event.is_set():
                 raise AlgorithmStoppedError("Algorithm run was stopped.")
 
-            if process.returncode != 0:
+            runner_observability = load_runner_observability(
+                output_dir,
+                dataset_id,
+                run_id,
+                algorithm_id,
+            )
+            if runner_observability is not None:
+                run_metadata[run_id]["runner_observability"] = runner_observability
+                runner_total = (
+                    runner_observability.get("stages_seconds", {}).get(
+                        "runner_observed_total"
+                    )
+                )
+                blrunner_total = stage_timings.get("blrunner_request")
+                if isinstance(runner_total, (int, float)) and isinstance(
+                    blrunner_total,
+                    (int, float),
+                ):
+                    stage_timings["blrunner_request_overhead_estimate"] = round(
+                        max(0.0, blrunner_total - runner_total),
+                        6,
+                    )
+                write_run_timings(runtime_root, run_metadata)
+
+            if not worker_response or worker_response.get("status") != "Completed":
                 log_text = "\n".join(
                     [
                         read_recent_log_text(stderr_log_path),
@@ -2979,8 +3315,11 @@ def run_beeline_with_progress(
                     log_text,
                     algorithm_id,
                 )
+                if worker_response and worker_response.get("error_message"):
+                    friendly_error = str(worker_response["error_message"])
                 raise RuntimeError(friendly_error)
 
+            output_ingestion_started = time.perf_counter()
             run_edges, ranked_edges_path = parse_confidence_run_output(
                 output_dir,
                 dataset_id,
@@ -2989,6 +3328,11 @@ def run_beeline_with_progress(
                 runtime_root=runtime_root,
                 max_edges_per_target=ranked_edges_per_target_limit,
             )
+            stage_timings["output_ingestion"] = round(
+                time.perf_counter() - output_ingestion_started,
+                6,
+            )
+            confidence_update_started = time.perf_counter()
             if confidence_settings.get("confidence_enabled"):
                 previous_run_count = int(confidence_accumulator.get("processed_runs", 0))
                 previous_edges: list[dict] = []
@@ -3055,6 +3399,10 @@ def run_beeline_with_progress(
                                     "elapsed_seconds": 0,
                                 }
                             )
+                        stage_timings["confidence_update"] = round(
+                            time.perf_counter() - confidence_update_started,
+                            6,
+                        )
                         write_run_timings(runtime_root, run_metadata)
                         update_job_state_fn(
                             project_dir,
@@ -3070,10 +3418,26 @@ def run_beeline_with_progress(
                         ranked_edge_paths[run_id] = str(ranked_edges_path)
                         del run_edges
                         break
+            stage_timings["confidence_update"] = round(
+                time.perf_counter() - confidence_update_started,
+                6,
+            )
             ranked_edge_paths[run_id] = str(ranked_edges_path)
             del run_edges
+            write_run_timings(runtime_root, run_metadata)
         finally:
             shutil.rmtree(run_dir, ignore_errors=True)
+            if sys.exc_info()[0] is not None:
+                persistent_worker.stop(force=True)
+
+    persistent_worker.stop()
+    update_job_state_fn(
+        project_dir,
+        job_id,
+        algorithm_id=algorithm_id,
+        process_pid=0,
+        run_metadata=run_metadata,
+    )
 
     progress_label = (
         "Aggregating confidence scores"
@@ -3088,6 +3452,7 @@ def run_beeline_with_progress(
         progress_label=progress_label,
     )
 
+    final_aggregation_started = time.perf_counter()
     if confidence_settings.get("confidence_enabled"):
         processed_run_count = int(confidence_accumulator.get("processed_runs", 0))
         top_edges, network_summary = finalize_confidence_accumulator(
@@ -3107,6 +3472,18 @@ def run_beeline_with_progress(
             max_edges_per_target=ranked_edges_per_target_limit,
         )
 
+    final_aggregation_seconds = time.perf_counter() - final_aggregation_started
+    completed_run_ids = [
+        completed_run_id
+        for completed_run_id in run_ids
+        if run_metadata.get(completed_run_id, {}).get("status") == "Completed"
+    ]
+    if completed_run_ids:
+        run_metadata[completed_run_ids[-1]].setdefault("stages_seconds", {})[
+            "final_confidence_aggregation"
+        ] = round(final_aggregation_seconds, 6)
+        write_run_timings(runtime_root, run_metadata)
+
     update_job_state_fn(
         project_dir,
         job_id,
@@ -3124,6 +3501,7 @@ def run_beeline_with_progress(
         "top_edges": top_edges,
         "confidence_summary": {
             **confidence_settings,
+            "resource_allocation": resource_settings,
             "planned_bootstrap_runs": total_run_count,
             "bootstrap_runs": int(network_summary.get("bootstrap_runs", total_run_count)),
             "early_stopping": early_stopping,

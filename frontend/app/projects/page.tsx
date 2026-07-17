@@ -20,6 +20,8 @@ export type AlgorithmParameter = {
   options?: unknown[];
   minimum?: number;
   maximum?: number;
+  exclusive_minimum?: number;
+  exclusive_maximum?: number;
   step?: number;
   advanced?: boolean;
 };

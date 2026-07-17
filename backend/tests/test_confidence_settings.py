@@ -15,6 +15,16 @@ class ConfidenceSettingsTests(unittest.TestCase):
         self.assertEqual(settings["min_runs"], 3)
         self.assertEqual(settings["subsample_fraction"], 0.8)
         self.assertTrue(settings["early_stopping_enabled"])
+        self.assertEqual(settings["stop_rho"], 0.95)
+
+    def test_project_can_override_default_spearman_threshold(self):
+        with patch.dict(os.environ, {}, clear=True):
+            settings = resolve_confidence_settings(
+                {"confidence_stop_rho": 0.97},
+                gene_count=100,
+            )
+
+        self.assertEqual(settings["stop_rho"], 0.97)
 
     def test_legacy_activation_flags_cannot_disable_confidence_runs(self):
         with patch.dict(

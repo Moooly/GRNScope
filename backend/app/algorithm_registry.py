@@ -32,11 +32,13 @@ class AlgorithmParameter(TypedDict, total=False):
     required: bool
     value_type: str
     options: list[Any]
-    # Optional inclusive bounds for numeric parameters. When present they are
-    # enforced server-side and can be read by the frontend to bound the input
-    # control. Invalid values are rejected rather than silently changed.
+    # Optional inclusive or exclusive bounds for numeric parameters. When
+    # present they are enforced server-side and displayed by the frontend.
+    # Invalid values are rejected rather than silently changed.
     minimum: float
     maximum: float
+    exclusive_minimum: float
+    exclusive_maximum: float
     # UI hints (not enforced server-side). 'step' is the numeric input
     # increment; when absent the frontend uses 1 for integers. 'advanced' marks
     # rarely-tuned parameters the settings modal groups under an "Advanced"
@@ -331,7 +333,9 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 30000,
                 "required": False,
                 "value_type": "integer",
-                "minimum": 1,
+                # CellOracle's PCA/neighbor preprocessing needs at least three
+                # observations after subsampling.
+                "minimum": 3,
                 "maximum": 200000,
                 "step": 1000,
             },
@@ -627,6 +631,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 0,
                 "required": False,
                 "value_type": "float",
+                "minimum": 0.0,
                 "step": 0.1,
                 "advanced": True,
             },
@@ -710,18 +715,26 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "dT",
                 "label": "Time resolution (ΔT)",
-                "description": "Spacing of the resampled time grid.",
+                "description": (
+                    "Spacing of the resampled time grid. This value multiplied "
+                    "by the number of lags must be less than 100."
+                ),
                 "default": 15,
                 "required": False,
                 "value_type": "int",
                 "minimum": 1,
-                "maximum": 1000,
+                # SINGE requires dT * num_lags < 100. With num_lags >= 1,
+                # values above 99 can never form a valid configuration.
+                "maximum": 99,
                 "advanced": True,
             },
             {
                 "name": "num_lags",
                 "label": "Number of lags",
-                "description": "Past time points used to predict the present.",
+                "description": (
+                    "Past time points used to predict the present. This value "
+                    "multiplied by ΔT must be less than 100."
+                ),
                 "default": 5,
                 "required": False,
                 "value_type": "int",
@@ -744,24 +757,24 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "prob_zero_removal",
                 "label": "Zero-removal probability",
-                "description": "Chance a zero is dropped per replicate (0–1).",
+                "description": "Chance a zero is dropped per replicate (0 ≤ p < 1).",
                 "default": 0,
                 "required": False,
                 "value_type": "float",
                 "minimum": 0.0,
-                "maximum": 1.0,
+                "exclusive_maximum": 1.0,
                 "step": 0.05,
                 "advanced": True,
             },
             {
                 "name": "prob_remove_samples",
                 "label": "Sample-removal probability",
-                "description": "Chance a cell is dropped per replicate (0–1).",
+                "description": "Chance a cell is dropped per replicate (0 ≤ p < 1).",
                 "default": 0.0,
                 "required": False,
                 "value_type": "float",
                 "minimum": 0.0,
-                "maximum": 1.0,
+                "exclusive_maximum": 1.0,
                 "step": 0.05,
                 "advanced": True,
             },
@@ -1035,6 +1048,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": None,
                 "required": True,
                 "value_type": "float",
+                "exclusive_minimum": 0.0,
+                "exclusive_maximum": 1.0,
             },
             {
                 "name": "neg_density",
@@ -1043,6 +1058,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": None,
                 "required": True,
                 "value_type": "float",
+                "exclusive_minimum": 0.0,
+                "exclusive_maximum": 1.0,
             },
             {
                 "name": "assoc",
@@ -1051,6 +1068,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": None,
                 "required": True,
                 "value_type": "string",
+                "options": ["correlation", "dotprod", "proprho", "zikendall"],
             },
         ],
     },
@@ -1245,6 +1263,8 @@ def validate_algorithm_parameters(
         if isinstance(coerced, (int, float)) and not isinstance(coerced, bool):
             minimum = parameter.get("minimum")
             maximum = parameter.get("maximum")
+            exclusive_minimum = parameter.get("exclusive_minimum")
+            exclusive_maximum = parameter.get("exclusive_maximum")
             if minimum is not None and coerced < minimum:
                 raise ValueError(
                     f"{algorithm_info['id']}.{name} must be at least {minimum}."
@@ -1252,6 +1272,16 @@ def validate_algorithm_parameters(
             if maximum is not None and coerced > maximum:
                 raise ValueError(
                     f"{algorithm_info['id']}.{name} must be at most {maximum}."
+                )
+            if exclusive_minimum is not None and coerced <= exclusive_minimum:
+                raise ValueError(
+                    f"{algorithm_info['id']}.{name} must be greater than "
+                    f"{exclusive_minimum}."
+                )
+            if exclusive_maximum is not None and coerced >= exclusive_maximum:
+                raise ValueError(
+                    f"{algorithm_info['id']}.{name} must be less than "
+                    f"{exclusive_maximum}."
                 )
 
         cleaned[name] = coerced
@@ -1319,6 +1349,14 @@ def resolve_algorithm_parameters(
         if parameter.get("required"):
             raise ValueError(
                 f"{algorithm_info['id']}.{name} is required."
+            )
+
+    if algorithm_info["id"] == "SINGE":
+        time_resolution = int(resolved["dT"])
+        lag_count = int(resolved["num_lags"])
+        if time_resolution * lag_count >= 100:
+            raise ValueError(
+                "SINGE.dT multiplied by SINGE.num_lags must be less than 100."
             )
 
     return resolved

@@ -915,6 +915,7 @@ export default function NetworkGraph({
     if (!cy) return;
 
     cy.elements().unselect();
+    cy.nodes().removeClass("selected-edge-endpoint");
 
     if (selectedGene) {
       const node = cy.getElementById(selectedGene);
@@ -927,6 +928,7 @@ export default function NetworkGraph({
       const edge = cy.getElementById(selectedEdgeKey);
       if (edge.nonempty()) {
         edge.select();
+        edge.connectedNodes().addClass("selected-edge-endpoint");
       }
     }
   }, [selectedGene, selectedEdgeKey]);
