@@ -285,6 +285,13 @@ export type PerturbationResult = {
   }>;
   mean_shift_magnitude: number;
   mean_random_shift_magnitude: number;
+  perturbation_score?: number | null;
+  perturbation_score_p_value?: number | null;
+  perturbation_score_direction?: "promotes" | "blocks" | "neutral" | string | null;
+  perturbation_score_grid_point_count?: number;
+  perturbation_score_unavailable_reason?: string | null;
+  pseudotime_trajectory?: string;
+  pseudotime_cell_count?: number;
   completed_at?: string | null;
   top_affected_genes: Array<{
     gene: string;
@@ -304,6 +311,11 @@ export type PerturbationResult = {
     mean_shift_magnitude: number;
     mean_random_shift_magnitude: number;
     shift_ratio?: number | null;
+    perturbation_score?: number | null;
+    perturbation_score_p_value?: number | null;
+    perturbation_score_direction?: "promotes" | "blocks" | "neutral" | string | null;
+    perturbation_score_grid_point_count?: number;
+    perturbation_score_unavailable_reason?: string | null;
     ood_warning_gene_count?: number | null;
     top_genes?: Array<{
       gene: string;

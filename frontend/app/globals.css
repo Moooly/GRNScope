@@ -97,6 +97,32 @@ body {
   }
 }
 
+.animate-slide-in-right {
+  animation: slideInRight 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.animate-slide-out-right {
+  animation: slideOutRight 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 .animate-inspector-panel {
   animation: inspectorPanelIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }

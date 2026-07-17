@@ -1920,6 +1920,8 @@ useEffect(() => {
                 )}
           </ResultsHubSection>
 
+          {resultsHubView === "network" && (
+          <>
           <AlgorithmCardsSection
             tasks={latestJob?.tasks ?? []}
             algorithmMetaMap={algorithmMetaMap}
@@ -1957,6 +1959,8 @@ useEffect(() => {
               />
             )}
           />
+          </>
+          )}
 
           <ResultsGuideModal
             open={isResultsGuideOpen}

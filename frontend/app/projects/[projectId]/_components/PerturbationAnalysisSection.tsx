@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   PointerEvent as ReactPointerEvent,
   RefObject,
@@ -95,6 +96,12 @@ function formatScientific(value: number) {
     return value.toFixed(3).replace(/\.?0+$/, "");
   }
   return value.toExponential(2);
+}
+
+function formatPValue(value: number) {
+  if (!Number.isFinite(value)) return "Unavailable";
+  if (value < 0.0001) return "< 0.0001";
+  return value.toFixed(4).replace(/\.?0+$/, "");
 }
 
 function formatPerturbation(gene: string, value: number) {
@@ -704,14 +711,14 @@ function PlotZoomControls({
     <div
       className={connected
         ? "inline-flex h-full"
-        : "inline-flex h-9 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"}
+        : "inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"}
       aria-label="Shared plot zoom"
     >
       <button
         type="button"
         onClick={() => onViewportChange(zoomViewportAtPoint(viewport, 1.2, 0.5, 0.5))}
         disabled={isFullyZoomedOut}
-        className="inline-flex w-9 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
+        className="inline-flex w-10 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
         aria-label="Zoom out both plots"
         title="Zoom out"
       >
@@ -721,7 +728,7 @@ function PlotZoomControls({
         type="button"
         onClick={() => onViewportChange(zoomViewportAtPoint(viewport, 0.84, 0.5, 0.5))}
         disabled={isFullyZoomedIn}
-        className={`inline-flex w-9 items-center justify-center text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600 ${connected ? "border-r border-slate-200" : ""}`}
+        className={`inline-flex w-10 items-center justify-center text-base font-bold text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600 ${connected ? "border-r border-slate-200" : ""}`}
         aria-label="Zoom in both plots"
         title="Zoom in"
       >
@@ -742,14 +749,15 @@ function ExpandComparisonButton({
     <button
       type="button"
       onClick={onClick}
+      aria-label="Expand comparison"
+      title="Expand comparison"
       className={connected
-        ? "inline-flex h-full items-center gap-2 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"
-        : "inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"}
+        ? "inline-flex h-full w-10 items-center justify-center bg-white text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"
+        : "inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"}
     >
       <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
         <path d="M7 3.5H3.5V7M13 3.5h3.5V7M7 16.5H3.5V13M13 16.5h3.5V13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      Expand
     </button>
   );
 }
@@ -777,13 +785,9 @@ function FigureExportMenu({
         disabled={isExporting}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-wait disabled:opacity-60"
       >
-        <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
-          <path d="M10 3v9m0 0 3.3-3.3M10 12 6.7 8.7M4 14v2.5h12V14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
         {isExporting ? "Preparing…" : "Download"}
-        <SelectChevron />
       </button>
       {isOpen && (
         <div
@@ -815,9 +819,6 @@ function FigureExportMenu({
             </span>
             <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">PNG</span>
           </button>
-          <p className="border-t border-slate-100 px-3 pb-1 pt-2 text-[11px] leading-5 text-slate-500">
-            Exports both plots in the current synchronized view.
-          </p>
           {error && (
             <p className="mx-2 mb-1 rounded-lg bg-rose-50 px-2.5 py-2 text-[11px] leading-4 text-rose-700" role="alert">
               {error}
@@ -937,33 +938,41 @@ function PerturbationHistoryStrip({
   result,
   loadingRunId,
   onSelect,
+  embedded = false,
 }: {
   runs: PerturbationRun[];
-  result: PerturbationResult;
+  result: PerturbationResult | null;
   loadingRunId: string | null;
   onSelect: (run: PerturbationRun) => void;
+  embedded?: boolean;
 }) {
   return (
     <aside
-      className="rounded-[1.1rem] border border-slate-200 bg-white p-4 lg:sticky lg:top-24"
+      className={
+        embedded
+          ? "min-w-0"
+          : "min-w-0 rounded-[1.1rem] border border-slate-200 bg-white p-4 lg:sticky lg:top-24"
+      }
       aria-label="Saved perturbation runs"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 px-1 lg:block">
-        <div>
-          <h3 className="text-sm font-bold text-slate-950">Run history</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Select a run to view its results.
+      {!embedded && (
+        <div className="flex flex-wrap items-start justify-between gap-3 px-1 lg:block">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">Run history</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Select a run to view its results.
+            </p>
+          </div>
+          <p className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500 lg:mt-3 lg:inline-flex">
+            {Math.min(runs.length, 8)} saved {runs.length === 1 ? "run" : "runs"}
           </p>
         </div>
-        <p className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500 lg:mt-3 lg:inline-flex">
-          {Math.min(runs.length, 8)} saved {runs.length === 1 ? "run" : "runs"}
-        </p>
-      </div>
+      )}
 
-      <div className="mt-3 flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] lg:flex-col lg:overflow-visible lg:pb-0">
+      <div className={`flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] lg:flex-col lg:overflow-visible lg:pb-0 ${embedded ? "" : "mt-3"}`}>
         {runs.slice(0, 8).map((run, index) => {
           const isCompleted = run.status === "Completed";
-          const isSelected = result.run_id === run.run_id;
+          const isSelected = result?.run_id === run.run_id;
           const isRunLoading = loadingRunId === run.run_id;
           const cardContent = (
             <>
@@ -1022,11 +1031,18 @@ function SelectedResultHeader({
   result,
   resultScope,
   onScopeChange,
+  onRerunWithClipping,
+  rerunDisabled,
 }: {
   result: PerturbationResult;
   resultScope: string;
   onScopeChange: (scope: string) => void;
+  onRerunWithClipping: () => void;
+  rerunDisabled: boolean;
 }) {
+  const [showAllOodGenes, setShowAllOodGenes] = useState(false);
+  const oodGenes = result.ood_genes ?? [];
+  const visibleOodGenes = showAllOodGenes ? oodGenes : oodGenes.slice(0, 5);
   const clusterCounts = new Map<string, number>();
   for (const point of result.embedding_points) {
     clusterCounts.set(point.cluster, (clusterCounts.get(point.cluster) ?? 0) + 1);
@@ -1045,6 +1061,26 @@ function SelectedResultHeader({
   const shiftRatio = meanRandomShift !== null && meanRandomShift > 0
     ? (meanShift ?? 0) / meanRandomShift
     : null;
+  const perturbationScore = resultScope === "global"
+    ? result.perturbation_score ?? null
+    : selectedCluster?.perturbation_score ?? null;
+  const perturbationScorePValue = resultScope === "global"
+    ? result.perturbation_score_p_value ?? null
+    : selectedCluster?.perturbation_score_p_value ?? null;
+  const perturbationScoreDirection = resultScope === "global"
+    ? result.perturbation_score_direction
+    : selectedCluster?.perturbation_score_direction;
+  const perturbationScoreUnavailableReason = resultScope === "global"
+    ? result.perturbation_score_unavailable_reason
+    : selectedCluster?.perturbation_score_unavailable_reason;
+  const perturbationScoreAvailable = perturbationScore !== null;
+  const perturbationScoreDirectionLabel = perturbationScoreDirection === "promotes"
+    ? "Promotes differentiation"
+    : perturbationScoreDirection === "blocks"
+      ? "Blocks differentiation"
+      : perturbationScoreDirection === "neutral"
+        ? "No directional effect"
+        : null;
   const metrics = [
     {
       label: "Mean shift",
@@ -1069,34 +1105,24 @@ function SelectedResultHeader({
         ? result.ood_warning_gene_count > 0
         : (selectedCluster?.ood_warning_gene_count ?? 0) > 0,
     },
+    {
+      label: "Perturbation score",
+      value: perturbationScore === null ? "—" : formatScientific(perturbationScore),
+    },
+    {
+      label: "PS p-value",
+      value: perturbationScorePValue === null ? "—" : formatPValue(perturbationScorePValue),
+    },
   ];
 
   return (
-    <div className="rounded-[1.1rem] border border-slate-200 bg-slate-50 p-4 sm:p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-            Selected result
-          </p>
-          <h3 className="mt-1 text-lg font-bold text-slate-950">
-            {formatPerturbation(result.gene, result.perturbation_value)}
-          </h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            {result.n_propagation} propagation steps
-            {result.completed_at ? ` · ${formatTimestamp(result.completed_at)}` : ""}
-            {result.model_scope === "cluster_specific"
-              ? ` · Cluster-specific GRNs${result.cluster_count ? ` (${result.cluster_count} clusters)` : ""}`
-              : result.model_scope === "global"
-                ? " · Global GRN"
-                : ""}
-            {resultScope !== "global" ? ` · Showing ${resultScope}` : ""}
-          </p>
-        </div>
-        <label className="relative flex h-10 w-full shrink-0 items-center overflow-hidden rounded-full border border-slate-300 bg-white text-xs font-bold text-slate-700 shadow-sm focus-within:border-slate-500 focus-within:ring-4 focus-within:ring-slate-200 sm:w-[15rem]">
+    <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative inline-flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10 sm:w-auto">
           <select
             value={resultScope}
             onChange={(event) => onScopeChange(event.target.value)}
-            className="h-full w-full appearance-none bg-transparent px-4 pr-10 outline-none"
+            className="h-full w-full appearance-none bg-transparent pl-4 pr-10 outline-none sm:min-w-[10rem]"
             aria-label="Result scope"
           >
             <option value="global">Global</option>
@@ -1110,21 +1136,104 @@ function SelectedResultHeader({
         </label>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-200 pt-4 md:grid-cols-4 md:gap-0 md:divide-x md:divide-slate-200">
-        {metrics.map((metric) => (
-          <div
-            key={metric.label}
-            className="min-w-0 md:px-5 md:first:pl-0 md:last:pr-0"
-          >
-            <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
-              {metric.label}
-            </dt>
-            <dd className="mt-1 text-lg font-bold text-slate-950">
-              {metric.value}
-            </dd>
-          </div>
-        ))}
+      <dl className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {metrics.map((metric) => {
+          const isWarning = "warning" in metric && metric.warning;
+          return (
+            <div key={metric.label} className="flex min-h-[76px] flex-col rounded-xl bg-[#f8fafc] p-3">
+              <dt className="text-[10px] font-bold uppercase leading-4 tracking-[0.12em] text-slate-500">
+                {metric.label}
+              </dt>
+              <dd className={`mt-auto pt-2 text-xl font-extrabold ${isWarning ? "text-amber-700" : "text-slate-950"}`}>
+                {metric.value}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
+
+      <p className="mt-3 text-[11px] leading-4 text-slate-500">
+        {perturbationScoreAvailable
+          ? `${perturbationScoreDirectionLabel ?? "Pseudotime alignment calculated"} · Compared with randomized GRN${result.pseudotime_trajectory ? ` · ${result.pseudotime_trajectory}` : ""}`
+          : `Perturbation score and p-value unavailable · ${perturbationScoreUnavailableReason ?? "Upload pseudotime and rerun to calculate them."}`}
+      </p>
+
+      {resultScope === "global" && result.ood_warning_gene_count > 0 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-[#f8fafc] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5">
+                  <path d="M10 3.2 17 16H3L10 3.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                  <path d="M10 7.4v4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  <circle cx="10" cy="14" r=".9" fill="currentColor" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-950">
+                  {result.ood_warning_gene_count.toLocaleString()} predicted {result.ood_warning_gene_count === 1 ? "gene exceeds" : "genes exceed"} the observed range
+                </h3>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600">
+                  These genes are pushed beyond any expression seen in the data (out-of-distribution). Interpret them cautiously, or rerun with clipping.
+                </p>
+              </div>
+            </div>
+            {!result.clip_delta_x && (
+              <button
+                type="button"
+                onClick={onRerunWithClipping}
+                disabled={rerunDisabled}
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Rerun with clipping
+              </button>
+            )}
+          </div>
+          {oodGenes.length ? (
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="hidden grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] bg-slate-100 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 sm:grid">
+                <span className="px-3 py-2">Gene</span>
+                <span className="border-l border-slate-200 px-3 py-2">Affected cells</span>
+                <span className="border-l border-slate-200 px-3 py-2">Largest exceedance</span>
+              </div>
+              <div className={showAllOodGenes ? "max-h-72 overflow-y-auto" : ""}>
+                {visibleOodGenes.map((row) => (
+                  <div
+                    key={row.gene}
+                    className="grid gap-2 border-t border-slate-200 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] sm:gap-0 sm:px-0 sm:py-0 sm:first:border-t"
+                  >
+                    <span className="truncate text-sm font-bold text-slate-950 sm:px-3 sm:py-2.5">
+                      {row.gene}
+                    </span>
+                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
+                      <span className="sm:hidden">Affected cells</span>
+                      <strong className="text-slate-900">{(row.ood_cell_ratio * 100).toFixed(1)}%</strong>
+                    </span>
+                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
+                      <span className="sm:hidden">Largest exceedance</span>
+                      <strong className="text-slate-900">{(row.max_exceeding_ratio * 100).toFixed(1)}% beyond range</strong>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {oodGenes.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllOodGenes((current) => !current)}
+                  className="flex w-full items-center justify-center border-t border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                  aria-expanded={showAllOodGenes}
+                >
+                  {showAllOodGenes ? "Show highest 5 only" : `Show all ${oodGenes.length} OOD genes`}
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
+              This saved run predates gene-level OOD diagnostics. Its count is available, but the affected gene names were not stored.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1135,6 +1244,9 @@ type ClusterSummaryView = {
   mean_shift_magnitude: number | null;
   mean_random_shift_magnitude: number | null;
   shift_ratio: number | null;
+  perturbation_score: number | null;
+  perturbation_score_p_value: number | null;
+  perturbation_score_unavailable_reason?: string | null;
   ood_warning_gene_count: number | null;
   top_genes: Array<{ gene: string; mean_change: number }>;
 };
@@ -1456,14 +1568,10 @@ function ResultSummary({
   projectId,
   result,
   resultScope,
-  onRerunWithClipping,
-  rerunDisabled,
 }: {
   projectId: string;
   result: PerturbationResult;
   resultScope: string;
-  onRerunWithClipping: () => void;
-  rerunDisabled: boolean;
 }) {
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [hoveredVectorIndex, setHoveredVectorIndex] = useState<number | null>(null);
@@ -1475,7 +1583,7 @@ function ResultSummary({
   const [figureExportMenu, setFigureExportMenu] = useState<"main" | "expanded" | null>(null);
   const [isFigureExporting, setIsFigureExporting] = useState(false);
   const [figureExportError, setFigureExportError] = useState<string | null>(null);
-  const [showAllOodGenes, setShowAllOodGenes] = useState(false);
+  const [showAllGenes, setShowAllGenes] = useState(false);
   const [expandedGene, setExpandedGene] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const figureExportMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1508,6 +1616,13 @@ function ResultSummary({
           shift_ratio: cluster.shift_ratio === null || cluster.shift_ratio === undefined
             ? null
             : cluster.shift_ratio,
+          perturbation_score: Number.isFinite(cluster.perturbation_score)
+            ? cluster.perturbation_score ?? null
+            : null,
+          perturbation_score_p_value: Number.isFinite(cluster.perturbation_score_p_value)
+            ? cluster.perturbation_score_p_value ?? null
+            : null,
+          perturbation_score_unavailable_reason: cluster.perturbation_score_unavailable_reason,
           ood_warning_gene_count: cluster.ood_warning_gene_count ?? null,
           top_genes: cluster.top_genes ?? [],
         }))
@@ -1527,6 +1642,9 @@ function ResultSummary({
         mean_shift_magnitude: null,
         mean_random_shift_magnitude: null,
         shift_ratio: null,
+        perturbation_score: null,
+        perturbation_score_p_value: null,
+        perturbation_score_unavailable_reason: "Pseudotime is required.",
         ood_warning_gene_count: null,
         top_genes: genes
           .sort((left, right) => Math.abs(right.mean_change) - Math.abs(left.mean_change))
@@ -1590,6 +1708,16 @@ function ResultSummary({
     : result.top_affected_genes
       .filter((row) => row.mean_absolute_change > DISPLAY_CHANGE_EPSILON)
       .slice(0, 15);
+  const increaseGenes = rankedChangedGenes.filter((row) => row.mean_change > 0).slice(0, 5);
+  const decreaseGenes = rankedChangedGenes.filter((row) => row.mean_change < 0).slice(0, 5);
+  const maxIncreaseMagnitude = Math.max(
+    ...increaseGenes.map((row) => row.mean_absolute_change),
+    DISPLAY_CHANGE_EPSILON
+  );
+  const maxDecreaseMagnitude = Math.max(
+    ...decreaseGenes.map((row) => row.mean_absolute_change),
+    DISPLAY_CHANGE_EPSILON
+  );
   const expressionDistributions = useMemo(() => {
     const byGene = new Map<string, GeneExpressionDistribution>();
     for (const distribution of result.gene_expression_distributions ?? []) {
@@ -1600,8 +1728,6 @@ function ResultSummary({
     }
     return byGene;
   }, [isClusterScope, result.gene_expression_distributions, resultScope]);
-  const oodGenes = result.ood_genes ?? [];
-  const visibleOodGenes = showAllOodGenes ? oodGenes : oodGenes.slice(0, 5);
 
   const handleVectorHover = (plot: PlotKind, index: number | null) => {
     setHoveredVectorIndex(index);
@@ -1725,92 +1851,15 @@ function ResultSummary({
   }, [figureExportMenu, isComparisonExpanded]);
 
   return (
-    <div className="space-y-5">
-      {!isClusterScope && result.ood_warning_gene_count > 0 && (
-        <section className="rounded-[1.1rem] border border-slate-200 bg-slate-50 p-4 text-slate-900">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5">
-                  <path d="M10 3.2 17 16H3L10 3.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                  <path d="M10 7.4v4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  <circle cx="10" cy="14" r=".9" fill="currentColor" />
-                </svg>
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-950">
-                  {result.ood_warning_gene_count.toLocaleString()} predicted {result.ood_warning_gene_count === 1 ? "gene exceeds" : "genes exceed"} the observed range
-                </h3>
-                <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600">
-                  Interpret cautiously, or rerun with clipping to constrain shifts to the observed expression range.
-                </p>
-              </div>
-            </div>
-            {!result.clip_delta_x && (
-              <button
-                type="button"
-                onClick={onRerunWithClipping}
-                disabled={rerunDisabled}
-                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Rerun with clipping
-              </button>
-            )}
-          </div>
-          {oodGenes.length ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="hidden grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] bg-slate-100 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 sm:grid">
-                <span className="px-3 py-2">Gene</span>
-                <span className="border-l border-slate-200 px-3 py-2">Affected cells</span>
-                <span className="border-l border-slate-200 px-3 py-2">Largest exceedance</span>
-              </div>
-              <div className={showAllOodGenes ? "max-h-72 overflow-y-auto" : ""}>
-                {visibleOodGenes.map((row) => (
-                  <div
-                    key={row.gene}
-                    className="grid gap-2 border-t border-slate-200 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] sm:gap-0 sm:px-0 sm:py-0 sm:first:border-t"
-                  >
-                    <span className="truncate text-sm font-bold text-slate-950 sm:px-3 sm:py-2.5">
-                      {row.gene}
-                    </span>
-                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
-                      <span className="sm:hidden">Affected cells</span>
-                      <strong className="text-slate-900">{(row.ood_cell_ratio * 100).toFixed(1)}%</strong>
-                    </span>
-                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
-                      <span className="sm:hidden">Largest exceedance</span>
-                      <strong className="text-slate-900">{(row.max_exceeding_ratio * 100).toFixed(1)}% beyond range</strong>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {oodGenes.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllOodGenes((current) => !current)}
-                  className="flex w-full items-center justify-center border-t border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                  aria-expanded={showAllOodGenes}
-                >
-                  {showAllOodGenes ? "Show highest 5 only" : `Show all ${oodGenes.length} OOD genes`}
-                </button>
-              )}
-            </div>
-          ) : (
-            <p className="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
-              This saved run predates gene-level OOD diagnostics. Its count is available, but the affected gene names were not stored.
-            </p>
-          )}
-        </section>
-      )}
-
-      <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
+    <div>
+      <div className="mt-5 border-t border-slate-100 pt-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-950">
-              Genes ranked by predicted change{isClusterScope ? ` · ${resultScope}` : ""}
+              Predicted gene changes{isClusterScope ? ` · ${resultScope}` : ""}
             </h3>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Select a gene to compare its baseline and simulated expression.
+              Genes with the largest predicted increase and decrease.
             </p>
           </div>
           <div ref={downloadMenuRef} className="relative shrink-0">
@@ -1832,7 +1881,73 @@ function ResultSummary({
             )}
           </div>
         </div>
-        <div className="mt-4 overflow-x-auto">
+
+        {rankedChangedGenes.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            No measurable gene-expression changes were predicted.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-slate-500">
+                  <span aria-hidden="true">↑</span> Increases most
+                </h4>
+                {increaseGenes.length > 0 ? (
+                  increaseGenes.map((row) => (
+                    <div key={row.gene} className="flex items-center gap-3 py-1.5 text-sm">
+                      <span className="w-24 shrink-0 truncate font-bold text-slate-950">{row.gene}</span>
+                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <span
+                          className="block h-full rounded-full bg-emerald-600"
+                          style={{ width: `${Math.max(4, (row.mean_absolute_change / maxIncreaseMagnitude) * 100)}%` }}
+                        />
+                      </span>
+                      <span className="shrink-0 font-bold tabular-nums text-emerald-700">
+                        +{formatScientific(row.mean_change)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="py-2 text-xs text-slate-400">No predicted increases.</p>
+                )}
+              </div>
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-slate-500">
+                  <span aria-hidden="true">↓</span> Decreases most
+                </h4>
+                {decreaseGenes.length > 0 ? (
+                  decreaseGenes.map((row) => (
+                    <div key={row.gene} className="flex items-center gap-3 py-1.5 text-sm">
+                      <span className="w-24 shrink-0 truncate font-bold text-slate-950">{row.gene}</span>
+                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <span
+                          className="block h-full rounded-full bg-rose-500"
+                          style={{ width: `${Math.max(4, (row.mean_absolute_change / maxDecreaseMagnitude) * 100)}%` }}
+                        />
+                      </span>
+                      <span className="shrink-0 font-bold tabular-nums text-rose-600">
+                        {formatScientific(row.mean_change)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="py-2 text-xs text-slate-400">No predicted decreases.</p>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAllGenes((current) => !current)}
+              aria-expanded={showAllGenes}
+              className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead]"
+            >
+              {showAllGenes ? "Hide full list" : `See all ${rankedChangedGenes.length} genes · inspect distributions`}
+            </button>
+
+            {showAllGenes && (
+              <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.1em] text-slate-500">
@@ -1904,31 +2019,30 @@ function ResultSummary({
               )}
             </tbody>
           </table>
-        </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
-        <div className="min-w-0">
-          <h3 className="text-base font-bold text-slate-950">Cell-state shift</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Compare the predicted response to {formatPerturbation(result.gene, result.perturbation_value)} with a randomized-network control.
-          </p>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
-          <div className="flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
-              Cells
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
-              Average local shift
-            </span>
+      <section className="mt-5 border-t border-slate-100 pt-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-slate-950">Cell-state shift</h3>
+            <div className="mt-1.5 flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
+                Cells
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
+                Average local shift
+              </span>
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <div
-              className="inline-flex h-9 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+              className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"
               aria-label="Plot view controls"
             >
               <PlotZoomControls
@@ -2105,6 +2219,9 @@ export default function PerturbationAnalysisSection({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [openPanel, setOpenPanel] = useState<"form" | "history" | null>(null);
+  const [isPanelClosing, setIsPanelClosing] = useState(false);
+  const panelCloseTimeoutRef = useRef<number | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
   const resultViewRef = useRef<HTMLDivElement | null>(null);
 
@@ -2137,9 +2254,7 @@ export default function PerturbationAnalysisSection({
   useEffect(() => {
     if (!initialGene || !state?.eligible_genes.includes(initialGene)) return;
     setSelectedGene(initialGene);
-    window.requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setOpenPanel("form");
   }, [initialGene, state?.eligible_genes]);
 
   useEffect(() => {
@@ -2303,6 +2418,25 @@ export default function PerturbationAnalysisSection({
     }
   };
 
+  const openSheet = (kind: "form" | "history") => {
+    if (panelCloseTimeoutRef.current) {
+      window.clearTimeout(panelCloseTimeoutRef.current);
+      panelCloseTimeoutRef.current = null;
+    }
+    setIsPanelClosing(false);
+    setOpenPanel(kind);
+  };
+
+  const closePanel = () => {
+    if (panelCloseTimeoutRef.current) return;
+    setIsPanelClosing(true);
+    panelCloseTimeoutRef.current = window.setTimeout(() => {
+      setOpenPanel(null);
+      setIsPanelClosing(false);
+      panelCloseTimeoutRef.current = null;
+    }, 240);
+  };
+
   if (isLoading) {
     return (
       <div className="rounded-[1.25rem] border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">
@@ -2348,15 +2482,90 @@ export default function PerturbationAnalysisSection({
 
   return (
     <section className="space-y-5" aria-label="CellOracle perturbation analysis">
-      <div ref={formRef} className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
-        <div className="max-w-4xl">
-          <h2 className="text-lg font-bold text-slate-950">Run a CellOracle perturbation</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Choose a regulator and set its non-negative target expression across modeled cells—0 simulates a knockout.
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span aria-hidden="true" className="text-lg leading-none text-[#087ead]">⚗</span>
+          {displayedResult ? (
+            <span className="truncate text-sm text-slate-600">
+              <span className="font-bold text-slate-950">
+                {displayedResult.gene} → {displayedResult.perturbation_value.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+              </span>
+              {displayedResult.perturbation_value === 0 ? " · knockout" : ""} · {displayedResult.n_propagation} propagation {displayedResult.n_propagation === 1 ? "step" : "steps"}
+            </span>
+          ) : (
+            <span className="text-sm font-semibold text-slate-500">No perturbation run yet</span>
+          )}
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openSheet("history")}
+            className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead]"
+          >
+            History ({state.runs.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => openSheet("form")}
+            className="inline-flex h-10 items-center rounded-full bg-[#087ead] px-5 text-sm font-bold text-white transition hover:bg-[#066b94]"
+          >
+            + New run
+          </button>
+        </div>
+      </div>
 
-        <div className="mt-6 grid gap-x-4 gap-y-5 md:grid-cols-2 xl:grid-cols-[minmax(240px,360px)_220px_240px]">
+      {openPanel && createPortal(
+        <div className="fixed inset-0 z-[80]">
+          <div
+            className={`absolute inset-0 bg-slate-950/40 backdrop-blur-sm ${
+              isPanelClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
+            }`}
+            onMouseDown={closePanel}
+          />
+          <div
+            ref={openPanel === "form" ? formRef : undefined}
+            className={`absolute inset-y-0 right-0 w-[420px] max-w-[90vw] overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 ${
+              isPanelClosing ? "animate-slide-out-right" : "animate-slide-in-right"
+            }`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-slate-950">
+                {openPanel === "form" ? "New perturbation" : "Run history"}
+              </h2>
+              <button
+                type="button"
+                onClick={closePanel}
+                aria-label="Close panel"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+              >
+                ✕
+              </button>
+            </div>
+
+            {openPanel === "history" ? (
+              <>
+                <p className="mb-3 text-sm leading-6 text-slate-600">
+                  Select a run to view its results.
+                </p>
+                <PerturbationHistoryStrip
+                  runs={state.runs}
+                  result={displayedResult}
+                  loadingRunId={loadingHistoryRunId}
+                  onSelect={(run) => {
+                    void handleSelectHistoryRun(run);
+                    closePanel();
+                  }}
+                  embedded
+                />
+              </>
+            ) : (
+              <>
+                <p className="text-sm leading-6 text-slate-600">
+                  Choose a regulator and set its non-negative target expression across modeled cells—0 simulates a knockout.
+                </p>
+
+                <div className="mt-5 grid gap-5">
           <label className="block min-w-0">
             <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Regulator</span>
             <div className="relative flex h-12 w-full items-center overflow-hidden rounded-xl border border-slate-200 bg-white transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
@@ -2455,29 +2664,37 @@ export default function PerturbationAnalysisSection({
           </label>
         </div>
 
-        <div className="mt-5 flex flex-col gap-4 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <label className="inline-flex cursor-pointer items-start gap-3 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={clipDeltaX}
-              onChange={(event) => setClipDeltaX(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#087ead]"
-            />
-            <span>
-              Clip predictions to the observed expression range
-            </span>
-          </label>
+                <div className="mt-6 flex flex-col gap-4 border-t border-slate-100 pt-5">
+                  <label className="inline-flex cursor-pointer items-start gap-3 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={clipDeltaX}
+                      onChange={(event) => setClipDeltaX(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#087ead]"
+                    />
+                    <span>
+                      Clip predictions to the observed expression range
+                    </span>
+                  </label>
 
-          <button
-            type="button"
-            onClick={handleRun}
-            disabled={!selectedGene || !isPerturbationValueValid || isExpressionProfileLoading || Boolean(activeRun) || isSubmitting}
-            className="h-12 w-full shrink-0 rounded-xl bg-[#087ead] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#066b94] disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto sm:min-w-[240px]"
-          >
-            {activeRun ? "Perturbation running" : isSubmitting ? "Starting…" : `Run ${selectedGene || "gene"} perturbation`}
-          </button>
-        </div>
-      </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleRun();
+                      closePanel();
+                    }}
+                    disabled={!selectedGene || !isPerturbationValueValid || isExpressionProfileLoading || Boolean(activeRun) || isSubmitting}
+                    className="h-12 w-full rounded-xl bg-[#087ead] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#066b94] disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {activeRun ? "Perturbation running" : isSubmitting ? "Starting…" : `Run ${selectedGene || "gene"} perturbation`}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
 
       {error && (
         <div className="rounded-[1.25rem] border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-700">
@@ -2493,42 +2710,34 @@ export default function PerturbationAnalysisSection({
       )}
 
       {displayedResult ? (
-        <div ref={resultViewRef} className="scroll-mt-24">
-          <div className="mb-4 px-1">
-            <h2 className="text-lg font-bold text-slate-950">Perturbation results</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Review the selected run or switch to a previous result.
-            </p>
-          </div>
-
-          <div className="grid items-start gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
-            <PerturbationHistoryStrip
-              runs={state.runs}
-              result={displayedResult}
-              loadingRunId={loadingHistoryRunId}
-              onSelect={(run) => void handleSelectHistoryRun(run)}
-            />
-            <div className="min-w-0 space-y-4">
-              <SelectedResultHeader
-                result={displayedResult}
-                resultScope={resultScope}
-                onScopeChange={setResultScope}
-              />
-              <ResultSummary
-                key={displayedResult.run_id}
-                projectId={projectId}
-                result={displayedResult}
-                resultScope={resultScope}
-                onRerunWithClipping={() => handleRerunWithClipping(displayedResult)}
-                rerunDisabled={Boolean(activeRun) || isSubmitting}
-              />
-            </div>
-          </div>
+        <div ref={resultViewRef} className="scroll-mt-24 rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
+          <SelectedResultHeader
+            result={displayedResult}
+            resultScope={resultScope}
+            onScopeChange={setResultScope}
+            onRerunWithClipping={() => handleRerunWithClipping(displayedResult)}
+            rerunDisabled={Boolean(activeRun) || isSubmitting}
+          />
+          <ResultSummary
+            key={displayedResult.run_id}
+            projectId={projectId}
+            result={displayedResult}
+            resultScope={resultScope}
+          />
         </div>
       ) : !activeRun ? (
         <div className="rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50/80 p-8 text-center">
           <h3 className="text-base font-bold text-slate-950">No perturbation results yet</h3>
-          <p className="mt-2 text-sm text-slate-600">Select an eligible regulator and target expression value above to run a perturbation.</p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+            Start a run with the “New run” button above to see predicted gene changes here.
+          </p>
+          <button
+            type="button"
+            onClick={() => openSheet("form")}
+            className="mt-4 inline-flex h-10 items-center rounded-full bg-[#087ead] px-5 text-sm font-bold text-white transition hover:bg-[#066b94]"
+          >
+            + New run
+          </button>
         </div>
       ) : null}
 

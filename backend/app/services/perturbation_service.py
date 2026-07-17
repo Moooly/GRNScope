@@ -645,6 +645,10 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
         cluster_path = Path(str(cluster_path_value)) if cluster_path_value else None
         if cluster_path is not None and not cluster_path.exists():
             cluster_path = None
+        pseudotime_path_value = project_manifest.get("pseudotime_path")
+        pseudotime_path = Path(str(pseudotime_path_value)) if pseudotime_path_value else None
+        if pseudotime_path is not None and not pseudotime_path.exists():
+            pseudotime_path = None
 
         perturb_root = perturbation_root(project_dir)
         runtime_dir = perturb_root / "runtime" / run_id
@@ -655,11 +659,14 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
         expression_copy = runtime_dir / "ExpressionData.csv"
         edges_copy = runtime_dir / "CellOracleEdges.csv"
         clusters_copy = runtime_dir / "ClusterLabels.csv"
+        pseudotime_copy = runtime_dir / "PseudoTime.csv"
         cluster_edges_manifest = runtime_dir / "ClusterEdges.json"
         shutil.copy2(expression_path, expression_copy)
         shutil.copy2(edges_path, edges_copy)
         if cluster_path is not None:
             shutil.copy2(cluster_path, clusters_copy)
+        if pseudotime_path is not None:
+            shutil.copy2(pseudotime_path, pseudotime_copy)
         copied_cluster_edges: dict[str, str] = {}
         cluster_edges_dir = runtime_dir / "cluster_edges"
         for index, (label, path) in enumerate(sorted(cluster_edge_paths.items())):
@@ -750,6 +757,10 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
         if clusters_copy.exists():
             command.extend(
                 ["--clusters", f"{container_root}/runtime/{run_id}/{clusters_copy.name}"]
+            )
+        if pseudotime_copy.exists():
+            command.extend(
+                ["--pseudotime", f"{container_root}/runtime/{run_id}/{pseudotime_copy.name}"]
             )
         if cluster_edges_manifest.exists():
             command.extend(
