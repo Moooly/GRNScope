@@ -53,84 +53,19 @@ export default function RootLayout({
               <div className="relative flex h-[62px] w-[62px] items-center justify-center bg-transparent">
                 <svg
                   viewBox="0 0 64 64"
-                  className="relative h-[58px] w-[58px]"
+                  className="relative h-[52px] w-[52px]"
                   role="img"
                   aria-label="GRNScope gene regulatory network logo"
                 >
-
-
-                  <path
-                    d="M32 13 L32 51"
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M14 23 L32 13 L50 23"
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M14 23 L14 41 L32 51 L50 41 L50 23"
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M14 41 L32 31 L50 41"
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity="0.85"
-                  />
-                  <path
-                    d="M14 23 L32 31 L50 23"
-                    fill="none"
-                    stroke="#ffffff"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity="0.85"
-                  />
-
-                  <rect
-                    x="23.2"
-                    y="23.2"
-                    width="17.6"
-                    height="17.6"
-                    rx="1.6"
-                    fill="#5fc8bd"
-                    transform="rotate(45 32 32)"
-                  />
-                  <path
-                    d="M32 21 L32 43"
-                    stroke="#eafffb"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    opacity="0.9"
-                  />
-                  <path
-                    d="M22 32 L42 32"
-                    stroke="#eafffb"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    opacity="0.9"
-                  />
-
-                  <circle cx="32" cy="13" r="4.9" fill="#ffffff" />
-                  <circle cx="14" cy="23" r="4.9" fill="#ffffff" />
-                  <circle cx="50" cy="23" r="4.9" fill="#ffffff" />
-                  <circle cx="14" cy="41" r="4.9" fill="#ffffff" />
-                  <circle cx="50" cy="41" r="4.9" fill="#ffffff" />
-                  <circle cx="32" cy="51" r="4.9" fill="#ffffff" />
+                  <path d="M20.5 20.5C24.5 22 28.1 25 30.5 27" stroke="#ffffff" strokeWidth="2.6" strokeLinecap="round" opacity="0.82" />
+                  <path d="M36.4 27.3C40.2 24.2 43.5 21.5 46.7 19.4" stroke="#ffffff" strokeWidth="2.6" strokeLinecap="round" opacity="0.82" />
+                  <path d="M35.4 32.1C38.3 35.8 40.7 39.4 42.3 43" stroke="#ffffff" strokeWidth="2.6" strokeLinecap="round" opacity="0.82" />
+                  <path d="M30.3 32.2C26.4 36.2 23.2 39.9 19.9 43.4" stroke="#ffffff" strokeWidth="2.6" strokeLinecap="round" opacity="0.58" />
+                  <path d="M15.5 11.5 22.5 18.5 15.5 25.5 8.5 18.5Z" fill="#61d0c4" />
+                  <circle cx="33" cy="29.5" r="4.5" fill="#ffffff" />
+                  <circle cx="50.5" cy="17" r="6" fill="#ffffff" />
+                  <circle cx="44.5" cy="47.5" r="6.5" fill="#ffffff" />
+                  <circle cx="17" cy="47" r="4.75" fill="#61d0c4" />
                 </svg>
               </div>
               <p className="text-[30px] font-medium leading-none tracking-[-0.045em] text-white">

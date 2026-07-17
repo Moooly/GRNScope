@@ -288,7 +288,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
       <section className="relative overflow-hidden bg-[#f7fbff]">
-        <div className="relative mx-auto max-w-[1180px] px-6 pb-8 pt-12 lg:px-10 lg:pb-10 lg:pt-14">
+        <div className="relative mx-auto max-w-[1180px] px-6 pb-6 pt-12 lg:px-10 lg:pb-8 lg:pt-14">
           <div className="grid gap-8 lg:grid-cols-[1fr_0.48fr] lg:items-center lg:gap-12">
             <div className="max-w-none">
               <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
@@ -304,47 +304,44 @@ export default function HomePage() {
                   Infer, compare, and explore gene regulatory networks from single-cell RNA-seq data. Run multiple algorithms and inspect their predictions in one interactive workspace.
                 </p>
               </div>
-
-              <div className="mt-7 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(true)}
-                  className="inline-flex h-11 items-center justify-center rounded-full bg-[#1b75a6] px-6 text-sm font-bold text-white transition hover:bg-[#155f87]"
-                >
-                  Create new project
-                </button>
-                <Link
-                  href="/algorithms"
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                >
-                  Browse algorithms
-                </Link>
-              </div>
             </div>
 
             <Link
               href="/projects/demo"
-              className="group flex w-full flex-col rounded-[1.5rem] border border-slate-200 bg-white/60 p-5 text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:bg-white"
+              className="group flex w-full flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:shadow-[0_18px_40px_rgba(15,23,42,0.10)]"
             >
-              <div>
+              <div className="border-b border-slate-100 bg-gradient-to-br from-[#f2f9fc] to-[#e9f6f3] px-5 pb-1 pt-4">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
                   Try the demo
                 </p>
-                <h3 className="mt-2.5 text-lg font-bold tracking-tight text-slate-950">
-                  See a completed analysis
-                </h3>
+                <svg viewBox="0 0 300 140" className="mt-1 w-full" fill="none" aria-hidden="true">
+                  <defs>
+                    <marker id="demoNetArrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                      <path d="M0 0 L10 5 L0 10 z" fill="#94a3b8" />
+                    </marker>
+                  </defs>
+                  <line x1="72.9" y1="46.6" x2="142.1" y2="39.4" stroke="#cbd5e1" strokeWidth="1.6" markerEnd="url(#demoNetArrow)" />
+                  <line x1="69.8" y1="56.5" x2="110.2" y2="91.5" stroke="#cbd5e1" strokeWidth="1.6" markerEnd="url(#demoNetArrow)" />
+                  <line x1="166.2" y1="44.7" x2="213.8" y2="73.3" stroke="#cbd5e1" strokeWidth="1.6" markerEnd="url(#demoNetArrow)" />
+                  <line x1="132.8" y1="97.6" x2="212.2" y2="82.4" stroke="#cbd5e1" strokeWidth="1.6" markerEnd="url(#demoNetArrow)" />
+                  <line x1="107.9" y1="104.8" x2="87.1" y2="113.2" stroke="#cbd5e1" strokeWidth="1.6" markerEnd="url(#demoNetArrow)" />
+                  <path d="M60 36 L72 48 L60 60 L48 48 Z" fill="#24384a" />
+                  <path d="M120 88 L132 100 L120 112 L108 100 Z" fill="#24384a" />
+                  <circle cx="155" cy="38" r="10" fill="#24384a" />
+                  <circle cx="225" cy="80" r="10" fill="#0f8f7a" />
+                  <circle cx="75" cy="118" r="10" fill="#24384a" />
+                </svg>
               </div>
-              <p className="mt-2.5 text-sm leading-6 text-slate-600">
-                Inspect a prepared network, edge table, method overlap, and export workflow.
-              </p>
-              <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4">
-                <span className="text-sm font-bold text-[#1b75a6]">Open demo</span>
-                <span aria-hidden="true" className="text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#1b75a6]">
+              <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+                <span className="text-sm font-medium text-slate-600 transition group-hover:text-[#1b75a6]">
+                  See a completed analysis
+                </span>
+                <span aria-hidden="true" className="shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#1b75a6]">
                   <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">
                     <path
                       d="M2.5 3.5 12.5 14 2.5 24.5"
                       stroke="currentColor"
-                      strokeWidth="3.25"
+                      strokeWidth="2.75"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
@@ -357,23 +354,41 @@ export default function HomePage() {
       </section>
 
       <section className="bg-[#f7fbff]">
-        <div className="mx-auto max-w-[1180px] px-6 py-8 lg:px-10 lg:py-10">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-950">Recent projects</h2>
-              {!isProjectHistoryLoading ? (
-                <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 text-xs font-bold text-slate-500">
-                  {visibleProjectHistory.length}
+        <div className="mx-auto max-w-[1180px] px-6 pb-8 pt-4 lg:px-10 lg:pb-10 lg:pt-6">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-950">
+              <Link
+                href="/projects"
+                className="group inline-flex items-center gap-2.5 transition hover:text-[#1b75a6]"
+              >
+                Recent projects
+                <span
+                  aria-hidden="true"
+                  className="inline-flex text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#1b75a6]"
+                >
+                  <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">
+                    <path
+                      d="M2.5 3.5 12.5 14 2.5 24.5"
+                      stroke="currentColor"
+                      strokeWidth="2.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </span>
-              ) : null}
-            </div>
-            <Link
-              href="/projects"
-              className="group inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-[#1b75a6]"
+              </Link>
+            </h2>
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(true)}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-[#1b75a6] px-4 text-sm font-bold text-white transition hover:bg-[#155f87] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/15"
             >
-              View all
-              <span aria-hidden="true" className="transition group-hover:translate-x-0.5">→</span>
-            </Link>
+              <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+                <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              <span className="hidden sm:inline">New project</span>
+              <span className="sm:hidden">New</span>
+            </button>
           </div>
 
           {isProjectHistoryLoading ? (
@@ -471,21 +486,19 @@ function HomeProjectCard({ project }: { project: Project }) {
       href={`/projects/${project.id}`}
       className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-bold leading-6 tracking-tight text-slate-950">
-            {project.name}
-          </h3>
-          <p className="mt-2 text-xs font-semibold text-slate-500">
-            Created {createdAtLabel}
-          </p>
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="min-w-0 flex-1 truncate text-lg font-bold leading-6 tracking-tight text-slate-950">
+          {project.name}
+        </h3>
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold ring-1 ${status.className}`}
         >
           {status.label}
         </span>
       </div>
+      <p className="mt-1.5 truncate text-xs font-semibold text-slate-500">
+        Created {createdAtLabel}
+      </p>
 
       <div className="mt-auto grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-3 border-t border-slate-100 pt-3">
         <div>
