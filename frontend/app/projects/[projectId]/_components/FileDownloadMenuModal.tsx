@@ -77,23 +77,10 @@ export default function FileDownloadMenuModal({
       className="absolute bottom-[calc(100%+0.75rem)] right-0 z-40 w-[min(28rem,calc(100vw-3rem))] text-slate-900"
       role="dialog"
       aria-modal="false"
-      aria-labelledby="project-download-title"
+      aria-label="Download project files"
     >
-      <span
-        aria-hidden="true"
-        className="absolute -bottom-1.5 right-8 z-20 h-3 w-3 rotate-45 border-b border-r border-slate-200 bg-white"
-      />
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-        <div className="px-4 pb-3 pt-4">
-          <h3 id="project-download-title" className="text-sm font-bold text-slate-950">
-            Download project files
-          </h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Choose an input file or analysis metadata.
-          </p>
-        </div>
-
-        <div className="border-t border-slate-100 p-2">
+      <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
+        <div className="p-2">
           {files.map((file) => (
             <button
               key={file.label}

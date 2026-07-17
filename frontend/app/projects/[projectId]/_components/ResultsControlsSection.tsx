@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AlgorithmCatalogItem } from "../_lib/types";
 
@@ -68,8 +67,6 @@ export default function ResultsControlsSection({
   onOpenGuide,
 }: ResultsControlsSectionProps) {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
-  const [isSettingsClosing, setIsSettingsClosing] = useState(false);
-  const settingsCloseTimeoutRef = useRef<number | null>(null);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
   const [edgeDisplayDraft, setEdgeDisplayDraft] = useState<string | null>(null);
   const [algorithmDirectionFilter, setAlgorithmDirectionFilter] =
@@ -78,6 +75,27 @@ export default function ResultsControlsSection({
     useState<AlgorithmSignFilter>("all");
   const [algorithmCategoryFilter, setAlgorithmCategoryFilter] = useState("all");
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isSettingsMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!settingsMenuRef.current?.contains(event.target as Node)) {
+        setIsSettingsMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsSettingsMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSettingsMenuOpen]);
 
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
   const safeEvidenceThreshold = Number.isFinite(evidenceThreshold) ? evidenceThreshold : 0.8;
@@ -177,25 +195,6 @@ export default function ResultsControlsSection({
       Math.max(1, safeConsensusThreshold + delta)
     );
     onChangeConsensusThreshold(nextValue);
-  };
-
-  const openSettings = () => {
-    if (settingsCloseTimeoutRef.current) {
-      window.clearTimeout(settingsCloseTimeoutRef.current);
-      settingsCloseTimeoutRef.current = null;
-    }
-    setIsSettingsClosing(false);
-    setIsSettingsMenuOpen(true);
-  };
-
-  const closeSettings = () => {
-    if (settingsCloseTimeoutRef.current) return;
-    setIsSettingsClosing(true);
-    settingsCloseTimeoutRef.current = window.setTimeout(() => {
-      setIsSettingsMenuOpen(false);
-      setIsSettingsClosing(false);
-      settingsCloseTimeoutRef.current = null;
-    }, 240);
   };
 
   const panelHeader = (
@@ -502,7 +501,8 @@ export default function ResultsControlsSection({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => (isSettingsMenuOpen ? closeSettings() : openSettings())}
+          onClick={() => setIsSettingsMenuOpen((current) => !current)}
+          aria-expanded={isSettingsMenuOpen}
           className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 ${
             isSettingsMenuOpen
               ? "border-[#1b75a6]/40 bg-[#f2f9fc] text-[#1b75a6]"
@@ -526,42 +526,23 @@ export default function ResultsControlsSection({
         </button>
       </div>
 
-      {isSettingsMenuOpen && createPortal(
-        <div className="fixed inset-0 z-[80]">
-          <div
-            className={`absolute inset-0 bg-slate-950/40 backdrop-blur-sm ${
-              isSettingsClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
-            }`}
-            onMouseDown={closeSettings}
-          />
-          <div
-            className={`absolute inset-y-0 right-0 w-[440px] max-w-[92vw] overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 ${
-              isSettingsClosing ? "animate-slide-out-right" : "animate-slide-in-right"
-            }`}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-slate-950">Results settings</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onOpenGuide}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-                  aria-label="Open results controls guide"
-                  title="Open results controls guide"
-                >
-                  ?
-                </button>
-                <button
-                  type="button"
-                  onClick={closeSettings}
-                  aria-label="Close panel"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
+      {isSettingsMenuOpen && (
+        <div className="absolute right-0 top-[calc(100%+10px)] z-[70] w-[min(540px,calc(100vw-3rem))] max-h-[calc(100vh-var(--grnscope-header-height)-5rem)] overflow-y-auto rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.42)] sm:p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
+              Results settings
+            </h2>
+            <button
+              type="button"
+              onClick={onOpenGuide}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+              aria-label="Open results controls guide"
+              title="Open results controls guide"
+            >
+              ?
+            </button>
+          </div>
+
           <div className="space-y-1.5">
             {sectionLabel("Filters", matchingEdgesBadge)}
             {panelHeader("algorithms", "Algorithms")}
@@ -673,17 +654,16 @@ export default function ResultsControlsSection({
             )}
             {inlineRow(
               "Sign confidence",
-              inlinePercentControl(safeSignThreshold, onChangeSignConfidenceThreshold, "Sign confidence")
+              inlinePercentControl(
+                safeSignThreshold,
+                onChangeSignConfidenceThreshold,
+                "Sign confidence"
+              )
             )}
-            {inlineRow(
-              "Minimum supporting methods",
-              inlineMethodsControl()
-            )}
+            {inlineRow("Minimum supporting methods", inlineMethodsControl())}
             {edgeDisplayRow}
           </div>
-          </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

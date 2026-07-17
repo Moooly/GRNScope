@@ -94,17 +94,11 @@ export default function DatasetPreprocessingSection({
             onClick={isDownloadMenuOpen ? onCloseDownloadMenu : onOpenDownloadMenu}
             aria-expanded={isDownloadMenuOpen}
             aria-haspopup="dialog"
-            className={compact
-              ? "inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-              : "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-            }
+            aria-label="Download project files"
+            title="Download project files"
+            className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
           >
-            {compact ? (
-              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-                <path d="M8 2.5v7m0 0 2.5-2.5M8 9.5 5.5 7M3.5 12.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : null}
-            {compact ? "Download" : "Download files"}
+            Download
           </button>
           {downloadMenu}
         </div>

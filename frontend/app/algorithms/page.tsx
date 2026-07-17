@@ -1,651 +1,320 @@
-
-
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { API_BASE } from "../_lib/apiConfig";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  type AlgorithmEntry,
+  fetchActiveAlgorithms,
+} from "./_lib/catalog";
 
-type MethodologyCategory =
-  | "Partial information decomposition"
-  | "Random forest"
-  | "Gradient boosting"
-  | "Bayesian ridge regression"
-  | "Partial correlation"
-  | "Pearson correlation"
-  | "Linear ODE"
-  | "Ridge regression"
-  | "Directed information"
-  | "Kernel Granger causality"
-  | "Lagged correlation"
-  | "Linear ODE + velocity"
-  | "Bayesian ARMA"
-  | "Dynamical model + trees"
-  | "Signed graph learning";
+type BinaryFilter = "any" | "yes" | "no";
 
-type AlgorithmParameter = {
-  name: string;
-  label?: string;
-  description?: string;
-  default?: unknown;
-  required?: boolean;
-  value_type?: string;
-  options?: unknown[];
-  minimum?: number;
-  maximum?: number;
-  step?: number;
-  advanced?: boolean;
-};
+const PSEUDOTIME_OPTIONS = [
+  { value: "any", label: "Any pseudotime" },
+  { value: "yes", label: "Requires pseudotime" },
+  { value: "no", label: "No pseudotime" },
+] satisfies Array<{ value: BinaryFilter; label: string }>;
 
-type BackendAlgorithmEntry = {
-  id: string;
-  name: string;
-  description: string;
-  long_description: string;
-  category: MethodologyCategory;
-  year: string;
-  journal: string;
-  publication_title: string;
-  publication_url: string;
-  source_url: string | null;
-  docker_image: string;
-  runner: string;
-  directed: boolean;
-  signed: boolean;
-  requires_pseudotime: boolean;
-  supports_expression_matrix: boolean;
-  active: boolean;
-  recommended: boolean;
-  strengths: string[];
-  limitations: string[];
-  recommended_use_cases: string[];
-  parameters: AlgorithmParameter[];
-};
+const DIRECTION_OPTIONS = [
+  { value: "any", label: "Any direction" },
+  { value: "yes", label: "Directed" },
+  { value: "no", label: "Undirected" },
+] satisfies Array<{ value: BinaryFilter; label: string }>;
 
-type AlgorithmEntry = {
-  id: string;
-  name: string;
-  tagline: string;
-  category: MethodologyCategory;
-  requiresPseudotime: boolean;
-  directed: boolean;
-  signed: boolean;
-  publication: string;
-  year: string;
-  journal: string;
-  dockerVersion: string;
-  paperUrl: string;
-  sourceUrl: string | null;
-  strengths: string[];
-  limitations: string[];
-  recommendedUseCases: string[];
-  detail: string;
-  recommended: boolean;
-  runner: string;
-  parameters: AlgorithmParameter[];
-};
+const SIGN_OPTIONS = [
+  { value: "any", label: "Any sign" },
+  { value: "yes", label: "Signed" },
+  { value: "no", label: "Unsigned" },
+] satisfies Array<{ value: BinaryFilter; label: string }>;
 
-const API_BASE_URL = API_BASE;
-
-function getDockerVersion(dockerImage: string) {
-  const parts = dockerImage.split(":");
-  return parts.length > 1 ? parts[parts.length - 1] : dockerImage;
-}
-
-function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): AlgorithmEntry {
-  return {
-    id: algorithm.id,
-    name: algorithm.name,
-    tagline: algorithm.description,
-    category: algorithm.category,
-    requiresPseudotime: algorithm.requires_pseudotime,
-    directed: algorithm.directed,
-    signed: algorithm.signed,
-    publication: algorithm.publication_title,
-    year: algorithm.year,
-    journal: algorithm.journal,
-    dockerVersion: getDockerVersion(algorithm.docker_image),
-    paperUrl: algorithm.publication_url,
-    sourceUrl: algorithm.source_url,
-    strengths: algorithm.strengths,
-    limitations: algorithm.limitations,
-    recommendedUseCases: algorithm.recommended_use_cases,
-    detail: algorithm.long_description,
-    recommended: algorithm.recommended,
-    runner: algorithm.runner,
-    parameters: algorithm.parameters ?? [],
-  };
-}
-
-// Human-readable default for the read-only parameter list.
-function formatParameterDefault(parameter: AlgorithmParameter): string {
-  const { default: value, value_type } = parameter;
-  if (value === null || value === undefined) return "—";
-  if (value_type === "bool" || value_type === "boolean") {
-    return value ? "On" : "Off";
-  }
-  return String(value);
-}
-
-// Compact range / options hint shown under each parameter.
-function formatParameterRange(parameter: AlgorithmParameter): string | null {
-  if (parameter.options && parameter.options.length > 0) {
-    return parameter.options.map((option) => String(option)).join(" · ");
-  }
-  const { value_type, minimum, maximum } = parameter;
-  if (value_type === "bool" || value_type === "boolean") {
-    return "On / Off";
-  }
-  if (typeof minimum === "number" && typeof maximum === "number") {
-    return `Range ${minimum} – ${maximum}`;
-  }
-  return null;
-}
-
-
-function badgeClass(active: boolean) {
-  return active
-    ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
-    : "border-slate-200 bg-white text-slate-600";
+function matchesBoolean(value: boolean, filter: BinaryFilter) {
+  if (filter === "any") return true;
+  return filter === "yes" ? value : !value;
 }
 
 export default function AlgorithmsPage() {
   const [algorithms, setAlgorithms] = useState<AlgorithmEntry[]>([]);
-  const [isLoadingAlgorithms, setIsLoadingAlgorithms] = useState(true);
-  const [algorithmLoadError, setAlgorithmLoadError] = useState<string | null>(null);
-  const [requiresPseudotimeOnly, setRequiresPseudotimeOnly] = useState(false);
-  const [directedOnly, setDirectedOnly] = useState(false);
-  const [signedOnly, setSignedOnly] = useState(false);
-  const [selectedAlgorithmId, setSelectedAlgorithmId] = useState<string>("");
-  const [isAlgorithmGuideOpen, setIsAlgorithmGuideOpen] = useState(false);
-  const [closingAlgorithmId, setClosingAlgorithmId] = useState<string | null>(null);
-  const [isPropertiesMenuOpen, setIsPropertiesMenuOpen] = useState(false);
-  const propertiesMenuRef = useRef<HTMLDivElement | null>(null);
-  const propertiesButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [pseudotimeFilter, setPseudotimeFilter] = useState<BinaryFilter>("any");
+  const [directionFilter, setDirectionFilter] = useState<BinaryFilter>("any");
+  const [signFilter, setSignFilter] = useState<BinaryFilter>("any");
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
 
-    async function loadAlgorithms() {
-      setIsLoadingAlgorithms(true);
-      setAlgorithmLoadError(null);
+    fetchActiveAlgorithms(controller.signal)
+      .then(setAlgorithms)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setLoadError(error instanceof Error ? error.message : "Failed to load algorithms.");
+        setAlgorithms([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false);
+      });
 
-      try {
-        const response = await fetch(`${API_BASE_URL}/algorithms`, {
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load algorithms: ${response.status}`);
-        }
-
-        const data = (await response.json()) as BackendAlgorithmEntry[];
-        const activeAlgorithms = data
-          .filter((algorithm) => algorithm.active)
-          .map(mapBackendAlgorithm);
-
-        if (isMounted) {
-          setAlgorithms(activeAlgorithms);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setAlgorithmLoadError(
-            error instanceof Error ? error.message : "Failed to load algorithms."
-          );
-          setAlgorithms([]);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingAlgorithms(false);
-        }
-      }
-    }
-
-    loadAlgorithms();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (algorithms.length === 0) return;
-    const requestedAlgorithmId = new URLSearchParams(window.location.search)
-      .get("algorithm")
-      ?.trim()
-      .toUpperCase();
-    if (!requestedAlgorithmId) return;
-    if (!algorithms.some((algorithm) => algorithm.id === requestedAlgorithmId)) {
-      return;
-    }
-    setSelectedAlgorithmId(requestedAlgorithmId);
-  }, [algorithms]);
-
   const filteredAlgorithms = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
     return algorithms.filter((algorithm) => {
-      if (requiresPseudotimeOnly && !algorithm.requiresPseudotime) {
-        return false;
-      }
-      if (directedOnly && !algorithm.directed) {
-        return false;
-      }
-      if (signedOnly && !algorithm.signed) {
-        return false;
-      }
-      return true;
+      const matchesSearch =
+        normalizedQuery.length === 0 ||
+        [algorithm.name, algorithm.category, algorithm.tagline]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+
+      return (
+        matchesSearch &&
+        matchesBoolean(algorithm.requiresPseudotime, pseudotimeFilter) &&
+        matchesBoolean(algorithm.directed, directionFilter) &&
+        matchesBoolean(algorithm.signed, signFilter)
+      );
     });
-  }, [algorithms, directedOnly, requiresPseudotimeOnly, signedOnly]);
+  }, [algorithms, directionFilter, pseudotimeFilter, query, signFilter]);
 
-  const activeAlgorithmId = closingAlgorithmId ?? selectedAlgorithmId;
+  const hasActiveFilters =
+    query.trim().length > 0 ||
+    pseudotimeFilter !== "any" ||
+    directionFilter !== "any" ||
+    signFilter !== "any";
 
-  const selectedAlgorithm =
-    activeAlgorithmId.length > 0
-      ? algorithms.find((algorithm) => algorithm.id === activeAlgorithmId) ?? null
-      : null;
-
-  const closeAlgorithmModal = () => {
-    setSelectedAlgorithmId("");
-    setClosingAlgorithmId(null);
+  const clearFilters = () => {
+    setQuery("");
+    setPseudotimeFilter("any");
+    setDirectionFilter("any");
+    setSignFilter("any");
   };
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) {
-        return;
-      }
-
-      if (
-        isPropertiesMenuOpen &&
-        propertiesMenuRef.current &&
-        !propertiesMenuRef.current.contains(target) &&
-        !(propertiesButtonRef.current && propertiesButtonRef.current.contains(target))
-      ) {
-        setIsPropertiesMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [isPropertiesMenuOpen]);
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="relative overflow-hidden bg-[#f4f6f8]">
-        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/90 to-transparent" />
-        <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-cyan-100/60 blur-3xl" />
-        <div className="absolute -right-24 top-12 h-72 w-72 rounded-full bg-teal-100/60 blur-3xl" />
-        <div className="relative mx-auto max-w-[1180px] px-6 py-16 lg:px-10 lg:py-20">
-          <div className="flex flex-col gap-6">
-            <div className="max-w-4xl">
-              <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#1b75a6]">
-                Algorithms directory
-              </p>
-              <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl lg:text-[4.15rem] lg:leading-[1.02]">
-                Explore algorithms in GRNScope
-              </h1>
-              <p className="mt-6 max-w-3xl text-[1.05rem] leading-8 text-slate-700">
-                Browse the gene regulatory network inference methods available in the platform.
-                Filter by pseudotime requirements, directionality, and signed output.
-              </p>
-            </div>
-          </div>
+      <section className="border-b border-slate-200 bg-gradient-to-br from-white via-[#f7fbff] to-[#edf9f7]">
+        <div className="mx-auto max-w-[1180px] px-6 py-10 lg:px-10 lg:py-12">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#1b75a6]">
+            Algorithms directory
+          </p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+            Explore algorithms
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            Find and compare the gene regulatory network inference methods available in GRNScope.
+          </p>
         </div>
       </section>
 
-      <section className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10 lg:py-12">
-
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4 border-b border-[#213f54]/35 pb-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-slate-950">All algorithms</h2>
+      <section className="mx-auto max-w-[1180px] px-6 pb-12 lg:px-10">
+        <div className="sticky top-[var(--grnscope-header-height)] z-30 -mx-2 border-b border-slate-200/80 bg-[#f7fbff]/95 px-2 py-5 backdrop-blur-lg">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-baseline justify-between gap-4">
+              <div className="flex items-baseline gap-3">
+                <h2 className="text-xl font-bold tracking-tight text-slate-950">All algorithms</h2>
+                {!isLoading && !loadError ? (
+                  <span className="text-sm font-medium text-slate-400">
+                    {filteredAlgorithms.length} {filteredAlgorithms.length === 1 ? "method" : "methods"}
+                  </span>
+                ) : null}
+              </div>
+              {hasActiveFilters ? (
                 <button
                   type="button"
-                  onClick={() => setIsAlgorithmGuideOpen(true)}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
-                  aria-label="Open algorithms guide"
-                  title="Open algorithms guide"
+                  onClick={clearFilters}
+                  className="text-sm font-semibold text-slate-500 transition hover:text-[#1b75a6]"
                 >
-                  ?
+                  Reset filters
                 </button>
-              </div>
+              ) : null}
             </div>
 
-            <div className="relative flex shrink-0 items-center gap-3 self-start sm:self-auto">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(17rem,1fr)_repeat(3,12rem)]">
+              <label className="relative block md:col-span-2 xl:col-span-1">
+                <span className="sr-only">Search algorithms</span>
+                <svg
+                  viewBox="0 0 20 20"
+                  className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle cx="8.5" cy="8.5" r="5" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="m12.3 12.3 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search by name or methodology"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-[#1b75a6]/45 focus:ring-4 focus:ring-[#1b75a6]/10"
+                />
+              </label>
+
+              <FilterSelect
+                label="Pseudotime"
+                value={pseudotimeFilter}
+                options={PSEUDOTIME_OPTIONS}
+                onChange={setPseudotimeFilter}
+              />
+              <FilterSelect
+                label="Direction"
+                value={directionFilter}
+                options={DIRECTION_OPTIONS}
+                onChange={setDirectionFilter}
+              />
+              <FilterSelect
+                label="Sign"
+                value={signFilter}
+                options={SIGN_OPTIONS}
+                onChange={setSignFilter}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-6">
+          {loadError ? (
+            <div className="rounded-[1.25rem] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-700">
+              {loadError}
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3" aria-label="Loading algorithms">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <AlgorithmCardLoading key={index} />
+              ))}
+            </div>
+          ) : null}
+
+          {!isLoading && !loadError && filteredAlgorithms.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {filteredAlgorithms.map((algorithm) => (
+                <AlgorithmCard key={algorithm.id} algorithm={algorithm} />
+              ))}
+            </div>
+          ) : null}
+
+          {!isLoading && !loadError && filteredAlgorithms.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+              <h3 className="text-lg font-bold text-slate-950">No matching algorithms</h3>
+              <p className="mt-2 text-sm text-slate-500">Try a different search term or reset the property filters.</p>
               <button
-                ref={propertiesButtonRef}
                 type="button"
-                onClick={() => {
-                  setIsPropertiesMenuOpen((current) => !current);
-                }}
-                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
-                  isPropertiesMenuOpen || requiresPseudotimeOnly || directedOnly || signedOnly
-                    ? "border-[#1b75a6]/25 bg-[#e9f5fa] text-[#1b75a6]"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                }`}
+                onClick={clearFilters}
+                className="mt-5 inline-flex h-10 items-center rounded-full border border-[#1b75a6]/25 bg-[#f2f9fc] px-4 text-sm font-bold text-[#1b75a6] transition hover:bg-[#e8f5fb]"
               >
-                <span>Properties</span>
-                <span
-                  className={`text-xs transition ${
-                    isPropertiesMenuOpen ? "rotate-180" : ""
-                  }`}
-                >
-                  ▾
-                </span>
+                Reset filters
               </button>
-
-              {isPropertiesMenuOpen ? (
-                <div
-                  ref={propertiesMenuRef}
-                  className="absolute right-0 top-full z-20 mt-3 w-[320px] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold text-slate-950">Properties</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRequiresPseudotimeOnly(false);
-                        setDirectedOnly(false);
-                        setSignedOnly(false);
-                      }}
-                      className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition hover:text-[#1b75a6]"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm text-slate-700">
-                    <label className={`flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition ${badgeClass(requiresPseudotimeOnly)}`}>
-                      <span>Requires pseudotime</span>
-                      <input
-                        type="checkbox"
-                        checked={requiresPseudotimeOnly}
-                        onChange={(event) => setRequiresPseudotimeOnly(event.target.checked)}
-                        className="h-4 w-4 rounded border-white/20 bg-transparent"
-                      />
-                    </label>
-                    <label className={`flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition ${badgeClass(directedOnly)}`}>
-                      <span>Directed output</span>
-                      <input
-                        type="checkbox"
-                        checked={directedOnly}
-                        onChange={(event) => setDirectedOnly(event.target.checked)}
-                        className="h-4 w-4 rounded border-white/20 bg-transparent"
-                      />
-                    </label>
-                    <label className={`flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 transition ${badgeClass(signedOnly)}`}>
-                      <span>Signed output</span>
-                      <input
-                        type="checkbox"
-                        checked={signedOnly}
-                        onChange={(event) => setSignedOnly(event.target.checked)}
-                        className="h-4 w-4 rounded border-white/20 bg-transparent"
-                      />
-                    </label>
-                  </div>
-                </div>
-              ) : null}
             </div>
-          </div>
-
-          <div className="grid gap-5 xl:grid-cols-3">
-            {algorithmLoadError ? (
-              <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
-                {algorithmLoadError}. The backend algorithm endpoint is expected at {API_BASE_URL}/algorithms.
-              </div>
-            ) : null}
-            {isLoadingAlgorithms
-              ? Array.from({ length: 6 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="relative min-h-[12.5rem] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/70 before:to-transparent"
-                  >
-                    <div className="h-6 w-32 rounded-full bg-slate-200" />
-                    <div className="mt-4 h-4 w-full rounded-full bg-slate-100" />
-                    <div className="mt-2 h-4 w-3/4 rounded-full bg-slate-100" />
-                    <div className="mt-10 h-16 rounded-2xl bg-slate-100" />
-                  </div>
-                ))
-              : filteredAlgorithms.map((algorithm) => {
-              return (
-                <button
-                  key={algorithm.id}
-                  type="button"
-                  onClick={() => {
-                    setClosingAlgorithmId(null);
-                    setSelectedAlgorithmId(algorithm.id);
-                  }}
-                  className="group flex h-full flex-col rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left transition duration-200 hover:border-[#1b75a6]/30 hover:shadow-lg hover:shadow-slate-200/60"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-xl font-bold tracking-tight text-slate-950">
-                      {algorithm.name}
-                    </h3>
-                    <span className="mt-1 shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                      {algorithm.year}
-                    </span>
-                  </div>
-
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
-                    {algorithm.category}
-                  </p>
-
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
-                    {algorithm.tagline}
-                  </p>
-
-                  <div className="mt-auto flex flex-wrap gap-1.5 pt-5">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                      {algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}
-                    </span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                      {algorithm.directed ? "Directed" : "Undirected"}
-                    </span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                      {algorithm.signed ? "Signed" : "Unsigned"}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-            {!isLoadingAlgorithms && !algorithmLoadError && filteredAlgorithms.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm xl:col-span-3">
-                No algorithms match the current filters.
-              </div>
-            ) : null}
-          </div>
+          ) : null}
         </div>
-
-      
       </section>
-
-      {isAlgorithmGuideOpen ? (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm"
-          onClick={() => setIsAlgorithmGuideOpen(false)}
-        >
-          <div
-            className="max-h-[70vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 animate-modal-panel"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
-                Algorithms guide
-              </p>
-              <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
-                What do these algorithm properties mean?
-              </h3>
-              <p className="mt-2 text-xs leading-5 text-slate-600">
-                Each card summarizes one available GRN inference algorithm and the main properties that affect how the method should be understood.
-              </p>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="text-sm font-bold text-slate-950">Methodology</h4>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Methodology describes the method family, such as random forest, regression, correlation, or information-theory based inference.
-                </p>
-              </div>
-
-              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="text-sm font-bold text-slate-950">Pseudotime property</h4>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Pseudotime means the algorithm uses cell ordering information. No pseudotime means the method only uses the expression matrix without cell-order information.
-                </p>
-              </div>
-
-              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="text-sm font-bold text-slate-950">Directed or undirected</h4>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Directed means the algorithm predicts a source gene and target gene direction. Undirected means the result mainly shows association without a clear regulatory direction.
-                </p>
-              </div>
-
-              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="text-sm font-bold text-slate-950">Signed or unsigned</h4>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Signed methods can indicate whether a relationship is activating or repressing. Unsigned methods only report the strength of the predicted relationship.
-                </p>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      ) : null}
-
-      {selectedAlgorithm ? (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm sm:px-6 lg:py-14"
-          onClick={closeAlgorithmModal}
-        >
-          <div
-            className="max-h-[calc(100vh-5rem)] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 animate-modal-panel lg:p-8"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                  Algorithm details
-                </p>
-                <h2 className="mt-3 text-3xl font-bold text-slate-950">{selectedAlgorithm.name}</h2>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#1b75a6]">
-                  {selectedAlgorithm.category}
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-6 text-sm leading-7 text-slate-600">{selectedAlgorithm.detail}</p>
-
-            <div className="mt-6 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Publication</p>
-                <p className="mt-2 font-semibold text-slate-950">{selectedAlgorithm.year}</p>
-                <p className="mt-1 text-slate-500">{selectedAlgorithm.journal}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Docker version</p>
-                <p className="mt-2 font-semibold text-slate-950">{selectedAlgorithm.dockerVersion}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Properties</p>
-                <p className="mt-2 text-slate-600">
-                  {selectedAlgorithm.requiresPseudotime ? "Requires pseudotime" : "No pseudotime required"} · {selectedAlgorithm.directed ? "Directed" : "Undirected"} · {selectedAlgorithm.signed ? "Signed" : "Unsigned"}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-6">
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Strengths</h3>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-                  {selectedAlgorithm.strengths.map((item) => (
-                    <li key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Limitations</h3>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-                  {selectedAlgorithm.limitations.map((item) => (
-                    <li key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Parameters</h3>
-                {selectedAlgorithm.parameters.length > 0 ? (
-                  <div className="mt-3 space-y-2">
-                    {selectedAlgorithm.parameters.map((parameter) => {
-                      const range = formatParameterRange(parameter);
-                      return (
-                        <div
-                          key={parameter.name}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                        >
-                          <div className="flex items-baseline justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-900">
-                              {parameter.label ?? parameter.name}
-                            </p>
-                            <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                              Default: {formatParameterDefault(parameter)}
-                            </span>
-                          </div>
-                          {parameter.description ? (
-                            <p className="mt-1 text-xs leading-5 text-slate-500">
-                              {parameter.description}
-                            </p>
-                          ) : null}
-                          {range ? (
-                            <p className="mt-1 text-xs text-slate-400">{range}</p>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                    No adjustable parameters — this method runs with platform defaults.
-                  </p>
-                )}
-              </div>
-
-            </div>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href={selectedAlgorithm.paperUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-              >
-                Open paper
-              </a>
-              {selectedAlgorithm.sourceUrl ? (
-                <a
-                  href={selectedAlgorithm.sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                >
-                  Open source
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: BinaryFilter;
+  options: Array<{ value: BinaryFilter; label: string }>;
+  onChange: (value: BinaryFilter) => void;
+}) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as BinaryFilter)}
+        aria-label={label}
+        className={`h-11 w-full appearance-none rounded-xl border bg-white px-4 pr-10 text-sm font-semibold outline-none transition hover:border-slate-300 focus:ring-4 focus:ring-[#1b75a6]/10 ${
+          value === "any"
+            ? "border-slate-200 text-slate-600 focus:border-[#1b75a6]/45"
+            : "border-[#1b75a6]/30 bg-[#f2f9fc] text-[#1b75a6] focus:border-[#1b75a6]/50"
+        }`}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <svg
+        viewBox="0 0 16 16"
+        className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </label>
+  );
+}
+
+function AlgorithmCard({ algorithm }: { algorithm: AlgorithmEntry }) {
+  return (
+    <Link
+      href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
+      className="group flex min-h-[15rem] flex-col rounded-[1.35rem] border border-slate-200 bg-white p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/15"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-xl font-bold tracking-tight text-slate-950">{algorithm.name}</h3>
+            {algorithm.recommended ? (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-700">
+                Recommended
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1.5 text-xs font-semibold leading-5 text-[#1b75a6]">{algorithm.category}</p>
+        </div>
+        <span className="mt-1 shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+          {algorithm.year}
+        </span>
+      </div>
+
+      <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{algorithm.tagline}</p>
+
+      <div className="mt-auto pt-5">
+        <div className="flex flex-wrap gap-1.5">
+          <PropertyTag>{algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}</PropertyTag>
+          <PropertyTag>{algorithm.directed ? "Directed" : "Undirected"}</PropertyTag>
+          <PropertyTag>{algorithm.signed ? "Signed" : "Unsigned"}</PropertyTag>
+        </div>
+        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-sm font-semibold text-slate-500 transition group-hover:text-[#1b75a6]">
+          <span>View details</span>
+          <span aria-hidden="true" className="transition group-hover:translate-x-0.5">›</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function PropertyTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+      {children}
+    </span>
+  );
+}
+
+function AlgorithmCardLoading() {
+  return (
+    <div className="min-h-[15rem] animate-pulse rounded-[1.35rem] border border-slate-200 bg-white p-5">
+      <div className="h-6 w-32 rounded-full bg-slate-200" />
+      <div className="mt-3 h-4 w-40 rounded-full bg-slate-100" />
+      <div className="mt-5 h-4 w-full rounded-full bg-slate-100" />
+      <div className="mt-2 h-4 w-3/4 rounded-full bg-slate-100" />
+      <div className="mt-12 flex gap-2">
+        <div className="h-6 w-24 rounded-full bg-slate-100" />
+        <div className="h-6 w-20 rounded-full bg-slate-100" />
+      </div>
+    </div>
   );
 }

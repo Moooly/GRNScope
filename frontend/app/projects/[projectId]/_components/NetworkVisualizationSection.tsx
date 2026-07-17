@@ -359,38 +359,20 @@ export default function NetworkVisualizationSection({
               aria-expanded={isExportConfirmOpen}
               aria-haspopup="dialog"
               title="Download current network"
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10"
+              className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10"
             >
-              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
-                <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
               Download
             </button>
           {isExportConfirmOpen && (
             <>
-              <span
-                aria-hidden="true"
-                className="absolute right-2 top-[calc(100%+0.375rem)] z-50 h-3 w-3 rotate-45 border-l border-t border-slate-200 bg-white"
-              />
               <div
                 className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(22rem,calc(100vw-3rem))] text-slate-900"
                 role="dialog"
                 aria-modal="false"
-                aria-labelledby="network-download-title"
+                aria-label="Download current network"
               >
-                <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-                  <div className="px-4 pb-3 pt-4">
-                    <h5 id="network-download-title" className="text-sm font-bold text-slate-950">
-                      Download current network
-                    </h5>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {networkLayout === "circos"
-                        ? "Choose the image file for the current filtered Circos view."
-                        : "Choose a file for the network currently shown on the canvas."}
-                    </p>
-                  </div>
-
-                  <div className="border-t border-slate-100 p-2">
+                <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
+                  <div className="p-2">
                     {networkLayout !== "circos" && (
                       <button
                         type="button"

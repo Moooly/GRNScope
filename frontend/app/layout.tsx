@@ -16,7 +16,7 @@ export default function RootLayout({
   const [contactContext, setContactContext] = useState<ContactSupportContext>({});
   const pathname = usePathname();
   const isHomeActive = pathname === "/";
-  const isAlgorithmsActive = pathname === "/algorithms";
+  const isAlgorithmsActive = pathname.startsWith("/algorithms");
 
   useEffect(() => {
     function handleOpenContact(event: Event) {

@@ -98,9 +98,11 @@ export default function EdgeAnalysisTableSection({
           <button
             type="button"
             onClick={onExportEdgeList}
-            className="w-full whitespace-nowrap rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] sm:w-auto"
+            aria-label="Download edge analysis as CSV"
+            title="Download edge analysis as CSV"
+            className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] sm:w-auto"
           >
-            Export CSV
+            Download
           </button>
         </div>
       </div>

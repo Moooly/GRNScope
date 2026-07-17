@@ -453,7 +453,7 @@ export default function AlgorithmSettingsPopover({
 
         <div className="flex shrink-0 items-center justify-between gap-3 bg-slate-50/70 px-4 py-2.5">
           <a
-            href={`/algorithms?algorithm=${encodeURIComponent(algorithm.id)}`}
+            href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
             target="_blank"
             rel="noreferrer"
             className="-ml-3 min-w-0 truncate rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1b75a6]"
