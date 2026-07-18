@@ -82,7 +82,6 @@ export default function AlgorithmsPage() {
     pseudotimeFilter !== "any" ||
     directionFilter !== "any" ||
     signFilter !== "any";
-
   const clearFilters = () => {
     setQuery("");
     setPseudotimeFilter("any");
@@ -92,13 +91,18 @@ export default function AlgorithmsPage() {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="mx-auto max-w-[1180px] px-6 pb-16 pt-10 lg:px-10 lg:pb-20 lg:pt-14">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <h1 className="min-w-0 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+      <section className="mx-auto max-w-[1100px] px-6 pb-16 pt-10 lg:px-10 lg:pb-20 lg:pt-14">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
             Explore algorithms
           </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            Find a method based on its data requirements and network properties.
+          </p>
+        </div>
 
-          <label className="relative">
+        <div className="mt-7 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <label className="relative block w-full lg:max-w-sm">
             <span className="sr-only">Search algorithms</span>
             <svg
               viewBox="0 0 20 20"
@@ -114,13 +118,11 @@ export default function AlgorithmsPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search algorithms"
-              className="h-10 w-full min-w-[16rem] rounded-full border-0 bg-slate-100 pl-10 pr-4 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:bg-slate-200/60 focus:bg-white focus:ring-4 focus:ring-[#1b75a6]/15"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:border-slate-300 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
             />
           </label>
-        </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <FilterPill
               value={pseudotimeFilter}
               options={PSEUDOTIME_OPTIONS}
@@ -139,17 +141,16 @@ export default function AlgorithmsPage() {
               onChange={setSignFilter}
               ariaLabel="Sign filter"
             />
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="px-2 text-xs font-medium text-slate-500 transition hover:text-[#1b75a6]"
+              >
+                Reset
+              </button>
+            ) : null}
           </div>
-
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-xs font-semibold text-slate-500 transition hover:text-[#1b75a6]"
-            >
-              Reset filters
-            </button>
-          ) : null}
         </div>
 
         {loadError ? (
@@ -159,20 +160,17 @@ export default function AlgorithmsPage() {
         ) : null}
 
         {isLoading ? (
-          <div
-            className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            aria-label="Loading algorithms"
-          >
+          <div className="mt-8 border-y border-slate-200" aria-label="Loading algorithms">
             {Array.from({ length: 6 }).map((_, index) => (
-              <AlgorithmCardLoading key={index} />
+              <AlgorithmRowLoading key={index} />
             ))}
           </div>
         ) : null}
 
         {!isLoading && !loadError && filteredAlgorithms.length > 0 ? (
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 border-y border-slate-200">
             {filteredAlgorithms.map((algorithm) => (
-              <AlgorithmCard key={algorithm.id} algorithm={algorithm} />
+              <AlgorithmRow key={algorithm.id} algorithm={algorithm} />
             ))}
           </div>
         ) : null}
@@ -218,10 +216,10 @@ function FilterPill({
         value={value}
         onChange={(event) => onChange(event.target.value as BinaryFilter)}
         aria-label={ariaLabel}
-        className={`inline-flex h-9 cursor-pointer appearance-none items-center rounded-full pl-3.5 pr-9 text-xs font-bold outline-none transition focus:ring-4 focus:ring-[#1b75a6]/15 ${
+        className={`inline-flex h-9 cursor-pointer appearance-none items-center rounded-lg border pl-3.5 pr-9 text-xs font-semibold outline-none transition focus:ring-4 focus:ring-[#1b75a6]/10 ${
           isActive
-            ? "bg-[#e7f2f7] text-[#1b75a6] hover:bg-[#d8e9f3]"
-            : "bg-slate-100 text-slate-600 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
+            ? "border-[#1b75a6]/20 bg-[#edf6fa] text-[#1b75a6] hover:bg-[#e3f0f6]"
+            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"
         }`}
       >
         {options.map((option) => (
@@ -244,53 +242,37 @@ function FilterPill({
   );
 }
 
-function AlgorithmCard({ algorithm }: { algorithm: AlgorithmEntry }) {
+function AlgorithmRow({ algorithm }: { algorithm: AlgorithmEntry }) {
   return (
     <Link
       href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
-      className="group relative flex min-h-[12.5rem] flex-col rounded-[1.1rem] border border-slate-100 bg-white p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/15"
+      className="group grid min-h-[5rem] items-center gap-2 border-b border-slate-200 px-1 py-4 text-left transition last:border-b-0 hover:bg-white/70 focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/10 sm:grid-cols-[minmax(0,1fr)_minmax(26rem,28rem)] sm:gap-8 sm:px-3"
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="min-w-0 flex-1 truncate text-lg font-bold leading-6 tracking-tight text-slate-950">
+      <div className="min-w-0">
+        <h3 className="truncate text-[15px] font-semibold leading-5 tracking-tight text-slate-950 transition group-hover:text-[#155f87]">
           {algorithm.name}
         </h3>
-        {algorithm.recommended ? (
-          <span
-            title="Recommended"
-            aria-label="Recommended"
-            className="shrink-0 text-sm leading-none text-amber-500"
-          >
-            ★
-          </span>
-        ) : null}
+        <p className="mt-1 truncate text-xs font-normal text-slate-500">
+          {algorithm.category}
+        </p>
       </div>
-      <p className="mt-1 truncate text-xs font-semibold text-[#1b75a6]">
-        {algorithm.category}
-      </p>
-
-      <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
-        {algorithm.tagline}
-      </p>
-
-      <p className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-slate-100 pt-3 text-xs font-medium text-slate-500">
+      <div className="grid w-full grid-cols-[1.35fr_1fr_0.8fr] gap-x-2 text-[11px] font-normal text-slate-500 sm:grid-cols-[minmax(8.5rem,1.35fr)_minmax(6rem,1fr)_minmax(4.5rem,0.8fr)] sm:gap-x-5 sm:text-xs">
         <span>{algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}</span>
-        <span aria-hidden="true" className="text-slate-300">·</span>
         <span>{algorithm.directed ? "Directed" : "Undirected"}</span>
-        <span aria-hidden="true" className="text-slate-300">·</span>
         <span>{algorithm.signed ? "Signed" : "Unsigned"}</span>
-      </p>
+      </div>
     </Link>
   );
 }
 
-function AlgorithmCardLoading() {
+function AlgorithmRowLoading() {
   return (
-    <div className="min-h-[12.5rem] animate-pulse rounded-[1.1rem] border border-slate-100 bg-white p-4">
-      <div className="h-5 w-28 rounded-full bg-slate-200" />
-      <div className="mt-2 h-3 w-36 rounded-full bg-slate-100" />
-      <div className="mt-4 h-3 w-full rounded-full bg-slate-100" />
-      <div className="mt-2 h-3 w-3/4 rounded-full bg-slate-100" />
-      <div className="mt-6 h-3 w-40 rounded-full bg-slate-100" />
+    <div className="flex min-h-[5rem] animate-pulse items-center justify-between gap-6 border-b border-slate-200 px-3 py-4 last:border-b-0">
+      <div>
+        <div className="h-4 w-28 rounded-full bg-slate-200" />
+        <div className="mt-2 h-3 w-36 rounded-full bg-slate-100" />
+      </div>
+      <div className="h-3 w-52 rounded-full bg-slate-100" />
     </div>
   );
 }

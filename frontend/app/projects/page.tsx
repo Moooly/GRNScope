@@ -455,14 +455,14 @@ function ProjectsPageContent() {
                     aria-pressed={isActive}
                     className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
                       isActive
-                        ? "bg-[#1b75a6] text-white"
+                        ? "bg-[#e4f1f7] text-[#155f87]"
                         : "bg-transparent text-slate-500 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
                     }`}
                   >
                     {filter.label}
                     <span
                       className={`text-[11px] tabular-nums ${
-                        isActive ? "text-white/70" : "text-slate-400"
+                        isActive ? "text-[#1b75a6]/65" : "text-slate-400"
                       }`}
                     >
                       {count}
