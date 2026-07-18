@@ -1082,21 +1082,26 @@ RECOMMENDED_ALGORITHM_IDS: list[str] = [
 ]
 
 ALGORITHM_RUN_DIFFICULTY_ORDER: list[str] = [
+    # Fastest-first execution priority. This order is shared by the local
+    # scheduler and the RQ enqueue path so useful results become available as
+    # early as possible when worker concurrency is limited.
     "PEARSON",
     "PPCOR",
-    "LEAP",
-    "SCODE",
     "SINCERITIES",
-    "GRNBOOST2",
     "CELLORACLE",
+    "PIDC",
+    "LEAP",
+    "GRNBOOST2",
+    "SCRIBE",
+    "GRISLI",
+    "GENIE3",
+    # Not present in the latest production timing sample; keep their registry
+    # medium-cost placement ahead of the consistently slow methods below.
     "JUMP3",
     "SCSGL",
-    "GENIE3",
-    "GRISLI",
-    "GRNVBEM",
-    "PIDC",
-    "SCRIBE",
     "SINGE",
+    "SCODE",
+    "GRNVBEM",
 ]
 
 ALGORITHM_RUN_DIFFICULTY_RANK: dict[str, int] = {
