@@ -50,6 +50,10 @@ class UpdateNotificationEmailRequest(BaseModel):
     notification_email: Optional[str] = None
 
 
+class UpdateProjectNameRequest(BaseModel):
+    project_name: str
+
+
 class ContactSupportRequest(BaseModel):
     question: str
     reply_to_email: Optional[str] = None

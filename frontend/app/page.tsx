@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE } from "./_lib/apiConfig";
 import { apiFetch } from "./_lib/clientIdentity";
-import { formatProjectCreatedAt } from "./projects/_lib/time";
+import ProjectCard from "./projects/_components/ProjectCard";
+import DeleteProjectModal from "./projects/_components/DeleteProjectModal";
+import RenameProjectModal from "./projects/_components/RenameProjectModal";
 import { Project, ProjectJob } from "./projects/_types/project";
 
 const CreateProjectFlow = dynamic(() => import("./projects/_components/CreateProjectFlow"), {
@@ -22,6 +24,15 @@ export default function HomePage() {
   const metadataRequestIds = useRef<Set<string>>(new Set());
   const projectHistoryRowRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
+
+  const [projectPendingDelete, setProjectPendingDelete] = useState<Project | null>(null);
+  const [isDeleteModalClosing, setIsDeleteModalClosing] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+
+  const [projectPendingRename, setProjectPendingRename] = useState<Project | null>(null);
+  const [isRenameModalClosing, setIsRenameModalClosing] = useState(false);
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   const visibleProjectHistory = useMemo(
     () => projectHistory.filter((project) => project.id !== "demo"),
@@ -239,6 +250,96 @@ export default function HomePage() {
     router.push(`/projects/${project.id}`);
   };
 
+  const handleAskDeleteProject = (project: Project) => {
+    setIsDeleteModalClosing(false);
+    setProjectPendingDelete(project);
+  };
+
+  const handleCancelDeleteProject = () => {
+    if (isDeletingProject || !projectPendingDelete) return;
+    setIsDeleteModalClosing(true);
+    window.setTimeout(() => {
+      setProjectPendingDelete(null);
+      setIsDeleteModalClosing(false);
+    }, 280);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!projectPendingDelete) return;
+    const targetProjectId = projectPendingDelete.id;
+    try {
+      setIsDeletingProject(true);
+      const response = await apiFetch(
+        `${API_BASE}/projects/${targetProjectId}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) return;
+      setIsDeleteModalClosing(true);
+      window.setTimeout(() => {
+        setProjectPendingDelete(null);
+        setIsDeleteModalClosing(false);
+      }, 280);
+      window.setTimeout(() => {
+        setProjectHistory((currentProjects) =>
+          currentProjects.filter((item) => item.id !== targetProjectId),
+        );
+      }, 300);
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
+  const handleAskRenameProject = (project: Project) => {
+    setRenameError(null);
+    setIsRenameModalClosing(false);
+    setProjectPendingRename(project);
+  };
+
+  const handleCancelRenameProject = () => {
+    if (isRenamingProject || !projectPendingRename) return;
+    setIsRenameModalClosing(true);
+    window.setTimeout(() => {
+      setProjectPendingRename(null);
+      setIsRenameModalClosing(false);
+    }, 280);
+  };
+
+  const handleConfirmRenameProject = async (newName: string) => {
+    if (!projectPendingRename) return;
+    const targetProjectId = projectPendingRename.id;
+    try {
+      setIsRenamingProject(true);
+      setRenameError(null);
+      const response = await apiFetch(
+        `${API_BASE}/projects/${targetProjectId}/name`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_name: newName }),
+        },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setRenameError(payload.detail || "Failed to rename the project.");
+        return;
+      }
+      setProjectHistory((currentProjects) =>
+        currentProjects.map((item) =>
+          item.id === targetProjectId ? { ...item, name: newName } : item,
+        ),
+      );
+      setIsRenameModalClosing(true);
+      window.setTimeout(() => {
+        setProjectPendingRename(null);
+        setIsRenameModalClosing(false);
+      }, 280);
+    } catch {
+      setRenameError("Could not connect to the server.");
+    } finally {
+      setIsRenamingProject(false);
+    }
+  };
+
   useEffect(() => {
     const row = projectHistoryRowRef.current;
     if (!row) {
@@ -287,7 +388,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="relative overflow-hidden bg-[#f7fbff]">
+      <section className="relative bg-[#f7fbff]">
         <div className="relative mx-auto max-w-[1180px] px-6 pb-6 pt-12 lg:px-10 lg:pb-8 lg:pt-14">
           <div className="grid gap-8 lg:grid-cols-[1fr_0.48fr] lg:items-center lg:gap-12">
             <div className="max-w-none">
@@ -397,10 +498,16 @@ export default function HomePage() {
             <div className="group/history relative mt-5">
               <div
                 ref={projectHistoryRowRef}
-                className="flex snap-x items-start gap-4 overflow-x-auto pb-4 pt-1"
+                className="flex snap-x items-start gap-4 overflow-x-auto px-1 pb-8 pt-2"
               >
                 {visibleProjectHistory.map((project) => (
-                  <HomeProjectCard key={project.id} project={project} />
+                  <div key={project.id} className="w-[17.5rem] shrink-0 snap-start">
+                    <ProjectCard
+                      project={project}
+                      onRename={handleAskRenameProject}
+                      onDelete={handleAskDeleteProject}
+                    />
+                  </div>
                 ))}
               </div>
               {canScrollProjectHistoryRight ? (
@@ -443,6 +550,23 @@ export default function HomePage() {
           onProjectCreated={handleProjectCreated}
         />
       ) : null}
+
+      <DeleteProjectModal
+        project={projectPendingDelete}
+        isDeleting={isDeletingProject}
+        isClosing={isDeleteModalClosing}
+        onCancel={handleCancelDeleteProject}
+        onConfirm={handleConfirmDeleteProject}
+      />
+
+      <RenameProjectModal
+        project={projectPendingRename}
+        isSaving={isRenamingProject}
+        isClosing={isRenameModalClosing}
+        error={renameError}
+        onCancel={handleCancelRenameProject}
+        onConfirm={handleConfirmRenameProject}
+      />
     </main>
   );
 }
@@ -460,67 +584,6 @@ function HomeProjectHistoryLoading() {
         <div className="hidden h-4 animate-pulse rounded-full bg-slate-100 lg:block" />
       </div>
     </div>
-  );
-}
-
-function HomeProjectCard({ project }: { project: Project }) {
-  const createdAtLabel = formatProjectCreatedAt(
-    project.createdAtTimestamp,
-    project.createdAt,
-  );
-  const status = getProjectStatus(project);
-  const tasks = project.latestJob?.tasks ?? [];
-  const completedCount = tasks.filter((task) => task.status === "Completed").length;
-  const algorithmSummary = tasks.length > 0 ? `${completedCount}/${tasks.length}` : "-";
-  const geneSummary =
-    typeof project.geneCount === "number"
-      ? project.geneCount.toLocaleString()
-      : "-";
-  const cellSummary =
-    typeof project.cellCount === "number"
-      ? project.cellCount.toLocaleString()
-      : "-";
-
-  return (
-    <Link
-      href={`/projects/${project.id}`}
-      className="group flex h-[9.75rem] w-[17.5rem] shrink-0 snap-start flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="min-w-0 flex-1 truncate text-lg font-bold leading-6 tracking-tight text-slate-950">
-          {project.name}
-        </h3>
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[0.68rem] font-bold ring-1 ${status.className}`}
-        >
-          {status.label}
-        </span>
-      </div>
-      <p className="mt-1.5 truncate text-xs font-semibold text-slate-500">
-        Created {createdAtLabel}
-      </p>
-
-      <div className="mt-auto grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-3 border-t border-slate-100 pt-3">
-        <div>
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Genes
-          </p>
-          <p className="mt-1 text-sm font-bold text-slate-800">{geneSummary}</p>
-        </div>
-        <div>
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Cells
-          </p>
-          <p className="mt-1 text-sm font-bold text-slate-800">{cellSummary}</p>
-        </div>
-        <div>
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Algorithms
-          </p>
-          <p className="mt-1 text-sm font-bold text-slate-800">{algorithmSummary}</p>
-        </div>
-      </div>
-    </Link>
   );
 }
 
@@ -543,51 +606,3 @@ function normalizeProjectDimensions(project: Project & Record<string, unknown>):
   };
 }
 
-function getProjectStatus(project: Project) {
-  const latestJob = project.latestJob;
-  if (!latestJob) {
-    return {
-      label: "No run",
-      className: "bg-slate-50 text-slate-600 ring-slate-200",
-    };
-  }
-
-  const tasks = latestJob.tasks ?? [];
-  const hasRunning = tasks.some((task) => task.status === "Running");
-  const hasQueued = tasks.some((task) => task.status === "Queued");
-  const hasCompleted = tasks.some((task) => task.status === "Completed");
-  const hasFailed = tasks.some((task) => task.status === "Failed");
-
-  if (hasRunning || hasQueued || latestJob.overall_status === "Running") {
-    return {
-      label: "Running",
-      className: "bg-sky-50 text-sky-700 ring-sky-200",
-    };
-  }
-
-  if (hasCompleted && hasFailed) {
-    return {
-      label: "Partially completed",
-      className: "bg-violet-50 text-violet-700 ring-violet-200",
-    };
-  }
-
-  if (hasFailed || latestJob.overall_status === "Failed") {
-    return {
-      label: "Failed",
-      className: "bg-rose-50 text-rose-600 ring-rose-200",
-    };
-  }
-
-  if (hasCompleted || latestJob.overall_status === "Completed") {
-    return {
-      label: "Completed",
-      className: "bg-[#e8f7f1] text-[#178a62] ring-[#20b779]/20",
-    };
-  }
-
-  return {
-    label: latestJob.overall_status || "Queued",
-    className: "bg-amber-50 text-amber-700 ring-amber-200",
-  };
-}

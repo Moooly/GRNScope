@@ -16,6 +16,7 @@ export default function RootLayout({
   const [contactContext, setContactContext] = useState<ContactSupportContext>({});
   const pathname = usePathname();
   const isHomeActive = pathname === "/";
+  const isProjectsActive = pathname === "/projects" || pathname.startsWith("/projects/");
   const isAlgorithmsActive = pathname.startsWith("/algorithms");
 
   useEffect(() => {
@@ -83,6 +84,17 @@ export default function RootLayout({
                 }`}
               >
                 Home
+              </Link>
+              <Link
+                href="/projects"
+                aria-current={isProjectsActive ? "page" : undefined}
+                className={`cursor-pointer rounded-full px-4 py-2.5 text-base font-bold transition hover:text-white ${
+                  isProjectsActive
+                    ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                    : "bg-transparent text-white/90"
+                }`}
+              >
+                Projects
               </Link>
               <Link
                 href="/algorithms"

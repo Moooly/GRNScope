@@ -47,6 +47,7 @@ from ..schemas import (
     CreateProjectFromTempResponse,
     CreateProjectResponse,
     UpdateNotificationEmailRequest,
+    UpdateProjectNameRequest,
 )
 from ..validators import validate_csv_extension
 from ..services.beeline_service import count_expression_gene_rows, read_delimited_header
@@ -835,6 +836,43 @@ async def update_project_notification_email(
             "notification_email": notification_email,
             "project": project_manifest,
             "latest_job": latest_job,
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.patch("/api/projects/{project_id}/name")
+async def update_project_name(
+    project_id: str,
+    payload: UpdateProjectNameRequest,
+    request: Request,
+    response: Response,
+):
+    owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        raise HTTPException(status_code=403, detail="Demo project is read-only.")
+
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    new_name = (payload.project_name or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Project name cannot be empty.")
+    if len(new_name) > 200:
+        raise HTTPException(status_code=400, detail="Project name is too long.")
+
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        project_manifest["project_name"] = new_name
+        write_project_manifest(project_dir, project_manifest)
+
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "project_name": new_name,
+            "project": project_manifest,
         }
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
