@@ -56,18 +56,24 @@ function defaultAsString(parameter: AlgorithmParameter): string {
 
 function numericHint(parameter: AlgorithmParameter): string | null {
   if (!isNumberParam(parameter)) return null;
-  const lower =
-    typeof parameter.exclusive_minimum === "number"
-      ? `> ${parameter.exclusive_minimum}`
-      : typeof parameter.minimum === "number"
-        ? `≥ ${parameter.minimum}`
-        : null;
-  const upper =
-    typeof parameter.exclusive_maximum === "number"
-      ? `< ${parameter.exclusive_maximum}`
-      : typeof parameter.maximum === "number"
-        ? `≤ ${parameter.maximum}`
-        : null;
+  const formatBound = (value: number) => value.toLocaleString("en-US");
+  const hasInclusiveMinimum = typeof parameter.minimum === "number";
+  const hasInclusiveMaximum = typeof parameter.maximum === "number";
+
+  if (hasInclusiveMinimum && hasInclusiveMaximum) {
+    return `${formatBound(parameter.minimum as number)}–${formatBound(parameter.maximum as number)}`;
+  }
+
+  const lower = typeof parameter.exclusive_minimum === "number"
+    ? `> ${formatBound(parameter.exclusive_minimum)}`
+    : hasInclusiveMinimum
+      ? `≥ ${formatBound(parameter.minimum as number)}`
+      : null;
+  const upper = typeof parameter.exclusive_maximum === "number"
+    ? `< ${formatBound(parameter.exclusive_maximum)}`
+    : hasInclusiveMaximum
+      ? `≤ ${formatBound(parameter.maximum as number)}`
+      : null;
   return [lower, upper].filter(Boolean).join(" and ") || null;
 }
 
@@ -362,7 +368,7 @@ export default function AlgorithmSettingsPopover({
     const options = parameter.options ?? [];
     const fieldId = `popover-${algorithm.id}-${parameter.name}`;
     const errorId = `${fieldId}-error`;
-    const controlClass = `box-border h-10 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+    const controlClass = `box-border h-9 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 outline-none transition focus:ring-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
       error
         ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
         : "border-slate-200 hover:border-slate-300 focus:border-[#087ead] focus:ring-[#087ead]/15"
@@ -372,11 +378,11 @@ export default function AlgorithmSettingsPopover({
       return (
         <div
           key={parameter.name}
-          className="flex items-center justify-between gap-3 py-3"
+          className="flex items-center justify-between gap-3 py-2.5"
         >
           <label
             htmlFor={fieldId}
-            className="text-sm font-semibold text-slate-800"
+            className="text-sm font-medium text-slate-800"
           >
             {parameter.label ?? parameter.name}
           </label>
@@ -401,35 +407,48 @@ export default function AlgorithmSettingsPopover({
     }
 
     return (
-      <div key={parameter.name} className="py-3">
-        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+      <div
+        key={parameter.name}
+        className="grid grid-cols-[minmax(0,1fr)_8.75rem] items-center gap-x-4 py-3"
+      >
+        <div>
           <label
             htmlFor={fieldId}
-            className="text-sm font-semibold text-slate-800"
+            className="block text-sm font-medium text-slate-800"
           >
             {parameter.label ?? parameter.name}
           </label>
           {hint && !error ? (
-            <span className="text-[11px] font-medium text-slate-400">{hint}</span>
+            <p className="mt-0.5 text-[11px] font-normal text-slate-400">{hint}</p>
           ) : null}
         </div>
         {options.length > 0 ? (
-          <select
-            id={fieldId}
-            value={String(value ?? "")}
-            onChange={(event) =>
-              setField(parameter.name, event.target.value)
-            }
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? errorId : undefined}
-            className={controlClass}
-          >
-            {options.map((option) => (
-              <option key={String(option)} value={String(option)}>
-                {String(option)}
-              </option>
-            ))}
-          </select>
+          <div className="relative w-full justify-self-end">
+            <select
+              id={fieldId}
+              value={String(value ?? "")}
+              onChange={(event) =>
+                setField(parameter.name, event.target.value)
+              }
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? errorId : undefined}
+              className={`${controlClass} appearance-none pr-9`}
+            >
+              {options.map((option) => (
+                <option key={String(option)} value={String(option)}>
+                  {String(option)}
+                </option>
+              ))}
+            </select>
+            <svg
+              viewBox="0 0 12 12"
+              className="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
         ) : (
           <input
             id={fieldId}
@@ -441,11 +460,11 @@ export default function AlgorithmSettingsPopover({
             onChange={(event) => setField(parameter.name, event.target.value)}
             aria-invalid={Boolean(error)}
             aria-describedby={error ? errorId : undefined}
-            className={controlClass}
+            className={`${controlClass} w-full justify-self-end [appearance:textfield]`}
           />
         )}
         {error ? (
-          <p id={errorId} className="mt-1.5 text-[11px] font-medium text-rose-600">
+          <p id={errorId} className="col-start-2 mt-1.5 text-[11px] font-medium text-rose-600">
             {error}
           </p>
         ) : null}
@@ -463,36 +482,38 @@ export default function AlgorithmSettingsPopover({
       role="dialog"
       aria-modal="false"
       aria-label={`${algorithm.name} settings`}
-      className={`${modalElement ? "absolute" : "fixed"} z-[140] w-[min(27rem,calc(100vw-1.5rem))] text-slate-900`}
+      className={`${modalElement ? "absolute" : "fixed"} z-[140] w-[min(25rem,calc(100vw-1.5rem))] text-slate-900`}
       style={{ visibility: "hidden" }}
     >
-      <div className="relative z-10 flex max-h-[inherit] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20">
-        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-4">
-          <h3 className="truncate text-sm font-bold text-slate-900">
-            {algorithm.name} parameters
-          </h3>
-          <a
-            href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-slate-500 transition hover:text-[#1b75a6]"
-          >
-            About
-            <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" aria-hidden="true">
-              <path d="M3 9 9 3M4.5 3H9v4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </a>
+      <div className="relative z-10 flex max-h-[inherit] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_50px_-18px_rgba(15,23,42,0.3)]">
+        <div className="shrink-0 px-5 pb-2 pt-4">
+          <div className="flex items-center gap-3">
+            <h3 className="truncate text-base font-semibold text-slate-950">
+              {algorithm.name} settings
+            </h3>
+            <a
+              href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-[#1b75a6] transition hover:text-[#155f87]"
+            >
+              Method details
+              <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" aria-hidden="true">
+                <path d="M3 9 9 3M4.5 3H9v4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </a>
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-1">
           {parameters.map(renderField)}
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
           <button
             type="button"
             onClick={resetToDefaults}
-            className="rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
+            className="text-xs font-medium text-slate-500 transition hover:text-[#1b75a6]"
           >
             Reset to defaults
           </button>
@@ -500,9 +521,9 @@ export default function AlgorithmSettingsPopover({
             type="button"
             onClick={handleApply}
             disabled={hasErrors}
-            className="rounded-full bg-[#1b75a6] px-5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+            className="inline-flex h-9 items-center rounded-full bg-[#1b75a6] px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
           >
-            Apply
+            Save settings
           </button>
         </div>
       </div>
