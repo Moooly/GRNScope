@@ -22,7 +22,7 @@ type JobProgressBannerProps = {
 };
 
 /**
- * Top-of-page progress strip shown while a job has Queued or Running tasks.
+ * Compact live status shown inside the Analysis setup bar.
  * Hides itself entirely once every task has reached a terminal state
  * (Completed, Failed, or anything else non-Queued/non-Running).
  */
@@ -116,19 +116,20 @@ export default function JobProgressBanner({
       remainingSeconds: null,
     };
   });
-  const visibleRunningItems = runningItems.slice(0, 2);
-  const hiddenRunningCount = Math.max(0, runningItems.length - visibleRunningItems.length);
-  const queuedNames = queued.slice(0, 2).map((task) => getAlgorithmName(task.algorithm_id));
-  const hiddenQueuedCount = Math.max(0, queued.length - queuedNames.length);
-  const queuedMessage =
-    queuedNames.length > 0
-      ? `${formatNameList(queuedNames)}${
-          hiddenQueuedCount > 0 ? ` and ${hiddenQueuedCount} more` : ""
-        }`
-      : "";
-  const waitingSummary = [queuedMessage, stopping.length > 0 ? `${stopping.length} stopping` : null]
-    .filter(Boolean)
-    .join(" · ");
+  const primaryRunningItem = runningItems[0];
+  const runningSummary = primaryRunningItem
+    ? `Running ${primaryRunningItem.name}${
+        runningItems.length > 1 ? ` + ${runningItems.length - 1} more` : ""
+      } · ${primaryRunningItem.detail}`
+    : isWaitingForUpload
+      ? "Waiting for dataset upload"
+      : stopping.length > 0
+        ? `${stopping.length} ${stopping.length === 1 ? "method" : "methods"} stopping`
+        : `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`;
+  const waitingSummary =
+    running.length > 0 && queued.length > 0
+      ? `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`
+      : null;
 
   const saveNotificationEmail = async () => {
     if (!onSaveNotificationEmail || isSavingEmail) return;
@@ -159,129 +160,118 @@ export default function JobProgressBanner({
   };
 
   return (
-    <section className="mt-8 rounded-[1.25rem] border border-slate-200 bg-white px-5 py-4 text-slate-900 sm:px-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span
-              aria-hidden="true"
-              className="inline-flex h-2 w-2 animate-pulse rounded-full bg-[#1b75a6]"
-            />
-            <h2 className="text-lg font-bold text-slate-950">
-              {isWaitingForUpload ? "Uploading dataset" : "Analysis running"}
-            </h2>
-            <span className="hidden text-slate-300 sm:inline">·</span>
-            <p className="text-sm font-semibold text-slate-500">
-              {completionSummary.join(" · ")}
+    <div
+      className="order-3 flex w-full min-w-0 items-center gap-3 border-t border-slate-100 px-5 py-3 sm:px-6 lg:order-none lg:w-auto lg:max-w-[42rem] lg:flex-1 lg:border-t-0 lg:px-2 lg:py-0"
+      aria-live="polite"
+    >
+      {!isEditingEmail ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#1b75a6]"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-900">
+              <span className="shrink-0">
+                {isWaitingForUpload ? "Uploading dataset" : "Analysis running"}
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="truncate font-semibold text-slate-500">
+                {completionSummary.join(" · ")}
+              </span>
+            </p>
+            <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+              <span className="text-slate-600">{runningSummary}</span>
+              {waitingSummary ? ` · ${waitingSummary}` : ""}
             </p>
           </div>
-        </div>
 
-        {onSaveNotificationEmail && (
-          <div className="w-full lg:flex lg:max-w-[42rem] lg:flex-1 lg:justify-end">
-            {!isEditingEmail ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setEmailMessage("");
-                  setEmailDraft(notificationEmail ?? "");
-                  setIsEditingEmail(true);
-                }}
-                className="inline-flex h-10 max-w-full items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] lg:ml-auto"
-              >
-                <span className="truncate">
-                  {hasNotificationEmail
-                    ? `Will email ${notificationEmail}`
-                    : "Email me when done"}
-                </span>
-              </button>
-            ) : (
-              <form
-                className="flex w-full flex-col gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void saveNotificationEmail();
-                }}
-              >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <input
-                    type="email"
-                    value={emailDraft}
-                    onChange={(event) => setEmailDraft(event.target.value)}
-                    placeholder="Email when analysis finishes"
-                    className="grnscope-email-input h-10 min-w-0 flex-1 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSavingEmail}
-                    className="inline-flex h-10 min-w-18 items-center justify-center rounded-full bg-[#1b75a6] px-4 text-sm font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isSavingEmail ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditingEmail(false);
-                      setEmailDraft(notificationEmail ?? "");
-                      setEmailMessage("");
-                    }}
-                    className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm font-bold text-slate-500 transition hover:text-slate-900"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {emailMessage && (
-                  <p
-                    className={`px-2 text-xs font-semibold ${
-                      emailMessage === "Saved." ? "text-[#178a62]" : "text-rose-600"
-                    }`}
-                  >
-                    {emailMessage}
-                  </p>
-                )}
-              </form>
-            )}
-          </div>
-        )}
-      </div>
+          {onSaveNotificationEmail ? (
+            <button
+              type="button"
+              onClick={() => {
+                setEmailMessage("");
+                setEmailDraft(notificationEmail ?? "");
+                setIsEditingEmail(true);
+              }}
+              aria-label={
+                hasNotificationEmail
+                  ? `Completion email set to ${notificationEmail}`
+                  : "Email me when analysis is done"
+              }
+              title={
+                hasNotificationEmail
+                  ? `Completion email: ${notificationEmail}`
+                  : "Email me when done"
+              }
+              className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${
+                hasNotificationEmail
+                  ? "border-[#1b75a6]/25 bg-[#eaf5fb] text-[#1b75a6]"
+                  : "border-slate-200 bg-white text-slate-500 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
+              }`}
+            >
+              <svg viewBox="0 0 20 20" className="h-4.5 w-4.5" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10 6.2v4.1l2.7 1.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {hasNotificationEmail ? (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#20b779]" />
+              ) : null}
+            </button>
+          ) : null}
+        </>
+      ) : (
+        <form
+          className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveNotificationEmail();
+          }}
+        >
+          <input
+            type="email"
+            value={emailDraft}
+            onChange={(event) => setEmailDraft(event.target.value)}
+            placeholder="Email when finished"
+            aria-label="Completion notification email"
+            className="grnscope-email-input h-9 min-w-[12rem] flex-1 rounded-full border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
+          />
+          <button
+            type="submit"
+            disabled={isSavingEmail}
+            className="inline-flex h-9 items-center justify-center rounded-full bg-[#1b75a6] px-3.5 text-xs font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSavingEmail ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditingEmail(false);
+              setEmailDraft(notificationEmail ?? "");
+              setEmailMessage("");
+            }}
+            aria-label="Cancel email notification editing"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+              <path d="m4 4 8 8m0-8-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+          {emailMessage ? (
+            <p className="w-full text-right text-xs font-semibold text-rose-600">
+              {emailMessage}
+            </p>
+          ) : null}
+        </form>
+      )}
 
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+      <div className="absolute inset-x-0 bottom-0 h-1 bg-slate-100" aria-hidden="true">
         <div
-          className="h-full rounded-full bg-[#1b75a6] transition-[width] duration-500 ease-out"
+          className="h-full bg-[#1b75a6] transition-[width] duration-500 ease-out"
           style={{ width: `${overall}%` }}
         />
       </div>
-
-      <div className="mt-3 flex flex-col gap-1.5 text-sm font-semibold text-slate-600 lg:flex-row lg:items-center lg:justify-between">
-        {visibleRunningItems.length > 0 ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-slate-500">Running:</span>
-            {visibleRunningItems.map((item, index) => (
-              <span key={item.name} className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 truncate text-slate-600">
-                  <span>{item.name}</span>{" "}
-                  <span>{item.detail}</span>
-                </span>
-                {(index < visibleRunningItems.length - 1 || hiddenRunningCount > 0) && (
-                  <span className="text-slate-300">·</span>
-                )}
-              </span>
-            ))}
-            {hiddenRunningCount > 0 && (
-              <span className="font-semibold text-slate-500">
-                {hiddenRunningCount} more running
-              </span>
-            )}
-          </div>
-        ) : null}
-        {waitingSummary ? (
-          <p className="min-w-0 text-slate-500 lg:shrink-0">
-            <span>Waiting:</span>{" "}
-            <span className="text-slate-600">{waitingSummary}</span>
-          </p>
-        ) : null}
-      </div>
-    </section>
+    </div>
   );
 }
 
@@ -298,10 +288,4 @@ function formatRemainingRange(minimumSeconds: number, maximumSeconds: number): s
     return `about ${maximumMinutes} ${maximumMinutes === 1 ? "minute" : "minutes"}`;
   }
   return `${minimumMinutes}–${maximumMinutes} minutes`;
-}
-
-function formatNameList(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }

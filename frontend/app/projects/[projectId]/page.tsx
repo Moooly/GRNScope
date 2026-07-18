@@ -1805,7 +1805,22 @@ useEffect(() => {
             projectId={projectId}
             projectContext={(
               <AnalysisSetupSection
-                summary={`${allJobTasks.length.toLocaleString()} ${allJobTasks.length === 1 ? "algorithm" : "algorithms"} · ${expressionMatrixLabel}`}
+                summary={`${allJobTasks.length.toLocaleString()} ${allJobTasks.length === 1 ? "algorithm" : "algorithms"}`}
+                isActive={(latestJob?.tasks ?? []).some((task) =>
+                  task.status === "Queued" ||
+                  task.status === "Running" ||
+                  task.status === "Stopping"
+                )}
+                status={(
+                  <JobProgressBanner
+                    tasks={latestJob?.tasks ?? []}
+                    algorithmMetaMap={algorithmMetaMap}
+                    notificationEmail={project?.notification_email ?? null}
+                    onSaveNotificationEmail={
+                      isDemoProject ? undefined : handleSaveNotificationEmail
+                    }
+                  />
+                )}
               >
                 <AlgorithmCardsSection
                   tasks={latestJob?.tasks ?? []}
@@ -1857,15 +1872,6 @@ useEffect(() => {
                 cellOracleStatus={cellOracleTask?.status}
               />
             )}
-          />
-
-          <JobProgressBanner
-            tasks={latestJob?.tasks ?? []}
-            algorithmMetaMap={algorithmMetaMap}
-            notificationEmail={project?.notification_email ?? null}
-            onSaveNotificationEmail={
-              isDemoProject ? undefined : handleSaveNotificationEmail
-            }
           />
 
           <ResultsHubSection>
