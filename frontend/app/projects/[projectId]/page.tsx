@@ -17,6 +17,8 @@ import ResultsGuideModal from "./_components/ResultsGuideModal";
 import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
 import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSection";
 import JobProgressBanner from "./_components/JobProgressBanner";
+import DatasetValidationStatus from "./_components/DatasetValidationStatus";
+import DatasetValidationIssuesSection from "./_components/DatasetValidationIssuesSection";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector from "./_components/ResultsHubViewSelector";
 import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSection";
@@ -337,7 +339,42 @@ export default function ProjectDetailPage() {
     : boolText(metadata?.preprocessing?.log_transform_enabled);
 
 
-  const allJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
+  const rawJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
+  const legacyMatrixValidationTask = useMemo(
+    () => rawJobTasks.find((task) => task.error_type === "matrix_validation") ?? null,
+    [rawJobTasks],
+  );
+  const matrixValidationError =
+    project?.dataset_validation_error ??
+    metadata?.dataset_validation_error ??
+    (latestJob?.setup_error_type === "matrix_validation"
+      ? latestJob.setup_error_message
+      : null) ??
+    legacyMatrixValidationTask?.error_message ??
+    null;
+  const matrixValidationIssues = useMemo(
+    () =>
+      project?.dataset_validation_issues ??
+      metadata?.dataset_validation_issues ??
+      latestJob?.setup_validation_issues ??
+      [],
+    [latestJob?.setup_validation_issues, metadata?.dataset_validation_issues, project?.dataset_validation_issues],
+  );
+  const allJobTasks = useMemo(
+    () =>
+      matrixValidationError
+        ? rawJobTasks.map((task) => ({
+            ...task,
+            status: "NotStarted",
+            elapsed_seconds: 0,
+            error_message: null,
+            error_type: null,
+            progress_percent: 0,
+            progress_label: "Not started",
+          }))
+        : rawJobTasks,
+    [matrixValidationError, rawJobTasks],
+  );
   const cellOracleTask = useMemo(
     () => allJobTasks.find((task) => task.algorithm_id.toUpperCase() === "CELLORACLE") ?? null,
     [allJobTasks]
@@ -1805,25 +1842,34 @@ useEffect(() => {
             projectId={projectId}
             projectContext={(
               <AnalysisSetupSection
-                summary={`${allJobTasks.length.toLocaleString()} ${allJobTasks.length === 1 ? "algorithm" : "algorithms"}`}
-                isActive={(latestJob?.tasks ?? []).some((task) =>
-                  task.status === "Queued" ||
-                  task.status === "Running" ||
-                  task.status === "Stopping"
-                )}
+                autoExpand={Boolean(matrixValidationError)}
                 status={(
-                  <JobProgressBanner
-                    tasks={latestJob?.tasks ?? []}
-                    algorithmMetaMap={algorithmMetaMap}
-                    notificationEmail={project?.notification_email ?? null}
-                    onSaveNotificationEmail={
-                      isDemoProject ? undefined : handleSaveNotificationEmail
-                    }
-                  />
+                  matrixValidationError ? (
+                    <DatasetValidationStatus
+                      message={matrixValidationError}
+                      issues={matrixValidationIssues}
+                    />
+                  ) : (
+                    <JobProgressBanner
+                      tasks={allJobTasks}
+                      algorithmMetaMap={algorithmMetaMap}
+                      notificationEmail={project?.notification_email ?? null}
+                      onSaveNotificationEmail={
+                        isDemoProject ? undefined : handleSaveNotificationEmail
+                      }
+                    />
+                  )
                 )}
               >
+                {matrixValidationError ? (
+                  <DatasetValidationIssuesSection
+                    issues={matrixValidationIssues}
+                    fallbackMessage={matrixValidationError}
+                  />
+                ) : null}
+
                 <AlgorithmCardsSection
-                  tasks={latestJob?.tasks ?? []}
+                  tasks={allJobTasks}
                   algorithmMetaMap={algorithmMetaMap}
                   onOpenAlgorithmError={setActiveAlgorithmErrorTask}
                   onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}

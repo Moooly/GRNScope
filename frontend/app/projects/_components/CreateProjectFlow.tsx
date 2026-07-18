@@ -183,7 +183,22 @@ interface CreateProjectFlowProps {
    * the modal automatically before invoking this callback.
    */
   onProjectCreated?: (project: Project) => void;
+  initialValues?: CreateProjectPrefill;
 }
+
+export type CreateProjectPrefill = {
+  projectName?: string;
+  projectDescription?: string;
+  topVariableGenes?: string;
+  includeAllTFs?: boolean;
+  normalizeEnabled?: boolean;
+  logTransformEnabled?: boolean;
+  maxEdgesPerTarget?: string;
+  selectedIds?: string[];
+  algorithmParameters?: Record<string, Record<string, unknown>>;
+  ensembleEnabled?: boolean;
+  cellOracleSpecies?: string;
+};
 
 /**
  * Self-contained state machine for the "create project" modal flow. Owns
@@ -198,6 +213,7 @@ export default function CreateProjectFlow({
   open,
   onClose,
   onProjectCreated,
+  initialValues,
 }: CreateProjectFlowProps) {
   const API_BASE = getApiBase();
 
@@ -248,8 +264,8 @@ export default function CreateProjectFlow({
     if (!open) return;
     setIsClosing(false);
     setErrors([]);
-    setProjectName("");
-    setProjectDescription("");
+    setProjectName(initialValues?.projectName ?? "");
+    setProjectDescription(initialValues?.projectDescription ?? "");
     setExpressionFile(null);
     setPseudotimeFile(null);
     setClusterLabelsFile(null);
@@ -258,20 +274,22 @@ export default function CreateProjectFlow({
     setClusterLabelsFileName("");
     setGeneCount(null);
     setCellCount(null);
-    setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
-    setIncludeAllTFs(true);
-    setNormalizeEnabled(true);
-    setLogTransformEnabled(true);
-    setMaxEdgesPerTarget(DEFAULT_MAX_EDGES_PER_TARGET);
-    setCellOracleSpecies("human");
-    setHasCellOracleSettingsConfigured(false);
-    setSelectedIds([]);
-    setHasUserAdjustedAlgorithms(false);
-    setAlgorithmParameters({});
-    setEnsembleEnabled(true);
+    setTopVariableGenes(initialValues?.topVariableGenes ?? DEFAULT_TOP_VARIABLE_GENES);
+    setIncludeAllTFs(initialValues?.includeAllTFs ?? true);
+    setNormalizeEnabled(initialValues?.normalizeEnabled ?? true);
+    setLogTransformEnabled(initialValues?.logTransformEnabled ?? true);
+    setMaxEdgesPerTarget(initialValues?.maxEdgesPerTarget ?? DEFAULT_MAX_EDGES_PER_TARGET);
+    setCellOracleSpecies(initialValues?.cellOracleSpecies ?? "human");
+    setHasCellOracleSettingsConfigured(
+      Boolean(initialValues?.selectedIds?.includes("CELLORACLE")),
+    );
+    setSelectedIds(initialValues?.selectedIds ?? []);
+    setHasUserAdjustedAlgorithms(Boolean(initialValues?.selectedIds?.length));
+    setAlgorithmParameters(initialValues?.algorithmParameters ?? {});
+    setEnsembleEnabled(initialValues?.ensembleEnabled ?? true);
     setIsSubmitting(false);
     lastAutoProjectNameRef.current = "";
-  }, [open]);
+  }, [initialValues, open]);
 
   // Load the algorithm catalog once when the component mounts.
   useEffect(() => {
@@ -422,7 +440,7 @@ export default function CreateProjectFlow({
     if (!expressionFile) {
       setGeneCount(null);
       setCellCount(null);
-      setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
+      setTopVariableGenes(initialValues?.topVariableGenes ?? DEFAULT_TOP_VARIABLE_GENES);
       return;
     }
 
@@ -455,7 +473,7 @@ export default function CreateProjectFlow({
     return () => {
       isCancelled = true;
     };
-  }, [expressionFile]);
+  }, [expressionFile, initialValues?.topVariableGenes]);
 
   // Auto-select all compatible algorithms by default. Stops syncing once the
   // user manually toggles anything in the algorithm grid.

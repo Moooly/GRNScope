@@ -29,7 +29,7 @@ export function runtimeLabel(
   elapsedSeconds: number | null | undefined,
   progressLabel?: string | null,
 ): string {
-  if (status === "Queued") return queuedLabel(progressLabel);
+  if (status === "Queued" || status === "NotStarted") return queuedLabel(progressLabel);
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `${status} ${runtime}`;
@@ -41,7 +41,7 @@ function runtimeTitleLabel(
   elapsedSeconds: number | null | undefined,
   progressLabel?: string | null,
 ): string {
-  if (status === "Queued") return queuedLabel(progressLabel);
+  if (status === "Queued" || status === "NotStarted") return queuedLabel(progressLabel);
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `Running time ${runtime}`;

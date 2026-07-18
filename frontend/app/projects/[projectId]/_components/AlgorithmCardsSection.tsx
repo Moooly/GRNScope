@@ -49,6 +49,9 @@ export default function AlgorithmCardsSection({
   compact = false,
 }: AlgorithmCardsSectionProps) {
   if (tasks.length === 0) return null;
+  const hasStartedTask = tasks.some(
+    (task) => task.status !== "NotStarted" && task.status !== "Queued",
+  );
 
   return (
     <section className={compact
@@ -56,7 +59,7 @@ export default function AlgorithmCardsSection({
       : "text-slate-900"
     }>
       <h2 className={compact ? "text-lg font-bold tracking-tight text-slate-950" : RESULT_SECTION_HEADING_CLASS}>
-        Algorithms executed
+        {hasStartedTask ? "Algorithms executed" : "Algorithms selected"}
       </h2>
 
       <div className={compact
@@ -215,6 +218,18 @@ function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void
           />
         </svg>
       </button>
+    );
+  }
+
+  if (status === "NotStarted") {
+    return (
+      <span
+        aria-label="Not started"
+        title="Not started"
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+      </span>
     );
   }
 

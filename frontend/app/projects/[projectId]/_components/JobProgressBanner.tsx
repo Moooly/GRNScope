@@ -22,9 +22,7 @@ type JobProgressBannerProps = {
 };
 
 /**
- * Compact live status shown inside the Analysis setup bar.
- * Hides itself entirely once every task has reached a terminal state
- * (Completed, Failed, or anything else non-Queued/non-Running).
+ * Compact status shown inside the Analysis bar.
  */
 export default function JobProgressBanner({
   tasks,
@@ -47,10 +45,45 @@ export default function JobProgressBanner({
   const stopped = tasks.filter((task) => task.status === "Stopped");
 
   const hasActiveWork = queued.length > 0 || running.length > 0 || stopping.length > 0;
-  if (!hasActiveWork) return null;
-
   const total = tasks.length;
   const finished = completed.length + failed.length + stopped.length;
+  const hasStarted = tasks.some((task) => task.status !== "NotStarted");
+
+  if (!hasActiveWork) {
+    const hasIssues = failed.length > 0 || stopped.length > 0;
+    const statusTitle = !hasStarted
+      ? "Ready"
+      : hasIssues
+        ? "Completed with issues"
+        : "Complete";
+
+    return (
+      <div
+        className="order-3 ml-auto flex min-w-0 items-center justify-end gap-2.5 px-5 py-3 sm:px-6 lg:order-none lg:py-2"
+        aria-live="polite"
+      >
+        <span
+          aria-hidden="true"
+          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+            hasIssues ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+          }`}
+        >
+          {hasIssues ? (
+            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
+              <path d="M8 4.4v4.1m0 2.5v.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.35" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none">
+              <path d="m4.2 8.2 2.4 2.4 5.2-5.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+        <p className="truncate text-sm font-bold text-slate-800">{statusTitle}</p>
+      </div>
+    );
+  }
+
   const isWaitingForUpload =
     running.length === 0 &&
     stopping.length === 0 &&
@@ -69,7 +102,7 @@ export default function JobProgressBanner({
   const overall = total === 0 ? 0 : Math.round(((finished + runningProgress) / total) * 100);
 
   const completionSummary = [
-    `${completed.length} of ${total} methods complete`,
+    total > 1 ? `${completed.length} of ${total} methods complete` : null,
     failed.length > 0 ? `${failed.length} failed` : null,
     stopped.length > 0 ? `${stopped.length} stopped` : null,
   ].filter(Boolean);
@@ -117,15 +150,19 @@ export default function JobProgressBanner({
     };
   });
   const primaryRunningItem = runningItems[0];
-  const runningSummary = primaryRunningItem
+  const activeWorkSummary = primaryRunningItem
     ? `Running ${primaryRunningItem.name}${
         runningItems.length > 1 ? ` + ${runningItems.length - 1} more` : ""
-      } · ${primaryRunningItem.detail}`
+      }`
     : isWaitingForUpload
       ? "Waiting for dataset upload"
       : stopping.length > 0
         ? `${stopping.length} ${stopping.length === 1 ? "method" : "methods"} stopping`
         : `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`;
+  const timingSummary =
+    primaryRunningItem?.detail === "Estimating time remaining"
+      ? null
+      : primaryRunningItem?.detail ?? null;
   const waitingSummary =
     running.length > 0 && queued.length > 0
       ? `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`
@@ -161,30 +198,30 @@ export default function JobProgressBanner({
 
   return (
     <div
-      className="order-3 flex w-full min-w-0 items-center gap-3 border-t border-slate-100 px-5 py-3 sm:px-6 lg:order-none lg:w-auto lg:max-w-[42rem] lg:flex-1 lg:border-t-0 lg:px-2 lg:py-0"
+      className="order-3 ml-auto flex min-w-0 flex-1 items-center justify-end gap-3 px-5 py-3 sm:px-6 lg:order-none lg:py-2"
       aria-live="polite"
     >
       {!isEditingEmail ? (
         <>
-          <span
-            aria-hidden="true"
-            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#1b75a6]"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-900">
-              <span className="shrink-0">
-                {isWaitingForUpload ? "Uploading dataset" : "Analysis running"}
-              </span>
-              <span className="text-slate-300">·</span>
-              <span className="truncate font-semibold text-slate-500">
-                {completionSummary.join(" · ")}
-              </span>
-            </p>
-            <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
-              <span className="text-slate-600">{runningSummary}</span>
-              {waitingSummary ? ` · ${waitingSummary}` : ""}
-            </p>
-          </div>
+          <span aria-hidden="true" className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#eef7fb]">
+            <span className="absolute h-2.5 w-2.5 animate-ping rounded-full bg-[#1b75a6]/25" />
+            <span className="h-2 w-2 rounded-full bg-[#1b75a6]" />
+          </span>
+          <p className="min-w-0 truncate text-sm font-semibold text-slate-700">
+            <span className="font-bold text-slate-900">{activeWorkSummary}</span>
+            {completionSummary.length > 0 ? (
+              <>
+                <span className="text-slate-300"> · </span>
+                <span>{completionSummary.join(" · ")}</span>
+              </>
+            ) : null}
+            {timingSummary ? ` · ${timingSummary}` : ""}
+            {waitingSummary ? ` · ${waitingSummary}` : ""}
+          </p>
+
+          <span className="hidden shrink-0 rounded-full bg-[#eef7fb] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6] sm:inline-flex">
+            {overall}%
+          </span>
 
           {onSaveNotificationEmail ? (
             <button
@@ -204,16 +241,17 @@ export default function JobProgressBanner({
                   ? `Completion email: ${notificationEmail}`
                   : "Email me when done"
               }
-              className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${
+              className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border px-3 text-xs font-bold transition ${
                 hasNotificationEmail
                   ? "border-[#1b75a6]/25 bg-[#eaf5fb] text-[#1b75a6]"
                   : "border-slate-200 bg-white text-slate-500 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
               }`}
             >
-              <svg viewBox="0 0 20 20" className="h-4.5 w-4.5" fill="none" aria-hidden="true">
-                <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M10 6.2v4.1l2.7 1.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+                <path d="M3.5 5.5h13v9h-13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="m4.2 6.2 5.8 4.2 5.8-4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
+              <span className="hidden sm:inline">{hasNotificationEmail ? "Email set" : "Notify me"}</span>
               {hasNotificationEmail ? (
                 <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#20b779]" />
               ) : null}
@@ -265,9 +303,16 @@ export default function JobProgressBanner({
         </form>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 h-1 bg-slate-100" aria-hidden="true">
+      <div
+        className="absolute inset-x-0 bottom-0 h-[3px] bg-[#e7f0f5]"
+        role="progressbar"
+        aria-label="Overall analysis progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={overall}
+      >
         <div
-          className="h-full bg-[#1b75a6] transition-[width] duration-500 ease-out"
+          className="h-full rounded-r-full bg-[#1b75a6] transition-[width] duration-500 ease-out"
           style={{ width: `${overall}%` }}
         />
       </div>

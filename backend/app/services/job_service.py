@@ -27,12 +27,14 @@ from ..repositories.project_repository import write_project_manifest
 from ..services.beeline_service import (
     AlgorithmStoppedError,
     MatrixValidationRuntimeError,
+    collect_expression_matrix_issues,
     count_expression_gene_rows,
     detect_csv_dialect_from_file,
     ensure_project_preprocessed_expression,
     find_algorithm_runtime_roots,
     read_delimited_header,
     run_beeline_with_progress,
+    summarize_expression_matrix_issues,
     terminate_algorithm_docker_containers,
     write_expression_subset_by_cells,
 )
@@ -114,6 +116,154 @@ ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
 )
 TERMINAL_JOB_STATUSES = {"Completed", "Failed", "Stopped"}
 MIN_CLUSTER_SCOPE_CELLS = 50
+
+
+def mark_project_setup_failure(
+    project_dir: Path,
+    job_id: str,
+    message: str,
+    *,
+    error_type: str = "matrix_validation",
+    validation_issues: list[dict] | None = None,
+) -> None:
+    """Record a pre-run setup failure without blaming algorithm tasks."""
+
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
+        jobs_manifest = read_jobs_manifest(project_dir)
+        for job in jobs_manifest:
+            if not isinstance(job, dict) or job.get("job_id") != job_id:
+                continue
+            job["overall_status"] = "SetupFailed"
+            job["setup_error_type"] = error_type
+            job["setup_error_message"] = message
+            if validation_issues:
+                job["setup_validation_issues"] = validation_issues
+            else:
+                job.pop("setup_validation_issues", None)
+            for task in job.get("tasks", []):
+                if not isinstance(task, dict):
+                    continue
+                task["status"] = "NotStarted"
+                task["elapsed_seconds"] = 0
+                task["error_message"] = None
+                task["error_type"] = None
+                task["progress_percent"] = 0
+                task["progress_label"] = "Not started"
+                task["started_at"] = None
+                task["started_at_timestamp"] = None
+                task["completed_at"] = None
+                task["completed_at_timestamp"] = None
+                task.pop("estimated_remaining_seconds", None)
+                task.pop("estimated_remaining_min_seconds", None)
+                task.pop("estimated_remaining_max_seconds", None)
+                task.pop("process_pid", None)
+            break
+        write_jobs_manifest(project_dir, jobs_manifest)
+
+    for manifest_name in ("project.json", "metadata.json"):
+        manifest_path = project_dir / manifest_name
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["setup_error_type"] = error_type
+            manifest["setup_error_message"] = message
+            if error_type == "matrix_validation":
+                manifest["dataset_validation_status"] = "failed"
+                manifest["dataset_validation_error"] = message
+                if validation_issues:
+                    manifest["dataset_validation_issues"] = validation_issues
+                else:
+                    manifest.pop("dataset_validation_issues", None)
+                manifest["upload_status"] = "validation_failed"
+            else:
+                manifest["upload_status"] = "failed"
+            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        except Exception:
+            continue
+
+
+def mark_project_dataset_validated(project_dir: Path, job_id: str) -> None:
+    (project_dir / "matrix_validation_issues.csv").unlink(missing_ok=True)
+    for manifest_name in ("project.json", "metadata.json"):
+        manifest_path = project_dir / manifest_name
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["dataset_validation_status"] = "validated"
+            manifest["upload_status"] = "validated"
+            manifest.pop("dataset_validation_error", None)
+            manifest.pop("dataset_validation_issues", None)
+            manifest.pop("setup_error_type", None)
+            manifest.pop("setup_error_message", None)
+            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        except Exception:
+            continue
+
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
+        jobs_manifest = read_jobs_manifest(project_dir)
+        for job in jobs_manifest:
+            if not isinstance(job, dict) or job.get("job_id") != job_id:
+                continue
+            job.pop("setup_error_type", None)
+            job.pop("setup_error_message", None)
+            job.pop("setup_validation_issues", None)
+            break
+        write_jobs_manifest(project_dir, jobs_manifest)
+
+
+def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool:
+    """Validate and preprocess the dataset before any algorithm starts."""
+
+    project_dir = PROJECTS_ROOT / project_id
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        if project_manifest.get("dataset_validation_status") == "failed":
+            return False
+        if project_manifest.get("dataset_validation_status") == "validated":
+            return True
+
+        expression_path = project_manifest.get("expression_path")
+        if not expression_path:
+            raise MatrixValidationRuntimeError("Expression matrix file is missing.")
+
+        source_expression = Path(expression_path)
+        if not source_expression.exists():
+            raise MatrixValidationRuntimeError("Expression matrix file could not be found.")
+
+        validation_report_path = project_dir / "matrix_validation_issues.csv"
+        validation_issues = collect_expression_matrix_issues(
+            source_expression,
+            report_path=validation_report_path,
+        )
+        if validation_issues:
+            mark_project_setup_failure(
+                project_dir,
+                job_id,
+                summarize_expression_matrix_issues(validation_issues),
+                error_type="matrix_validation",
+                validation_issues=validation_issues,
+            )
+            return False
+        validation_report_path.unlink(missing_ok=True)
+
+        ensure_project_preprocessed_expression(
+            project_id,
+            source_expression,
+            project_manifest,
+        )
+        sync_project_dataset_dimensions(project_dir, project_manifest, source_expression)
+        mark_project_dataset_validated(project_dir, job_id)
+        return True
+    except MatrixValidationRuntimeError as exc:
+        mark_project_setup_failure(
+            project_dir,
+            job_id,
+            str(exc),
+            error_type="matrix_validation",
+        )
+        return False
 
 
 def sync_project_dataset_dimensions(
@@ -752,7 +902,9 @@ def recompute_overall_status(project_dir: Path, job_id: str) -> None:
             tasks = job.get("tasks", [])
             statuses = [task.get("status") for task in tasks]
 
-            if any(status == "Running" for status in statuses) or any(
+            if job.get("setup_error_message"):
+                job["overall_status"] = "SetupFailed"
+            elif any(status == "Running" for status in statuses) or any(
                 status == "Stopping" for status in statuses
             ):
                 job["overall_status"] = "Running"
@@ -781,6 +933,10 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
+        return
+
+    if not prepare_project_dataset_for_algorithms(project_id, job_id):
+        clear_task_control(project_id, job_id, algorithm_id)
         return
 
     control = get_or_create_task_control(project_id, job_id, algorithm_id)
@@ -852,21 +1008,6 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             progress_label="Validating dataset",
             estimated_remaining_seconds=None,
         )
-
-        expression_path = project_manifest.get("expression_path")
-        if not expression_path:
-            raise MatrixValidationRuntimeError("Expression matrix file is missing.")
-
-        source_expression = Path(expression_path)
-        if not source_expression.exists():
-            raise MatrixValidationRuntimeError("Expression matrix file could not be found.")
-
-        ensure_project_preprocessed_expression(
-            project_id,
-            source_expression,
-            project_manifest,
-        )
-        sync_project_dataset_dimensions(project_dir, project_manifest, source_expression)
 
         scopes = build_algorithm_scopes(project_manifest)
         has_cluster_scopes = any(scope.scope_type == "cluster" for scope in scopes)
@@ -1018,39 +1159,11 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             process_pid=0,
         )
     except MatrixValidationRuntimeError as exc:
-        completed_at_timestamp = time.time()
-        elapsed = int(completed_at_timestamp - started_at_timestamp)
-        error_message = str(exc)
-        diagnostics_path = archive_task_failure_diagnostics(
-            project_dir,
-            project_id,
-            job_id,
-            algorithm_id,
-            error_message=error_message,
-            error_type="matrix_validation",
-            started_at_timestamp=started_at_timestamp,
-            completed_at_timestamp=completed_at_timestamp,
-            elapsed_seconds=elapsed,
-        )
-        error_message = user_error_message_after_archiving(
-            error_message,
-            diagnostics_path,
-        )
-        update_job_state(
+        mark_project_setup_failure(
             project_dir,
             job_id,
-            algorithm_id=algorithm_id,
-            task_status="Failed",
-            elapsed_seconds=elapsed,
-            progress_percent=0,
-            progress_label="Matrix validation failed",
-            error_message=error_message,
+            str(exc),
             error_type="matrix_validation",
-            diagnostics_path=diagnostics_path,
-            estimated_remaining_seconds=0,
-            completed_at=format_runtime_timestamp(completed_at_timestamp),
-            completed_at_timestamp=completed_at_timestamp,
-            process_pid=0,
         )
     except Exception as exc:
         completed_at_timestamp = time.time()
@@ -1118,6 +1231,9 @@ def launch_independent_algorithm_tasks(
     if not project_dir.exists():
         return
 
+    if not prepare_project_dataset_for_algorithms(project_id, job_id):
+        return
+
     update_job_state(project_dir, job_id, overall_status="Running")
 
     for algorithm_id in sort_algorithm_ids_by_difficulty(selected_algorithms_list):
@@ -1138,6 +1254,9 @@ def run_algorithm_job_worker(
     project_dir = PROJECTS_ROOT / project_id
 
     if not project_dir.exists():
+        return
+
+    if not prepare_project_dataset_for_algorithms(project_id, job_id):
         return
 
     update_job_state(project_dir, job_id, overall_status="Running")

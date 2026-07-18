@@ -2,7 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import CreateProjectFlow from "./_components/CreateProjectFlow";
+import CreateProjectFlow, {
+  type CreateProjectPrefill,
+} from "./_components/CreateProjectFlow";
 import ProjectCard, { getProjectStatusKey } from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
@@ -73,11 +75,22 @@ function matchesStatusFilter(project: Project, filter: StatusFilter) {
   return true;
 }
 
+function readPrefillBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+  }
+  return fallback;
+}
+
 function ProjectsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createPrefill, setCreatePrefill] = useState<CreateProjectPrefill>();
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,9 +115,57 @@ function ProjectsPageContent() {
 
   useEffect(() => {
     if (searchParams.get("create") !== "1") return;
-    setIsCreateOpen(true);
-    router.replace("/projects", { scroll: false });
+    let isCancelled = false;
+    const sourceProjectId = searchParams.get("source");
+
+    const openCreateFlow = async () => {
+      let nextPrefill: CreateProjectPrefill | undefined;
+      if (sourceProjectId) {
+        try {
+          const response = await apiFetch(`${API_BASE}/projects/${sourceProjectId}`);
+          if (response.ok) {
+            const data = await response.json();
+            const source = data.project ?? {};
+            const sourceName = String(source.project_name ?? "Untitled project").trim();
+            nextPrefill = {
+              projectName: sourceName.toLowerCase().endsWith("(corrected)")
+                ? sourceName
+                : `${sourceName} (corrected)`,
+              projectDescription: String(source.project_description ?? ""),
+              topVariableGenes: String(source.top_variable_genes ?? ""),
+              includeAllTFs: readPrefillBoolean(source.include_all_tfs, true),
+              normalizeEnabled: readPrefillBoolean(source.normalize_enabled, true),
+              logTransformEnabled: readPrefillBoolean(source.log_transform_enabled, true),
+              maxEdgesPerTarget: String(source.ranked_edges_per_target_limit ?? "20"),
+              selectedIds: Array.isArray(source.selected_algorithms)
+                ? source.selected_algorithms.map(String)
+                : [],
+              algorithmParameters: source.algorithm_parameters ?? {},
+              ensembleEnabled: readPrefillBoolean(source.ensemble_enabled, true),
+              cellOracleSpecies: String(source.celloracle?.species ?? "human"),
+            };
+          }
+        } catch {
+          nextPrefill = undefined;
+        }
+      }
+
+      if (isCancelled) return;
+      setCreatePrefill(nextPrefill);
+      setIsCreateOpen(true);
+      router.replace("/projects", { scroll: false });
+    };
+
+    void openCreateFlow();
+    return () => {
+      isCancelled = true;
+    };
   }, [searchParams, router]);
+
+  const openBlankCreateFlow = () => {
+    setCreatePrefill(undefined);
+    setIsCreateOpen(true);
+  };
 
   useEffect(() => {
     let isCancelled = false;
@@ -380,12 +441,12 @@ function ProjectsPageContent() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search projects"
-                className="h-10 w-full min-w-[14rem] rounded-full border border-slate-200 bg-white pl-10 pr-4 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:border-slate-300 focus:border-[#1b75a6] focus:ring-4 focus:ring-[#1b75a6]/10"
+                className="h-10 w-full min-w-[14rem] rounded-full border-0 bg-slate-100 pl-10 pr-4 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:bg-slate-200/60 focus:bg-white focus:ring-4 focus:ring-[#1b75a6]/15"
               />
             </label>
             <button
               type="button"
-              onClick={() => setIsCreateOpen(true)}
+              onClick={openBlankCreateFlow}
               className="inline-flex h-10 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
             >
               + New project
@@ -412,10 +473,10 @@ function ProjectsPageContent() {
                     type="button"
                     onClick={() => setStatusFilter(filter.id)}
                     aria-pressed={isActive}
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-bold transition ${
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
                       isActive
-                        ? "border-[#1b75a6] bg-[#1b75a6] text-white"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                        ? "bg-[#1b75a6] text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
                     }`}
                   >
                     {filter.label}
@@ -436,7 +497,7 @@ function ProjectsPageContent() {
               <select
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
-                className="inline-flex h-9 cursor-pointer appearance-none items-center rounded-full border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-bold text-slate-600 outline-none transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus:border-[#1b75a6] focus:ring-4 focus:ring-[#1b75a6]/10"
+                className="inline-flex h-9 cursor-pointer appearance-none items-center rounded-full border-0 bg-slate-100 pl-3.5 pr-9 text-xs font-bold text-slate-600 outline-none transition hover:bg-[#e7f2f7] hover:text-[#1b75a6] focus:ring-4 focus:ring-[#1b75a6]/15"
               >
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
@@ -457,7 +518,7 @@ function ProjectsPageContent() {
         {isLoading ? (
           <ProjectsLoadingSkeleton />
         ) : showEmptyLibrary ? (
-          <EmptyProjectsLibrary onCreate={() => setIsCreateOpen(true)} />
+          <EmptyProjectsLibrary onCreate={openBlankCreateFlow} />
         ) : showNoMatches ? (
           <NoMatchingProjects
             hasFilter={hasSearchOrFilter}
@@ -467,7 +528,7 @@ function ProjectsPageContent() {
             }}
           />
         ) : (
-          <div className="mt-6 grid grid-cols-[repeat(auto-fill,17.5rem)] gap-4">
+          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(17.5rem,1fr))] gap-4">
             {filteredProjects.map((project) => (
               <div
                 key={project.id}
@@ -502,6 +563,7 @@ function ProjectsPageContent() {
           open={isCreateOpen}
           onClose={() => setIsCreateOpen(false)}
           onProjectCreated={handleProjectCreated}
+          initialValues={createPrefill}
         />
 
         <DeleteProjectModal
@@ -579,7 +641,7 @@ function NoMatchingProjects({
 
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(17.5rem,1fr))] gap-4">
       {[0, 1, 2].map((idx) => (
         <div
           key={idx}

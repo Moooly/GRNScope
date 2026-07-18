@@ -55,8 +55,7 @@ export default function AlgorithmErrorModal({ task, onClose }: AlgorithmErrorMod
         </div>
 
         <div className="mt-5 rounded-[1.25rem] border border-rose-100 bg-rose-50/70 p-4 text-sm leading-6 text-slate-700">
-          <p className="font-bold text-slate-900">What you can do</p>
-          <p className="mt-1">
+          <p>
             Try running the algorithm again. If it continues to fail, contact us and
             we’ll investigate it using this project’s details. Your project and results
             from other algorithms are not affected.

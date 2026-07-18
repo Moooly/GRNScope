@@ -1094,6 +1094,264 @@ def parse_expression_numeric_values(
         yield value
 
 
+def collect_expression_matrix_issues(
+    source_expression: Path,
+    *,
+    max_examples_per_issue: int = 5,
+    report_path: Path | None = None,
+) -> list[dict]:
+    """Collect grouped matrix problems without stopping at the first error."""
+
+    issues_by_code: dict[str, dict] = {}
+    report_file = None
+    report_writer = None
+
+    if report_path is not None:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_file = report_path.open("w", encoding="utf-8", newline="")
+        report_writer = csv.writer(report_file)
+        report_writer.writerow(
+            [
+                "Severity",
+                "Issue type",
+                "Row",
+                "Column",
+                "Current value",
+                "Required correction",
+                "Location",
+            ]
+        )
+
+    def close_report() -> None:
+        nonlocal report_file
+        if report_file is not None:
+            report_file.close()
+            report_file = None
+
+    def add_issue(
+        code: str,
+        title: str,
+        message: str,
+        location: dict | None = None,
+    ) -> None:
+        issue = issues_by_code.setdefault(
+            code,
+            {
+                "code": code,
+                "severity": "error",
+                "title": title,
+                "message": message,
+                "count": 0,
+                "locations": [],
+            },
+        )
+        issue["count"] += 1
+        if location is not None and len(issue["locations"]) < max_examples_per_issue:
+            issue["locations"].append(location)
+        if report_writer is not None:
+            report_writer.writerow(
+                [
+                    "error",
+                    title,
+                    location.get("row", "") if location else "",
+                    location.get("column", "") if location else "",
+                    location.get("value", "") if location else "",
+                    message,
+                    location.get("label", "") if location else "",
+                ]
+            )
+
+    try:
+        dialect = detect_csv_dialect_from_file(source_expression)
+        with source_expression.open("r", encoding="utf-8", newline="") as source_file:
+            reader = csv.reader(source_file, dialect=dialect)
+            try:
+                header = next(reader)
+            except StopIteration:
+                add_issue(
+                    "empty_matrix",
+                    "Empty matrix",
+                    "Expression matrix file is empty.",
+                )
+                close_report()
+                return list(issues_by_code.values())
+
+            if len(header) < 2:
+                add_issue(
+                    "missing_cell_columns",
+                    "Cell columns are missing",
+                    "The header must contain a gene-name column and at least one cell column.",
+                    {"row": 1, "label": "Header row"},
+                )
+                close_report()
+                return list(issues_by_code.values())
+
+            cell_names = [str(column).strip() for column in header[1:]]
+            expected_column_count = len(header)
+            first_cell_columns: dict[str, int] = {}
+
+            for column_index, cell_name in enumerate(cell_names, start=2):
+                if cell_name == "":
+                    add_issue(
+                        "blank_cell_identifier",
+                        "Blank cell identifiers",
+                        "Add a unique cell identifier to every blank header column.",
+                        {
+                            "row": 1,
+                            "column": column_index,
+                            "label": f"Header row · Column {column_index}",
+                        },
+                    )
+                    continue
+
+                first_column = first_cell_columns.get(cell_name)
+                if first_column is not None:
+                    add_issue(
+                        "duplicate_cell_identifier",
+                        "Duplicate cell identifiers",
+                        "Rename duplicated cell identifiers so every header is unique.",
+                        {
+                            "row": 1,
+                            "column": column_index,
+                            "value": preview_matrix_identifier(cell_name, "unnamed cell"),
+                            "label": (
+                                f"Header row · Columns {first_column} and {column_index}"
+                            ),
+                        },
+                    )
+                else:
+                    first_cell_columns[cell_name] = column_index
+
+            seen_gene_rows: dict[str, int] = {}
+            for row_number, row in enumerate(reader, start=2):
+                if not row or all(str(value).strip() == "" for value in row):
+                    continue
+
+                gene_name = str(row[0]).strip() if row else ""
+                if gene_name == "":
+                    add_issue(
+                        "blank_gene_name",
+                        "Blank gene names",
+                        "Add a gene name to the first column of every affected row.",
+                        {
+                            "row": row_number,
+                            "column": 1,
+                            "label": f"Row {row_number} · Column 1",
+                        },
+                    )
+                else:
+                    first_row = seen_gene_rows.get(gene_name)
+                    if first_row is not None:
+                        add_issue(
+                            "duplicate_gene_name",
+                            "Duplicate gene names",
+                            "Rename or remove duplicated genes so every gene name is unique.",
+                            {
+                                "row": row_number,
+                                "column": 1,
+                                "value": preview_matrix_identifier(gene_name, "unnamed gene"),
+                                "label": f"Rows {first_row} and {row_number} · Column 1",
+                            },
+                        )
+                    else:
+                        seen_gene_rows[gene_name] = row_number
+
+                if len(row) != expected_column_count:
+                    add_issue(
+                        "inconsistent_row_length",
+                        "Inconsistent row lengths",
+                        f"Add or remove values so every affected row contains {expected_column_count} columns.",
+                        {
+                            "row": row_number,
+                            "value": str(len(row)),
+                            "label": (
+                                f"Row {row_number} · Expected {expected_column_count}, "
+                                f"found {len(row)} columns"
+                            ),
+                        },
+                    )
+
+                numeric_value_count = min(len(cell_names), max(0, len(row) - 1))
+                for value_index in range(numeric_value_count):
+                    column_index = value_index + 2
+                    raw_value = row[value_index + 1]
+                    raw_text = str(raw_value).strip()
+                    cell_name = cell_names[value_index]
+                    location = {
+                        "row": row_number,
+                        "column": column_index,
+                        "gene": preview_matrix_identifier(gene_name, "unnamed gene"),
+                        "cell": preview_matrix_identifier(
+                            cell_name,
+                            f"column {column_index}",
+                        ),
+                        "value": preview_matrix_identifier(raw_value, "blank"),
+                        "label": f"Row {row_number} · Column {column_index}",
+                    }
+
+                    if raw_text in MISSING_MATRIX_VALUE_TOKENS:
+                        add_issue(
+                            "missing_expression_value",
+                            "Missing expression values",
+                            "Replace every blank or missing expression value with a valid number.",
+                            location,
+                        )
+                        continue
+
+                    try:
+                        numeric_value = float(raw_text)
+                    except (TypeError, ValueError):
+                        add_issue(
+                            "non_numeric_expression_value",
+                            "Non-numeric expression values",
+                            "Replace every non-numeric expression value with a valid number.",
+                            location,
+                        )
+                        continue
+
+                    if not isfinite(numeric_value):
+                        add_issue(
+                            "non_finite_expression_value",
+                            "Non-finite expression values",
+                            "Replace every infinite value with a finite number.",
+                            location,
+                        )
+    except csv.Error as exc:
+        add_issue(
+            "invalid_csv",
+            "CSV parsing failed",
+            f"Expression matrix could not be parsed as CSV: {exc}.",
+        )
+    except MatrixValidationRuntimeError as exc:
+        add_issue("matrix_validation", "Matrix validation failed", str(exc))
+    except (OSError, UnicodeError, ValueError) as exc:
+        add_issue(
+            "unreadable_matrix",
+            "Matrix could not be read",
+            str(exc),
+        )
+
+    close_report()
+
+    return list(issues_by_code.values())
+
+
+def summarize_expression_matrix_issues(issues: list[dict]) -> str:
+    if not issues:
+        return "The uploaded expression matrix could not be validated."
+
+    first_issue = issues[0]
+    message = str(first_issue.get("message") or first_issue.get("title") or "Matrix validation failed.")
+    locations = first_issue.get("locations")
+    if isinstance(locations, list) and locations:
+        label = str(locations[0].get("label") or "").strip()
+        if label:
+            message = f"{message.rstrip('.')} at {label.lower()}."
+    if len(issues) > 1:
+        return f"{len(issues)} validation issue types found. First: {message}"
+    return message
+
+
 def transform_expression_values(
     values: Iterable[float],
     *,

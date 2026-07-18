@@ -48,7 +48,7 @@ export default function ProjectCard({ project, onRename, onDelete }: ProjectCard
     typeof project.cellCount === "number" ? project.cellCount.toLocaleString() : "-";
 
   return (
-    <article className="group relative flex h-[9.75rem] flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+    <article className="group relative flex h-[9.75rem] flex-col rounded-[1.1rem] border border-slate-100 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
       <Link
         href={`/projects/${project.id}`}
         aria-label={`Open ${project.name}`}
@@ -165,12 +165,21 @@ export default function ProjectCard({ project, onRename, onDelete }: ProjectCard
   );
 }
 
-export type ProjectStatusKey = "running" | "completed" | "partial" | "failed" | "none";
+export type ProjectStatusKey =
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed"
+  | "attention"
+  | "none";
 
 export function getProjectStatusKey(project: Project): ProjectStatusKey {
   const latestJob = project.latestJob;
   if (!latestJob) return "none";
   const tasks = latestJob.tasks ?? [];
+  if (latestJob.overall_status === "SetupFailed" || latestJob.setup_error_message) {
+    return "attention";
+  }
   const hasRunning = tasks.some((task) => task.status === "Running");
   const hasQueued = tasks.some((task) => task.status === "Queued");
   const hasCompleted = tasks.some((task) => task.status === "Completed");
@@ -193,6 +202,13 @@ function getProjectStatus(project: Project) {
   }
 
   const tasks = latestJob.tasks ?? [];
+  if (latestJob.overall_status === "SetupFailed" || latestJob.setup_error_message) {
+    return {
+      label: "Setup issue",
+      textClassName: "text-amber-700",
+      dotClassName: "bg-amber-500",
+    };
+  }
   const hasRunning = tasks.some((task) => task.status === "Running");
   const hasQueued = tasks.some((task) => task.status === "Queued");
   const hasCompleted = tasks.some((task) => task.status === "Completed");

@@ -17,11 +17,32 @@ export type ProjectTask = {
   run_metadata?: Record<string, Record<string, unknown>> | null;
 };
 
+export type MatrixValidationLocation = {
+  row?: number | null;
+  column?: number | null;
+  label?: string | null;
+  value?: string | null;
+  gene?: string | null;
+  cell?: string | null;
+};
+
+export type MatrixValidationIssue = {
+  code: string;
+  severity: "error" | "warning" | "info" | string;
+  title: string;
+  message: string;
+  count: number;
+  locations?: MatrixValidationLocation[];
+};
+
 export type ProjectJob = {
   job_id: string;
   overall_status: string;
   ensemble_enabled: boolean | string;
   tasks: ProjectTask[];
+  setup_error_type?: string | null;
+  setup_error_message?: string | null;
+  setup_validation_issues?: MatrixValidationIssue[];
 };
 
 export type ProjectManifest = {
@@ -36,10 +57,24 @@ export type ProjectManifest = {
   cluster_labels_filename?: string | null;
   selected_algorithms?: string[];
   ensemble_enabled?: boolean | string;
+  top_variable_genes?: string | number | null;
+  include_all_tfs?: boolean | string;
+  normalize_enabled?: boolean | string;
+  log_transform_enabled?: boolean | string;
+  ranked_edges_per_target_limit?: number | string | null;
+  algorithm_parameters?: Record<string, Record<string, unknown>>;
+  celloracle?: {
+    species?: string | null;
+    base_grn?: string | null;
+  };
   latest_job_id?: string | null;
   created_at?: string | null;
   created_at_display?: string | null;
   notification_email?: string | null;
+  upload_status?: string | null;
+  dataset_validation_status?: string | null;
+  dataset_validation_error?: string | null;
+  dataset_validation_issues?: MatrixValidationIssue[];
   is_demo?: boolean;
   read_only?: boolean;
 };
@@ -66,6 +101,10 @@ export type MetadataManifest = {
   ensemble_enabled?: boolean | string;
   is_demo?: boolean;
   read_only?: boolean;
+  upload_status?: string | null;
+  dataset_validation_status?: string | null;
+  dataset_validation_error?: string | null;
+  dataset_validation_issues?: MatrixValidationIssue[];
   input_files?: Array<{
     name: string;
     path: string;

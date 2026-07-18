@@ -16,6 +16,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from fastapi.responses import FileResponse
 
 from ..algorithm_registry import (
     CELLORACLE_BASE_GRN_OPTIONS,
@@ -50,10 +51,16 @@ from ..schemas import (
     UpdateProjectNameRequest,
 )
 from ..validators import validate_csv_extension
-from ..services.beeline_service import count_expression_gene_rows, read_delimited_header
+from ..services.beeline_service import (
+    collect_expression_matrix_issues,
+    count_expression_gene_rows,
+    read_delimited_header,
+    summarize_expression_matrix_issues,
+)
 from ..services.email_service import normalize_notification_email
 from ..services.job_service import (
     launch_independent_algorithm_tasks,
+    mark_project_setup_failure,
     send_job_completion_notification_if_needed,
     update_job_state,
 )
@@ -234,30 +241,72 @@ def build_job_manifest(
 
 
 def mark_upload_failure(project_dir: Path, job_id: str, message: str) -> None:
-    completed_at_timestamp = time.time()
-    completed_at = time.strftime(
-        "%Y-%m-%d %H:%M",
-        time.localtime(completed_at_timestamp),
+    mark_project_setup_failure(
+        project_dir,
+        job_id,
+        message,
+        error_type="upload",
     )
 
-    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
-        jobs_manifest = read_jobs_manifest(project_dir)
-        for job in jobs_manifest:
-            if not isinstance(job, dict) or job.get("job_id") != job_id:
-                continue
-            job["overall_status"] = "Failed"
-            for task in job.get("tasks", []):
-                if not isinstance(task, dict):
-                    continue
-                task["status"] = "Failed"
-                task["error_type"] = "upload"
-                task["error_message"] = message
-                task["progress_percent"] = 100
-                task["progress_label"] = "Dataset upload failed"
-                task["completed_at"] = completed_at
-                task["completed_at_timestamp"] = completed_at_timestamp
-            break
-        write_jobs_manifest(project_dir, jobs_manifest)
+
+def migrate_legacy_matrix_validation_failure(
+    project_dir: Path,
+    jobs_manifest: list[dict],
+) -> list[dict]:
+    """Upgrade jobs created before matrix validation became a setup phase."""
+
+    job = jobs_manifest[-1] if jobs_manifest else None
+    if not isinstance(job, dict):
+        return jobs_manifest
+
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        needs_structured_issues = (
+            project_manifest.get("dataset_validation_status") == "failed"
+            and (
+                not project_manifest.get("dataset_validation_issues")
+                or not (project_dir / "matrix_validation_issues.csv").exists()
+            )
+        )
+        expression_path = project_manifest.get("expression_path")
+        if needs_structured_issues and expression_path and Path(expression_path).exists():
+            validation_issues = collect_expression_matrix_issues(
+                Path(expression_path),
+                report_path=project_dir / "matrix_validation_issues.csv",
+            )
+            if validation_issues:
+                mark_project_setup_failure(
+                    project_dir,
+                    str(job.get("job_id") or ""),
+                    summarize_expression_matrix_issues(validation_issues),
+                    error_type="matrix_validation",
+                    validation_issues=validation_issues,
+                )
+                return read_jobs_manifest(project_dir)
+    except Exception:
+        pass
+
+    validation_task = next(
+        (
+            task
+            for task in job.get("tasks", [])
+            if isinstance(task, dict)
+            and task.get("error_type") == "matrix_validation"
+        ),
+        None,
+    )
+    if validation_task is not None:
+        mark_project_setup_failure(
+            project_dir,
+            str(job.get("job_id") or ""),
+            str(
+                validation_task.get("error_message")
+                or "The uploaded expression matrix could not be validated."
+            ),
+            error_type="matrix_validation",
+        )
+        return read_jobs_manifest(project_dir)
+    return jobs_manifest
 
 
 @router.post("/api/projects/create-pending", response_model=CreateProjectResponse)
@@ -932,7 +981,10 @@ async def list_projects(request: Request, response: Response):
                 project_manifest = read_project_manifest(project_dir)
                 if not project_belongs_to_client(project_dir, owner_id):
                     continue
-                jobs_manifest = read_jobs_manifest(project_dir)
+                jobs_manifest = migrate_legacy_matrix_validation_failure(
+                    project_dir,
+                    read_jobs_manifest(project_dir),
+                )
                 latest_job = jobs_manifest[-1] if jobs_manifest else None
                 metadata_manifest = {}
                 metadata_path = project_dir / "metadata.json"
@@ -1049,7 +1101,10 @@ async def get_project(project_id: str, request: Request, response: Response):
             project_manifest,
             metadata_manifest,
         )
-        jobs_manifest = read_jobs_manifest(project_dir)
+        jobs_manifest = migrate_legacy_matrix_validation_failure(
+            project_dir,
+            read_jobs_manifest(project_dir),
+        )
 
         latest_job = jobs_manifest[-1] if jobs_manifest else None
 
@@ -1062,6 +1117,24 @@ async def get_project(project_id: str, request: Request, response: Response):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/validation-report")
+async def download_project_validation_report(
+    project_id: str,
+    request: Request,
+    response: Response,
+):
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, get_or_create_client_id(request, response))
+    report_path = project_dir / "matrix_validation_issues.csv"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="Validation report is not available.")
+    return FileResponse(
+        report_path,
+        media_type="text/csv",
+        filename=f"{project_id}-matrix-validation-issues.csv",
+    )
 
 
 @router.get("/api/projects/{project_id}/metadata")
