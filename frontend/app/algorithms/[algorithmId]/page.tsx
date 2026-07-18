@@ -76,8 +76,8 @@ export default function AlgorithmDetailPage() {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="border-b border-slate-200 bg-gradient-to-br from-white via-[#f7fbff] to-[#edf9f7]">
-        <div className="mx-auto max-w-[1180px] px-6 py-10 lg:px-10 lg:py-12">
+      <section className="border-b border-slate-200 bg-white/55">
+        <div className="mx-auto max-w-[1100px] px-6 py-8 lg:px-10 lg:py-10">
           <Link
             href="/algorithms"
             className="group inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-[#1b75a6]"
@@ -86,27 +86,22 @@ export default function AlgorithmDetailPage() {
             All algorithms
           </Link>
 
-          <div className="mt-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
-                  {algorithm.category}
-                </p>
-                {algorithm.recommended ? (
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">
-                    Recommended
-                  </span>
-                ) : null}
-              </div>
-              <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+          <div className="mt-7 max-w-3xl">
+            <p className="text-sm font-medium text-[#1b75a6]">{algorithm.category}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
                 {algorithm.name}
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                {algorithm.tagline}
-              </p>
+              {algorithm.recommended ? (
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-700">
+                  Recommended
+                </span>
+              ) : null}
             </div>
-
-            <div className="flex flex-wrap gap-2 lg:max-w-sm lg:justify-end">
+            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+              {algorithm.tagline}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
               <PropertyPill>{algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}</PropertyPill>
               <PropertyPill>{algorithm.directed ? "Directed" : "Undirected"}</PropertyPill>
               <PropertyPill>{algorithm.signed ? "Signed" : "Unsigned"}</PropertyPill>
@@ -115,22 +110,22 @@ export default function AlgorithmDetailPage() {
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-[1180px] gap-6 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:px-10 lg:py-10">
-        <div className="space-y-6">
-          <section className="rounded-[1.5rem] border border-slate-200 bg-white p-6 sm:p-7">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">Overview</p>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">How the method works</h2>
-            <p className="mt-4 text-sm leading-7 text-slate-600">{algorithm.detail}</p>
+      <div className="mx-auto grid max-w-[1100px] gap-10 px-6 py-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-14 lg:px-10 lg:py-12">
+        <div>
+          <section className="border-b border-slate-200 pb-9">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#1b75a6]">Overview</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">How the method works</h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">{algorithm.detail}</p>
           </section>
 
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-10 border-b border-slate-200 py-9 md:grid-cols-2">
             <InsightSection title="Strengths" tone="positive" items={algorithm.strengths} />
             <InsightSection title="Limitations" tone="caution" items={algorithm.limitations} />
           </div>
 
-          <section className="rounded-[1.5rem] border border-slate-200 bg-white p-6 sm:p-7">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">Configuration</p>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Parameters</h2>
+          <section className="pt-9">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#1b75a6]">Configuration</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Parameters</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               Defaults used by GRNScope when this method is selected.
             </p>
@@ -170,13 +165,12 @@ export default function AlgorithmDetailPage() {
         </div>
 
         <aside className="self-start lg:sticky lg:top-[calc(var(--grnscope-header-height)+1.5rem)]">
-          <section className="rounded-[1.5rem] border border-slate-200 bg-white p-6">
-            <h2 className="text-lg font-bold text-slate-950">At a glance</h2>
-            <dl className="mt-4 divide-y divide-slate-200">
+          <section className="rounded-2xl bg-[#f1f6f8] p-6">
+            <h2 className="text-lg font-semibold text-slate-950">At a glance</h2>
+            <dl className="mt-4 divide-y divide-[#1b75a6]/10">
               <DetailRow label="Methodology" value={algorithm.category} />
               <DetailRow label="Published" value={algorithm.year} />
               <DetailRow label="Journal" value={algorithm.journal || "—"} />
-              <DetailRow label="Docker version" value={algorithm.dockerVersion || "—"} />
               <DetailRow label="Input" value={algorithm.requiresPseudotime ? "Expression + pseudotime" : "Expression matrix"} />
               <DetailRow label="Output" value={`${algorithm.directed ? "Directed" : "Undirected"} · ${algorithm.signed ? "Signed" : "Unsigned"}`} />
             </dl>
@@ -194,7 +188,7 @@ export default function AlgorithmDetailPage() {
 
 function PropertyPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-[#1b75a6]/15 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-600">
+    <span className="rounded-full bg-[#e9f2f6] px-3 py-1.5 text-xs font-medium text-slate-600">
       {children}
     </span>
   );
@@ -211,8 +205,8 @@ function InsightSection({
 }) {
   const markerClass = tone === "positive" ? "bg-emerald-500" : "bg-amber-500";
   return (
-    <section className="rounded-[1.5rem] border border-slate-200 bg-white p-6">
-      <h2 className="text-xl font-bold tracking-tight text-slate-950">{title}</h2>
+    <section>
+      <h2 className="text-xl font-semibold tracking-tight text-slate-950">{title}</h2>
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
           <li key={item} className="flex gap-3 text-sm leading-6 text-slate-600">
@@ -228,8 +222,8 @@ function InsightSection({
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1 py-3 first:pt-0 last:pb-0">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</dt>
-      <dd className="text-sm font-semibold leading-5 text-slate-700">{value}</dd>
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</dt>
+      <dd className="text-sm font-medium leading-5 text-slate-700">{value}</dd>
     </div>
   );
 }
@@ -240,7 +234,7 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="group inline-flex h-10 items-center justify-between rounded-xl border border-slate-200 px-3.5 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+      className="group inline-flex h-9 items-center justify-between border-b border-[#1b75a6]/15 text-sm font-medium text-slate-700 transition hover:border-[#1b75a6]/40 hover:text-[#1b75a6]"
     >
       {children}
       <span aria-hidden="true" className="text-slate-400 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5">↗</span>
@@ -251,17 +245,17 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
 function AlgorithmDetailLoading() {
   return (
     <main className="min-h-screen animate-pulse bg-[#f7fbff]">
-      <div className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-[1180px] px-6 py-12 lg:px-10">
+      <div className="border-b border-slate-200 bg-white/55">
+        <div className="mx-auto max-w-[1100px] px-6 py-10 lg:px-10">
           <div className="h-4 w-28 rounded-full bg-slate-200" />
           <div className="mt-7 h-5 w-36 rounded-full bg-slate-200" />
           <div className="mt-4 h-12 w-64 rounded-2xl bg-slate-200" />
           <div className="mt-5 h-5 max-w-2xl rounded-full bg-slate-100" />
         </div>
       </div>
-      <div className="mx-auto grid max-w-[1180px] gap-6 px-6 py-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:px-10">
-        <div className="h-80 rounded-[1.5rem] border border-slate-200 bg-white" />
-        <div className="h-96 rounded-[1.5rem] border border-slate-200 bg-white" />
+      <div className="mx-auto grid max-w-[1100px] gap-10 px-6 py-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-14 lg:px-10">
+        <div className="h-80 border-y border-slate-200" />
+        <div className="h-96 rounded-2xl bg-[#f1f6f8]" />
       </div>
     </main>
   );
