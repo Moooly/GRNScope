@@ -418,44 +418,24 @@ function ProjectsPageContent() {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="mx-auto max-w-[1180px] px-6 pb-16 pt-10 lg:px-10 lg:pb-20 lg:pt-14">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <h1 className="min-w-0 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-            Your projects
-          </h1>
-
-          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-            <label className="relative">
-              <span className="sr-only">Search projects</span>
-              <svg
-                viewBox="0 0 20 20"
-                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-                <path d="m13.2 13.2 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search projects"
-                className="h-10 w-full min-w-[14rem] rounded-full border-0 bg-slate-100 pl-10 pr-4 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:bg-slate-200/60 focus:bg-white focus:ring-4 focus:ring-[#1b75a6]/15"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={openBlankCreateFlow}
-              className="inline-flex h-10 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
-            >
-              + New project
-            </button>
+      <section className="mx-auto max-w-[1260px] px-6 pb-16 pt-10 lg:px-10 lg:pb-20 lg:pt-14">
+        <div className="flex items-start justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              Your projects
+            </h1>
           </div>
+          <button
+            type="button"
+            onClick={openBlankCreateFlow}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
+          >
+            + New project
+          </button>
         </div>
 
         {!isLoading && visibleProjectHistory.length > 0 ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               {STATUS_FILTERS.map((filter) => {
                 const isActive = statusFilter === filter.id;
@@ -476,7 +456,7 @@ function ProjectsPageContent() {
                     className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
                       isActive
                         ? "bg-[#1b75a6] text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
+                        : "bg-transparent text-slate-500 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
                     }`}
                   >
                     {filter.label}
@@ -492,26 +472,47 @@ function ProjectsPageContent() {
               })}
             </div>
 
-            <label className="relative">
-              <span className="sr-only">Sort by</span>
-              <select
-                value={sortMode}
-                onChange={(event) => setSortMode(event.target.value as SortMode)}
-                className="inline-flex h-9 cursor-pointer appearance-none items-center rounded-full border-0 bg-slate-100 pl-3.5 pr-9 text-xs font-bold text-slate-600 outline-none transition hover:bg-[#e7f2f7] hover:text-[#1b75a6] focus:ring-4 focus:ring-[#1b75a6]/15"
-              >
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="name">Name (A–Z)</option>
-              </select>
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-              >
-                <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none">
-                  <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="relative">
+                <span className="sr-only">Search projects</span>
+                <svg
+                  viewBox="0 0 20 20"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="m13.2 13.2 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
-              </span>
-            </label>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search projects"
+                  className="h-9 w-full min-w-[14rem] rounded-full border-0 bg-slate-100 pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:bg-slate-200/60 focus:bg-white focus:ring-4 focus:ring-[#1b75a6]/15"
+                />
+              </label>
+              <label className="relative">
+                <span className="sr-only">Sort by</span>
+                <select
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as SortMode)}
+                  className="inline-flex h-9 cursor-pointer appearance-none items-center rounded-full border-0 bg-transparent pl-3.5 pr-9 text-xs font-bold text-slate-500 outline-none transition hover:bg-[#e7f2f7] hover:text-[#1b75a6] focus:ring-4 focus:ring-[#1b75a6]/15"
+                >
+                  <option value="newest">Sort: Newest</option>
+                  <option value="oldest">Sort: Oldest</option>
+                  <option value="name">Sort: Name</option>
+                </select>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                >
+                  <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none">
+                    <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              </label>
+            </div>
           </div>
         ) : null}
 
@@ -528,7 +529,7 @@ function ProjectsPageContent() {
             }}
           />
         ) : (
-          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(17.5rem,1fr))] gap-4">
+          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
             {filteredProjects.map((project) => (
               <div
                 key={project.id}
@@ -547,6 +548,7 @@ function ProjectsPageContent() {
                   project={project}
                   onRename={handleAskRenameProject}
                   onDelete={handleAskDeleteProject}
+                  variant="library"
                 />
               </div>
             ))}
@@ -641,11 +643,11 @@ function NoMatchingProjects({
 
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(17.5rem,1fr))] gap-4">
+    <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
       {[0, 1, 2].map((idx) => (
         <div
           key={idx}
-          className="h-[10rem] animate-pulse rounded-[1.1rem] border border-slate-200 bg-white p-4"
+          className="h-[9.75rem] animate-pulse rounded-[1.1rem] border border-slate-200 bg-white p-4"
         >
           <div className="h-4 w-32 rounded-full bg-slate-100" />
           <div className="mt-3 h-3 w-24 rounded-full bg-slate-100" />

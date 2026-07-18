@@ -9,7 +9,7 @@ interface ProjectCardProps {
   project: Project;
   onRename?: (project: Project) => void;
   onDelete?: (project: Project) => void;
-  variant?: "default" | "home";
+  variant?: "default" | "home" | "library";
 }
 
 export default function ProjectCard({
@@ -20,6 +20,8 @@ export default function ProjectCard({
 }: ProjectCardProps) {
   const hasActions = Boolean(onRename || onDelete);
   const isHomeCard = variant === "home";
+  const isLibraryCard = variant === "library";
+  const hasSoftTypography = isHomeCard || isLibraryCard;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -64,9 +66,9 @@ export default function ProjectCard({
 
       <div className="pointer-events-none relative z-20 flex flex-1 flex-col">
         <div className="flex items-start gap-2">
-          <h3 className={`min-w-0 flex-1 truncate leading-6 tracking-tight text-slate-950 ${
-            isHomeCard ? "text-base font-semibold" : "text-lg font-bold"
-          }`}>
+          <h3 title={project.name} className={`min-w-0 flex-1 leading-6 tracking-tight text-slate-950 ${
+            hasSoftTypography ? "text-base font-semibold" : "text-lg font-bold"
+          } truncate`}>
             {project.name}
           </h3>
           {hasActions ? (
@@ -141,7 +143,7 @@ export default function ProjectCard({
           ) : null}
         </div>
         <p className={`mt-1.5 flex min-w-0 items-center gap-2 truncate text-xs text-slate-500 ${
-          isHomeCard ? "font-medium" : "font-semibold"
+          hasSoftTypography ? "font-medium" : "font-semibold"
         }`}>
           <span className={`inline-flex shrink-0 items-center gap-1.5 ${status.textClassName}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${status.dotClassName}`} aria-hidden="true" />
@@ -154,31 +156,31 @@ export default function ProjectCard({
         <div className="mt-auto grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-3 border-t border-slate-100 pt-3">
           <div>
             <p className={`text-[0.65rem] uppercase text-slate-400 ${
-              isHomeCard ? "font-semibold tracking-[0.1em]" : "font-bold tracking-[0.12em]"
+              hasSoftTypography ? "font-medium tracking-[0.1em]" : "font-bold tracking-[0.12em]"
             }`}>
               Genes
             </p>
-            <p className={`mt-1 text-sm text-slate-800 ${isHomeCard ? "font-semibold" : "font-bold"}`}>
+            <p className={`mt-1 text-sm tabular-nums text-slate-800 ${hasSoftTypography ? "font-medium" : "font-bold"}`}>
               {geneSummary}
             </p>
           </div>
           <div>
             <p className={`text-[0.65rem] uppercase text-slate-400 ${
-              isHomeCard ? "font-semibold tracking-[0.1em]" : "font-bold tracking-[0.12em]"
+              hasSoftTypography ? "font-medium tracking-[0.1em]" : "font-bold tracking-[0.12em]"
             }`}>
               Cells
             </p>
-            <p className={`mt-1 text-sm text-slate-800 ${isHomeCard ? "font-semibold" : "font-bold"}`}>
+            <p className={`mt-1 text-sm tabular-nums text-slate-800 ${hasSoftTypography ? "font-medium" : "font-bold"}`}>
               {cellSummary}
             </p>
           </div>
           <div>
             <p className={`text-[0.65rem] uppercase text-slate-400 ${
-              isHomeCard ? "font-semibold tracking-[0.1em]" : "font-bold tracking-[0.12em]"
+              hasSoftTypography ? "font-medium tracking-[0.1em]" : "font-bold tracking-[0.12em]"
             }`}>
               Algorithms
             </p>
-            <p className={`mt-1 text-sm text-slate-800 ${isHomeCard ? "font-semibold" : "font-bold"}`}>
+            <p className={`mt-1 text-sm tabular-nums text-slate-800 ${hasSoftTypography ? "font-medium" : "font-bold"}`}>
               {algorithmSummary}
             </p>
           </div>
