@@ -943,12 +943,6 @@ async def list_projects(request: Request, response: Response):
                         )
                     except Exception:
                         metadata_manifest = {}
-                project_manifest, metadata_manifest = backfill_dataset_dimensions(
-                    project_dir,
-                    project_manifest,
-                    metadata_manifest,
-                )
-
                 created_at = project_manifest.get("created_at")
                 if not created_at:
                     try:

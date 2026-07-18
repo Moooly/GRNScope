@@ -78,9 +78,12 @@ async function loadCompletedAlgorithmResults(
   currentResults: Record<string, AlgorithmStoredResult> = {},
   options: {
     onProgress?: (results: Record<string, AlgorithmStoredResult>) => void;
+    signal?: AbortSignal;
   } = {}
 ) {
-  const resultsResponse = await apiFetch(`${API_BASE}/projects/${projectId}/results`);
+  const resultsResponse = await apiFetch(`${API_BASE}/projects/${projectId}/results`, {
+    signal: options.signal,
+  });
 
   if (!resultsResponse.ok) return currentResults;
 
@@ -108,7 +111,8 @@ async function loadCompletedAlgorithmResults(
     missingRows.map(async (item) => {
       try {
         const response = await apiFetch(
-          `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`
+          `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}`,
+          { signal: options.signal },
         );
 
         if (!response.ok) return null;
@@ -247,13 +251,16 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
     if (!projectId) return;
 
     let cancelled = false;
+    const controller = new AbortController();
 
     const load = async () => {
       setError("");
       setIsLoadingCompletedResults(true);
 
       try {
-        const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`);
+        const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`, {
+          signal: controller.signal,
+        });
 
         if (!projectResponse.ok) {
           if (!cancelled) {
@@ -283,7 +290,9 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
       }
 
       try {
-        const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
+        const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`, {
+          signal: controller.signal,
+        });
 
         if (!cancelled && metadataResponse.ok) {
           const metadataData = await metadataResponse.json();
@@ -295,6 +304,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
       try {
         const nextResults = await loadCompletedAlgorithmResults(projectId, {}, {
+          signal: controller.signal,
           onProgress: (results) => {
             if (!cancelled) setAlgorithmResults(results);
           },
@@ -311,6 +321,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [isDemoRoute, projectId]);
 
@@ -318,10 +329,13 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
     if (!projectId) return;
 
     let cancelled = false;
+    const controller = new AbortController();
 
     const poll = async () => {
       try {
-        const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`);
+        const projectResponse = await apiFetch(`${API_BASE}/projects/${projectId}`, {
+          signal: controller.signal,
+        });
 
         if (projectResponse.ok) {
           const projectData = await projectResponse.json();
@@ -332,7 +346,9 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           }
         }
 
-        const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
+        const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`, {
+          signal: controller.signal,
+        });
         if (metadataResponse.ok) {
           const metadataData = await metadataResponse.json();
 
@@ -347,6 +363,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
             projectId,
             algorithmResultsRef.current,
             {
+              signal: controller.signal,
               onProgress: (results) => {
                 if (!cancelled) setAlgorithmResults(results);
               },
@@ -369,6 +386,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearInterval(interval);
     };
   }, [hasActiveTasks, projectId]);

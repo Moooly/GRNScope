@@ -9,6 +9,11 @@ import { apiFetch } from "./_lib/clientIdentity";
 import ProjectCard from "./projects/_components/ProjectCard";
 import DeleteProjectModal from "./projects/_components/DeleteProjectModal";
 import RenameProjectModal from "./projects/_components/RenameProjectModal";
+import {
+  loadProjectHistory as fetchProjectHistory,
+  readCachedProjectHistory,
+  writeCachedProjectHistory,
+} from "./projects/_lib/projectHistoryCache";
 import { Project, ProjectJob } from "./projects/_types/project";
 
 const CreateProjectFlow = dynamic(() => import("./projects/_components/CreateProjectFlow"), {
@@ -41,26 +46,18 @@ export default function HomePage() {
 
   useEffect(() => {
     let isCancelled = false;
+    const cachedProjects = readCachedProjectHistory();
+    if (cachedProjects) {
+      setProjectHistory(cachedProjects);
+      setIsProjectHistoryLoading(false);
+    }
 
     const loadProjectHistory = async () => {
-      setIsProjectHistoryLoading(true);
       try {
-        const response = await apiFetch(`${API_BASE}/projects`);
-        if (!response.ok) {
-          if (!isCancelled) setProjectHistory([]);
-          return;
-        }
-
-        const data = await response.json();
-        if (isCancelled) return;
-
-        if (data.ok && Array.isArray(data.projects)) {
-          setProjectHistory(data.projects.map(normalizeProjectDimensions) as Project[]);
-        } else {
-          setProjectHistory([]);
-        }
+        const projects = await fetchProjectHistory();
+        if (!isCancelled) setProjectHistory(projects);
       } catch {
-        if (!isCancelled) setProjectHistory([]);
+        // Keep showing the last successful list when a background refresh fails.
       } finally {
         if (!isCancelled) setIsProjectHistoryLoading(false);
       }
@@ -246,7 +243,11 @@ export default function HomePage() {
   }, [projectsMissingDimensions]);
 
   const handleProjectCreated = (project: Project) => {
-    setProjectHistory((currentProjects) => [project, ...currentProjects]);
+    setProjectHistory((currentProjects) => {
+      const nextProjects = [project, ...currentProjects];
+      writeCachedProjectHistory(nextProjects);
+      return nextProjects;
+    });
     router.push(`/projects/${project.id}`);
   };
 
@@ -280,9 +281,13 @@ export default function HomePage() {
         setIsDeleteModalClosing(false);
       }, 280);
       window.setTimeout(() => {
-        setProjectHistory((currentProjects) =>
-          currentProjects.filter((item) => item.id !== targetProjectId),
-        );
+        setProjectHistory((currentProjects) => {
+          const nextProjects = currentProjects.filter(
+            (item) => item.id !== targetProjectId,
+          );
+          writeCachedProjectHistory(nextProjects);
+          return nextProjects;
+        });
       }, 300);
     } finally {
       setIsDeletingProject(false);
@@ -323,11 +328,13 @@ export default function HomePage() {
         setRenameError(payload.detail || "Failed to rename the project.");
         return;
       }
-      setProjectHistory((currentProjects) =>
-        currentProjects.map((item) =>
+      setProjectHistory((currentProjects) => {
+        const nextProjects = currentProjects.map((item) =>
           item.id === targetProjectId ? { ...item, name: newName } : item,
-        ),
-      );
+        );
+        writeCachedProjectHistory(nextProjects);
+        return nextProjects;
+      });
       setIsRenameModalClosing(true);
       window.setTimeout(() => {
         setProjectPendingRename(null);
@@ -597,12 +604,3 @@ function readOptionalDimension(source: Record<string, unknown>, type: "gene" | "
   const snakeKey = type === "gene" ? "gene_count" : "cell_count";
   return toOptionalNumber(source[camelKey] ?? source[snakeKey]);
 }
-
-function normalizeProjectDimensions(project: Project & Record<string, unknown>): Project {
-  return {
-    ...project,
-    geneCount: project.geneCount ?? readOptionalDimension(project, "gene"),
-    cellCount: project.cellCount ?? readOptionalDimension(project, "cell"),
-  };
-}
-
