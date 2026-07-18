@@ -513,6 +513,7 @@ export default function HomePage() {
                       project={project}
                       onRename={handleAskRenameProject}
                       onDelete={handleAskDeleteProject}
+                      variant="home"
                     />
                   </div>
                 ))}

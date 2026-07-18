@@ -9,10 +9,17 @@ interface ProjectCardProps {
   project: Project;
   onRename?: (project: Project) => void;
   onDelete?: (project: Project) => void;
+  variant?: "default" | "home";
 }
 
-export default function ProjectCard({ project, onRename, onDelete }: ProjectCardProps) {
+export default function ProjectCard({
+  project,
+  onRename,
+  onDelete,
+  variant = "default",
+}: ProjectCardProps) {
   const hasActions = Boolean(onRename || onDelete);
+  const isHomeCard = variant === "home";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -48,7 +55,7 @@ export default function ProjectCard({ project, onRename, onDelete }: ProjectCard
     typeof project.cellCount === "number" ? project.cellCount.toLocaleString() : "-";
 
   return (
-    <article className="group relative flex h-[9.75rem] flex-col rounded-[1.1rem] border border-slate-100 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+    <article className="group relative flex h-[9.75rem] flex-col rounded-[1.1rem] border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#1b75a6]/25 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
       <Link
         href={`/projects/${project.id}`}
         aria-label={`Open ${project.name}`}
@@ -57,7 +64,9 @@ export default function ProjectCard({ project, onRename, onDelete }: ProjectCard
 
       <div className="pointer-events-none relative z-20 flex flex-1 flex-col">
         <div className="flex items-start gap-2">
-          <h3 className="min-w-0 flex-1 truncate text-lg font-bold leading-6 tracking-tight text-slate-950">
+          <h3 className={`min-w-0 flex-1 truncate leading-6 tracking-tight text-slate-950 ${
+            isHomeCard ? "text-base font-semibold" : "text-lg font-bold"
+          }`}>
             {project.name}
           </h3>
           {hasActions ? (
@@ -131,7 +140,9 @@ export default function ProjectCard({ project, onRename, onDelete }: ProjectCard
             </div>
           ) : null}
         </div>
-        <p className="mt-1.5 flex min-w-0 items-center gap-2 truncate text-xs font-semibold text-slate-500">
+        <p className={`mt-1.5 flex min-w-0 items-center gap-2 truncate text-xs text-slate-500 ${
+          isHomeCard ? "font-medium" : "font-semibold"
+        }`}>
           <span className={`inline-flex shrink-0 items-center gap-1.5 ${status.textClassName}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${status.dotClassName}`} aria-hidden="true" />
             {status.label}
@@ -142,22 +153,34 @@ export default function ProjectCard({ project, onRename, onDelete }: ProjectCard
 
         <div className="mt-auto grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-3 border-t border-slate-100 pt-3">
           <div>
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+            <p className={`text-[0.65rem] uppercase text-slate-400 ${
+              isHomeCard ? "font-semibold tracking-[0.1em]" : "font-bold tracking-[0.12em]"
+            }`}>
               Genes
             </p>
-            <p className="mt-1 text-sm font-bold text-slate-800">{geneSummary}</p>
+            <p className={`mt-1 text-sm text-slate-800 ${isHomeCard ? "font-semibold" : "font-bold"}`}>
+              {geneSummary}
+            </p>
           </div>
           <div>
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+            <p className={`text-[0.65rem] uppercase text-slate-400 ${
+              isHomeCard ? "font-semibold tracking-[0.1em]" : "font-bold tracking-[0.12em]"
+            }`}>
               Cells
             </p>
-            <p className="mt-1 text-sm font-bold text-slate-800">{cellSummary}</p>
+            <p className={`mt-1 text-sm text-slate-800 ${isHomeCard ? "font-semibold" : "font-bold"}`}>
+              {cellSummary}
+            </p>
           </div>
           <div>
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+            <p className={`text-[0.65rem] uppercase text-slate-400 ${
+              isHomeCard ? "font-semibold tracking-[0.1em]" : "font-bold tracking-[0.12em]"
+            }`}>
               Algorithms
             </p>
-            <p className="mt-1 text-sm font-bold text-slate-800">{algorithmSummary}</p>
+            <p className={`mt-1 text-sm text-slate-800 ${isHomeCard ? "font-semibold" : "font-bold"}`}>
+              {algorithmSummary}
+            </p>
           </div>
         </div>
       </div>
