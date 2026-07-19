@@ -1029,8 +1029,31 @@ function SelectedResultHeader({
   rerunDisabled: boolean;
 }) {
   const [showAllOodGenes, setShowAllOodGenes] = useState(false);
+  const [isOodDetailsOpen, setIsOodDetailsOpen] = useState(false);
+  const oodDetailsRef = useRef<HTMLDivElement | null>(null);
+  const oodMetricButtonRef = useRef<HTMLButtonElement | null>(null);
   const oodGenes = result.ood_genes ?? [];
   const visibleOodGenes = showAllOodGenes ? oodGenes : oodGenes.slice(0, 5);
+
+  useEffect(() => {
+    if (!isOodDetailsOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (oodDetailsRef.current?.contains(target)) return;
+      if (oodMetricButtonRef.current?.contains(target)) return;
+      setIsOodDetailsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOodDetailsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOodDetailsOpen]);
   const clusterCounts = new Map<string, number>();
   for (const point of result.embedding_points) {
     clusterCounts.set(point.cluster, (clusterCounts.get(point.cluster) ?? 0) + 1);
@@ -1112,7 +1135,11 @@ function SelectedResultHeader({
         <label className="relative inline-flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10 sm:w-auto">
           <select
             value={resultScope}
-            onChange={(event) => onScopeChange(event.target.value)}
+            onChange={(event) => {
+              setIsOodDetailsOpen(false);
+              setShowAllOodGenes(false);
+              onScopeChange(event.target.value);
+            }}
             className="h-full w-full appearance-none bg-transparent pl-4 pr-10 outline-none sm:min-w-[10rem]"
             aria-label="Result scope"
           >
@@ -1127,25 +1154,127 @@ function SelectedResultHeader({
         </label>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {metrics.map((metric) => {
           const isWarning = "warning" in metric && metric.warning;
           const isPrimary = "primary" in metric && metric.primary;
+          const isOodMetric = metric.label === "OOD genes";
+          const canInspectOod = isOodMetric && resultScope === "global" && result.ood_warning_gene_count > 0;
+          const cardContent = (
+            <>
+              <span className={`text-[10px] font-bold uppercase leading-4 tracking-[0.12em] ${isPrimary ? "text-[#087ead]" : "text-slate-500"}`}>
+                {metric.label}
+              </span>
+              <span className={`mt-auto flex items-center gap-1.5 pt-2 font-extrabold ${isPrimary ? "text-2xl text-slate-950" : "text-xl"} ${isWarning ? "text-amber-700" : "text-slate-950"}`}>
+                {metric.value}
+              </span>
+            </>
+          );
+
+          if (canInspectOod) {
+            return (
+              <div key={metric.label} className="relative">
+                <button
+                  ref={oodMetricButtonRef}
+                  type="button"
+                  onClick={() => setIsOodDetailsOpen((current) => !current)}
+                  aria-expanded={isOodDetailsOpen}
+                  aria-haspopup="dialog"
+                  aria-label={`View ${metric.value} out-of-distribution ${result.ood_warning_gene_count === 1 ? "gene" : "genes"}`}
+                  className="flex h-full min-h-[76px] w-full cursor-pointer flex-col rounded-xl bg-[#f8fafc] p-3 text-left transition hover:bg-amber-50/70 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/15"
+                >
+                  {cardContent}
+                </button>
+                {isOodDetailsOpen ? (
+                  <div
+                    ref={oodDetailsRef}
+                    role="dialog"
+                    aria-modal="false"
+                    aria-label="Out-of-distribution gene details"
+                    className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(26rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_50px_-18px_rgba(15,23,42,0.3)]"
+                  >
+                    <div className="px-4 pb-3 pt-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-600" aria-hidden="true">
+                          <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
+                            <path d="M10 3.2 17 16H3L10 3.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                            <path d="M10 7.4v4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                            <circle cx="10" cy="14" r=".9" fill="currentColor" />
+                          </svg>
+                        </span>
+                        <h3 className="text-sm font-semibold text-slate-950">Out-of-distribution genes</h3>
+                        <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700">
+                          {result.ood_warning_gene_count.toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        Predictions beyond the observed expression range should be interpreted cautiously.
+                      </p>
+                    </div>
+
+                    {oodGenes.length ? (
+                      <div className={`border-y border-slate-100 ${showAllOodGenes ? "max-h-72 overflow-y-auto" : ""}`}>
+                        {visibleOodGenes.map((row) => (
+                          <div
+                            key={row.gene}
+                            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-3 first:border-t-0"
+                          >
+                            <p className="text-sm font-semibold text-slate-950">{row.gene}</p>
+                            <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                              <span>{(row.ood_cell_ratio * 100).toFixed(1)}% cells affected</span>
+                              <span aria-hidden="true" className="text-slate-300">·</span>
+                              <span>{(row.max_exceeding_ratio * 100).toFixed(1)}% beyond range</span>
+                            </p>
+                          </div>
+                        ))}
+                        {oodGenes.length > 5 ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllOodGenes((current) => !current)}
+                            className="flex w-full items-center justify-center border-t border-slate-100 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 hover:text-[#087ead]"
+                            aria-expanded={showAllOodGenes}
+                          >
+                            {showAllOodGenes ? "Show highest 5 only" : `Show all ${oodGenes.length} genes`}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="border-y border-slate-100 px-4 py-3 text-xs leading-5 text-slate-500">
+                        This saved run includes the count, but its gene-level diagnostics were not stored.
+                      </p>
+                    )}
+
+                    {!result.clip_delta_x ? (
+                      <div className="flex justify-end px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsOodDetailsOpen(false);
+                            onRerunWithClipping();
+                          }}
+                          disabled={rerunDisabled}
+                          className="inline-flex h-9 items-center justify-center rounded-full bg-slate-800 px-4 text-xs font-semibold text-white transition hover:bg-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Rerun with clipping
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          }
+
           return (
             <div
               key={metric.label}
               className="flex min-h-[76px] flex-col rounded-xl bg-[#f8fafc] p-3"
             >
-              <dt className={`text-[10px] font-bold uppercase leading-4 tracking-[0.12em] ${isPrimary ? "text-[#087ead]" : "text-slate-500"}`}>
-                {metric.label}
-              </dt>
-              <dd className={`mt-auto pt-2 font-extrabold ${isPrimary ? "text-2xl text-slate-950" : "text-xl"} ${isWarning ? "text-amber-700" : "text-slate-950"}`}>
-                {metric.value}
-              </dd>
+              {cardContent}
             </div>
           );
         })}
-      </dl>
+      </div>
 
       <p className="mt-3 text-[11px] leading-4 text-slate-500">
         {perturbationScoreAvailable
@@ -1153,82 +1282,6 @@ function SelectedResultHeader({
           : `Perturbation score and p-value unavailable · ${perturbationScoreUnavailableReason ?? "Upload pseudotime and rerun to calculate them."}`}
       </p>
 
-      {resultScope === "global" && result.ood_warning_gene_count > 0 && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-[#f8fafc] p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <span className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5">
-                  <path d="M10 3.2 17 16H3L10 3.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                  <path d="M10 7.4v4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  <circle cx="10" cy="14" r=".9" fill="currentColor" />
-                </svg>
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-950">
-                  {result.ood_warning_gene_count.toLocaleString()} predicted {result.ood_warning_gene_count === 1 ? "gene exceeds" : "genes exceed"} the observed range
-                </h3>
-                <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600">
-                  These genes are pushed beyond any expression seen in the data (out-of-distribution). Interpret them cautiously, or rerun with clipping.
-                </p>
-              </div>
-            </div>
-            {!result.clip_delta_x && (
-              <button
-                type="button"
-                onClick={onRerunWithClipping}
-                disabled={rerunDisabled}
-                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Rerun with clipping
-              </button>
-            )}
-          </div>
-          {oodGenes.length ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="hidden grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] bg-slate-100 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 sm:grid">
-                <span className="px-3 py-2">Gene</span>
-                <span className="border-l border-slate-200 px-3 py-2">Affected cells</span>
-                <span className="border-l border-slate-200 px-3 py-2">Largest exceedance</span>
-              </div>
-              <div className={showAllOodGenes ? "max-h-72 overflow-y-auto" : ""}>
-                {visibleOodGenes.map((row) => (
-                  <div
-                    key={row.gene}
-                    className="grid gap-2 border-t border-slate-200 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.75fr)_minmax(12rem,0.9fr)] sm:gap-0 sm:px-0 sm:py-0 sm:first:border-t"
-                  >
-                    <span className="truncate text-sm font-bold text-slate-950 sm:px-3 sm:py-2.5">
-                      {row.gene}
-                    </span>
-                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
-                      <span className="sm:hidden">Affected cells</span>
-                      <strong className="text-slate-900">{(row.ood_cell_ratio * 100).toFixed(1)}%</strong>
-                    </span>
-                    <span className="flex items-center justify-between text-xs text-slate-600 sm:block sm:border-l sm:border-slate-200 sm:px-3 sm:py-2.5">
-                      <span className="sm:hidden">Largest exceedance</span>
-                      <strong className="text-slate-900">{(row.max_exceeding_ratio * 100).toFixed(1)}% beyond range</strong>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {oodGenes.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllOodGenes((current) => !current)}
-                  className="flex w-full items-center justify-center border-t border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-                  aria-expanded={showAllOodGenes}
-                >
-                  {showAllOodGenes ? "Show highest 5 only" : `Show all ${oodGenes.length} OOD genes`}
-                </button>
-              )}
-            </div>
-          ) : (
-            <p className="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
-              This saved run predates gene-level OOD diagnostics. Its count is available, but the affected gene names were not stored.
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

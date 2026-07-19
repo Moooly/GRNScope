@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CreateProjectFlow, {
   type CreateProjectPrefill,
 } from "./_components/CreateProjectFlow";
-import ProjectCard, { getProjectStatusKey } from "./_components/ProjectCard";
+import ProjectCard from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
 import RenameProjectModal from "./_components/RenameProjectModal";
@@ -56,25 +56,6 @@ export type ProjectAlgorithm = {
   parameters: AlgorithmParameter[];
 };
 
-type StatusFilter = "all" | "running" | "completed" | "failed";
-type SortMode = "newest" | "oldest" | "name";
-
-const STATUS_FILTERS: Array<{ id: StatusFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "running", label: "Running" },
-  { id: "completed", label: "Completed" },
-  { id: "failed", label: "Failed" },
-];
-
-function matchesStatusFilter(project: Project, filter: StatusFilter) {
-  if (filter === "all") return true;
-  const key = getProjectStatusKey(project);
-  if (filter === "running") return key === "running";
-  if (filter === "completed") return key === "completed" || key === "partial";
-  if (filter === "failed") return key === "failed" || key === "partial";
-  return true;
-}
-
 function readPrefillBoolean(value: unknown, fallback: boolean) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -93,9 +74,6 @@ function ProjectsPageContent() {
   const [createPrefill, setCreatePrefill] = useState<CreateProjectPrefill>();
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
 
   const [projectPendingDelete, setProjectPendingDelete] = useState<Project | null>(null);
   const [isDeleteModalClosing, setIsDeleteModalClosing] = useState(false);
@@ -270,32 +248,6 @@ function ProjectsPageContent() {
     };
   }, [activeProjectIds]);
 
-  const statusCounts = useMemo(() => {
-    const counts = { total: visibleProjectHistory.length, running: 0, completed: 0, failed: 0 };
-    for (const project of visibleProjectHistory) {
-      const key = getProjectStatusKey(project);
-      if (key === "running") counts.running += 1;
-      if (key === "completed" || key === "partial") counts.completed += 1;
-      if (key === "failed" || key === "partial") counts.failed += 1;
-    }
-    return counts;
-  }, [visibleProjectHistory]);
-
-  const filteredProjects = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const filtered = visibleProjectHistory.filter((project) => {
-      if (!matchesStatusFilter(project, statusFilter)) return false;
-      if (query && !project.name.toLowerCase().includes(query)) return false;
-      return true;
-    });
-    return filtered.sort((left, right) => {
-      if (sortMode === "name") return left.name.localeCompare(right.name);
-      const leftTime = Number(left.createdAtTimestamp ?? 0) || 0;
-      const rightTime = Number(right.createdAtTimestamp ?? 0) || 0;
-      return sortMode === "oldest" ? leftTime - rightTime : rightTime - leftTime;
-    });
-  }, [visibleProjectHistory, searchQuery, statusFilter, sortMode]);
-
   const handleProjectCreated = (project: Project) => {
     setProjectHistory((currentProjects) => {
       const nextProjects = [project, ...currentProjects];
@@ -411,10 +363,7 @@ function ProjectsPageContent() {
     }
   };
 
-  const hasSearchOrFilter = searchQuery.trim().length > 0 || statusFilter !== "all";
   const showEmptyLibrary = !isLoading && visibleProjectHistory.length === 0;
-  const showNoMatches =
-    !isLoading && visibleProjectHistory.length > 0 && filteredProjects.length === 0;
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
@@ -434,103 +383,13 @@ function ProjectsPageContent() {
           </button>
         </div>
 
-        {!isLoading && visibleProjectHistory.length > 0 ? (
-          <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              {STATUS_FILTERS.map((filter) => {
-                const isActive = statusFilter === filter.id;
-                const count =
-                  filter.id === "all"
-                    ? statusCounts.total
-                    : filter.id === "running"
-                      ? statusCounts.running
-                      : filter.id === "completed"
-                        ? statusCounts.completed
-                        : statusCounts.failed;
-                return (
-                  <button
-                    key={filter.id}
-                    type="button"
-                    onClick={() => setStatusFilter(filter.id)}
-                    aria-pressed={isActive}
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
-                      isActive
-                        ? "bg-[#e4f1f7] text-[#155f87]"
-                        : "bg-transparent text-slate-500 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
-                    }`}
-                  >
-                    {filter.label}
-                    <span
-                      className={`text-[11px] tabular-nums ${
-                        isActive ? "text-[#1b75a6]/65" : "text-slate-400"
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative">
-                <span className="sr-only">Search projects</span>
-                <svg
-                  viewBox="0 0 20 20"
-                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-                  <path d="m13.2 13.2 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search projects"
-                  className="h-9 w-full min-w-[14rem] rounded-full border-0 bg-slate-100 pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:bg-slate-200/60 focus:bg-white focus:ring-4 focus:ring-[#1b75a6]/15"
-                />
-              </label>
-              <label className="relative">
-                <span className="sr-only">Sort by</span>
-                <select
-                  value={sortMode}
-                  onChange={(event) => setSortMode(event.target.value as SortMode)}
-                  className="inline-flex h-9 cursor-pointer appearance-none items-center rounded-full border-0 bg-transparent pl-3.5 pr-9 text-xs font-bold text-slate-500 outline-none transition hover:bg-[#e7f2f7] hover:text-[#1b75a6] focus:ring-4 focus:ring-[#1b75a6]/15"
-                >
-                  <option value="newest">Sort: Newest</option>
-                  <option value="oldest">Sort: Oldest</option>
-                  <option value="name">Sort: Name</option>
-                </select>
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                >
-                  <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none">
-                    <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-              </label>
-            </div>
-          </div>
-        ) : null}
-
         {isLoading ? (
           <ProjectsLoadingSkeleton />
         ) : showEmptyLibrary ? (
           <EmptyProjectsLibrary onCreate={openBlankCreateFlow} />
-        ) : showNoMatches ? (
-          <NoMatchingProjects
-            hasFilter={hasSearchOrFilter}
-            onReset={() => {
-              setSearchQuery("");
-              setStatusFilter("all");
-            }}
-          />
         ) : (
-          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
-            {filteredProjects.map((project) => (
+          <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
+            {visibleProjectHistory.map((project) => (
               <div
                 key={project.id}
                 className="origin-top overflow-visible"
@@ -611,32 +470,6 @@ function EmptyProjectsLibrary({ onCreate }: { onCreate: () => void }) {
       >
         + New project
       </button>
-    </div>
-  );
-}
-
-function NoMatchingProjects({
-  hasFilter,
-  onReset,
-}: {
-  hasFilter: boolean;
-  onReset: () => void;
-}) {
-  return (
-    <div className="mt-8 rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-      <h2 className="text-base font-bold text-slate-950">No projects match</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-        Try a different search or filter.
-      </p>
-      {hasFilter ? (
-        <button
-          type="button"
-          onClick={onReset}
-          className="mt-4 inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-        >
-          Clear filters
-        </button>
-      ) : null}
     </div>
   );
 }
