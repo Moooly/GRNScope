@@ -58,7 +58,7 @@ export default function AnalysisSetupSection({
           </svg>
         </div>
 
-        <div className="contents [&>*]:relative [&>*]:z-10 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
+        <div className="contents [&>*]:z-10 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
           {status}
         </div>
       </div>
