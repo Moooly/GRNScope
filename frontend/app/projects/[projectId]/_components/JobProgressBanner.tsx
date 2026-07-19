@@ -207,7 +207,7 @@ export default function JobProgressBanner({
             <span className="absolute h-2.5 w-2.5 animate-ping rounded-full bg-[#1b75a6]/25" />
             <span className="h-2 w-2 rounded-full bg-[#1b75a6]" />
           </span>
-          <p className="min-w-0 truncate text-sm font-semibold text-slate-700">
+          <p className="mr-2 min-w-0 truncate text-sm font-semibold text-slate-700 sm:mr-5">
             <span className="font-bold text-slate-900">{activeWorkSummary}</span>
               <span className="hidden">
                 {completionSummary.length > 0 ? (
