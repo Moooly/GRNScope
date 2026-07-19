@@ -1015,18 +1015,78 @@ function PerturbationHistoryStrip({
   );
 }
 
+function PerturbationRunActions({
+  runCount,
+  onOpenHistory,
+  onOpenNewRun,
+  historyExpanded,
+  newRunExpanded,
+}: {
+  runCount: number;
+  onOpenHistory: () => void;
+  onOpenNewRun: () => void;
+  historyExpanded: boolean;
+  newRunExpanded: boolean;
+}) {
+  return (
+    <div className="flex w-full items-center gap-2 sm:w-auto">
+      <button
+        type="button"
+        onClick={onOpenHistory}
+        aria-expanded={historyExpanded}
+        aria-controls="perturbation-side-panel"
+        aria-label={`Open run history, ${runCount} saved ${runCount === 1 ? "run" : "runs"}`}
+        className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 sm:flex-none ${
+          historyExpanded
+            ? "border-[#087ead]/30 bg-[#f2f9fc] text-[#087ead]"
+            : "border-slate-200 bg-white text-slate-700 hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead]"
+        }`}
+      >
+        <svg viewBox="0 0 18 18" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+          <path d="M9 4.5V9l3 1.75M15 9a6 6 0 1 1-1.76-4.24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M13.25 2.75v2.5h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span>History</span>
+        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-600" aria-hidden="true">
+          {runCount}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenNewRun}
+        aria-expanded={newRunExpanded}
+        aria-controls="perturbation-side-panel"
+        className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#087ead] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#066b94] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/20 sm:flex-none"
+      >
+        <span className="text-base font-medium leading-none" aria-hidden="true">+</span>
+        New run
+      </button>
+    </div>
+  );
+}
+
 function SelectedResultHeader({
   result,
   resultScope,
   onScopeChange,
   onRerunWithClipping,
   rerunDisabled,
+  runCount,
+  onOpenHistory,
+  onOpenNewRun,
+  historyExpanded,
+  newRunExpanded,
 }: {
   result: PerturbationResult;
   resultScope: string;
   onScopeChange: (scope: string) => void;
   onRerunWithClipping: () => void;
   rerunDisabled: boolean;
+  runCount: number;
+  onOpenHistory: () => void;
+  onOpenNewRun: () => void;
+  historyExpanded: boolean;
+  newRunExpanded: boolean;
 }) {
   const [showAllOodGenes, setShowAllOodGenes] = useState(false);
   const [isOodDetailsOpen, setIsOodDetailsOpen] = useState(false);
@@ -1078,20 +1138,13 @@ function SelectedResultHeader({
   const perturbationScorePValue = resultScope === "global"
     ? result.perturbation_score_p_value ?? null
     : selectedCluster?.perturbation_score_p_value ?? null;
-  const perturbationScoreDirection = resultScope === "global"
-    ? result.perturbation_score_direction
-    : selectedCluster?.perturbation_score_direction;
   const perturbationScoreUnavailableReason = resultScope === "global"
     ? result.perturbation_score_unavailable_reason
     : selectedCluster?.perturbation_score_unavailable_reason;
   const perturbationScoreAvailable = perturbationScore !== null;
-  const perturbationScoreDirectionLabel = perturbationScoreDirection === "promotes"
-    ? "Promotes differentiation"
-    : perturbationScoreDirection === "blocks"
-      ? "Blocks differentiation"
-      : perturbationScoreDirection === "neutral"
-        ? "No directional effect"
-        : null;
+  const oodWarningCount = resultScope === "global"
+    ? result.ood_warning_gene_count
+    : selectedCluster?.ood_warning_gene_count ?? null;
   const metrics = [
     {
       label: "Predicted / control",
@@ -1117,48 +1170,77 @@ function SelectedResultHeader({
       value: meanRandomShift === null ? "—" : formatScientific(meanRandomShift),
     },
     {
-      label: "OOD genes",
-      value: resultScope === "global"
-        ? result.ood_warning_gene_count.toLocaleString()
-        : selectedCluster?.ood_warning_gene_count === null || selectedCluster?.ood_warning_gene_count === undefined
-          ? "—"
-          : selectedCluster.ood_warning_gene_count.toLocaleString(),
-      warning: resultScope === "global"
-        ? result.ood_warning_gene_count > 0
-        : (selectedCluster?.ood_warning_gene_count ?? 0) > 0,
+      label: "OOD warning",
+      value: oodWarningCount === null
+        ? "—"
+        : `${oodWarningCount.toLocaleString()} ${oodWarningCount === 1 ? "gene" : "genes"}`,
+      warning: (oodWarningCount ?? 0) > 0,
     },
   ];
 
+  const perturbationValue = result.perturbation_value.toLocaleString(undefined, {
+    maximumFractionDigits: 3,
+  });
+
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative inline-flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10 sm:w-auto">
-          <select
-            value={resultScope}
-            onChange={(event) => {
-              setIsOodDetailsOpen(false);
-              setShowAllOodGenes(false);
-              onScopeChange(event.target.value);
-            }}
-            className="h-full w-full appearance-none bg-transparent pl-4 pr-10 outline-none sm:min-w-[10rem]"
-            aria-label="Result scope"
-          >
-            <option value="global">Global</option>
-            {clusterOptions.map((cluster) => (
-              <option key={cluster.cluster} value={cluster.cluster}>
-                {cluster.cluster} ({cluster.cell_count})
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-3 text-slate-700"><SelectChevron /></span>
-        </label>
+      <div className="border-b border-slate-100 pb-5">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-slate-950 sm:text-[1.7rem]">
+                {result.gene} <span className="px-0.5 font-semibold text-[#087ead]">→</span> {perturbationValue}
+              </h2>
+              {result.clip_delta_x ? (
+                <span className="rounded-full bg-[#eef8f5] px-2.5 py-1 text-[11px] font-semibold text-[#217a68]">
+                  Range clipped
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:flex-nowrap lg:justify-end">
+            <label className="block w-full shrink-0 sm:w-[9.5rem]">
+              <span className="relative flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
+                <select
+                  value={resultScope}
+                  onChange={(event) => {
+                    setIsOodDetailsOpen(false);
+                    setShowAllOodGenes(false);
+                    onScopeChange(event.target.value);
+                  }}
+                  className="h-full w-full appearance-none bg-transparent pl-3.5 pr-9 outline-none"
+                  aria-label="Analysis scope"
+                >
+                  <option value="global">Global</option>
+                  {clusterOptions.map((cluster) => (
+                    <option key={cluster.cluster} value={cluster.cluster}>
+                      {cluster.cluster} ({cluster.cell_count.toLocaleString()})
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 text-slate-600"><SelectChevron /></span>
+              </span>
+            </label>
+
+            <span className="hidden h-5 w-px shrink-0 bg-slate-200 lg:block" aria-hidden="true" />
+
+            <PerturbationRunActions
+              runCount={runCount}
+              onOpenHistory={onOpenHistory}
+              onOpenNewRun={onOpenNewRun}
+              historyExpanded={historyExpanded}
+              newRunExpanded={newRunExpanded}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {metrics.map((metric) => {
           const isWarning = "warning" in metric && metric.warning;
           const isPrimary = "primary" in metric && metric.primary;
-          const isOodMetric = metric.label === "OOD genes";
+          const isOodMetric = metric.label === "OOD warning";
           const canInspectOod = isOodMetric && resultScope === "global" && result.ood_warning_gene_count > 0;
           const cardContent = (
             <>
@@ -1180,8 +1262,8 @@ function SelectedResultHeader({
                   onClick={() => setIsOodDetailsOpen((current) => !current)}
                   aria-expanded={isOodDetailsOpen}
                   aria-haspopup="dialog"
-                  aria-label={`View ${metric.value} out-of-distribution ${result.ood_warning_gene_count === 1 ? "gene" : "genes"}`}
-                  className="flex h-full min-h-[76px] w-full cursor-pointer flex-col rounded-xl bg-[#f8fafc] p-3 text-left transition hover:bg-amber-50/70 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/15"
+                  aria-label={`View details for ${metric.value} outside the observed range`}
+                  className="flex h-full min-h-[84px] w-full cursor-pointer flex-col rounded-xl border border-amber-200/70 bg-amber-50/70 p-3 text-left transition hover:bg-amber-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/15"
                 >
                   {cardContent}
                 </button>
@@ -1268,7 +1350,11 @@ function SelectedResultHeader({
           return (
             <div
               key={metric.label}
-              className="flex min-h-[76px] flex-col rounded-xl bg-[#f8fafc] p-3"
+              className={`flex min-h-[84px] flex-col rounded-xl border p-3 ${
+                isWarning
+                  ? "border-amber-200/70 bg-amber-50/70"
+                  : "border-transparent bg-[#f8fafc]"
+              }`}
             >
               {cardContent}
             </div>
@@ -1278,7 +1364,7 @@ function SelectedResultHeader({
 
       <p className="mt-3 text-[11px] leading-4 text-slate-500">
         {perturbationScoreAvailable
-          ? `${perturbationScoreDirectionLabel ?? "Pseudotime alignment calculated"} · Compared with randomized GRN${result.pseudotime_trajectory ? ` · ${result.pseudotime_trajectory}` : ""}`
+          ? `Compared with randomized GRN${result.pseudotime_trajectory ? ` · ${result.pseudotime_trajectory}` : ""}`
           : `Perturbation score and p-value unavailable · ${perturbationScoreUnavailableReason ?? "Upload pseudotime and rerun to calculate them."}`}
       </p>
 
@@ -2477,7 +2563,7 @@ export default function PerturbationAnalysisSection({
     setOpenPanel(kind);
   };
 
-  const closePanel = () => {
+  const closePanel = useCallback(() => {
     if (panelCloseTimeoutRef.current) return;
     setIsPanelClosing(true);
     panelCloseTimeoutRef.current = window.setTimeout(() => {
@@ -2485,7 +2571,21 @@ export default function PerturbationAnalysisSection({
       setIsPanelClosing(false);
       panelCloseTimeoutRef.current = null;
     }, 240);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!openPanel) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closePanel();
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closePanel, openPanel]);
 
   if (isLoading) {
     return (
@@ -2532,37 +2632,17 @@ export default function PerturbationAnalysisSection({
 
   return (
     <section className="space-y-5" aria-label="CellOracle perturbation analysis">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span aria-hidden="true" className="text-lg leading-none text-[#087ead]">⚗</span>
-          {displayedResult ? (
-            <span className="truncate text-sm text-slate-600">
-              <span className="font-bold text-slate-950">
-                {displayedResult.gene} → {displayedResult.perturbation_value.toLocaleString(undefined, { maximumFractionDigits: 3 })}
-              </span>
-              {displayedResult.perturbation_value === 0 ? " · knockout" : ""} · {displayedResult.n_propagation} propagation {displayedResult.n_propagation === 1 ? "step" : "steps"}
-            </span>
-          ) : (
-            <span className="text-sm font-semibold text-slate-500">No perturbation run yet</span>
-          )}
+      {!displayedResult ? (
+        <div className="flex items-center">
+          <PerturbationRunActions
+            runCount={state.runs.length}
+            onOpenHistory={() => openSheet("history")}
+            onOpenNewRun={() => openSheet("form")}
+            historyExpanded={openPanel === "history"}
+            newRunExpanded={openPanel === "form"}
+          />
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => openSheet("history")}
-            className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead]"
-          >
-            History ({state.runs.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => openSheet("form")}
-            className="inline-flex h-10 items-center rounded-full bg-[#087ead] px-5 text-sm font-bold text-white transition hover:bg-[#066b94]"
-          >
-            + New run
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       {openPanel && createPortal(
         <div className="fixed inset-0 z-[80]">
@@ -2572,17 +2652,40 @@ export default function PerturbationAnalysisSection({
             }`}
             onMouseDown={closePanel}
           />
-          <div
+          <aside
+            id="perturbation-side-panel"
             ref={openPanel === "form" ? formRef : undefined}
-            className={`absolute inset-y-0 right-0 w-[420px] max-w-[90vw] overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/20 ${
-              isPanelClosing ? "animate-slide-out-right" : "animate-slide-in-right"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="perturbation-panel-title"
+            className={`absolute inset-y-0 left-0 w-[390px] max-w-[92vw] overflow-y-auto border-r border-slate-200 bg-white p-6 shadow-[18px_0_48px_-24px_rgba(15,23,42,0.45)] ${
+              isPanelClosing ? "animate-slide-out-left" : "animate-slide-in-left"
             }`}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-slate-950">
-                {openPanel === "form" ? "New perturbation" : "Run history"}
-              </h2>
+            <div className="-mx-6 -mt-6 mb-5 flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/75 px-6 py-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#e8f5fa] text-[#087ead]" aria-hidden="true">
+                  {openPanel === "history" ? (
+                    <svg viewBox="0 0 20 20" className="h-[1.125rem] w-[1.125rem]" fill="none">
+                      <path d="M10 5v5l3.25 1.8M16.5 10A6.5 6.5 0 1 1 14.6 5.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M14.5 3.5v2.75h2.75" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 20 20" className="h-[1.125rem] w-[1.125rem]" fill="none">
+                      <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                    </svg>
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.11em] text-slate-400">
+                    Perturbation workspace
+                  </p>
+                  <h2 id="perturbation-panel-title" className="truncate text-lg font-bold text-slate-950">
+                    {openPanel === "form" ? "New perturbation" : "Run history"}
+                  </h2>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={closePanel}
@@ -2741,7 +2844,7 @@ export default function PerturbationAnalysisSection({
                 </div>
               </>
             )}
-          </div>
+          </aside>
         </div>,
         document.body
       )}
@@ -2767,6 +2870,11 @@ export default function PerturbationAnalysisSection({
             onScopeChange={setResultScope}
             onRerunWithClipping={() => handleRerunWithClipping(displayedResult)}
             rerunDisabled={Boolean(activeRun) || isSubmitting}
+            runCount={state.runs.length}
+            onOpenHistory={() => openSheet("history")}
+            onOpenNewRun={() => openSheet("form")}
+            historyExpanded={openPanel === "history"}
+            newRunExpanded={openPanel === "form"}
           />
           <ResultSummary
             key={displayedResult.run_id}
