@@ -39,16 +39,13 @@ export default function DeleteProjectModal({
         <p className="text-sm font-bold uppercase tracking-[0.22em] text-rose-600">
           Delete project
         </p>
-        <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
-          Remove {project.name}?
-        </h3>
         <p className="mt-4 text-sm leading-6 text-slate-600">
           This will permanently remove the project record, uploaded files, and
           job history from the backend.
         </p>
 
         <div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-bold text-slate-950">{project.name}</p>
+          <p className="min-w-0 max-w-full break-words font-bold leading-5 text-slate-900 [overflow-wrap:anywhere]">{project.name}</p>
           <p className="mt-2 text-xs font-medium text-slate-500">
             Created {createdAtLabel}
           </p>
