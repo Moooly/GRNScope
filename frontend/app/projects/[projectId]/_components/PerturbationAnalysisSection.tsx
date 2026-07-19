@@ -2889,13 +2889,6 @@ export default function PerturbationAnalysisSection({
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
             Start a run with the “New run” button above to see predicted gene changes here.
           </p>
-          <button
-            type="button"
-            onClick={() => openSheet("form")}
-            className="mt-4 inline-flex h-10 items-center rounded-full bg-[#087ead] px-5 text-sm font-bold text-white transition hover:bg-[#066b94]"
-          >
-            + New run
-          </button>
         </div>
       ) : null}
 
