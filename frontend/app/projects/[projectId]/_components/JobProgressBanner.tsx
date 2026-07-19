@@ -209,14 +209,16 @@ export default function JobProgressBanner({
           </span>
           <p className="min-w-0 truncate text-sm font-semibold text-slate-700">
             <span className="font-bold text-slate-900">{activeWorkSummary}</span>
-            {completionSummary.length > 0 ? (
-              <>
-                <span className="text-slate-300"> · </span>
-                <span>{completionSummary.join(" · ")}</span>
-              </>
-            ) : null}
-            {timingSummary ? ` · ${timingSummary}` : ""}
-            {waitingSummary ? ` · ${waitingSummary}` : ""}
+              <span className="hidden">
+              {completionSummary.length > 0 ? (
+                <>
+                  <span className="text-slate-300"> · </span>
+                  <span>{completionSummary.join(" · ")}</span>
+                </>
+              ) : null}
+              {timingSummary ? ` · ${timingSummary}` : ""}
+              {waitingSummary ? ` · ${waitingSummary}` : ""}
+            </span>
           </p>
 
           <span className="hidden shrink-0 rounded-full bg-[#eef7fb] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6] sm:inline-flex">
