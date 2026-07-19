@@ -1842,7 +1842,6 @@ useEffect(() => {
             projectId={projectId}
             projectContext={(
               <AnalysisSetupSection
-                autoExpand={Boolean(matrixValidationError)}
                 status={(
                   matrixValidationError ? (
                     <DatasetValidationStatus

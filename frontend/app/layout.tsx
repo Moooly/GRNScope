@@ -45,16 +45,16 @@ export default function RootLayout({
     <html lang="en">
       <body style={{ "--grnscope-header-height": "78px" } as React.CSSProperties}>
         <header className="sticky top-0 z-[60] border-b border-[#1a3448] bg-[#213f54]">
-          <div className="mx-auto flex h-[78px] w-full max-w-[1440px] items-center px-9 xl:px-16">
+          <div className="mx-auto flex h-[78px] w-full max-w-[1440px] items-center px-3 sm:px-6 lg:px-9 xl:px-16">
             <Link
               href="/"
-              className="flex shrink-0 items-center gap-4"
+              className="flex shrink-0 items-center gap-2 sm:gap-4"
               aria-label="Go to GRNScope home page"
             >
-              <div className="relative flex h-[62px] w-[62px] items-center justify-center bg-transparent">
+              <div className="relative flex h-11 w-11 items-center justify-center bg-transparent sm:h-[62px] sm:w-[62px]">
                 <svg
                   viewBox="0 0 64 64"
-                  className="relative h-[52px] w-[52px]"
+                  className="relative h-10 w-10 sm:h-[52px] sm:w-[52px]"
                   role="img"
                   aria-label="GRNScope gene regulatory network logo"
                 >
@@ -69,15 +69,15 @@ export default function RootLayout({
                   <circle cx="17" cy="47" r="4.75" fill="#61d0c4" />
                 </svg>
               </div>
-              <p className="text-[30px] font-medium leading-none tracking-[-0.045em] text-white">
+              <p className="hidden text-[30px] font-medium leading-none tracking-[-0.045em] text-white sm:block">
                 GRNScope
               </p>
             </Link>
-            <nav className="ml-auto flex items-center gap-5" aria-label="Main navigation">
+            <nav className="ml-auto flex items-center gap-0.5 sm:gap-2 lg:gap-5" aria-label="Main navigation">
               <Link
                 href="/"
                 aria-current={isHomeActive ? "page" : undefined}
-                className={`cursor-pointer rounded-full px-4 py-2.5 text-base font-bold transition hover:text-white ${
+                className={`cursor-pointer rounded-full px-2 py-2 text-[11px] font-bold transition hover:text-white sm:px-3 sm:text-sm lg:px-4 lg:py-2.5 lg:text-base ${
                   isHomeActive
                     ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
                     : "bg-transparent text-white/90"
@@ -88,7 +88,7 @@ export default function RootLayout({
               <Link
                 href="/projects"
                 aria-current={isProjectsActive ? "page" : undefined}
-                className={`cursor-pointer rounded-full px-4 py-2.5 text-base font-bold transition hover:text-white ${
+                className={`cursor-pointer rounded-full px-2 py-2 text-[11px] font-bold transition hover:text-white sm:px-3 sm:text-sm lg:px-4 lg:py-2.5 lg:text-base ${
                   isProjectsActive
                     ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
                     : "bg-transparent text-white/90"
@@ -99,7 +99,7 @@ export default function RootLayout({
               <Link
                 href="/algorithms"
                 aria-current={isAlgorithmsActive ? "page" : undefined}
-                className={`cursor-pointer rounded-full px-4 py-2.5 text-base font-bold transition hover:text-white ${
+                className={`cursor-pointer rounded-full px-2 py-2 text-[11px] font-bold transition hover:text-white sm:px-3 sm:text-sm lg:px-4 lg:py-2.5 lg:text-base ${
                   isAlgorithmsActive
                     ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
                     : "bg-transparent text-white/90"
@@ -110,9 +110,10 @@ export default function RootLayout({
               <button
                 type="button"
                 onClick={openContactModal}
-                className="cursor-pointer rounded-full bg-transparent px-4 py-2.5 text-base font-bold text-white/90 transition hover:text-white"
+                className="cursor-pointer rounded-full bg-transparent px-2 py-2 text-[11px] font-bold text-white/90 transition hover:text-white sm:px-3 sm:text-sm lg:px-4 lg:py-2.5 lg:text-base"
               >
-                Contact us
+                <span className="sm:hidden">Contact</span>
+                <span className="hidden sm:inline">Contact us</span>
               </button>
             </nav>
           </div>

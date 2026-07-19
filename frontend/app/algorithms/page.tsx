@@ -27,6 +27,13 @@ const SIGN_OPTIONS = [
   { value: "no", label: "Unsigned" },
 ] satisfies Array<{ value: BinaryFilter; label: string }>;
 
+const ALGORITHM_DISPLAY_NAMES: Record<string, string> = {
+  CELLORACLE: "CellOracle",
+  GRNBOOST2: "GRNBoost2",
+  PEARSON: "Pearson",
+  SCSGL: "scSGL",
+};
+
 function matchesBoolean(value: boolean, filter: BinaryFilter) {
   if (filter === "any") return true;
   return filter === "yes" ? value : !value;
@@ -36,7 +43,6 @@ export default function AlgorithmsPage() {
   const [algorithms, setAlgorithms] = useState<AlgorithmEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const [pseudotimeFilter, setPseudotimeFilter] = useState<BinaryFilter>("any");
   const [directionFilter, setDirectionFilter] = useState<BinaryFilter>("any");
   const [signFilter, setSignFilter] = useState<BinaryFilter>("any");
@@ -59,31 +65,19 @@ export default function AlgorithmsPage() {
   }, []);
 
   const filteredAlgorithms = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return algorithms.filter((algorithm) => {
-      const matchesSearch =
-        normalizedQuery.length === 0 ||
-        [algorithm.name, algorithm.category, algorithm.tagline]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery);
-
-      return (
-        matchesSearch &&
+    return algorithms.filter(
+      (algorithm) =>
         matchesBoolean(algorithm.requiresPseudotime, pseudotimeFilter) &&
         matchesBoolean(algorithm.directed, directionFilter) &&
-        matchesBoolean(algorithm.signed, signFilter)
-      );
-    });
-  }, [algorithms, directionFilter, pseudotimeFilter, query, signFilter]);
+        matchesBoolean(algorithm.signed, signFilter),
+    );
+  }, [algorithms, directionFilter, pseudotimeFilter, signFilter]);
 
   const hasActiveFilters =
-    query.trim().length > 0 ||
     pseudotimeFilter !== "any" ||
     directionFilter !== "any" ||
     signFilter !== "any";
   const clearFilters = () => {
-    setQuery("");
     setPseudotimeFilter("any");
     setDirectionFilter("any");
     setSignFilter("any");
@@ -91,66 +85,14 @@ export default function AlgorithmsPage() {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
-      <section className="mx-auto max-w-[1100px] px-6 pb-16 pt-10 lg:px-10 lg:pb-20 lg:pt-14">
+      <section className="mx-auto max-w-[1160px] px-5 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-10 lg:pb-20 lg:pt-12">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+          <h1 className="text-3xl font-bold tracking-[-0.035em] text-slate-950 sm:text-[2.5rem]">
             Explore algorithms
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            Find a method based on its data requirements and network properties.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Compare methods by their data requirements and network output.
           </p>
-        </div>
-
-        <div className="mt-7 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <label className="relative block w-full lg:max-w-sm">
-            <span className="sr-only">Search algorithms</span>
-            <svg
-              viewBox="0 0 20 20"
-              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              fill="none"
-              aria-hidden="true"
-            >
-              <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-              <path d="m13.2 13.2 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search algorithms"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 hover:border-slate-300 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-            />
-          </label>
-
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <FilterPill
-              value={pseudotimeFilter}
-              options={PSEUDOTIME_OPTIONS}
-              onChange={setPseudotimeFilter}
-              ariaLabel="Pseudotime filter"
-            />
-            <FilterPill
-              value={directionFilter}
-              options={DIRECTION_OPTIONS}
-              onChange={setDirectionFilter}
-              ariaLabel="Direction filter"
-            />
-            <FilterPill
-              value={signFilter}
-              options={SIGN_OPTIONS}
-              onChange={setSignFilter}
-              ariaLabel="Sign filter"
-            />
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="px-2 text-xs font-medium text-slate-500 transition hover:text-[#1b75a6]"
-              >
-                Reset
-              </button>
-            ) : null}
-          </div>
         </div>
 
         {loadError ? (
@@ -159,38 +101,80 @@ export default function AlgorithmsPage() {
           </div>
         ) : null}
 
-        {isLoading ? (
-          <div className="mt-8 border-y border-slate-200" aria-label="Loading algorithms">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <AlgorithmRowLoading key={index} />
-            ))}
-          </div>
-        ) : null}
+        {!loadError ? (
+          <>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <FilterPill
+                  value={pseudotimeFilter}
+                  options={PSEUDOTIME_OPTIONS}
+                  onChange={setPseudotimeFilter}
+                  ariaLabel="Pseudotime filter"
+                />
+                <FilterPill
+                  value={directionFilter}
+                  options={DIRECTION_OPTIONS}
+                  onChange={setDirectionFilter}
+                  ariaLabel="Direction filter"
+                />
+                <FilterPill
+                  value={signFilter}
+                  options={SIGN_OPTIONS}
+                  onChange={setSignFilter}
+                  ariaLabel="Sign filter"
+                />
+                {hasActiveFilters ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="ml-1 text-xs font-semibold text-slate-500 transition hover:text-[#1b75a6]"
+                  >
+                    Reset
+                  </button>
+                ) : null}
+              </div>
+              <p className="text-xs font-medium text-slate-500" aria-live="polite" aria-atomic="true">
+                {isLoading
+                  ? "Loading…"
+                  : `${filteredAlgorithms.length} ${filteredAlgorithms.length === 1 ? "algorithm" : "algorithms"}`}
+              </p>
+            </div>
 
-        {!isLoading && !loadError && filteredAlgorithms.length > 0 ? (
-          <div className="mt-8 border-y border-slate-200">
-            {filteredAlgorithms.map((algorithm) => (
-              <AlgorithmRow key={algorithm.id} algorithm={algorithm} />
-            ))}
-          </div>
-        ) : null}
-
-        {!isLoading && !loadError && filteredAlgorithms.length === 0 ? (
-          <div className="mt-8 rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-            <h2 className="text-base font-bold text-slate-950">No algorithms match</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-              Try a different search or reset the property filters.
-            </p>
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-4 inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-              >
-                Reset filters
-              </button>
-            ) : null}
-          </div>
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_10px_35px_rgba(15,23,42,0.035)]">
+              <div className="hidden grid-cols-[minmax(0,1fr)_8.75rem_7.25rem_6.25rem_1.5rem] gap-x-4 border-b border-slate-100 px-5 py-3 text-[11px] font-semibold text-slate-400 md:grid">
+                <span>Algorithm</span>
+                <span>Pseudotime</span>
+                <span>Direction</span>
+                <span>Sign</span>
+                <span className="sr-only">Details</span>
+              </div>
+              <div aria-label={isLoading ? "Loading algorithms" : "Algorithm comparison"}>
+                {isLoading
+                  ? Array.from({ length: 6 }).map((_, index) => (
+                      <AlgorithmRowLoading key={index} />
+                    ))
+                  : filteredAlgorithms.length > 0
+                    ? filteredAlgorithms.map((algorithm) => (
+                        <AlgorithmRow key={algorithm.id} algorithm={algorithm} />
+                      ))
+                    : (
+                        <div className="px-6 py-12 text-center">
+                          <h2 className="text-base font-bold text-slate-950">No algorithms match</h2>
+                          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+                            Adjust or reset the property filters.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={clearFilters}
+                            className="mt-4 inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                          >
+                            Reset filters
+                          </button>
+                        </div>
+                      )}
+              </div>
+            </div>
+          </>
         ) : null}
       </section>
     </main>
@@ -216,10 +200,10 @@ function FilterPill({
         value={value}
         onChange={(event) => onChange(event.target.value as BinaryFilter)}
         aria-label={ariaLabel}
-        className={`inline-flex h-9 cursor-pointer appearance-none items-center rounded-lg border pl-3.5 pr-9 text-xs font-semibold outline-none transition focus:ring-4 focus:ring-[#1b75a6]/10 ${
+        className={`inline-flex h-9 cursor-pointer appearance-none items-center rounded-full pl-3.5 pr-9 text-xs font-bold outline-none transition focus:ring-4 focus:ring-[#1b75a6]/15 ${
           isActive
-            ? "border-[#1b75a6]/20 bg-[#edf6fa] text-[#1b75a6] hover:bg-[#e3f0f6]"
-            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"
+            ? "bg-[#e7f2f7] text-[#1b75a6] hover:bg-[#d8e9f3]"
+            : "bg-slate-100 text-slate-600 hover:bg-[#e7f2f7] hover:text-[#1b75a6]"
         }`}
       >
         {options.map((option) => (
@@ -243,36 +227,80 @@ function FilterPill({
 }
 
 function AlgorithmRow({ algorithm }: { algorithm: AlgorithmEntry }) {
+  const displayName = ALGORITHM_DISPLAY_NAMES[algorithm.id] ?? algorithm.name;
+
   return (
     <Link
       href={`/algorithms/${encodeURIComponent(algorithm.id)}`}
-      className="group grid min-h-[5rem] items-center gap-2 border-b border-slate-200 px-1 py-4 text-left transition last:border-b-0 hover:bg-white/70 focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/10 sm:grid-cols-[minmax(0,1fr)_minmax(26rem,28rem)] sm:gap-8 sm:px-3"
+      aria-label={`View ${displayName} algorithm details`}
+      className="group grid min-h-[5.25rem] grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-x-4 border-b border-slate-200 px-4 py-4 text-left transition last:border-b-0 hover:bg-[#f8fcfe] focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/15 md:grid-cols-[minmax(0,1fr)_8.75rem_7.25rem_6.25rem_1.5rem] md:px-5"
     >
       <div className="min-w-0">
-        <h3 className="truncate text-[15px] font-semibold leading-5 tracking-tight text-slate-950 transition group-hover:text-[#155f87]">
-          {algorithm.name}
-        </h3>
-        <p className="mt-1 truncate text-xs font-normal text-slate-500">
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate text-[15px] font-bold leading-5 tracking-[-0.015em] text-slate-950 transition group-hover:text-[#155f87]">
+            {displayName}
+          </h3>
+          {algorithm.recommended ? (
+            <span className="shrink-0 rounded-full bg-[#e5f5f2] px-2 py-0.5 text-[10px] font-bold text-[#23796f]">
+              Recommended
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 truncate text-xs leading-5 text-slate-600" title={algorithm.tagline}>
           {algorithm.category}
         </p>
       </div>
-      <div className="grid w-full grid-cols-[1.35fr_1fr_0.8fr] gap-x-2 text-[11px] font-normal text-slate-500 sm:grid-cols-[minmax(8.5rem,1.35fr)_minmax(6rem,1fr)_minmax(4.5rem,0.8fr)] sm:gap-x-5 sm:text-xs">
-        <span>{algorithm.requiresPseudotime ? "Uses pseudotime" : "No pseudotime"}</span>
-        <span>{algorithm.directed ? "Directed" : "Undirected"}</span>
-        <span>{algorithm.signed ? "Signed" : "Unsigned"}</span>
-      </div>
+      <dl className="col-span-2 mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 md:contents">
+        <AlgorithmProperty
+          label="Pseudotime"
+          value={algorithm.requiresPseudotime ? "Required" : "Not required"}
+        />
+        <AlgorithmProperty
+          label="Direction"
+          value={algorithm.directed ? "Directed" : "Undirected"}
+        />
+        <AlgorithmProperty label="Sign" value={algorithm.signed ? "Signed" : "Unsigned"} />
+      </dl>
+      <svg
+        viewBox="0 0 20 20"
+        className="col-start-2 row-start-1 h-5 w-5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#1b75a6] md:col-start-5"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="m7.5 5 5 5-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </Link>
+  );
+}
+
+function AlgorithmProperty({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 md:block">
+      <dt className="mb-1.5 truncate text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 md:sr-only">
+        {label}
+      </dt>
+      <dd>
+        <span className="inline-flex max-w-full items-center rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 sm:text-[11px]">
+          <span className="truncate">{value}</span>
+        </span>
+      </dd>
+    </div>
   );
 }
 
 function AlgorithmRowLoading() {
   return (
-    <div className="flex min-h-[5rem] animate-pulse items-center justify-between gap-6 border-b border-slate-200 px-3 py-4 last:border-b-0">
-      <div>
+    <div className="grid min-h-[5.25rem] animate-pulse grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-4 border-b border-slate-200 px-4 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_8.75rem_7.25rem_6.25rem_1.5rem] md:px-5">
+      <div className="min-w-0">
         <div className="h-4 w-28 rounded-full bg-slate-200" />
         <div className="mt-2 h-3 w-36 rounded-full bg-slate-100" />
       </div>
-      <div className="h-3 w-52 rounded-full bg-slate-100" />
+      <div className="col-span-2 grid grid-cols-3 gap-2 md:contents">
+        <div className="h-6 w-20 rounded-md bg-slate-100" />
+        <div className="h-6 w-16 rounded-md bg-slate-100" />
+        <div className="h-6 w-14 rounded-md bg-slate-100" />
+      </div>
+      <div className="hidden h-5 w-5 rounded-full bg-slate-100 md:block" />
     </div>
   );
 }

@@ -64,7 +64,7 @@ export default function ProjectCard({
         <div className="flex items-start gap-2">
           <h3
             title={project.name}
-            className="min-w-0 flex-1 truncate text-base font-semibold leading-6 tracking-tight text-slate-950"
+            className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-6 tracking-[-0.015em] text-slate-900"
           >
             {project.name}
           </h3>
@@ -139,38 +139,39 @@ export default function ProjectCard({
             </div>
           ) : null}
         </div>
-        <p className="mt-1.5 flex min-w-0 items-center gap-2 truncate text-xs font-normal text-slate-500">
-          <span className={`inline-flex shrink-0 items-center gap-1.5 ${status.textClassName}`}>
+        <div className="mt-1.5 flex min-w-0 items-center gap-2">
+          <span className={`inline-flex h-[1.375rem] shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold leading-none ring-1 ring-inset ${status.badgeClassName}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${status.dotClassName}`} aria-hidden="true" />
             {status.label}
           </span>
-          <span className="text-slate-300">·</span>
-          <span className="truncate">Created {createdAtLabel}</span>
-        </p>
+          <span className="truncate text-[11px] font-medium leading-5 text-slate-400">
+            Created {createdAtLabel}
+          </span>
+        </div>
 
         <div className="mt-auto grid grid-cols-[0.8fr_0.8fr_1.4fr] gap-3 border-t border-slate-100 pt-3">
           <div>
-            <p className="text-[0.65rem] font-normal uppercase tracking-[0.1em] text-slate-400">
-              Genes
-            </p>
-            <p className="mt-1 text-sm font-normal tabular-nums text-slate-800">
+            <p className="text-[15px] font-semibold leading-5 tabular-nums text-slate-800">
               {geneSummary}
             </p>
+            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+              Genes
+            </p>
           </div>
           <div>
-            <p className="text-[0.65rem] font-normal uppercase tracking-[0.1em] text-slate-400">
-              Cells
-            </p>
-            <p className="mt-1 text-sm font-normal tabular-nums text-slate-800">
+            <p className="text-[15px] font-semibold leading-5 tabular-nums text-slate-800">
               {cellSummary}
             </p>
+            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+              Cells
+            </p>
           </div>
           <div>
-            <p className="text-[0.65rem] font-normal uppercase tracking-[0.1em] text-slate-400">
-              Algorithms
-            </p>
-            <p className="mt-1 text-sm font-normal tabular-nums text-slate-800">
+            <p className="text-[15px] font-semibold leading-5 tabular-nums text-slate-800">
               {algorithmSummary}
+            </p>
+            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+              Algorithms
             </p>
           </div>
         </div>
@@ -210,8 +211,8 @@ function getProjectStatus(project: Project) {
   if (!latestJob) {
     return {
       label: "No run",
-      textClassName: "text-slate-500",
-      dotClassName: "bg-slate-300",
+      badgeClassName: "bg-slate-50 text-slate-600 ring-slate-200",
+      dotClassName: "bg-slate-400",
     };
   }
 
@@ -219,7 +220,7 @@ function getProjectStatus(project: Project) {
   if (latestJob.overall_status === "SetupFailed" || latestJob.setup_error_message) {
     return {
       label: "Setup issue",
-      textClassName: "text-amber-700",
+      badgeClassName: "bg-amber-50 text-amber-700 ring-amber-200/80",
       dotClassName: "bg-amber-500",
     };
   }
@@ -231,34 +232,34 @@ function getProjectStatus(project: Project) {
   if (hasRunning || hasQueued || latestJob.overall_status === "Running") {
     return {
       label: "Running",
-      textClassName: "text-sky-700",
+      badgeClassName: "bg-sky-50 text-sky-700 ring-sky-200/80",
       dotClassName: "bg-sky-500",
     };
   }
   if (hasCompleted && hasFailed) {
     return {
       label: "Partial",
-      textClassName: "text-violet-700",
+      badgeClassName: "bg-violet-50 text-violet-700 ring-violet-200/80",
       dotClassName: "bg-violet-500",
     };
   }
   if (hasFailed || latestJob.overall_status === "Failed") {
     return {
       label: "Failed",
-      textClassName: "text-rose-600",
+      badgeClassName: "bg-rose-50 text-rose-700 ring-rose-200/80",
       dotClassName: "bg-rose-500",
     };
   }
   if (hasCompleted || latestJob.overall_status === "Completed") {
     return {
       label: "Completed",
-      textClassName: "text-[#178a62]",
-      dotClassName: "bg-[#20b779]",
+      badgeClassName: "bg-emerald-50 text-emerald-700 ring-emerald-200/80",
+      dotClassName: "bg-emerald-500",
     };
   }
   return {
     label: latestJob.overall_status || "Queued",
-    textClassName: "text-amber-700",
+    badgeClassName: "bg-amber-50 text-amber-700 ring-amber-200/80",
     dotClassName: "bg-amber-500",
   };
 }
