@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import heapq
 import hashlib
 import io
@@ -40,6 +41,7 @@ DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
 DEFAULT_CONFIDENCE_STOP_RHO = 0.95
 DEFAULT_CONFIDENCE_STOP_STREAK = 2
 DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
+SINGE_MAX_CONSECUTIVE_EMPTY_RUNS = 3
 DEFAULT_MAX_PREPROCESSED_GENES = 8000
 DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
 DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
@@ -62,6 +64,20 @@ class AlgorithmStoppedError(RuntimeError):
 
 class MatrixValidationRuntimeError(ValueError):
     pass
+
+
+class EmptyRankedEdgesError(ValueError):
+    pass
+
+
+class EmptyConfidenceRunError(RuntimeError):
+    def __init__(self, algorithm_id: str, run_id: str, ranked_edges_path: Path):
+        self.algorithm_id = algorithm_id.upper()
+        self.run_id = run_id
+        self.ranked_edges_path = ranked_edges_path
+        super().__init__(
+            f"{self.algorithm_id} produced no valid edges for {self.run_id}."
+        )
 
 
 ERROR_PRIORITY_MARKERS = (
@@ -1548,6 +1564,155 @@ def preprocess_expression_matrix(
             )
 
 
+def resolve_algorithm_gene_limit(
+    algorithm_id: str,
+    project_manifest: dict,
+    parameter_name: str,
+) -> int | None:
+    normalized_algorithm_id = algorithm_id.upper()
+
+    overrides = (project_manifest.get("algorithm_parameters") or {}).get(
+        normalized_algorithm_id
+    )
+    if isinstance(overrides, dict) and parameter_name in overrides:
+        return parse_positive_int(overrides.get(parameter_name))
+
+    resolved = (project_manifest.get("resolved_algorithm_parameters") or {}).get(
+        normalized_algorithm_id
+    )
+    if isinstance(resolved, dict) and parameter_name in resolved:
+        return parse_positive_int(resolved.get(parameter_name))
+
+    try:
+        algorithm_info = get_algorithm_by_id(normalized_algorithm_id)
+    except KeyError:
+        return None
+    for parameter in algorithm_info.get("parameters", []):
+        if parameter.get("name") == parameter_name:
+            return parse_positive_int(parameter.get("default"))
+    return None
+
+
+def limit_expression_genes_by_variance(
+    source_expression: Path,
+    destination_expression: Path,
+    max_genes: int,
+) -> Path:
+    """Create one deterministic top-variance gene subset for an algorithm.
+
+    This runs before confidence cells are sampled, ensuring every bootstrap run
+    uses the same genes. The input is already globally preprocessed, so values
+    are copied exactly and only rows are removed.
+    """
+    dialect = detect_csv_dialect_from_file(source_expression)
+    with source_expression.open("r", encoding="utf-8", newline="") as source_file:
+        reader = csv.reader(source_file, dialect=dialect)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return source_expression
+
+    cell_names = validate_preprocessing_header(header)
+    cell_count = len(cell_names)
+    scored_rows: list[tuple[float, int]] = []
+    for index, row in iter_expression_data_rows(source_expression, dialect):
+        row_number = index + 2
+        gene_name = validate_preprocessing_gene_name(row, row_number)
+        values = parse_expression_numeric_values(
+            row,
+            cell_count,
+            row_number=row_number,
+            gene_name=gene_name,
+            cell_names=cell_names,
+        )
+        scored_rows.append((compute_row_variance(values), index))
+
+    if len(scored_rows) <= max_genes:
+        return source_expression
+
+    retained_indices = {
+        index
+        for _variance, index in sorted(
+            scored_rows,
+            key=lambda item: (-item[0], item[1]),
+        )[:max_genes]
+    }
+    destination_expression.parent.mkdir(parents=True, exist_ok=True)
+    with destination_expression.open(
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as destination_file:
+        writer = csv.writer(
+            destination_file,
+            delimiter=getattr(dialect, "delimiter", ","),
+            quotechar=getattr(dialect, "quotechar", '"'),
+            lineterminator="\n",
+        )
+        writer.writerow(header)
+        for index, row in iter_expression_data_rows(source_expression, dialect):
+            if index in retained_indices:
+                writer.writerow(row)
+
+    return destination_expression
+
+
+def prepare_algorithm_expression_source(
+    *,
+    runtime_root: Path,
+    algorithm_id: str,
+    project_manifest: dict,
+    preprocessed_expression: Path,
+) -> Path:
+    normalized_algorithm_id = algorithm_id.upper()
+    if normalized_algorithm_id not in {
+        "PIDC",
+        "SINCERITIES",
+        "SCRIBE",
+        "SINGE",
+    }:
+        return preprocessed_expression
+
+    max_genes = resolve_algorithm_gene_limit(
+        normalized_algorithm_id,
+        project_manifest,
+        "maxGenes",
+    )
+    if max_genes is None:
+        return preprocessed_expression
+
+    if normalized_algorithm_id == "SINCERITIES":
+        header, _dialect = read_delimited_header(preprocessed_expression)
+        total_cell_count = max(0, len(header) - 1)
+        gene_count = count_expression_gene_rows(preprocessed_expression)
+        confidence_settings = resolve_confidence_settings(
+            project_manifest,
+            gene_count=gene_count,
+        )
+        confidence_run_count = int(confidence_settings["bootstrap_runs"])
+        confidence_cell_count = total_cell_count
+        if confidence_run_count > 1:
+            confidence_cell_count = max(
+                1,
+                int(
+                    round(
+                        total_cell_count
+                        * float(confidence_settings["subsample_fraction"])
+                    )
+                ),
+            )
+        # ppcor's all-gene partial-correlation matrix needs fewer variables
+        # than observations. Keep a final runtime guard even when the user
+        # chooses a larger value in the settings UI.
+        max_genes = min(max_genes, max(2, confidence_cell_count - 1))
+
+    return limit_expression_genes_by_variance(
+        preprocessed_expression,
+        runtime_root / "algorithm_preprocessed" / "ExpressionData.csv",
+        max_genes,
+    )
+
+
 def read_delimited_header(
     source_path: Path,
 ) -> tuple[list[str], csv.Dialect | type[csv.Dialect]]:
@@ -1752,6 +1917,9 @@ def write_run_timings(runtime_root: Path, run_metadata: dict[str, dict]) -> None
                 "stages_seconds",
                 "runner_observability",
                 "resource_allocation",
+                "reason",
+                "error_message",
+                "diagnostics_path",
             }
         }
         for run_id, metadata in run_metadata.items()
@@ -1936,6 +2104,17 @@ def completed_run_durations(run_metadata: dict[str, dict]) -> list[int]:
     return durations
 
 
+def attempted_run_durations(run_metadata: dict[str, dict]) -> list[int]:
+    durations: list[int] = []
+    for metadata in run_metadata.values():
+        if metadata.get("status") not in {"Completed", "Empty"}:
+            continue
+        elapsed_seconds = parse_positive_int(metadata.get("elapsed_seconds"))
+        if elapsed_seconds is not None:
+            durations.append(elapsed_seconds)
+    return durations
+
+
 def estimate_remaining_seconds_range_from_run_timings(
     run_metadata: dict[str, dict],
     *,
@@ -1953,14 +2132,16 @@ def estimate_remaining_seconds_range_from_run_timings(
     if completed_count == 0:
         return None
 
-    typical_run_seconds = float(median(completed_durations[-3:]))
+    attempt_durations = attempted_run_durations(run_metadata)
+    attempted_count = len(attempt_durations)
+    typical_run_seconds = float(median(attempt_durations[-3:]))
     bounded_maximum_run_count = min(
         DEFAULT_CONFIDENCE_MAX_RUNS,
         max(1, int(maximum_run_count)),
     )
     latest_remaining_runs = max(
         0,
-        bounded_maximum_run_count - completed_count,
+        bounded_maximum_run_count - attempted_count,
     )
     if latest_remaining_runs == 0:
         return 0, 0
@@ -2277,6 +2458,12 @@ def initialize_beeline_runtime(
         source_expression=source_expression,
         project_manifest=project_manifest,
     )
+    preprocessed_expression = prepare_algorithm_expression_source(
+        runtime_root=runtime_root,
+        algorithm_id=algorithm_id,
+        project_manifest=project_manifest,
+        preprocessed_expression=preprocessed_expression,
+    )
 
     return (
         runtime_root,
@@ -2534,7 +2721,9 @@ def parse_ranked_edges_csv(
                 node_names.add(target)
 
     if not parsed_edges:
-        raise ValueError("rankedEdges.csv did not contain any valid edges.")
+        raise EmptyRankedEdgesError(
+            "rankedEdges.csv did not contain any valid edges."
+        )
 
     scores = [edge["score"] for edge in parsed_edges]
     min_score = min(scores)
@@ -2959,6 +3148,111 @@ def confidence_ranked_edges_path(
     return output_dir / dataset_id / run_id / algorithm_id.upper() / "rankedEdges.csv"
 
 
+def gzip_diagnostic_file(source: Path, destination: Path) -> str:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+    with source.open("rb") as source_handle, gzip.open(
+        destination,
+        "wb",
+        compresslevel=6,
+    ) as destination_handle:
+        while chunk := source_handle.read(1024 * 1024):
+            digest.update(chunk)
+            destination_handle.write(chunk)
+    return digest.hexdigest()
+
+
+def archive_singe_empty_run_diagnostics(
+    *,
+    runtime_root: Path,
+    output_dir: Path,
+    dataset_id: str,
+    run_id: str,
+    parse_error: str,
+) -> Path:
+    """Preserve raw SINGE evidence for an empty, otherwise successful run."""
+
+    algorithm_output_dir = output_dir / dataset_id / run_id / "SINGE"
+    diagnostic_dir = runtime_root / "run_diagnostics" / run_id
+    shutil.rmtree(diagnostic_dir, ignore_errors=True)
+    diagnostic_dir.mkdir(parents=True, exist_ok=True)
+
+    inventory: list[dict] = []
+    if algorithm_output_dir.exists():
+        for source in sorted(algorithm_output_dir.rglob("*")):
+            if source.is_file() and not source.is_symlink():
+                try:
+                    size_bytes = source.stat().st_size
+                except OSError:
+                    continue
+                inventory.append(
+                    {
+                        "path": str(source.relative_to(algorithm_output_dir)),
+                        "size_bytes": size_bytes,
+                    }
+                )
+
+    sources: set[Path] = set()
+    for relative_path in (
+        Path("rankedEdges.csv"),
+        Path("output.txt"),
+        Path("working_dir") / "phase_timings.json",
+    ):
+        source = algorithm_output_dir / relative_path
+        if source.is_file() and not source.is_symlink():
+            sources.add(source)
+
+    working_dir = algorithm_output_dir / "working_dir"
+    if working_dir.is_dir():
+        for source in working_dir.glob("time*.txt"):
+            if source.is_file() and not source.is_symlink():
+                sources.add(source)
+        # SINGE writes its raw aggregate and per-replicate intermediate files
+        # below one numeric directory per pseudotime trajectory.
+        for trajectory_dir in working_dir.iterdir():
+            if not trajectory_dir.is_dir() or not trajectory_dir.name.isdigit():
+                continue
+            for source in trajectory_dir.rglob("*"):
+                if source.is_file() and not source.is_symlink():
+                    sources.add(source)
+
+    archived_files: list[dict] = []
+    for source in sorted(sources):
+        relative_path = source.relative_to(algorithm_output_dir)
+        destination = diagnostic_dir / "raw" / Path(f"{relative_path}.gz")
+        try:
+            sha256 = gzip_diagnostic_file(source, destination)
+            archived_files.append(
+                {
+                    "source_path": str(relative_path),
+                    "archive_path": str(destination.relative_to(diagnostic_dir)),
+                    "size_bytes": source.stat().st_size,
+                    "sha256": sha256,
+                }
+            )
+        except OSError as exc:
+            archived_files.append(
+                {
+                    "source_path": str(relative_path),
+                    "archive_error": sanitize_error_message(str(exc)),
+                }
+            )
+
+    manifest = {
+        "algorithm_id": "SINGE",
+        "run_id": run_id,
+        "reason": "empty_ranked_edges",
+        "parse_error": parse_error,
+        "source_inventory": inventory,
+        "archived_files": archived_files,
+    }
+    (diagnostic_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2),
+        encoding="utf-8",
+    )
+    return diagnostic_dir
+
+
 def parse_confidence_run_output(
     output_dir: Path,
     dataset_id: str,
@@ -2988,6 +3282,12 @@ def parse_confidence_run_output(
                 run_id=run_id,
                 algorithm_id=algorithm_id,
             )
+        ) from exc
+    except EmptyRankedEdgesError as exc:
+        raise EmptyConfidenceRunError(
+            algorithm_id,
+            run_id,
+            ranked_edges_path,
         ) from exc
     except ValueError as exc:
         raise RuntimeError(
@@ -3396,6 +3696,12 @@ def run_beeline_with_progress(
         "streak": 0,
         "checks": [],
     }
+    empty_run_summary = {
+        "max_consecutive": SINGE_MAX_CONSECUTIVE_EMPTY_RUNS,
+        "consecutive": 0,
+        "total": 0,
+        "run_ids": [],
+    }
     persistent_worker = PersistentBLRunnerWorker(
         python_executable=python_executable,
         beeline_root=beeline_root,
@@ -3477,6 +3783,14 @@ def run_beeline_with_progress(
             response_path = persistent_worker.submit(config_path, run_id)
             worker_response = persistent_worker.read_response(response_path)
             while worker_response is None:
+                # Check the durable task signal before inspecting the worker.
+                # The stop request may come from a different service process;
+                # in that case the API has already terminated BLRunner, and an
+                # exit-code check first would misclassify the stop as a failure.
+                if stop_event is not None and stop_event.is_set():
+                    persistent_worker.stop(force=True)
+                    break
+
                 process = persistent_worker.process
                 if process is None or process.poll() is not None:
                     return_code = process.returncode if process is not None else None
@@ -3484,10 +3798,6 @@ def run_beeline_with_progress(
                         "Persistent BLRunner worker exited before completing "
                         f"{run_id} (code {return_code})."
                     )
-                if stop_event is not None and stop_event.is_set():
-                    persistent_worker.stop(force=True)
-                    break
-
                 elapsed = int(time.time() - started_at)
                 current_run_elapsed = int(time.time() - run_started_at_timestamp)
                 run_metadata[run_id]["elapsed_seconds"] = current_run_elapsed
@@ -3626,14 +3936,64 @@ def run_beeline_with_progress(
                 raise RuntimeError(friendly_error)
 
             output_ingestion_started = time.perf_counter()
-            run_edges, ranked_edges_path = parse_confidence_run_output(
-                output_dir,
-                dataset_id,
-                run_id,
-                algorithm_id,
-                runtime_root=runtime_root,
-                max_edges_per_target=ranked_edges_per_target_limit,
-            )
+            try:
+                run_edges, ranked_edges_path = parse_confidence_run_output(
+                    output_dir,
+                    dataset_id,
+                    run_id,
+                    algorithm_id,
+                    runtime_root=runtime_root,
+                    max_edges_per_target=ranked_edges_per_target_limit,
+                )
+            except EmptyConfidenceRunError as exc:
+                if algorithm_id.upper() != "SINGE":
+                    raise
+
+                ranked_edges_path = exc.ranked_edges_path
+                ranked_edge_paths[run_id] = str(ranked_edges_path)
+                empty_run_summary["total"] = int(empty_run_summary["total"]) + 1
+                empty_run_summary["consecutive"] = (
+                    int(empty_run_summary["consecutive"]) + 1
+                )
+                empty_run_summary["run_ids"].append(run_id)
+                diagnostic_dir = archive_singe_empty_run_diagnostics(
+                    runtime_root=runtime_root,
+                    output_dir=output_dir,
+                    dataset_id=dataset_id,
+                    run_id=run_id,
+                    parse_error=str(exc.__cause__ or exc),
+                )
+                stage_timings["output_ingestion"] = round(
+                    time.perf_counter() - output_ingestion_started,
+                    6,
+                )
+                run_metadata[run_id].update(
+                    {
+                        "status": "Empty",
+                        "reason": "empty_ranked_edges",
+                        "error_message": str(exc),
+                        "diagnostics_path": str(diagnostic_dir),
+                    }
+                )
+                write_run_timings(runtime_root, run_metadata)
+                update_job_state_fn(
+                    project_dir,
+                    job_id,
+                    algorithm_id=algorithm_id,
+                    progress_label="SINGE returned an empty confidence sample; continuing",
+                    run_metadata=run_metadata,
+                )
+                if int(empty_run_summary["consecutive"]) >= int(
+                    empty_run_summary["max_consecutive"]
+                ):
+                    raise RuntimeError(
+                        "SINGE produced no valid edges in "
+                        f"{empty_run_summary['consecutive']} consecutive confidence runs. "
+                        "The selected genes or SINGE parameters did not produce a usable network."
+                    ) from exc
+                continue
+
+            empty_run_summary["consecutive"] = 0
             stage_timings["output_ingestion"] = round(
                 time.perf_counter() - output_ingestion_started,
                 6,
@@ -3761,6 +4121,16 @@ def run_beeline_with_progress(
     final_aggregation_started = time.perf_counter()
     if confidence_settings.get("confidence_enabled"):
         processed_run_count = int(confidence_accumulator.get("processed_runs", 0))
+        if (
+            algorithm_id.upper() == "SINGE"
+            and processed_run_count < int(early_stopping["min_runs"])
+        ):
+            raise RuntimeError(
+                "SINGE completed "
+                f"{processed_run_count} valid confidence runs and "
+                f"{empty_run_summary['total']} empty runs, but at least "
+                f"{early_stopping['min_runs']} valid runs are required."
+            )
         top_edges, network_summary = finalize_confidence_accumulator(
             confidence_accumulator,
             run_count=processed_run_count,
@@ -3811,9 +4181,15 @@ def run_beeline_with_progress(
             "planned_bootstrap_runs": total_run_count,
             "bootstrap_runs": int(network_summary.get("bootstrap_runs", total_run_count)),
             "early_stopping": early_stopping,
+            "empty_runs": empty_run_summary,
             "run_metadata": run_metadata,
         },
         "run_ranked_edges_paths": ranked_edge_paths,
+        "run_diagnostics_root": (
+            str(runtime_root / "run_diagnostics")
+            if (runtime_root / "run_diagnostics").is_dir()
+            else None
+        ),
         "runtime_root": str(runtime_root),
         "ranked_edges_path": str(ranked_edges_path),
     }

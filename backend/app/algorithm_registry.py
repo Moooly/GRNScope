@@ -131,7 +131,23 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Datasets without pseudotime.",
             "Recommended preset selection.",
         ],
-        "parameters": [],
+        "parameters": [
+            {
+                "name": "maxGenes",
+                "label": "Gene filtering",
+                "description": (
+                    "Maximum number of highest-variance genes PIDC analyzes after "
+                    "the project-wide gene filter. PIDC evaluates gene triplets, so "
+                    "larger values can increase runtime very quickly."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "integer",
+                "minimum": 3,
+                "maximum": 8000,
+                "step": 100,
+            },
+        ],
     },
     {
         "id": "GENIE3",
@@ -556,6 +572,21 @@ ALGORITHMS: list[AlgorithmInfo] = [
         ],
         "parameters": [
             {
+                "name": "maxGenes",
+                "label": "Gene filtering",
+                "description": (
+                    "Maximum number of highest-variance genes SINCERITIES analyzes "
+                    "after the project-wide gene filter. GRNScope may lower this "
+                    "further so the partial-correlation step has more cells than genes."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "integer",
+                "minimum": 2,
+                "maximum": 8000,
+                "step": 100,
+            },
+            {
                 "name": "nBins",
                 "label": "Number of time bins",
                 "description": "Time windows the trajectory is split into.",
@@ -604,6 +635,21 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Comparing directed information methods.",
         ],
         "parameters": [
+            {
+                "name": "maxGenes",
+                "label": "Gene filtering",
+                "description": (
+                    "Number of highest-variance genes SCRIBE analyzes after the "
+                    "project-wide gene filter. SCRIBE evaluates every directed "
+                    "gene pair, so larger values can increase runtime very quickly."
+                ),
+                "default": 300,
+                "required": False,
+                "value_type": "integer",
+                "minimum": 3,
+                "maximum": 8000,
+                "step": 100,
+            },
             {
                 "name": "delay",
                 "label": "Time delay",
@@ -701,6 +747,21 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Small to medium gene sets where runtime is acceptable.",
         ],
         "parameters": [
+            {
+                "name": "maxGenes",
+                "label": "Gene filtering",
+                "description": (
+                    "Number of highest-variance genes SINGE analyzes after the "
+                    "project-wide gene filter. SINGE fits lagged regulator-target "
+                    "models, so larger values can increase runtime very quickly."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "integer",
+                "minimum": 3,
+                "maximum": 8000,
+                "step": 100,
+            },
             {
                 "name": "lambda",
                 "label": "Regularization strength",

@@ -100,6 +100,20 @@ def copy_runtime_diagnostic_files(runtime_root: Path, destination: Path) -> list
                 if copy_if_present(source, destination_path):
                     copied_files.append(str(destination_path))
 
+    run_diagnostics_dir = runtime_root / "run_diagnostics"
+    if run_diagnostics_dir.is_dir():
+        archived_run_diagnostics = destination / "run_diagnostics"
+        shutil.copytree(
+            run_diagnostics_dir,
+            archived_run_diagnostics,
+            dirs_exist_ok=True,
+        )
+        copied_files.extend(
+            str(path)
+            for path in archived_run_diagnostics.rglob("*")
+            if path.is_file()
+        )
+
     return copied_files
 
 
@@ -219,6 +233,32 @@ def archive_beeline_result_artifacts(
 
     if archived_run_paths:
         archived_result["run_ranked_edges_paths"] = archived_run_paths
+
+    run_diagnostics_root_value = beeline_result.get("run_diagnostics_root")
+    if run_diagnostics_root_value:
+        run_diagnostics_root = Path(str(run_diagnostics_root_value))
+        archived_run_diagnostics_root = artifact_dir / "run_diagnostics"
+        if run_diagnostics_root.is_dir():
+            shutil.copytree(
+                run_diagnostics_root,
+                archived_run_diagnostics_root,
+                dirs_exist_ok=True,
+            )
+            archived_result["run_diagnostics_root"] = str(
+                archived_run_diagnostics_root
+            )
+            run_metadata = (
+                archived_result.get("confidence_summary", {}).get("run_metadata", {})
+            )
+            if isinstance(run_metadata, dict):
+                for run_id, metadata in run_metadata.items():
+                    if not isinstance(metadata, dict) or metadata.get("status") != "Empty":
+                        continue
+                    archived_diagnostic_path = (
+                        archived_run_diagnostics_root / str(run_id)
+                    )
+                    if archived_diagnostic_path.is_dir():
+                        metadata["diagnostics_path"] = str(archived_diagnostic_path)
 
     if runtime_root:
         copy_if_present(runtime_root / "config.yaml", artifact_dir / "config.yaml")

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..schemas import TempUploadResponse
+from ..species_inference import infer_species_from_gene_names
 from ..storage import (
     create_temp_upload_id,
     save_json,
@@ -163,6 +164,9 @@ async def temp_dataset_upload(
             "cell_names": preview_names(expression_info["cell_names"]),
             "gene_names_truncated": (
                 expression_info["gene_count"] > METADATA_NAME_PREVIEW_LIMIT
+            ),
+            "species_inference": infer_species_from_gene_names(
+                expression_info["gene_names"]
             ),
             "cell_names_truncated": (
                 expression_info["cell_count"] > METADATA_NAME_PREVIEW_LIMIT

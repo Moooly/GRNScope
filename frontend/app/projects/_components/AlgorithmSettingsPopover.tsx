@@ -15,6 +15,7 @@ interface AlgorithmSettingsPopoverProps {
   algorithm: ProjectAlgorithm | null;
   anchorElement: HTMLButtonElement | null;
   currentOverrides: Record<string, unknown>;
+  contextualDefaults?: Record<string, unknown>;
   onApply: (algorithmId: string, overrides: Record<string, unknown>) => void;
   onClose: () => void;
 }
@@ -41,17 +42,28 @@ function isBoolParam(parameter: AlgorithmParameter) {
 function initialDraftValue(
   parameter: AlgorithmParameter,
   override: unknown,
+  contextualDefault?: unknown,
 ): DraftValue {
-  const raw = override !== undefined ? override : parameter.default;
+  const raw = override !== undefined
+    ? override
+    : contextualDefault !== undefined
+      ? contextualDefault
+      : parameter.default;
   if (isBoolParam(parameter)) return Boolean(raw);
   return raw === null || raw === undefined ? "" : String(raw);
 }
 
-function defaultAsString(parameter: AlgorithmParameter): string {
-  if (isBoolParam(parameter)) return String(Boolean(parameter.default));
-  return parameter.default === null || parameter.default === undefined
+function defaultAsString(
+  parameter: AlgorithmParameter,
+  contextualDefault?: unknown,
+): string {
+  const raw = contextualDefault !== undefined
+    ? contextualDefault
+    : parameter.default;
+  if (isBoolParam(parameter)) return String(Boolean(raw));
+  return raw === null || raw === undefined
     ? ""
-    : String(parameter.default);
+    : String(raw);
 }
 
 function numericHint(parameter: AlgorithmParameter): string | null {
@@ -134,6 +146,7 @@ export default function AlgorithmSettingsPopover({
   algorithm,
   anchorElement,
   currentOverrides,
+  contextualDefaults = {},
   onApply,
   onClose,
 }: AlgorithmSettingsPopoverProps) {
@@ -148,12 +161,12 @@ export default function AlgorithmSettingsPopover({
       next[parameter.name] = initialDraftValue(
         parameter,
         currentOverrides[parameter.name],
+        contextualDefaults[parameter.name],
       );
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening or recontextualizing the popover seeds its local form draft
     setDraft(next);
-    // Re-seed only when a different algorithm opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [algorithm]);
+  }, [algorithm, contextualDefaults, currentOverrides]);
 
   const positionPopover = useCallback(() => {
     const panel = panelRef.current;
@@ -318,7 +331,11 @@ export default function AlgorithmSettingsPopover({
   const resetToDefaults = () => {
     const next: Draft = {};
     for (const parameter of parameters) {
-      next[parameter.name] = initialDraftValue(parameter, undefined);
+      next[parameter.name] = initialDraftValue(
+        parameter,
+        undefined,
+        contextualDefaults[parameter.name],
+      );
     }
     setDraft(next);
   };
@@ -333,7 +350,10 @@ export default function AlgorithmSettingsPopover({
 
       if (isBoolParam(parameter)) {
         const value = Boolean(raw);
-        if (String(value) !== defaultAsString(parameter)) {
+        if (
+          String(value) !==
+          defaultAsString(parameter, contextualDefaults[parameter.name])
+        ) {
           overrides[parameter.name] = value;
         }
         continue;
@@ -343,16 +363,20 @@ export default function AlgorithmSettingsPopover({
         const text = String(raw).trim();
         if (text === "") continue;
         const value = Number(text);
-        const hasDefault =
-          parameter.default !== null && parameter.default !== undefined;
-        if (!hasDefault || value !== Number(parameter.default)) {
+        const defaultValue = contextualDefaults[parameter.name] !== undefined
+          ? contextualDefaults[parameter.name]
+          : parameter.default;
+        const hasDefault = defaultValue !== null && defaultValue !== undefined;
+        if (!hasDefault || value !== Number(defaultValue)) {
           overrides[parameter.name] = value;
         }
         continue;
       }
 
       const value = String(raw);
-      if (value !== defaultAsString(parameter)) {
+      if (
+        value !== defaultAsString(parameter, contextualDefaults[parameter.name])
+      ) {
         overrides[parameter.name] = value;
       }
     }

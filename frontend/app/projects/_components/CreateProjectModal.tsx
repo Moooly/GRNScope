@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmSettingsPopover from "./AlgorithmSettingsPopover";
@@ -6,6 +6,7 @@ import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 
 const MAX_PREPROCESSED_GENES = 8000;
+const EMPTY_ALGORITHM_PARAMETER_VALUES: Record<string, unknown> = {};
 
 const CELLORACLE_SPECIES_OPTIONS = [
   { value: "human", label: "Human" },
@@ -53,6 +54,10 @@ interface CreateProjectModalProps {
   logTransformEnabled: boolean;
   maxEdgesPerTarget: string;
   maxEdgesLimit: number;
+  pidcDefaultMaxGenes: number;
+  sinceritiesDefaultMaxGenes: number;
+  scribeDefaultMaxGenes: number;
+  singeDefaultMaxGenes: number;
   cellOracleSpecies: string;
   hasCellOracleSettingsConfigured: boolean;
   selectedIds: string[];
@@ -108,6 +113,10 @@ export default function CreateProjectModal({
   logTransformEnabled,
   maxEdgesPerTarget,
   maxEdgesLimit,
+  pidcDefaultMaxGenes,
+  sinceritiesDefaultMaxGenes,
+  scribeDefaultMaxGenes,
+  singeDefaultMaxGenes,
   cellOracleSpecies,
   hasCellOracleSettingsConfigured,
   selectedIds,
@@ -158,6 +167,38 @@ export default function CreateProjectModal({
   const [algorithmToConfigure, setAlgorithmToConfigure] = useState<ProjectAlgorithm | null>(null);
   const [algorithmConfigureAnchor, setAlgorithmConfigureAnchor] =
     useState<HTMLButtonElement | null>(null);
+  const algorithmCurrentOverrides = useMemo(
+    () =>
+      algorithmToConfigure
+        ? algorithmParameters[algorithmToConfigure.id] ??
+          EMPTY_ALGORITHM_PARAMETER_VALUES
+        : EMPTY_ALGORITHM_PARAMETER_VALUES,
+    [algorithmParameters, algorithmToConfigure],
+  );
+  const algorithmContextualDefaults = useMemo(
+    () => {
+      if (algorithmToConfigure?.id === "PIDC") {
+        return { maxGenes: pidcDefaultMaxGenes };
+      }
+      if (algorithmToConfigure?.id === "SINCERITIES") {
+        return { maxGenes: sinceritiesDefaultMaxGenes };
+      }
+      if (algorithmToConfigure?.id === "SCRIBE") {
+        return { maxGenes: scribeDefaultMaxGenes };
+      }
+      if (algorithmToConfigure?.id === "SINGE") {
+        return { maxGenes: singeDefaultMaxGenes };
+      }
+      return EMPTY_ALGORITHM_PARAMETER_VALUES;
+    },
+    [
+      algorithmToConfigure?.id,
+      pidcDefaultMaxGenes,
+      sinceritiesDefaultMaxGenes,
+      scribeDefaultMaxGenes,
+      singeDefaultMaxGenes,
+    ],
+  );
   const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
@@ -862,11 +903,8 @@ export default function CreateProjectModal({
       <AlgorithmSettingsPopover
         algorithm={algorithmToConfigure}
         anchorElement={algorithmConfigureAnchor}
-        currentOverrides={
-          algorithmToConfigure
-            ? algorithmParameters[algorithmToConfigure.id] ?? {}
-            : {}
-        }
+        currentOverrides={algorithmCurrentOverrides}
+        contextualDefaults={algorithmContextualDefaults}
         onApply={onApplyAlgorithmParameters}
         onClose={handleCloseAlgorithmConfigure}
       />

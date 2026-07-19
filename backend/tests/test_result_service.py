@@ -133,6 +133,69 @@ class FailureDiagnosticsArchiveTests(unittest.TestCase):
                 self.assertEqual(path.name, "rankedEdges.csv")
                 self.assertIn(f"runs/{run_id}/rankedEdges.csv", str(path))
 
+    def test_success_archive_preserves_empty_run_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = Path(temporary_directory) / "project-123"
+            runtime_root = project_dir / "_beeline_runtime" / "SINGE"
+            final_ranked = runtime_root / "rankedEdges_confidence.csv"
+            final_ranked.parent.mkdir(parents=True)
+            final_ranked.write_text(
+                "Gene1\tGene2\tEdgeWeight\na\tb\t0.9\n",
+                encoding="utf-8",
+            )
+            diagnostic_root = runtime_root / "run_diagnostics"
+            manifest = diagnostic_root / "run-2" / "manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('{"reason":"empty_ranked_edges"}', encoding="utf-8")
+            empty_ranked = (
+                runtime_root
+                / "outputs"
+                / "dataset"
+                / "run-2"
+                / "SINGE"
+                / "rankedEdges.csv"
+            )
+            empty_ranked.parent.mkdir(parents=True)
+            empty_ranked.write_text(
+                "Gene1\tGene2\tEdgeWeight\n",
+                encoding="utf-8",
+            )
+
+            archived = archive_beeline_result_artifacts(
+                project_dir,
+                "SINGE",
+                {
+                    "runtime_root": str(runtime_root),
+                    "ranked_edges_path": str(final_ranked),
+                    "run_ranked_edges_paths": {"run-2": str(empty_ranked)},
+                    "run_diagnostics_root": str(diagnostic_root),
+                    "confidence_summary": {
+                        "run_metadata": {
+                            "run-2": {
+                                "status": "Empty",
+                                "diagnostics_path": str(manifest.parent),
+                            }
+                        }
+                    },
+                },
+            )
+
+            archived_root = Path(archived["run_diagnostics_root"])
+            self.assertTrue((archived_root / "run-2" / "manifest.json").is_file())
+            archived_empty_ranked = Path(
+                archived["run_ranked_edges_paths"]["run-2"]
+            )
+            self.assertEqual(
+                archived_empty_ranked.read_text(encoding="utf-8"),
+                "Gene1\tGene2\tEdgeWeight\n",
+            )
+            self.assertEqual(
+                archived["confidence_summary"]["run_metadata"]["run-2"][
+                    "diagnostics_path"
+                ],
+                str(archived_root / "run-2"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

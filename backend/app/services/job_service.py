@@ -24,6 +24,7 @@ from ..repositories.job_repository import (
 )
 from ..repositories.project_repository import read_project_manifest
 from ..repositories.project_repository import write_project_manifest
+from ..species_inference import infer_species_from_gene_names
 from ..services.beeline_service import (
     AlgorithmStoppedError,
     MatrixValidationRuntimeError,
@@ -293,6 +294,18 @@ def sync_project_dataset_dimensions(
 
     metadata_manifest["gene_count"] = gene_count
     metadata_manifest["cell_count"] = cell_count
+    dialect = detect_csv_dialect_from_file(source_expression)
+    gene_names: list[str] = []
+    with source_expression.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle, dialect=dialect)
+        next(reader, None)
+        for row in reader:
+            if row and str(row[0]).strip():
+                gene_names.append(str(row[0]).strip())
+            if len(gene_names) >= 1000:
+                break
+    metadata_manifest["gene_names"] = gene_names
+    metadata_manifest["species_inference"] = infer_species_from_gene_names(gene_names)
     metadata_manifest["upload_status"] = "validated"
     metadata_path.write_text(
         json.dumps(metadata_manifest, indent=2),
@@ -468,6 +481,7 @@ def scope_result_payload(scope: AlgorithmScope, beeline_result: dict) -> dict:
         "top_edges": beeline_result["top_edges"],
         "confidence_summary": beeline_result.get("confidence_summary"),
         "run_ranked_edges_paths": beeline_result.get("run_ranked_edges_paths"),
+        "run_diagnostics_root": beeline_result.get("run_diagnostics_root"),
         "beeline_runtime_root": beeline_result["runtime_root"],
         "result_artifact_root": beeline_result.get("result_artifact_root"),
         "ranked_edges_path": beeline_result["ranked_edges_path"],
@@ -1111,6 +1125,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "top_edges": primary_scope_result["top_edges"],
             "confidence_summary": primary_scope_result.get("confidence_summary"),
             "run_ranked_edges_paths": primary_scope_result.get("run_ranked_edges_paths"),
+            "run_diagnostics_root": primary_scope_result.get("run_diagnostics_root"),
             "beeline_runtime_root": primary_scope_result["beeline_runtime_root"],
             "result_artifact_root": primary_scope_result.get("result_artifact_root"),
             "ranked_edges_path": primary_scope_result["ranked_edges_path"],
@@ -1305,7 +1320,11 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
     terminate_algorithm_docker_containers(project_id, algorithm_id)
     terminate_process(control.process, fallback_pid=fallback_pid)
 
-    if status == "Queued" or (control.process is None and fallback_pid is not None):
+    # A running worker owns its runtime until it has recorded the stopped run
+    # metadata. Deleting it here races with ``write_run_timings`` when the API
+    # and worker are separate service processes. Queued tasks have no worker,
+    # so their unused runtime can still be removed immediately.
+    if status == "Queued":
         completed_at_timestamp = time.time()
         cleanup_algorithm_runtime(project_id, algorithm_id)
         update_job_state(

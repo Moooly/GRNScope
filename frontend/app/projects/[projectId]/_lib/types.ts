@@ -63,6 +63,7 @@ export type ProjectManifest = {
   log_transform_enabled?: boolean | string;
   ranked_edges_per_target_limit?: number | string | null;
   algorithm_parameters?: Record<string, Record<string, unknown>>;
+  resolved_algorithm_parameters?: Record<string, Record<string, unknown>>;
   celloracle?: {
     species?: string | null;
     base_grn?: string | null;
@@ -89,6 +90,14 @@ export type MetadataManifest = {
   gene_count?: number | null;
   cell_count?: number | null;
   gene_names?: string[];
+  species_inference?: {
+    species: string;
+    label: string;
+    confidence: number;
+    evidence_count: number;
+    recognized_count: number;
+    basis: string;
+  } | null;
   cell_names?: string[];
   known_tf_gene_names?: string[];
   has_pseudotime?: boolean | null;
@@ -98,6 +107,8 @@ export type MetadataManifest = {
   cluster_cell_counts?: Record<string, number>;
   has_ground_truth?: boolean | null;
   selected_algorithms?: string[];
+  algorithm_parameters?: Record<string, Record<string, unknown>>;
+  resolved_algorithm_parameters?: Record<string, Record<string, unknown>>;
   ensemble_enabled?: boolean | string;
   is_demo?: boolean;
   read_only?: boolean;

@@ -40,6 +40,10 @@ const ALL_GENES_VALUE = "all";
 const MAX_PREPROCESSED_GENES = 8000;
 const RANKED_EDGES_HARD_MAX = 100;
 const DEFAULT_MAX_EDGES_PER_TARGET = "20";
+const SINCERITIES_DEFAULT_MAX_GENES = 500;
+const SINCERITIES_SAFE_CELL_FRACTION = 0.75;
+const SCRIBE_DEFAULT_MAX_GENES = 300;
+const SINGE_DEFAULT_MAX_GENES = 500;
 const CELLORACLE_INTERNAL_BASE_GRN = "auto";
 
 function formatTopVariableGenes(value: string) {
@@ -353,6 +357,40 @@ export default function CreateProjectFlow({
         : Math.max(1, Math.min(effectiveGeneCount, RANKED_EDGES_HARD_MAX)),
     [effectiveGeneCount],
   );
+  const pidcDefaultMaxGenes = useMemo(
+    () =>
+      effectiveGeneCount !== null && effectiveGeneCount >= 3
+        ? Math.min(500, effectiveGeneCount)
+        : 500,
+    [effectiveGeneCount],
+  );
+  const sinceritiesDefaultMaxGenes = useMemo(() => {
+    const cellAwareLimit =
+      cellCount !== null
+        ? Math.max(2, Math.floor(cellCount * SINCERITIES_SAFE_CELL_FRACTION))
+        : SINCERITIES_DEFAULT_MAX_GENES;
+    return effectiveGeneCount !== null && effectiveGeneCount >= 2
+      ? Math.min(
+          SINCERITIES_DEFAULT_MAX_GENES,
+          effectiveGeneCount,
+          cellAwareLimit,
+        )
+      : Math.min(SINCERITIES_DEFAULT_MAX_GENES, cellAwareLimit);
+  }, [cellCount, effectiveGeneCount]);
+  const scribeDefaultMaxGenes = useMemo(
+    () =>
+      effectiveGeneCount !== null && effectiveGeneCount >= 3
+        ? Math.min(SCRIBE_DEFAULT_MAX_GENES, effectiveGeneCount)
+        : SCRIBE_DEFAULT_MAX_GENES,
+    [effectiveGeneCount],
+  );
+  const singeDefaultMaxGenes = useMemo(
+    () =>
+      effectiveGeneCount !== null && effectiveGeneCount >= 3
+        ? Math.min(SINGE_DEFAULT_MAX_GENES, effectiveGeneCount)
+        : SINGE_DEFAULT_MAX_GENES,
+    [effectiveGeneCount],
+  );
 
   // Keep the edge cap within its dynamic max as gene filtering changes; this also
   // lowers the default to the gene count when there are fewer than 20 genes.
@@ -546,8 +584,20 @@ export default function CreateProjectFlow({
     // Only submit overrides for algorithms that are actually selected.
     const selectedParameterOverrides: Record<string, Record<string, unknown>> = {};
     for (const algorithmId of safeSelectedIds) {
-      const overrides = algorithmParameters[algorithmId];
-      if (overrides && Object.keys(overrides).length > 0) {
+      const overrides = { ...(algorithmParameters[algorithmId] ?? {}) };
+      if (algorithmId === "PIDC" && overrides.maxGenes === undefined) {
+        overrides.maxGenes = pidcDefaultMaxGenes;
+      }
+      if (algorithmId === "SINCERITIES" && overrides.maxGenes === undefined) {
+        overrides.maxGenes = sinceritiesDefaultMaxGenes;
+      }
+      if (algorithmId === "SCRIBE" && overrides.maxGenes === undefined) {
+        overrides.maxGenes = scribeDefaultMaxGenes;
+      }
+      if (algorithmId === "SINGE" && overrides.maxGenes === undefined) {
+        overrides.maxGenes = singeDefaultMaxGenes;
+      }
+      if (Object.keys(overrides).length > 0) {
         selectedParameterOverrides[algorithmId] = overrides;
       }
     }
@@ -754,6 +804,10 @@ export default function CreateProjectFlow({
       logTransformEnabled={logTransformEnabled}
       maxEdgesPerTarget={maxEdgesPerTarget}
       maxEdgesLimit={maxEdgesLimit}
+      pidcDefaultMaxGenes={pidcDefaultMaxGenes}
+      sinceritiesDefaultMaxGenes={sinceritiesDefaultMaxGenes}
+      scribeDefaultMaxGenes={scribeDefaultMaxGenes}
+      singeDefaultMaxGenes={singeDefaultMaxGenes}
       cellOracleSpecies={cellOracleSpecies}
       hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}

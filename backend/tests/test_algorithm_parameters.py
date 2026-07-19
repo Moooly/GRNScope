@@ -15,13 +15,15 @@ from app.services.beeline_service import (
 
 
 NON_DEFAULT_PARAMETERS = {
+    "PIDC": {"maxGenes": 300},
     "GENIE3": {"nEstimators": 7, "maxFeatures": "log2"},
     "GRNBOOST2": {"learningRate": 0.1, "nEstimators": 20, "maxFeatures": 0.5},
     "CELLORACLE": {"maxCells": 50, "pValueCutoff": 0.1},
     "PPCOR": {"pVal": 0.2},
     "SCODE": {"z": 2, "nIter": 5, "nRep": 2},
-    "SINCERITIES": {"nBins": 4},
+    "SINCERITIES": {"maxGenes": 300, "nBins": 4},
     "SCRIBE": {
+        "maxGenes": 200,
         "delay": 2,
         "method": "RDI",
         "lowerDetectionLimit": 0.1,
@@ -30,6 +32,7 @@ NON_DEFAULT_PARAMETERS = {
         "ignorePT": False,
     },
     "SINGE": {
+        "maxGenes": 300,
         "lambda": 0.2,
         "dT": 4,
         "num_lags": 3,
@@ -122,6 +125,30 @@ class AlgorithmParameterValidationTests(unittest.TestCase):
     def test_celloracle_rejects_too_few_subsampled_cells(self):
         with self.assertRaises(ValueError):
             validate_algorithm_parameters("CELLORACLE", {"maxCells": 2})
+
+    def test_pidc_defaults_to_five_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("PIDC"),
+            {"maxGenes": 500},
+        )
+
+    def test_sincerities_defaults_to_five_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("SINCERITIES"),
+            {"maxGenes": 500, "nBins": 10},
+        )
+
+    def test_singe_defaults_to_five_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("SINGE")["maxGenes"],
+            500,
+        )
+
+    def test_scribe_defaults_to_three_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("SCRIBE")["maxGenes"],
+            300,
+        )
 
     def test_scsgl_association_is_allowlisted(self):
         with self.assertRaises(ValueError):
