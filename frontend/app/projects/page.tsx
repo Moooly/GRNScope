@@ -463,13 +463,6 @@ function EmptyProjectsLibrary({ onCreate }: { onCreate: () => void }) {
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
         Create your first project to upload an expression matrix and run GRN inference algorithms.
       </p>
-      <button
-        type="button"
-        onClick={onCreate}
-        className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
-      >
-        + New project
-      </button>
     </div>
   );
 }
