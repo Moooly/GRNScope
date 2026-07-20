@@ -1036,18 +1036,21 @@ function PerturbationRunActions({
         aria-expanded={historyExpanded}
         aria-controls="perturbation-side-panel"
         aria-label={`Open run history, ${runCount} saved ${runCount === 1 ? "run" : "runs"}`}
-        className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 sm:flex-none ${
+        className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 sm:flex-none ${
           historyExpanded
             ? "border-[#087ead]/30 bg-[#f2f9fc] text-[#087ead]"
             : "border-slate-200 bg-white text-slate-700 hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead]"
         }`}
       >
-        <svg viewBox="0 0 18 18" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-          <path d="M9 4.5V9l3 1.75M15 9a6 6 0 1 1-1.76-4.24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M13.25 2.75v2.5h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <svg viewBox="0 0 18 18" className="h-4 w-4" fill="none" aria-hidden="true">
+          <path d="M9 4.5V9l3 1.75M15 9a6 6 0 1 1-1.76-4.24" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M13.25 2.75v2.5h2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span>History</span>
-        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-600" aria-hidden="true">
+        <span
+          aria-hidden="true"
+          className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-500"
+        >
           {runCount}
         </span>
       </button>
@@ -1056,9 +1059,11 @@ function PerturbationRunActions({
         onClick={onOpenNewRun}
         aria-expanded={newRunExpanded}
         aria-controls="perturbation-side-panel"
-        className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#087ead] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#066b94] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/20 sm:flex-none"
+        className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#087ead] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#066b94] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/20 sm:flex-none"
       >
-        <span className="text-base font-medium leading-none" aria-hidden="true">+</span>
+        <svg viewBox="0 0 18 18" className="h-4 w-4" fill="none" aria-hidden="true">
+          <path d="M9 4v10M4 9h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
         New run
       </button>
     </div>
@@ -1201,7 +1206,7 @@ function SelectedResultHeader({
 
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:flex-nowrap lg:justify-end">
             <label className="block w-full shrink-0 sm:w-[9.5rem]">
-              <span className="relative flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
+              <span className="relative flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
                 <select
                   value={resultScope}
                   onChange={(event) => {
