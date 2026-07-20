@@ -22,6 +22,21 @@ body {
 }
 
 /*
+ * Restore the pointer cursor on interactive elements. Tailwind v4 resets
+ * `<button>` to `cursor: default`, so buttons don't feel clickable without
+ * this. `:where()` keeps specificity at 0 so any explicit `cursor-*` utility
+ * class on a specific element (e.g. `cursor-not-allowed` on disabled
+ * controls, `cursor-wait` on loading buttons) still wins.
+ */
+:where(button, [role="button"], a, select, summary) {
+  cursor: pointer;
+}
+:where(button, [role="button"], select):disabled,
+:where(button, [role="button"], select)[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/*
  * Use :where() so this rule has zero specificity. Any utility class on a link
  * (e.g. `text-white`, `text-slate-600`) wins automatically without having to
  * fight the cascade or depend on Tailwind layer ordering.
