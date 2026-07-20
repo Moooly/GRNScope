@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import { runtimeLabel, runtimeTitle } from "../_lib/runtime";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
@@ -28,7 +29,7 @@ type AlgorithmErrorTask = {
 type AlgorithmCardsSectionProps = {
   tasks: AlgorithmTask[];
   algorithmMetaMap: Map<string, AlgorithmMeta>;
-  onOpenAlgorithmError: (task: AlgorithmErrorTask) => void;
+  onOpenAlgorithmError: (task: AlgorithmErrorTask, anchorElement: HTMLElement) => void;
   onStopAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   onRerunAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   compact?: boolean;
@@ -110,16 +111,19 @@ export default function AlgorithmCardsSection({
                   status={task.status}
                   onClick={
                     isFailed
-                      ? () =>
-                          onOpenAlgorithmError({
-                            algorithmId: task.algorithm_id,
-                            errorType: task.error_type,
-                            errorMessage:
-                              task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
-                              (task.error_type === "matrix_validation"
-                                ? "GRNScope found a problem in the uploaded matrix while preparing the project."
-                                : "This algorithm failed. The server did not return a detailed message."),
-                          })
+                      ? (event) =>
+                          onOpenAlgorithmError(
+                            {
+                              algorithmId: task.algorithm_id,
+                              errorType: task.error_type,
+                              errorMessage:
+                                task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
+                                (task.error_type === "matrix_validation"
+                                  ? "GRNScope found a problem in the uploaded matrix while preparing the project."
+                                  : "This algorithm failed. The server did not return a detailed message."),
+                            },
+                            event.currentTarget,
+                          )
                       : canStop
                         ? () =>
                             onStopAlgorithm({
@@ -155,7 +159,13 @@ export default function AlgorithmCardsSection({
   );
 }
 
-function StatusGlyph({ status, onClick }: { status: string; onClick?: () => void }) {
+function StatusGlyph({
+  status,
+  onClick,
+}: {
+  status: string;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
   if (status === "Completed") {
     return (
       <span

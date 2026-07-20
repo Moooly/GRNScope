@@ -9,7 +9,7 @@ import ResultsSummarySection from "./_components/ResultsSummarySection";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
 import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
-import AlgorithmErrorModal from "./_components/AlgorithmErrorModal";
+import AlgorithmErrorPopover from "./_components/AlgorithmErrorPopover";
 import ConfirmDownloadModal from "./_components/ConfirmDownloadModal";
 import DatasetHelpModal from "./_components/DatasetHelpModal";
 import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
@@ -274,10 +274,13 @@ export default function ProjectDetailPage() {
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
   const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
-  const [activeAlgorithmErrorTask, setActiveAlgorithmErrorTask] = useState<{
-    algorithmId: string;
-    errorMessage: string;
-    errorType?: string | null;
+  const [activeAlgorithmError, setActiveAlgorithmError] = useState<{
+    task: {
+      algorithmId: string;
+      errorMessage: string;
+      errorType?: string | null;
+    };
+    anchorElement: HTMLElement;
   } | null>(null);
   const [pendingAlgorithmAction, setPendingAlgorithmAction] = useState<{
     type: "stop" | "rerun";
@@ -2016,7 +2019,7 @@ useEffect(() => {
                 <AlgorithmCardsSection
                   tasks={allJobTasks}
                   algorithmMetaMap={algorithmMetaMap}
-                  onOpenAlgorithmError={setActiveAlgorithmErrorTask}
+                  onOpenAlgorithmError={(task, anchorElement) => setActiveAlgorithmError({ task, anchorElement })}
                   onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
                   onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
                   compact
@@ -2183,9 +2186,10 @@ useEffect(() => {
             onClose={closeDownloadModal}
           />
 
-          <AlgorithmErrorModal
-            task={activeAlgorithmErrorTask}
-            onClose={() => setActiveAlgorithmErrorTask(null)}
+          <AlgorithmErrorPopover
+            task={activeAlgorithmError?.task ?? null}
+            anchorElement={activeAlgorithmError?.anchorElement ?? null}
+            onClose={() => setActiveAlgorithmError(null)}
           />
 
           {pendingAlgorithmAction && (
