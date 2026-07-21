@@ -235,6 +235,10 @@ export function getProjectStatusKey(project: Project): ProjectStatusKey {
   return "none";
 }
 
+export function getProjectStatusLabel(project: Project): string {
+  return getProjectStatus(project).label;
+}
+
 function getProjectStatus(project: Project) {
   const latestJob = project.latestJob;
   if (!latestJob) {

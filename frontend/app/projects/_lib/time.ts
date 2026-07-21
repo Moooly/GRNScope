@@ -25,6 +25,17 @@ function dateFromProjectTimestamp(value: number | string | null | undefined) {
   return parsedDate;
 }
 
+export function projectCreatedTimeValue(
+  timestamp: number | string | null | undefined,
+  fallback: string
+): number {
+  const date =
+    dateFromProjectTimestamp(timestamp) ??
+    (fallback ? new Date(fallback) : null);
+  const time = date?.getTime();
+  return typeof time === "number" && !Number.isNaN(time) ? time : 0;
+}
+
 export function formatProjectCreatedAt(
   timestamp: number | string | null | undefined,
   fallback: string

@@ -5,8 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CreateProjectFlow, {
   type CreateProjectPrefill,
 } from "./_components/CreateProjectFlow";
-import ProjectCard from "./_components/ProjectCard";
+import ProjectCard, { getProjectStatusLabel } from "./_components/ProjectCard";
+import ProjectsToolbar, {
+  type ProjectSortKey,
+  type ProjectStatusOption,
+} from "./_components/ProjectsToolbar";
 import { Project, ProjectJob } from "./_types/project";
+import { projectCreatedTimeValue } from "./_lib/time";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
 import StopProjectModal from "./_components/StopProjectModal";
 import RenameProjectModal from "./_components/RenameProjectModal";
@@ -92,10 +97,75 @@ function ProjectsPageContent() {
   const [isStoppingProject, setIsStoppingProject] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<ProjectSortKey>("newest");
+
   const visibleProjectHistory = useMemo(
     () => projectHistory.filter((project) => project.id !== "demo"),
     [projectHistory],
   );
+
+  // Status filter chips, in a stable display order, showing only statuses that
+  // are actually present in the library along with their counts.
+  const statusOptions = useMemo<ProjectStatusOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const project of visibleProjectHistory) {
+      const label = getProjectStatusLabel(project);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    const order = [
+      "Running",
+      "Queued",
+      "Partial",
+      "Completed",
+      "Stopped",
+      "Failed",
+      "Setup issue",
+      "No run",
+    ];
+    const ordered = order
+      .filter((label) => counts.has(label))
+      .map((label) => ({ label, count: counts.get(label) as number }));
+    // Include any status not covered by the known order, just in case.
+    const extras = [...counts.keys()]
+      .filter((label) => !order.includes(label))
+      .map((label) => ({ label, count: counts.get(label) as number }));
+    return [...ordered, ...extras];
+  }, [visibleProjectHistory]);
+
+  // Reset the status chip if it no longer matches any project (e.g. the last
+  // "Failed" project was deleted).
+  useEffect(() => {
+    if (statusFilter === "all") return;
+    if (!statusOptions.some((option) => option.label === statusFilter)) {
+      setStatusFilter("all");
+    }
+  }, [statusFilter, statusOptions]);
+
+  const displayedProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = visibleProjectHistory.filter((project) => {
+      const matchesSearch =
+        !query ||
+        project.name.toLowerCase().includes(query) ||
+        (project.description ?? "").toLowerCase().includes(query);
+      const matchesStatus =
+        statusFilter === "all" || getProjectStatusLabel(project) === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      if (sortKey === "name") {
+        return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      }
+      const timeA = projectCreatedTimeValue(a.createdAtTimestamp, a.createdAt);
+      const timeB = projectCreatedTimeValue(b.createdAtTimestamp, b.createdAt);
+      return sortKey === "oldest" ? timeA - timeB : timeB - timeA;
+    });
+    return sorted;
+  }, [visibleProjectHistory, searchQuery, statusFilter, sortKey]);
 
   useEffect(() => {
     if (searchParams.get("create") !== "1") return;
@@ -443,31 +513,53 @@ function ProjectsPageContent() {
         ) : showEmptyLibrary ? (
           <EmptyProjectsLibrary onCreate={openBlankCreateFlow} />
         ) : (
-          <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
-            {visibleProjectHistory.map((project) => (
-              <div
-                key={project.id}
-                className="origin-top overflow-visible"
-                style={{
-                  opacity: deletingProjectId === project.id ? 0 : 1,
-                  transform:
-                    deletingProjectId === project.id
-                      ? "translateY(12px) scale(0.95)"
-                      : "translateY(0px) scale(1)",
-                  transition: "opacity 280ms ease-out, transform 280ms ease-out",
-                  pointerEvents: deletingProjectId === project.id ? "none" : "auto",
+          <>
+            <ProjectsToolbar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              statusOptions={statusOptions}
+              activeStatus={statusFilter}
+              onStatusChange={setStatusFilter}
+              totalCount={visibleProjectHistory.length}
+              sortKey={sortKey}
+              onSortChange={setSortKey}
+            />
+
+            {displayedProjects.length === 0 ? (
+              <NoMatchingProjects
+                onClear={() => {
+                  setSearchQuery("");
+                  setStatusFilter("all");
                 }}
-              >
-                <ProjectCard
-                  project={project}
-                  onRename={handleAskRenameProject}
-                  onDelete={handleAskDeleteProject}
-                  onStop={handleAskStopProject}
-                  variant="library"
-                />
+              />
+            ) : (
+              <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
+                {displayedProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="origin-top overflow-visible"
+                    style={{
+                      opacity: deletingProjectId === project.id ? 0 : 1,
+                      transform:
+                        deletingProjectId === project.id
+                          ? "translateY(12px) scale(0.95)"
+                          : "translateY(0px) scale(1)",
+                      transition: "opacity 280ms ease-out, transform 280ms ease-out",
+                      pointerEvents: deletingProjectId === project.id ? "none" : "auto",
+                    }}
+                  >
+                    <ProjectCard
+                      project={project}
+                      onRename={handleAskRenameProject}
+                      onDelete={handleAskDeleteProject}
+                      onStop={handleAskStopProject}
+                      variant="library"
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
 
         {deleteError ? (
@@ -525,6 +617,24 @@ export default function ProjectsPage() {
     <Suspense fallback={<main className="min-h-screen bg-[#f7fbff]" />}>
       <ProjectsPageContent />
     </Suspense>
+  );
+}
+
+function NoMatchingProjects({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="mt-6 rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+      <h2 className="text-lg font-bold text-slate-950">No matching projects</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+        No projects match your current search and filters.
+      </p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="mt-5 inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+      >
+        Clear filters
+      </button>
+    </div>
   );
 }
 
