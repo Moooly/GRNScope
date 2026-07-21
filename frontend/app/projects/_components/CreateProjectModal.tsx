@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
-import AlgorithmSettingsPopover from "./AlgorithmSettingsPopover";
 import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 
@@ -164,35 +163,16 @@ export default function CreateProjectModal({
     useState<CellOracleBaseGrnSource>("built-in");
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
-  const [algorithmToConfigure, setAlgorithmToConfigure] = useState<ProjectAlgorithm | null>(null);
-  const [algorithmConfigureAnchor, setAlgorithmConfigureAnchor] =
-    useState<HTMLButtonElement | null>(null);
-  const algorithmCurrentOverrides = useMemo(
-    () =>
-      algorithmToConfigure
-        ? algorithmParameters[algorithmToConfigure.id] ??
-          EMPTY_ALGORITHM_PARAMETER_VALUES
-        : EMPTY_ALGORITHM_PARAMETER_VALUES,
-    [algorithmParameters, algorithmToConfigure],
-  );
-  const algorithmContextualDefaults = useMemo(
-    () => {
-      if (algorithmToConfigure?.id === "PIDC") {
-        return { maxGenes: pidcDefaultMaxGenes };
-      }
-      if (algorithmToConfigure?.id === "SINCERITIES") {
-        return { maxGenes: sinceritiesDefaultMaxGenes };
-      }
-      if (algorithmToConfigure?.id === "SCRIBE") {
-        return { maxGenes: scribeDefaultMaxGenes };
-      }
-      if (algorithmToConfigure?.id === "SINGE") {
-        return { maxGenes: singeDefaultMaxGenes };
-      }
+  const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(null);
+  const getAlgorithmContextualDefaults = useCallback(
+    (algorithmId: string): Record<string, unknown> => {
+      if (algorithmId === "PIDC") return { maxGenes: pidcDefaultMaxGenes };
+      if (algorithmId === "SINCERITIES") return { maxGenes: sinceritiesDefaultMaxGenes };
+      if (algorithmId === "SCRIBE") return { maxGenes: scribeDefaultMaxGenes };
+      if (algorithmId === "SINGE") return { maxGenes: singeDefaultMaxGenes };
       return EMPTY_ALGORITHM_PARAMETER_VALUES;
     },
     [
-      algorithmToConfigure?.id,
       pidcDefaultMaxGenes,
       sinceritiesDefaultMaxGenes,
       scribeDefaultMaxGenes,
@@ -241,8 +221,7 @@ export default function CreateProjectModal({
       setCellOracleBaseGrnSource("built-in");
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
-      setAlgorithmToConfigure(null);
-      setAlgorithmConfigureAnchor(null);
+      setExpandedAlgorithmId(null);
       /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
     }
@@ -259,18 +238,16 @@ export default function CreateProjectModal({
     };
   }, []);
 
-  const handleConfigureAlgorithm = (
-    algorithm: ProjectAlgorithm,
-    anchorElement: HTMLButtonElement,
-  ) => {
-    setAlgorithmToConfigure(algorithm);
-    setAlgorithmConfigureAnchor(anchorElement);
-  };
-
-  const handleCloseAlgorithmConfigure = useCallback(() => {
-    setAlgorithmToConfigure(null);
-    setAlgorithmConfigureAnchor(null);
+  const handleToggleAlgorithmExpanded = useCallback((algorithmId: string) => {
+    setExpandedAlgorithmId((current) => (current === algorithmId ? null : algorithmId));
   }, []);
+
+  useEffect(() => {
+    if (expandedAlgorithmId && !selectedIds.includes(expandedAlgorithmId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- collapse when the expanded algorithm is deselected
+      setExpandedAlgorithmId(null);
+    }
+  }, [expandedAlgorithmId, selectedIds]);
 
   useEffect(() => {
     if (!datasetReady || isLoadingAlgorithms || compatibleAlgorithms.length === 0) {
@@ -461,8 +438,7 @@ export default function CreateProjectModal({
       onClick={
         isPreprocessingHelpOpen ||
         isCellOracleSettingsOpen ||
-        cellOracleHelpTopic ||
-        algorithmToConfigure
+        cellOracleHelpTopic
           ? undefined
           : handleOutsideClose
       }
@@ -640,7 +616,11 @@ export default function CreateProjectModal({
                 isLoadingAlgorithms={isLoadingAlgorithms}
                 algorithmLoadError={algorithmLoadError}
                 onToggleAlgorithm={onToggleAlgorithm}
-                onConfigureAlgorithm={handleConfigureAlgorithm}
+                expandedAlgorithmId={expandedAlgorithmId}
+                onToggleAlgorithmExpanded={handleToggleAlgorithmExpanded}
+                algorithmParameters={algorithmParameters}
+                onApplyAlgorithmParameters={onApplyAlgorithmParameters}
+                getContextualDefaults={getAlgorithmContextualDefaults}
                 customizedIds={Object.keys(algorithmParameters)}
               />
 
@@ -898,15 +878,6 @@ export default function CreateProjectModal({
         onClearClusterLabels={clearClusterLabelsFile}
         onShowHelp={handleOpenCellOracleHelp}
         onClose={handleCloseCellOracleSettings}
-      />
-
-      <AlgorithmSettingsPopover
-        algorithm={algorithmToConfigure}
-        anchorElement={algorithmConfigureAnchor}
-        currentOverrides={algorithmCurrentOverrides}
-        contextualDefaults={algorithmContextualDefaults}
-        onApply={onApplyAlgorithmParameters}
-        onClose={handleCloseAlgorithmConfigure}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import type { ProjectAlgorithm } from "../page";
 
 interface AlgorithmCardProps {
@@ -7,7 +7,8 @@ interface AlgorithmCardProps {
   disabled: boolean;
   onToggle: () => void;
   showCheckbox?: boolean;
-  onConfigure?: (anchorElement: HTMLButtonElement) => void;
+  onToggleExpanded?: () => void;
+  expanded?: boolean;
   isCustomized?: boolean;
 }
 
@@ -17,19 +18,25 @@ export default function AlgorithmCard({
   disabled,
   onToggle,
   showCheckbox = true,
-  onConfigure,
+  onToggleExpanded,
+  expanded = false,
   isCustomized = false,
 }: AlgorithmCardProps) {
-  const hasParameters = (algorithm.parameters?.length ?? 0) > 0;
-  const showGear = hasParameters && Boolean(onConfigure);
+  const paramCount = algorithm.parameters?.length ?? 0;
+  const hasParameters = paramCount > 0;
+  const canExpand = hasParameters && checked && !disabled && Boolean(onToggleExpanded);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return;
-    // Spacebar / Enter toggle selection — same as the click target on the card.
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
       onToggle();
     }
+  };
+
+  const handleChevronClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onToggleExpanded?.();
   };
 
   return (
@@ -40,12 +47,14 @@ export default function AlgorithmCard({
       aria-pressed={checked}
       onClick={disabled ? undefined : onToggle}
       onKeyDown={handleKeyDown}
-      className={`group relative flex h-14 w-full items-center gap-2 rounded-2xl border px-3 py-3.5 text-left transition duration-150 outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 focus-visible:ring-offset-1 ${
+      className={`group relative flex min-h-[3.25rem] w-full items-center gap-2 rounded-2xl pl-2 pr-1.5 py-2.5 text-left transition duration-150 outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 focus-visible:ring-offset-1 ${
         disabled
-          ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
-          : checked
-            ? "cursor-pointer border-[#1b75a6]/40 bg-[#f2f9fc]"
-            : "cursor-pointer border-slate-200 bg-white hover:border-[#1b75a6]/30 hover:bg-[#f8fbfd]"
+          ? "cursor-not-allowed border border-slate-200 bg-slate-50 opacity-60"
+          : expanded
+            ? "cursor-pointer border-2 border-[#1b75a6] bg-[#f2f9fc]"
+            : checked
+              ? "cursor-pointer border border-[#1b75a6]/40 bg-[#f2f9fc]"
+              : "cursor-pointer border border-slate-200 bg-white hover:border-[#1b75a6]/30 hover:bg-[#f8fbfd]"
       }`}
     >
       {showCheckbox && (
@@ -73,52 +82,46 @@ export default function AlgorithmCard({
 
       <div className="min-w-0 flex-1">
         <h3
-          className="whitespace-nowrap text-xs font-semibold tracking-[-0.01em] text-slate-950"
+          className="break-words text-sm font-semibold leading-tight tracking-[-0.01em] text-slate-950"
           title={algorithm.name}
         >
           {algorithm.name}
         </h3>
       </div>
 
-      {showGear ? (
-        <div className="flex h-7 w-7 shrink-0 items-center justify-end">
-          <button
-            type="button"
-            onClick={(event) => {
+      {canExpand ? (
+        <button
+          type="button"
+          onClick={handleChevronClick}
+          onKeyDown={(event) => {
+            if (event.key === " " || event.key === "Enter") {
               event.stopPropagation();
-              onConfigure?.(event.currentTarget);
-            }}
-            onKeyDown={(event) => {
-              // Don't let space/enter on the gear bubble up and toggle the card.
-              if (event.key === " " || event.key === "Enter") {
-                event.stopPropagation();
-              }
-            }}
-            aria-label={`Configure ${algorithm.name}`}
-            title={`Configure ${algorithm.name}`}
-            className="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent text-slate-400 opacity-0 transition hover:border-[#1b75a6]/30 hover:bg-[#e8f5fb] hover:text-[#1b75a6] focus-visible:border-[#1b75a6]/30 focus-visible:bg-[#e8f5fb] focus-visible:text-[#1b75a6] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 group-hover:opacity-100 group-focus-within:opacity-100"
+            }
+          }}
+          aria-label={expanded ? `Collapse ${algorithm.name} parameters` : `Expand ${algorithm.name} parameters`}
+          aria-expanded={expanded}
+          title={expanded ? "Collapse parameters" : "Expand parameters"}
+          className={`relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/40 ${
+            expanded
+              ? "border-[#1b75a6]/40 bg-white text-[#1b75a6]"
+              : "border-transparent text-slate-400 hover:border-[#1b75a6]/30 hover:bg-white hover:text-[#1b75a6]"
+          }`}
+        >
+          <svg
+            viewBox="0 0 12 12"
+            className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`}
+            fill="none"
+            aria-hidden="true"
           >
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            {isCustomized ? (
-              <span
-                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#1b75a6] ring-2 ring-white"
-                aria-hidden="true"
-              />
-            ) : null}
-          </button>
-        </div>
+            <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {isCustomized ? (
+            <span
+              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#1b75a6] ring-2 ring-[#f2f9fc]"
+              aria-label="edited"
+            />
+          ) : null}
+        </button>
       ) : null}
     </div>
   );

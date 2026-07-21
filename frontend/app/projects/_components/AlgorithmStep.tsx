@@ -1,5 +1,7 @@
+import { Fragment } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmCard from "./AlgorithmCard";
+import AlgorithmInlineParameters from "./AlgorithmInlineParameters";
 
 interface DatasetSummary {
   hasPseudotime: boolean;
@@ -14,12 +16,18 @@ interface AlgorithmStepProps {
   isLoadingAlgorithms: boolean;
   algorithmLoadError: string | null;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
-  onConfigureAlgorithm?: (
-    algorithm: ProjectAlgorithm,
-    anchorElement: HTMLButtonElement,
+  expandedAlgorithmId?: string | null;
+  onToggleAlgorithmExpanded?: (algorithmId: string) => void;
+  algorithmParameters?: Record<string, Record<string, unknown>>;
+  onApplyAlgorithmParameters?: (
+    algorithmId: string,
+    overrides: Record<string, unknown>,
   ) => void;
+  getContextualDefaults?: (algorithmId: string) => Record<string, unknown>;
   customizedIds?: string[];
 }
+
+const EMPTY_OVERRIDES: Record<string, unknown> = {};
 
 export default function AlgorithmStep({
   algorithms,
@@ -28,7 +36,11 @@ export default function AlgorithmStep({
   isLoadingAlgorithms,
   algorithmLoadError,
   onToggleAlgorithm,
-  onConfigureAlgorithm,
+  expandedAlgorithmId = null,
+  onToggleAlgorithmExpanded,
+  algorithmParameters,
+  onApplyAlgorithmParameters,
+  getContextualDefaults,
   customizedIds,
 }: AlgorithmStepProps) {
   const getUnavailableReason = (algorithm: ProjectAlgorithm) => {
@@ -92,6 +104,10 @@ export default function AlgorithmStep({
     );
   };
 
+  const expandedAlgorithm = expandedAlgorithmId
+    ? availableAlgorithms.find((algorithm) => algorithm.id === expandedAlgorithmId) ?? null
+    : null;
+
   return (
     <div className="space-y-6">
       <section className="space-y-6">
@@ -124,23 +140,45 @@ export default function AlgorithmStep({
           ) : (
             <div className="mt-5 space-y-8">
               <div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                  {availableAlgorithms.map((algorithm) => (
-                    <AlgorithmCard
-                      key={algorithm.id}
-                      algorithm={algorithm}
-                      checked={availableAlgorithmIds.has(algorithm.id) && selectedIds.includes(algorithm.id)}
-                      disabled={false}
-                      onToggle={() => onToggleAlgorithm(algorithm.id, false)}
-                      onConfigure={
-                        onConfigureAlgorithm
-                          ? (anchorElement) =>
-                              onConfigureAlgorithm(algorithm, anchorElement)
-                          : undefined
-                      }
-                      isCustomized={customizedIds?.includes(algorithm.id)}
-                    />
-                  ))}
+                <div className="grid grid-flow-row-dense grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {availableAlgorithms.map((algorithm) => {
+                    const isChecked =
+                      availableAlgorithmIds.has(algorithm.id) &&
+                      selectedIds.includes(algorithm.id);
+                    const isExpanded = expandedAlgorithmId === algorithm.id;
+
+                    return (
+                      <Fragment key={algorithm.id}>
+                        <AlgorithmCard
+                          algorithm={algorithm}
+                          checked={isChecked}
+                          disabled={false}
+                          onToggle={() => onToggleAlgorithm(algorithm.id, false)}
+                          onToggleExpanded={
+                            onToggleAlgorithmExpanded
+                              ? () => onToggleAlgorithmExpanded(algorithm.id)
+                              : undefined
+                          }
+                          expanded={isExpanded}
+                          isCustomized={customizedIds?.includes(algorithm.id)}
+                        />
+                        {isExpanded && expandedAlgorithm && onApplyAlgorithmParameters ? (
+                          <div className="col-span-full">
+                            <AlgorithmInlineParameters
+                              algorithm={expandedAlgorithm}
+                              currentOverrides={
+                                algorithmParameters?.[expandedAlgorithm.id] ?? EMPTY_OVERRIDES
+                              }
+                              contextualDefaults={
+                                getContextualDefaults?.(expandedAlgorithm.id) ?? EMPTY_OVERRIDES
+                              }
+                              onApply={onApplyAlgorithmParameters}
+                            />
+                          </div>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </div>
               </div>
 
