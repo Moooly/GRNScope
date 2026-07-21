@@ -197,16 +197,8 @@ export default function AlgorithmsPage() {
                 ) : null}
               </div>
 
-              <p
-                className="ml-auto shrink-0 text-xs font-medium text-slate-500"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {isLoading
-                  ? "Loading…"
-                  : `${visibleAlgorithms.length} ${visibleAlgorithms.length === 1 ? "algorithm" : "algorithms"}`}
-              </p>
-              <FilterMenu
+              <div className="ml-auto flex items-center gap-2">
+                <FilterMenu
                 pseudotime={pseudotimeFilter}
                 direction={directionFilter}
                 sign={signFilter}
@@ -216,7 +208,8 @@ export default function AlgorithmsPage() {
                 activeCount={activeFilterCount}
                 onClearAll={clearFacets}
               />
-              <SortDropdown value={sortKey} onChange={setSortKey} />
+                <SortDropdown value={sortKey} onChange={setSortKey} />
+              </div>
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_10px_35px_rgba(15,23,42,0.035)]">
