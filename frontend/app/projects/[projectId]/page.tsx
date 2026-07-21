@@ -411,25 +411,6 @@ export default function ProjectDetailPage() {
           title: "CellOracle species does not match the dataset",
           message: `This dataset appears to use ${inferredSpecies.label} gene IDs, but CellOracle is set to ${selectedSpeciesLabel}. Change CellOracle species to ${inferredSpecies.label} or deselect CellOracle.`,
         });
-      } else {
-        const cellOracleFailure = rawJobTasks.find(
-          (task) =>
-            task.algorithm_id.toUpperCase() === "CELLORACLE" &&
-            task.status === "Failed",
-        );
-        const failureMessage = cellOracleFailure?.error_message?.toLowerCase() ?? "";
-        if (
-          failureMessage.includes("overlap") ||
-          failureMessage.includes("transcription factor") ||
-          failureMessage.includes("base grn")
-        ) {
-          warnings.push({
-            code: "celloracle-prior-overlap",
-            algorithmId: "CELLORACLE",
-            title: "CellOracle could not match this dataset",
-            message: `CellOracle could not find transcription factors shared by this dataset and the ${selectedSpeciesLabel} base regulatory network. Check that the matrix uses ${selectedSpeciesLabel} gene identifiers, or deselect CellOracle.`,
-          });
-        }
       }
     }
 
@@ -447,17 +428,15 @@ export default function ProjectDetailPage() {
         Number.isFinite(parsedPidcMaxGenes) && parsedPidcMaxGenes > 0
           ? Math.floor(parsedPidcMaxGenes)
           : 500;
-      const effectivePidcGeneCount =
-        typeof uploadedGeneCount === "number"
-          ? Math.min(uploadedGeneCount, pidcMaxGenes)
-          : pidcMaxGenes;
 
-      warnings.push({
-        code: "pidc-gene-filtering",
-        algorithmId: "PIDC",
-        title: "PIDC applies its own gene filtering",
-        message: `PIDC will analyze at most ${effectivePidcGeneCount.toLocaleString()} highest-variance genes after the project-wide gene filter. PIDC evaluates gene triplets, so increasing this value can cause a very large increase in runtime and memory use.`,
-      });
+      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > pidcMaxGenes) {
+        warnings.push({
+          code: "pidc-gene-filtering",
+          algorithmId: "PIDC",
+          title: "PIDC applies its own gene filtering",
+          message: `PIDC will analyze at most ${pidcMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter. PIDC evaluates gene triplets, so increasing this value can cause a very large increase in runtime and memory use.`,
+        });
+      }
     }
 
     if (selectedAlgorithmIds.has("SINGE")) {
@@ -472,17 +451,15 @@ export default function ProjectDetailPage() {
         Number.isFinite(parsedSingeMaxGenes) && parsedSingeMaxGenes > 0
           ? Math.floor(parsedSingeMaxGenes)
           : 500;
-      const effectiveSingeGeneCount =
-        typeof uploadedGeneCount === "number"
-          ? Math.min(uploadedGeneCount, singeMaxGenes)
-          : singeMaxGenes;
 
-      warnings.push({
-        code: "singe-gene-filtering",
-        algorithmId: "SINGE",
-        title: "SINGE uses a runtime-focused gene set",
-        message: `SINGE is currently configured to use ${effectiveSingeGeneCount.toLocaleString()} highest-variance genes after the project-wide gene filter because its lagged regulator-target calculations become much slower as gene count increases. You can change this value in SINGE's parameter settings.`,
-      });
+      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > singeMaxGenes) {
+        warnings.push({
+          code: "singe-gene-filtering",
+          algorithmId: "SINGE",
+          title: "SINGE uses a runtime-focused gene set",
+          message: `SINGE is currently configured to use ${singeMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its lagged regulator-target calculations become much slower as gene count increases. You can change this value in SINGE's parameter settings.`,
+        });
+      }
     }
 
     if (selectedAlgorithmIds.has("SCRIBE")) {
@@ -497,17 +474,15 @@ export default function ProjectDetailPage() {
         Number.isFinite(parsedScribeMaxGenes) && parsedScribeMaxGenes > 0
           ? Math.floor(parsedScribeMaxGenes)
           : 300;
-      const effectiveScribeGeneCount =
-        typeof uploadedGeneCount === "number"
-          ? Math.min(uploadedGeneCount, scribeMaxGenes)
-          : scribeMaxGenes;
 
-      warnings.push({
-        code: "scribe-gene-filtering",
-        algorithmId: "SCRIBE",
-        title: "SCRIBE uses a runtime-focused gene set",
-        message: `SCRIBE is currently configured to use ${effectiveScribeGeneCount.toLocaleString()} highest-variance genes after the project-wide gene filter because its directed-information calculation compares every gene pair and becomes very slow on larger matrices. You can change this value in SCRIBE's parameter settings.`,
-      });
+      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > scribeMaxGenes) {
+        warnings.push({
+          code: "scribe-gene-filtering",
+          algorithmId: "SCRIBE",
+          title: "SCRIBE uses a runtime-focused gene set",
+          message: `SCRIBE is currently configured to use ${scribeMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its directed-information calculation compares every gene pair and becomes very slow on larger matrices. You can change this value in SCRIBE's parameter settings.`,
+        });
+      }
     }
 
     if (
@@ -2032,7 +2007,27 @@ useEffect(() => {
                   tasks={allJobTasks}
                   algorithmMetaMap={algorithmMetaMap}
                   warningsByAlgorithm={warningsByAlgorithm}
-                  onOpenAlgorithmError={(task, anchorElement) => setActiveAlgorithmError({ task, anchorElement })}
+                  onOpenAlgorithmError={(task, anchorElement) => {
+                    let enhancedErrorMessage = task.errorMessage;
+                    if (task.algorithmId.toUpperCase() === "CELLORACLE") {
+                      const lower = task.errorMessage.toLowerCase();
+                      if (
+                        lower.includes("overlap") ||
+                        lower.includes("transcription factor") ||
+                        lower.includes("base grn")
+                      ) {
+                        const selectedSpecies = String(project?.celloracle?.species ?? "human");
+                        const selectedSpeciesLabel = selectedSpecies
+                          .replaceAll("_", " ")
+                          .replace(/\b\w/g, (character) => character.toUpperCase());
+                        enhancedErrorMessage = `CellOracle could not find transcription factors shared by this dataset and the ${selectedSpeciesLabel} base regulatory network. Check that the matrix uses ${selectedSpeciesLabel} gene identifiers, or deselect CellOracle.`;
+                      }
+                    }
+                    setActiveAlgorithmError({
+                      task: { ...task, errorMessage: enhancedErrorMessage },
+                      anchorElement,
+                    });
+                  }}
                   onOpenAlgorithmWarnings={(warnings, anchorElement) => setActiveAlgorithmWarnings({ warnings, anchorElement })}
                   onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
                   onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
