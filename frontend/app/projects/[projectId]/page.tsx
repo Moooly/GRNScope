@@ -48,6 +48,9 @@ const CONFIDENCE_STABILITY_TOP_K = 10;
 const MODAL_ANIMATION_MS = 480;
 // Number of strongest edges to reveal when a project detail page first opens.
 const INITIAL_VISIBLE_EDGE_TARGET = 10;
+// Shown for algorithm failures that aren't user-actionable (most are internal).
+const GENERAL_ALGORITHM_FAILURE_MESSAGE =
+  "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -2129,23 +2132,29 @@ useEffect(() => {
                   algorithmMetaMap={algorithmMetaMap}
                   warningsByAlgorithm={warningsByAlgorithm}
                   onOpenAlgorithmError={(task, anchorElement) => {
-                    let enhancedErrorMessage = task.errorMessage;
-                    if (task.algorithmId.toUpperCase() === "CELLORACLE") {
-                      const lower = task.errorMessage.toLowerCase();
-                      if (
-                        lower.includes("overlap") ||
+                    // Almost every algorithm failure is an internal/backend issue the
+                    // user can't act on, so show a general message. The one exception
+                    // is CellOracle's species/base-GRN mismatch, which the user can
+                    // fix. (Dataset/matrix problems surface in the dataset-validation
+                    // section, not here.)
+                    const lower = (task.errorMessage ?? "").toLowerCase();
+                    let displayMessage = GENERAL_ALGORITHM_FAILURE_MESSAGE;
+
+                    if (
+                      task.algorithmId.toUpperCase() === "CELLORACLE" &&
+                      (lower.includes("overlap") ||
                         lower.includes("transcription factor") ||
-                        lower.includes("base grn")
-                      ) {
-                        const selectedSpecies = String(project?.celloracle?.species ?? "human");
-                        const selectedSpeciesLabel = selectedSpecies
-                          .replaceAll("_", " ")
-                          .replace(/\b\w/g, (character) => character.toUpperCase());
-                        enhancedErrorMessage = `CellOracle could not find transcription factors shared by this dataset and the ${selectedSpeciesLabel} base regulatory network. Check that the matrix uses ${selectedSpeciesLabel} gene identifiers, or deselect CellOracle.`;
-                      }
+                        lower.includes("base grn"))
+                    ) {
+                      const selectedSpecies = String(project?.celloracle?.species ?? "human");
+                      const selectedSpeciesLabel = selectedSpecies
+                        .replaceAll("_", " ")
+                        .replace(/\b\w/g, (character) => character.toUpperCase());
+                      displayMessage = `CellOracle could not find transcription factors shared by this dataset and the ${selectedSpeciesLabel} base regulatory network. Check that the matrix uses ${selectedSpeciesLabel} gene identifiers, or deselect CellOracle.`;
                     }
+
                     setActiveAlgorithmError({
-                      task: { ...task, errorMessage: enhancedErrorMessage },
+                      task: { ...task, errorMessage: displayMessage },
                       anchorElement,
                     });
                   }}
