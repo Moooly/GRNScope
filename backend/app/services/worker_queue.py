@@ -170,6 +170,49 @@ def enqueue_algorithm_rerun(
     return str(queued_job.id)
 
 
+def cancel_project_queue_jobs(project_id: str) -> int:
+    """Remove any Redis-queued (not yet started) jobs belonging to this project.
+    Running jobs are terminated separately by killing their containers. Returns
+    the number of queued jobs that were cancelled."""
+    if not queue_enabled():
+        return 0
+
+    try:
+        from rq.job import Job
+    except ImportError:
+        return 0
+
+    try:
+        connection = get_redis_connection()
+        queue = get_rq_queue()
+    except Exception:
+        return 0
+
+    prefix = f"project-{safe_rq_job_id(project_id)}-"
+    cancelled = 0
+    try:
+        pending_ids = list(queue.job_ids)
+    except Exception:
+        pending_ids = []
+
+    for job_id in pending_ids:
+        job_id_str = str(job_id)
+        if not job_id_str.startswith(prefix):
+            continue
+        try:
+            job = Job.fetch(job_id_str, connection=connection)
+            job.cancel()
+        except Exception:
+            pass
+        try:
+            queue.remove(job_id_str)
+        except Exception:
+            pass
+        cancelled += 1
+
+    return cancelled
+
+
 def enqueue_perturbation_run(project_id: str, run_id: str) -> str:
     from .perturbation_service import run_perturbation_task
 

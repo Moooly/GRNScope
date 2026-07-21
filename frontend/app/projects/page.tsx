@@ -8,6 +8,7 @@ import CreateProjectFlow, {
 import ProjectCard from "./_components/ProjectCard";
 import { Project, ProjectJob } from "./_types/project";
 import DeleteProjectModal from "./_components/DeleteProjectModal";
+import StopProjectModal from "./_components/StopProjectModal";
 import RenameProjectModal from "./_components/RenameProjectModal";
 import { API_BASE } from "../_lib/apiConfig";
 import { apiFetch } from "../_lib/clientIdentity";
@@ -85,6 +86,11 @@ function ProjectsPageContent() {
   const [isRenameModalClosing, setIsRenameModalClosing] = useState(false);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
+
+  const [projectPendingStop, setProjectPendingStop] = useState<Project | null>(null);
+  const [isStopModalClosing, setIsStopModalClosing] = useState(false);
+  const [isStoppingProject, setIsStoppingProject] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
 
   const visibleProjectHistory = useMemo(
     () => projectHistory.filter((project) => project.id !== "demo"),
@@ -363,6 +369,55 @@ function ProjectsPageContent() {
     }
   };
 
+  // --- Stop flow ---
+  const handleAskStopProject = (project: Project) => {
+    setStopError(null);
+    setIsStopModalClosing(false);
+    setProjectPendingStop(project);
+  };
+
+  const handleCancelStopProject = () => {
+    if (isStoppingProject || !projectPendingStop) return;
+    setIsStopModalClosing(true);
+    window.setTimeout(() => {
+      setProjectPendingStop(null);
+      setIsStopModalClosing(false);
+    }, 280);
+  };
+
+  const handleConfirmStopProject = async () => {
+    if (!projectPendingStop) return;
+    const targetProjectId = projectPendingStop.id;
+    try {
+      setIsStoppingProject(true);
+      const response = await apiFetch(
+        `${API_BASE}/projects/${targetProjectId}/stop`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        setStopError("Failed to stop the project.");
+        return;
+      }
+      setIsStopModalClosing(true);
+      window.setTimeout(() => {
+        setProjectPendingStop(null);
+        setIsStopModalClosing(false);
+      }, 280);
+    } catch {
+      setStopError("Could not connect to the server.");
+    } finally {
+      setIsStoppingProject(false);
+    }
+  };
+
+  const stopTargetTasks = projectPendingStop?.latestJob?.tasks ?? [];
+  const stopRunningCount = stopTargetTasks.filter(
+    (task) => task.status === "Running" || task.status === "Stopping",
+  ).length;
+  const stopQueuedCount = stopTargetTasks.filter(
+    (task) => task.status === "Queued",
+  ).length;
+
   const showEmptyLibrary = !isLoading && visibleProjectHistory.length === 0;
 
   return (
@@ -407,6 +462,7 @@ function ProjectsPageContent() {
                   project={project}
                   onRename={handleAskRenameProject}
                   onDelete={handleAskDeleteProject}
+                  onStop={handleAskStopProject}
                   variant="library"
                 />
               </div>
@@ -417,6 +473,12 @@ function ProjectsPageContent() {
         {deleteError ? (
           <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
             {deleteError}
+          </div>
+        ) : null}
+
+        {stopError ? (
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+            {stopError}
           </div>
         ) : null}
 
@@ -433,6 +495,16 @@ function ProjectsPageContent() {
           isClosing={isDeleteModalClosing}
           onCancel={handleCancelDeleteProject}
           onConfirm={handleConfirmDeleteProject}
+        />
+
+        <StopProjectModal
+          projectName={projectPendingStop?.name ?? null}
+          runningCount={stopRunningCount}
+          queuedCount={stopQueuedCount}
+          isStopping={isStoppingProject}
+          isClosing={isStopModalClosing}
+          onCancel={handleCancelStopProject}
+          onConfirm={handleConfirmStopProject}
         />
 
         <RenameProjectModal

@@ -9,6 +9,7 @@ import { apiFetch } from "./_lib/clientIdentity";
 import ProjectCard from "./projects/_components/ProjectCard";
 import DeleteProjectModal from "./projects/_components/DeleteProjectModal";
 import RenameProjectModal from "./projects/_components/RenameProjectModal";
+import StopProjectModal from "./projects/_components/StopProjectModal";
 import {
   loadProjectHistory as fetchProjectHistory,
   readCachedProjectHistory,
@@ -38,6 +39,10 @@ export default function HomePage() {
   const [isRenameModalClosing, setIsRenameModalClosing] = useState(false);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
+
+  const [projectPendingStop, setProjectPendingStop] = useState<Project | null>(null);
+  const [isStopModalClosing, setIsStopModalClosing] = useState(false);
+  const [isStoppingProject, setIsStoppingProject] = useState(false);
 
   const visibleProjectHistory = useMemo(
     () => projectHistory.filter((project) => project.id !== "demo"),
@@ -347,6 +352,48 @@ export default function HomePage() {
     }
   };
 
+  const handleAskStopProject = (project: Project) => {
+    setIsStopModalClosing(false);
+    setProjectPendingStop(project);
+  };
+
+  const handleCancelStopProject = () => {
+    if (isStoppingProject || !projectPendingStop) return;
+    setIsStopModalClosing(true);
+    window.setTimeout(() => {
+      setProjectPendingStop(null);
+      setIsStopModalClosing(false);
+    }, 280);
+  };
+
+  const handleConfirmStopProject = async () => {
+    if (!projectPendingStop) return;
+    const targetProjectId = projectPendingStop.id;
+    try {
+      setIsStoppingProject(true);
+      const response = await apiFetch(
+        `${API_BASE}/projects/${targetProjectId}/stop`,
+        { method: "POST" },
+      );
+      if (!response.ok) return;
+      setIsStopModalClosing(true);
+      window.setTimeout(() => {
+        setProjectPendingStop(null);
+        setIsStopModalClosing(false);
+      }, 280);
+    } finally {
+      setIsStoppingProject(false);
+    }
+  };
+
+  const stopTargetTasks = projectPendingStop?.latestJob?.tasks ?? [];
+  const stopRunningCount = stopTargetTasks.filter(
+    (task) => task.status === "Running" || task.status === "Stopping",
+  ).length;
+  const stopQueuedCount = stopTargetTasks.filter(
+    (task) => task.status === "Queued",
+  ).length;
+
   useEffect(() => {
     const row = projectHistoryRowRef.current;
     if (!row) {
@@ -513,6 +560,7 @@ export default function HomePage() {
                       project={project}
                       onRename={handleAskRenameProject}
                       onDelete={handleAskDeleteProject}
+                      onStop={handleAskStopProject}
                       variant="home"
                     />
                   </div>
@@ -574,6 +622,16 @@ export default function HomePage() {
         error={renameError}
         onCancel={handleCancelRenameProject}
         onConfirm={handleConfirmRenameProject}
+      />
+
+      <StopProjectModal
+        projectName={projectPendingStop?.name ?? null}
+        runningCount={stopRunningCount}
+        queuedCount={stopQueuedCount}
+        isStopping={isStoppingProject}
+        isClosing={isStopModalClosing}
+        onCancel={handleCancelStopProject}
+        onConfirm={handleConfirmStopProject}
       />
     </main>
   );

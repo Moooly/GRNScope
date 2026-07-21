@@ -25,6 +25,14 @@ export default function DeleteProjectModal({
     project.createdAt
   );
 
+  const tasks = project.latestJob?.tasks ?? [];
+  const isRunning = tasks.some(
+    (task) =>
+      task.status === "Running" ||
+      task.status === "Queued" ||
+      task.status === "Stopping",
+  );
+
   return (
     <div
       className={`fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 px-6 py-10 backdrop-blur-sm ${
@@ -50,6 +58,19 @@ export default function DeleteProjectModal({
             Created {createdAtLabel}
           </p>
         </div>
+
+        {isRunning ? (
+          <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 p-3.5">
+            <svg viewBox="0 0 16 16" className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" fill="none" aria-hidden="true">
+              <path d="M8 1.75 L14.5 13.5 H1.5 Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              <path d="M8 6 v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <circle cx="8" cy="11.5" r="0.85" fill="currentColor" />
+            </svg>
+            <p className="text-xs leading-5 text-amber-700">
+              This project is currently running. Deleting it will stop all running algorithms first.
+            </p>
+          </div>
+        ) : null}
 
         <div className="mt-6 flex justify-end gap-3 border-t border-[#213f54]/15 pt-5">
           <button

@@ -59,9 +59,12 @@ from ..services.beeline_service import (
 )
 from ..services.email_service import normalize_notification_email
 from ..services.job_service import (
+    finalize_project_stop,
     launch_independent_algorithm_tasks,
     mark_project_setup_failure,
+    request_project_stop,
     send_job_completion_notification_if_needed,
+    stop_and_delete_project,
     update_job_state,
 )
 from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
@@ -1205,7 +1208,7 @@ async def get_project_metadata(project_id: str, request: Request, response: Resp
 
     
 @router.delete("/api/projects/{project_id}")
-async def delete_project(project_id: str, request: Request, response: Response):
+def delete_project(project_id: str, request: Request, response: Response):
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         raise HTTPException(status_code=403, detail="Demo project is read-only.")
@@ -1214,10 +1217,48 @@ async def delete_project(project_id: str, request: Request, response: Response):
     require_project_owner(project_dir, owner_id)
 
     try:
-        shutil.rmtree(project_dir)
+        stop_and_delete_project(project_id)
         return {
             "ok": True,
             "project_id": project_id,
         }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_id}/stop")
+async def stop_project(
+    project_id: str,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+):
+    owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        raise HTTPException(status_code=403, detail="Demo project is read-only.")
+    project_dir = PROJECTS_ROOT / project_id
+
+    require_project_owner(project_dir, owner_id)
+
+    try:
+        summary = request_project_stop(project_id)
+        stopping_targets = summary.get("stopping_targets", [])
+        if stopping_targets:
+            background_tasks.add_task(
+                finalize_project_stop,
+                project_id,
+                stopping_targets,
+            )
+        jobs_manifest = read_jobs_manifest(project_dir)
+        latest_job = jobs_manifest[-1] if jobs_manifest else None
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "stopping_count": len(stopping_targets),
+            "cancelled_queue_jobs": summary.get("cancelled_queue_jobs", 0),
+            "latest_job": latest_job,
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

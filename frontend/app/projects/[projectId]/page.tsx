@@ -26,6 +26,7 @@ import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector from "./_components/ResultsHubViewSelector";
 import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSection";
 import AnalysisSetupSection from "./_components/AnalysisSetupSection";
+import StopProjectModal from "../_components/StopProjectModal";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
 import { API_BASE } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
@@ -44,6 +45,8 @@ import { boolText, clamp } from "./_lib/utils";
 
 const CONFIDENCE_STABILITY_TOP_K = 10;
 const MODAL_ANIMATION_MS = 480;
+// Number of strongest edges to reveal when a project detail page first opens.
+const INITIAL_VISIBLE_EDGE_TARGET = 10;
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -293,9 +296,13 @@ export default function ProjectDetailPage() {
   } | null>(null);
   const [isAlgorithmActionSubmitting, setIsAlgorithmActionSubmitting] = useState(false);
   const [isAlgorithmActionModalClosing, setIsAlgorithmActionModalClosing] = useState(false);
+  const [isStopProjectModalOpen, setIsStopProjectModalOpen] = useState(false);
+  const [isStopProjectModalClosing, setIsStopProjectModalClosing] = useState(false);
+  const [isStoppingProject, setIsStoppingProject] = useState(false);
   const [resultsHubView, setResultsHubView] = useState<"network" | "perturbation">("network");
 
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
+  const seededProjectIdRef = useRef<string | null>(null);
   const networkGraphRef = useRef<Core | null>(null);
   const hasAppliedDemoDefaultsRef = useRef(false);
   const algorithmActionCloseTimeoutRef = useRef<number | null>(null);
@@ -1270,6 +1277,50 @@ export default function ProjectDetailPage() {
 
   const activeEdges = uncappedActiveEdges;
 
+  // First-open safety net: seed the result filters from each project's own edge
+  // distribution so the network and table always reveal a small, legible set of
+  // the strongest edges (~INITIAL_VISIBLE_EDGE_TARGET) instead of a blank canvas.
+  // Runs once per project, before the user touches any filter; afterwards their
+  // adjustments are respected even when they filter everything out. Demo projects
+  // keep their own curated defaults.
+  useEffect(() => {
+    if (isDemoProject || !projectId) return;
+    if (seededProjectIdRef.current === projectId) return;
+    if (activeAlgorithmIds.length === 0) return;
+
+    const isConsensusView = activeAlgorithmIds.length >= 2;
+    const candidatePool = isConsensusView
+      ? consensusCandidateRows
+      : standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
+
+    // Wait until this project's edges have actually loaded before seeding.
+    if (candidatePool.length === 0) return;
+
+    const sortedByEvidence = candidatePool
+      .filter((edge) => Number.isFinite(edge.score))
+      .sort((a, b) => b.score - a.score);
+    if (sortedByEvidence.length === 0) return;
+
+    const targetIndex =
+      Math.min(INITIAL_VISIBLE_EDGE_TARGET, sortedByEvidence.length) - 1;
+    const seedEvidenceThreshold = sortedByEvidence[targetIndex].score;
+
+    // Evidence alone drives the initial count; relax the other axes so they
+    // don't undercut the target. The panel then honestly reflects what is shown.
+    setEvidenceThreshold(seedEvidenceThreshold);
+    setConfidenceThreshold(0);
+    setDirectionConfidenceThreshold(0);
+    setSignConfidenceThreshold(0);
+    setConsensusThreshold(1);
+    seededProjectIdRef.current = projectId;
+  }, [
+    isDemoProject,
+    projectId,
+    activeAlgorithmIds,
+    consensusCandidateRows,
+    standardizedAlgorithmEdgeRows,
+  ]);
+
   const geneCoordinateMap = useMemo(() => {
     const coordinates = new Map<string, GeneCoordinateInfo>();
 
@@ -1552,27 +1603,72 @@ export default function ProjectDetailPage() {
   const confirmAlgorithmAction = async () => {
     if (!pendingAlgorithmAction || !latestJob || !projectId) return;
 
+    const jobId = latestJob.job_id;
+    const { algorithmId, type } = pendingAlgorithmAction;
+
     setIsAlgorithmActionSubmitting(true);
 
     try {
       const response = await apiFetch(
-        `${API_BASE}/projects/${projectId}/jobs/${latestJob.job_id}/tasks/${pendingAlgorithmAction.algorithmId}/${pendingAlgorithmAction.type === "stop" ? "stop" : "rerun"}`,
+        `${API_BASE}/projects/${projectId}/jobs/${jobId}/tasks/${algorithmId}/${type === "stop" ? "stop" : "rerun"}`,
         { method: "POST" }
       );
 
       if (response.ok) {
         const payload = await response.json();
+        // Apply the optimistic state the endpoint returns (e.g. "Stopping")
+        // right away, then reconcile with a full refresh in the background so
+        // the modal can close without waiting on the heavier fetch.
         if (payload.latest_job) {
           setLatestJob(payload.latest_job);
         }
-        await refreshProjectData();
+        void refreshProjectData();
       }
-
-      finishAlgorithmActionModal();
     } finally {
       setIsAlgorithmActionSubmitting(false);
+      finishAlgorithmActionModal();
     }
   };
+
+  const closeStopProjectModal = () => {
+    if (isStoppingProject) return;
+    setIsStopProjectModalClosing(true);
+    window.setTimeout(() => {
+      setIsStopProjectModalOpen(false);
+      setIsStopProjectModalClosing(false);
+    }, 280);
+  };
+
+  const confirmStopProject = async () => {
+    if (!projectId || isDemoProject) return;
+    setIsStoppingProject(true);
+    try {
+      const response = await apiFetch(`${API_BASE}/projects/${projectId}/stop`, {
+        method: "POST",
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload.latest_job) {
+          setLatestJob(payload.latest_job);
+        }
+        void refreshProjectData();
+      }
+    } finally {
+      setIsStoppingProject(false);
+      setIsStopProjectModalClosing(true);
+      window.setTimeout(() => {
+        setIsStopProjectModalOpen(false);
+        setIsStopProjectModalClosing(false);
+      }, 280);
+    }
+  };
+
+  const stopRunningCount = allJobTasks.filter(
+    (task) => task.status === "Running" || task.status === "Stopping",
+  ).length;
+  const stopQueuedCount = allJobTasks.filter(
+    (task) => task.status === "Queued",
+  ).length;
 
   const handleSaveNotificationEmail = useCallback(
     async (email: string) => {
@@ -1817,7 +1913,13 @@ useEffect(() => {
   const defaultConsensusValue = Math.max(1, Math.floor(maxConsensusValue / 2));
 
   setConsensusThreshold((current) => {
-    if (isDemoProject && hasAppliedDemoDefaultsRef.current) {
+    // Non-demo projects get their initial consensus value from the edge-seeding
+    // effect above; here we only keep it in range as the algorithm set changes.
+    if (!isDemoProject) {
+      return clamp(current, 1, maxConsensusValue);
+    }
+
+    if (hasAppliedDemoDefaultsRef.current) {
       return clamp(current, 1, maxConsensusValue);
     }
 
@@ -1991,6 +2093,14 @@ useEffect(() => {
                       notificationEmail={project?.notification_email ?? null}
                       onSaveNotificationEmail={
                         isDemoProject ? undefined : handleSaveNotificationEmail
+                      }
+                      onStopProject={
+                        isDemoProject
+                          ? undefined
+                          : () => {
+                              setIsStopProjectModalClosing(false);
+                              setIsStopProjectModalOpen(true);
+                            }
                       }
                     />
                   )
@@ -2263,6 +2373,20 @@ useEffect(() => {
               </div>
             </div>
           )}
+
+          {isStopProjectModalOpen ? (
+            <StopProjectModal
+              projectName={
+                project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")
+              }
+              runningCount={stopRunningCount}
+              queuedCount={stopQueuedCount}
+              isStopping={isStoppingProject}
+              isClosing={isStopProjectModalClosing}
+              onCancel={closeStopProjectModal}
+              onConfirm={confirmStopProject}
+            />
+          ) : null}
         </div>
       </section>
     </main>

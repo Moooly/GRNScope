@@ -19,6 +19,7 @@ type JobProgressBannerProps = {
   algorithmMetaMap?: Map<string, { name: string }>;
   notificationEmail?: string | null;
   onSaveNotificationEmail?: (email: string) => Promise<boolean>;
+  onStopProject?: () => void;
 };
 
 /**
@@ -29,6 +30,7 @@ export default function JobProgressBanner({
   algorithmMetaMap,
   notificationEmail = null,
   onSaveNotificationEmail,
+  onStopProject,
 }: JobProgressBannerProps) {
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState(notificationEmail ?? "");
@@ -257,6 +259,21 @@ export default function JobProgressBanner({
               {hasNotificationEmail ? (
                 <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#20b779]" />
               ) : null}
+            </button>
+          ) : null}
+
+          {onStopProject ? (
+            <button
+              type="button"
+              onClick={onStopProject}
+              aria-label="Stop project"
+              title="Stop all running algorithms"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-bold text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
+            >
+              <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+                <rect x="4.5" y="4.5" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              <span className="hidden sm:inline">Stop</span>
             </button>
           ) : null}
         </>

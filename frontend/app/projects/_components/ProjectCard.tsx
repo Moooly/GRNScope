@@ -9,6 +9,7 @@ interface ProjectCardProps {
   project: Project;
   onRename?: (project: Project) => void;
   onDelete?: (project: Project) => void;
+  onStop?: (project: Project) => void;
   variant?: "default" | "home" | "library";
 }
 
@@ -16,8 +17,11 @@ export default function ProjectCard({
   project,
   onRename,
   onDelete,
+  onStop,
 }: ProjectCardProps) {
-  const hasActions = Boolean(onRename || onDelete);
+  const statusKey = getProjectStatusKey(project);
+  const canStop = statusKey === "running" && Boolean(onStop);
+  const hasActions = Boolean(onRename || onDelete || onStop);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -114,6 +118,31 @@ export default function ProjectCard({
                         <path d="M13.2 3.8 15.5 6.1M4 16h2.4l8.4-8.4-2.4-2.4L4 13.6V16Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                       Rename
+                    </button>
+                  ) : null}
+                  {onStop ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!canStop}
+                      title={canStop ? "Stop all running algorithms" : "Nothing to stop"}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!canStop) return;
+                        setIsMenuOpen(false);
+                        onStop(project);
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
+                        canStop
+                          ? "text-amber-700 hover:bg-amber-50"
+                          : "cursor-not-allowed text-slate-300"
+                      }`}
+                    >
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <rect x="6" y="6" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                      </svg>
+                      Stop project
                     </button>
                   ) : null}
                   {onDelete ? (

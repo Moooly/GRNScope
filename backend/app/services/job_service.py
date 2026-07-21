@@ -1291,7 +1291,15 @@ def run_algorithm_job_worker(
     recompute_overall_status(project_dir, job_id)
 
 
-def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict:
+def request_algorithm_task_stop(
+    project_id: str,
+    job_id: str,
+    algorithm_id: str,
+) -> tuple[dict, int | None]:
+    """Fast path: set the stop event, flip state to Stopping (or Stopped for
+    Queued tasks), and return (task, fallback_pid). Container/process teardown
+    should be finished by ``finalize_algorithm_task_stop`` off the request
+    loop."""
     project_dir = PROJECTS_ROOT / project_id
     if not project_dir.exists():
         raise FileNotFoundError("Project not found.")
@@ -1302,7 +1310,7 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
 
     status = task.get("status")
     if status in {"Completed", "Failed", "Stopped"}:
-        return task
+        return task, None
 
     control = get_or_create_task_control(project_id, job_id, algorithm_id)
     control.stop_event.set()
@@ -1317,8 +1325,6 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
 
     task_pid = task.get("process_pid")
     fallback_pid = int(task_pid) if isinstance(task_pid, int) else None
-    terminate_algorithm_docker_containers(project_id, algorithm_id)
-    terminate_process(control.process, fallback_pid=fallback_pid)
 
     # A running worker owns its runtime until it has recorded the stopped run
     # metadata. Deleting it here races with ``write_run_timings`` when the API
@@ -1339,9 +1345,125 @@ def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
+        recompute_overall_status(project_dir, job_id)
+        return get_task_state(project_dir, job_id, algorithm_id) or task, None
+
+    return get_task_state(project_dir, job_id, algorithm_id) or task, fallback_pid
+
+
+def finalize_algorithm_task_stop(
+    project_id: str,
+    job_id: str,
+    algorithm_id: str,
+    fallback_pid: int | None,
+) -> None:
+    """Slow path: kill Docker containers and the worker process. Safe to run
+    outside the request loop (background task or threadpool)."""
+    project_dir = PROJECTS_ROOT / project_id
+    if not project_dir.exists():
+        return
+
+    control = get_or_create_task_control(project_id, job_id, algorithm_id)
+    try:
+        terminate_algorithm_docker_containers(project_id, algorithm_id)
+    except Exception:
+        pass
+    try:
+        terminate_process(control.process, fallback_pid=fallback_pid)
+    except Exception:
+        pass
 
     recompute_overall_status(project_dir, job_id)
+
+
+def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict:
+    """Synchronous stop — runs both the fast state flip and the slow teardown
+    inline. Kept for callers (project delete, tests) that need the full effect
+    to complete before returning."""
+    task, fallback_pid = request_algorithm_task_stop(project_id, job_id, algorithm_id)
+    if fallback_pid is not None or task.get("status") == "Stopping":
+        finalize_algorithm_task_stop(project_id, job_id, algorithm_id, fallback_pid)
+    project_dir = PROJECTS_ROOT / project_id
     return get_task_state(project_dir, job_id, algorithm_id) or task
+
+
+def request_project_stop(project_id: str) -> dict:
+    """Fast path: for every running/queued algorithm task across all
+    non-terminal jobs, flip state to Stopping (or Stopped for Queued) and cancel
+    any Redis-queued jobs for this project. Returns a summary plus the list of
+    (job_id, algorithm_id, fallback_pid) targets whose Docker containers still
+    need to be terminated by ``finalize_project_stop``."""
+    from .worker_queue import cancel_project_queue_jobs
+
+    project_dir = PROJECTS_ROOT / project_id
+    if not project_dir.exists():
+        raise FileNotFoundError("Project not found.")
+
+    jobs_manifest = read_jobs_manifest(project_dir)
+    stopping_targets: list[tuple[str, str, int | None]] = []
+
+    for job in jobs_manifest:
+        if job.get("overall_status") in TERMINAL_JOB_STATUSES:
+            continue
+        job_id = job.get("job_id")
+        if not job_id:
+            continue
+        for task in job.get("tasks", []):
+            status = task.get("status")
+            if status in {"Completed", "Failed", "Stopped", "NotStarted"}:
+                continue
+            algo_id = task.get("algorithm_id")
+            if not algo_id:
+                continue
+            try:
+                task_after, fallback_pid = request_algorithm_task_stop(
+                    project_id, job_id, algo_id,
+                )
+            except Exception:
+                continue
+            if task_after.get("status") == "Stopping":
+                stopping_targets.append((job_id, algo_id, fallback_pid))
+
+    try:
+        cancelled_queue_jobs = cancel_project_queue_jobs(project_id)
+    except Exception:
+        cancelled_queue_jobs = 0
+
+    return {
+        "project_id": project_id,
+        "stopping_targets": stopping_targets,
+        "cancelled_queue_jobs": cancelled_queue_jobs,
+    }
+
+
+def finalize_project_stop(
+    project_id: str,
+    stopping_targets: list[tuple[str, str, int | None]],
+) -> None:
+    """Slow path: kill Docker containers and worker processes for each target
+    scheduled by ``request_project_stop``. Safe to run in a background task."""
+    for job_id, algo_id, fallback_pid in stopping_targets:
+        try:
+            finalize_algorithm_task_stop(project_id, job_id, algo_id, fallback_pid)
+        except Exception:
+            continue
+
+
+def stop_and_delete_project(project_id: str) -> None:
+    """Synchronous stop + rmtree used by DELETE /api/projects/{id}. Runs the
+    full teardown inline so containers and worker processes have released the
+    project directory before it is removed."""
+    project_dir = PROJECTS_ROOT / project_id
+    if not project_dir.exists():
+        return
+
+    try:
+        summary = request_project_stop(project_id)
+    except FileNotFoundError:
+        summary = {"stopping_targets": []}
+    finalize_project_stop(project_id, summary.get("stopping_targets", []))
+
+    shutil.rmtree(project_dir, ignore_errors=True)
 
 
 def prepare_algorithm_task_for_rerun(
