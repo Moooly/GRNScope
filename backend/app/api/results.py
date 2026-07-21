@@ -105,6 +105,47 @@ def compact_result_for_client(result: dict) -> dict:
     return {key: value for key, value in compact.items() if value is not None}
 
 
+def limit_result_edges(result: dict, limit: int) -> dict:
+    """Trim ``top_edges`` (and each scope's ``top_edges``) to the strongest
+    ``limit`` edges by rank, leaving ``edge_count`` as the true total so the
+    client still knows the full network is larger. Used for the fast first-paint
+    load; the client fetches the untrimmed payload in the background afterwards.
+    """
+    if limit <= 0:
+        return result
+
+    def strongest(edges: list) -> list:
+        def rank_key(edge: dict):
+            rank = edge.get("rank")
+            return rank if isinstance(rank, (int, float)) else float("inf")
+
+        return sorted(
+            [edge for edge in edges if isinstance(edge, dict)],
+            key=rank_key,
+        )[:limit]
+
+    trimmed = dict(result)
+    if isinstance(result.get("top_edges"), list):
+        trimmed["top_edges"] = strongest(result["top_edges"])
+
+    scopes = result.get("scopes")
+    if isinstance(scopes, dict):
+        trimmed_scopes = {}
+        for scope_id, scope_payload in scopes.items():
+            if isinstance(scope_payload, dict) and isinstance(
+                scope_payload.get("top_edges"), list
+            ):
+                trimmed_scopes[scope_id] = {
+                    **scope_payload,
+                    "top_edges": strongest(scope_payload["top_edges"]),
+                }
+            else:
+                trimmed_scopes[scope_id] = scope_payload
+        trimmed["scopes"] = trimmed_scopes
+
+    return trimmed
+
+
 def iter_result_edges(result: dict):
     edges = (
         result.get("edges")
@@ -356,6 +397,7 @@ async def get_algorithm_result(
     algorithm_id: str,
     request: Request,
     response: Response,
+    limit: int | None = None,
 ):
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
@@ -364,6 +406,8 @@ async def get_algorithm_result(
                 result = read_demo_algorithm_result_from_json(algorithm_id)
             except FileNotFoundError:
                 result = read_demo_algorithm_result_from_csv(algorithm_id)
+            if limit and limit > 0:
+                result = limit_result_edges(result, limit)
             return {
                 "ok": True,
                 "project_id": project_id,
@@ -382,9 +426,10 @@ async def get_algorithm_result(
     require_project_owner(project_dir, owner_id)
 
     try:
-        result = attach_gene_coordinates_to_result(
-            compact_result_for_client(read_algorithm_result(project_dir, algorithm_id))
-        )
+        compact = compact_result_for_client(read_algorithm_result(project_dir, algorithm_id))
+        if limit and limit > 0:
+            compact = limit_result_edges(compact, limit)
+        result = attach_gene_coordinates_to_result(compact)
         return {
             "ok": True,
             "project_id": project_id,

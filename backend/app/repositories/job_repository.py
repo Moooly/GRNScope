@@ -5,6 +5,8 @@ import fcntl
 import json
 from pathlib import Path
 
+from ..atomic_io import atomic_write_json
+
 
 @contextmanager
 def jobs_manifest_lock(project_dir: Path):
@@ -26,5 +28,4 @@ def read_jobs_manifest(project_dir: Path) -> list[dict]:
 
 
 def write_jobs_manifest(project_dir: Path, jobs_manifest: list[dict]) -> None:
-    jobs_path = project_dir / "jobs.json"
-    jobs_path.write_text(json.dumps(jobs_manifest, indent=2), encoding="utf-8")
+    atomic_write_json(project_dir / "jobs.json", jobs_manifest)

@@ -6,6 +6,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .atomic_io import atomic_write_json
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMP_UPLOAD_DIR = BASE_DIR / "temp_uploads"
 TEMP_UPLOAD_ROOT = TEMP_UPLOAD_DIR
@@ -46,7 +48,7 @@ def save_upload_file(upload_file, destination: Path) -> None:
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data)
 
 
 def load_json(path: Path) -> dict[str, Any]:

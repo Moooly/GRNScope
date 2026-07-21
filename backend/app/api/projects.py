@@ -25,6 +25,7 @@ from ..algorithm_registry import (
     sort_algorithm_ids_by_difficulty,
     validate_selected_algorithm_parameters,
 )
+from ..atomic_io import atomic_write_json
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from .client_identity import (
     get_or_create_client_id,
@@ -125,10 +126,7 @@ def backfill_dataset_dimensions(
 
     try:
         write_project_manifest(project_dir, project_manifest)
-        (project_dir / "metadata.json").write_text(
-            json.dumps(metadata_manifest, indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(project_dir / "metadata.json", metadata_manifest)
     except Exception:
         pass
 
@@ -439,14 +437,8 @@ async def create_pending_project(
 
     try:
         write_project_manifest(project_dir, project_manifest)
-        (project_dir / "metadata.json").write_text(
-            json.dumps(metadata_manifest, indent=2),
-            encoding="utf-8",
-        )
-        (project_dir / "jobs.json").write_text(
-            json.dumps([job_manifest], indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(project_dir / "metadata.json", metadata_manifest)
+        atomic_write_json(project_dir / "jobs.json", [job_manifest])
     except Exception as exc:
         shutil.rmtree(project_dir, ignore_errors=True)
         return CreateProjectResponse(ok=False, errors=[str(exc)])
@@ -800,18 +792,9 @@ async def create_project_from_temp(
             },
         }
 
-        (project_dir / "project.json").write_text(
-            json.dumps(project_manifest, indent=2),
-            encoding="utf-8",
-        )
-        (project_dir / "metadata.json").write_text(
-            json.dumps(metadata_manifest, indent=2),
-            encoding="utf-8",
-        )
-        (project_dir / "jobs.json").write_text(
-            json.dumps([job_manifest], indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(project_dir / "project.json", project_manifest)
+        atomic_write_json(project_dir / "metadata.json", metadata_manifest)
+        atomic_write_json(project_dir / "jobs.json", [job_manifest])
 
         if upload_metadata_path.exists():
             upload_metadata_path.unlink()

@@ -28,6 +28,7 @@ import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSecti
 import AnalysisSetupSection from "./_components/AnalysisSetupSection";
 import StopProjectModal from "../_components/StopProjectModal";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
+import { clearCachedResults } from "./_lib/resultsCache";
 import { API_BASE } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
 import { startPendingProjectUpload } from "../_lib/pendingProjectUpload";
@@ -247,7 +248,9 @@ export default function ProjectDetailPage() {
     algorithmResults,
     algorithmCatalog,
     isLoadingCompletedResults,
+    isLoadingProject,
     error,
+    reload,
     refreshProjectData,
     setLatestJob,
   } = useProjectDetailData({ projectId, isDemoRoute });
@@ -1616,6 +1619,9 @@ export default function ProjectDetailPage() {
 
       if (response.ok) {
         const payload = await response.json();
+        // A stop/rerun changes this project's results, so drop any cached edges
+        // for it — the next visit must reload fresh.
+        if (projectId) clearCachedResults(projectId);
         // Apply the optimistic state the endpoint returns (e.g. "Stopping")
         // right away, then reconcile with a full refresh in the background so
         // the modal can close without waiting on the heavier fetch.
@@ -1648,6 +1654,7 @@ export default function ProjectDetailPage() {
       });
       if (response.ok) {
         const payload = await response.json();
+        if (projectId) clearCachedResults(projectId);
         if (payload.latest_job) {
           setLatestJob(payload.latest_job);
         }
@@ -2063,9 +2070,32 @@ useEffect(() => {
           >
             Back to projects
           </Link>
-          <div className="mt-8 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-6 text-rose-700 shadow-sm">
-            {error}
+          <div className="mt-8 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-6 shadow-sm">
+            <p className="text-rose-700">{error}</p>
+            {!isDemoProject ? (
+              <button
+                type="button"
+                onClick={reload}
+                className="mt-4 inline-flex h-10 items-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
+              >
+                Try again
+              </button>
+            ) : null}
           </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (isLoadingProject && !project) {
+    return (
+      <main className="min-h-screen bg-[#f7fbff] text-slate-900">
+        <section className="mx-auto flex max-w-[1180px] flex-col items-center justify-center px-6 py-32 lg:px-10">
+          <span
+            className="h-9 w-9 animate-spin rounded-full border-[3px] border-slate-200 border-t-[#1b75a6]"
+            aria-hidden="true"
+          />
+          <p className="mt-4 text-sm font-semibold text-slate-500">Loading project…</p>
         </section>
       </main>
     );

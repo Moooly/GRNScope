@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..atomic_io import atomic_write_json
 from ..config import PROJECTS_ROOT
 
 
@@ -14,8 +15,7 @@ def read_project_manifest(project_dir: Path) -> dict:
 
 
 def write_project_manifest(project_dir: Path, project_manifest: dict) -> None:
-    project_path = project_dir / "project.json"
-    project_path.write_text(json.dumps(project_manifest, indent=2), encoding="utf-8")
+    atomic_write_json(project_dir / "project.json", project_manifest)
 
 
 def list_project_directories() -> list[Path]:
