@@ -405,25 +405,6 @@ export default function ProjectDetailPage() {
     );
     const warnings: AlgorithmWarning[] = [];
 
-    if (selectedAlgorithmIds.has("CELLORACLE")) {
-      const selectedSpecies = String(project?.celloracle?.species ?? "human");
-      const selectedSpeciesLabel = selectedSpecies
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (character) => character.toUpperCase());
-      const inferredSpecies = metadata?.species_inference;
-      if (
-        inferredSpecies?.species &&
-        inferredSpecies.species !== selectedSpecies
-      ) {
-        warnings.push({
-          code: "celloracle-species-mismatch",
-          algorithmId: "CELLORACLE",
-          title: "CellOracle species does not match the dataset",
-          message: `This dataset appears to use ${inferredSpecies.label} gene IDs, but CellOracle is set to ${selectedSpeciesLabel}. Change CellOracle species to ${inferredSpecies.label} or deselect CellOracle.`,
-        });
-      }
-    }
-
     const uploadedGeneCount = metadata?.gene_count;
     const uploadedCellCount = metadata?.cell_count;
     if (selectedAlgorithmIds.has("PIDC")) {
@@ -444,7 +425,7 @@ export default function ProjectDetailPage() {
           code: "pidc-gene-filtering",
           algorithmId: "PIDC",
           title: "PIDC applies its own gene filtering",
-          message: `PIDC will analyze at most ${pidcMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter. PIDC evaluates gene triplets, so increasing this value can cause a very large increase in runtime and memory use.`,
+          message: `PIDC will analyze at most ${pidcMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter. PIDC evaluates gene triplets, so increasing this value can cause a very large increase in runtime and memory use. You can change this value in PIDC's parameter settings.`,
         });
       }
     }
@@ -505,7 +486,7 @@ export default function ProjectDetailPage() {
         code: "sincerities-genes-exceed-cells",
         algorithmId: "SINCERITIES",
         title: "SINCERITIES has more genes than cells",
-        message: `This matrix contains ${uploadedGeneCount.toLocaleString()} genes and ${uploadedCellCount.toLocaleString()} cells. SINCERITIES derives edge signs from an all-gene partial-correlation matrix, which can become singular when genes outnumber cells. GRNScope will apply SINCERITIES's separate highest-variance gene filter before analysis to keep this calculation stable.`,
+        message: `This matrix contains ${uploadedGeneCount.toLocaleString()} genes and ${uploadedCellCount.toLocaleString()} cells. SINCERITIES derives edge signs from an all-gene partial-correlation matrix, which can become singular when genes outnumber cells. GRNScope will apply SINCERITIES's separate highest-variance gene filter before analysis to keep this calculation stable. You can change this value in SINCERITIES's parameter settings.`,
       });
     }
 
