@@ -52,6 +52,7 @@ export type BackendAlgorithmEntry = {
   supports_expression_matrix: boolean;
   active: boolean;
   recommended: boolean;
+  estimated_runtime: string;
   strengths: string[];
   limitations: string[];
   recommended_use_cases: string[];
@@ -79,8 +80,33 @@ export type AlgorithmEntry = {
   detail: string;
   recommended: boolean;
   runner: string;
+  estimatedRuntime: string;
   parameters: AlgorithmParameter[];
 };
+
+export type AlgorithmSpeedTier = "fast" | "moderate" | "slow";
+
+export type AlgorithmSpeed = {
+  tier: AlgorithmSpeedTier;
+  label: string;
+  /** Sort order, fastest first. */
+  order: number;
+};
+
+/**
+ * Map the free-text `estimated_runtime` string to a coarse speed tier. Uses the
+ * worst case mentioned (checks "slow" before "medium") so the badge never
+ * understates how long a method can take.
+ */
+export function getAlgorithmSpeed(entry: AlgorithmEntry): AlgorithmSpeed {
+  const runtime = entry.estimatedRuntime.toLowerCase();
+  if (runtime.includes("slow")) return { tier: "slow", label: "Slow", order: 2 };
+  if (runtime.includes("medium") || runtime.includes("moderate")) {
+    return { tier: "moderate", label: "Moderate", order: 1 };
+  }
+  if (runtime.includes("fast")) return { tier: "fast", label: "Fast", order: 0 };
+  return { tier: "moderate", label: entry.estimatedRuntime || "Moderate", order: 1 };
+}
 
 function getDockerVersion(dockerImage: string) {
   const parts = dockerImage.split(":");
@@ -109,6 +135,7 @@ export function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): Algorithm
     detail: algorithm.long_description,
     recommended: algorithm.recommended,
     runner: algorithm.runner,
+    estimatedRuntime: algorithm.estimated_runtime ?? "",
     parameters: algorithm.parameters ?? [],
   };
 }

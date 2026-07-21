@@ -225,6 +225,41 @@ export default function AlgorithmInlineParameters({
     onApply(algorithm.id, {});
   };
 
+  const renderToggle = (parameter: AlgorithmParameter) => {
+    const value = draft[parameter.name];
+    const fieldId = `inline-${algorithm.id}-${parameter.name}`;
+    return (
+      <div
+        key={parameter.name}
+        className="flex h-10 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3.5"
+      >
+        <label
+          htmlFor={fieldId}
+          className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700"
+          title={parameter.label ?? parameter.name}
+        >
+          {parameter.label ?? parameter.name}
+        </label>
+        <button
+          id={fieldId}
+          type="button"
+          role="switch"
+          aria-checked={Boolean(value)}
+          onClick={() => setField(parameter.name, !Boolean(value), true)}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
+            value ? "bg-[#1b75a6]" : "bg-slate-300"
+          }`}
+        >
+          <span
+            className={`h-4 w-4 rounded-full bg-white shadow-sm transition ${
+              value ? "translate-x-[1.1rem]" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+    );
+  };
+
   const renderField = (parameter: AlgorithmParameter) => {
     const value = draft[parameter.name];
     const error = fieldErrors[parameter.name];
@@ -237,32 +272,6 @@ export default function AlgorithmInlineParameters({
         ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
         : "border-slate-200 hover:border-slate-300 focus:border-[#087ead] focus:ring-[#087ead]/15"
     }`;
-
-    if (isBoolParam(parameter)) {
-      return (
-        <div key={parameter.name} className="flex items-center justify-between gap-3">
-          <label htmlFor={fieldId} className="text-sm font-medium text-slate-800">
-            {parameter.label ?? parameter.name}
-          </label>
-          <button
-            id={fieldId}
-            type="button"
-            role="switch"
-            aria-checked={Boolean(value)}
-            onClick={() => setField(parameter.name, !Boolean(value), true)}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
-              value ? "bg-[#1b75a6]" : "bg-slate-300"
-            }`}
-          >
-            <span
-              className={`h-4 w-4 rounded-full bg-white shadow-sm transition ${
-                value ? "translate-x-[1.1rem]" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
-      );
-    }
 
     return (
       <div key={parameter.name}>
@@ -323,6 +332,12 @@ export default function AlgorithmInlineParameters({
     );
   };
 
+  // Keep value inputs (numbers, selects, text) in the grid, and gather all
+  // on/off switches into a single group at the bottom so the toggles line up
+  // together instead of breaking up the input rows.
+  const toggleParameters = parameters.filter((parameter) => isBoolParam(parameter));
+  const inputParameters = parameters.filter((parameter) => !isBoolParam(parameter));
+
   return (
     <div className="relative rounded-2xl border border-[#1b75a6]/30 bg-[#f4f9fc] p-6 shadow-sm">
       <div className="mb-5 flex items-center justify-between gap-3 border-b border-[#1b75a6]/10 pb-4">
@@ -349,9 +364,25 @@ export default function AlgorithmInlineParameters({
         </div>
       </div>
 
-      <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-        {parameters.map(renderField)}
-      </div>
+      {inputParameters.length > 0 ? (
+        <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+          {inputParameters.map(renderField)}
+        </div>
+      ) : null}
+
+      {toggleParameters.length > 0 ? (
+        <div
+          className={
+            inputParameters.length > 0
+              ? "mt-5 border-t border-[#1b75a6]/10 pt-5"
+              : ""
+          }
+        >
+          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            {toggleParameters.map(renderToggle)}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
