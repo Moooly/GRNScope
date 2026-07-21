@@ -266,9 +266,14 @@ export default function AlgorithmInlineParameters({
 
     return (
       <div key={parameter.name}>
-        <label htmlFor={fieldId} className="block text-xs font-medium text-slate-600">
-          {parameter.label ?? parameter.name}
-        </label>
+        <div className="flex items-baseline justify-between gap-2">
+          <label htmlFor={fieldId} className="text-xs font-medium text-slate-600">
+            {parameter.label ?? parameter.name}
+          </label>
+          {hint ? (
+            <span className="shrink-0 text-[11px] font-normal text-slate-400">{hint}</span>
+          ) : null}
+        </div>
         {options.length > 0 ? (
           <div className="relative mt-1.5">
             <select
@@ -313,19 +318,14 @@ export default function AlgorithmInlineParameters({
           <p id={errorId} className="mt-1.5 text-[11px] font-medium text-rose-600">
             {error}
           </p>
-        ) : hint ? (
-          <p className="mt-1.5 text-[11px] font-normal text-slate-400">{hint}</p>
         ) : null}
       </div>
     );
   };
 
-  const advancedParams = parameters.filter((parameter) => parameter.advanced);
-  const primaryParams = parameters.filter((parameter) => !parameter.advanced);
-
   return (
-    <div className="relative rounded-2xl border border-[#1b75a6]/60 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="relative rounded-2xl border border-[#1b75a6]/30 bg-[#f4f9fc] p-6 shadow-sm">
+      <div className="mb-5 flex items-center justify-between gap-3 border-b border-[#1b75a6]/10 pb-4">
         <p className="text-sm font-semibold text-slate-950">{algorithm.name} parameters</p>
         <div className="flex items-center gap-4">
           <button
@@ -349,20 +349,9 @@ export default function AlgorithmInlineParameters({
         </div>
       </div>
 
-      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-        {primaryParams.map(renderField)}
+      <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        {parameters.map(renderField)}
       </div>
-
-      {advancedParams.length > 0 ? (
-        <details className="mt-4 border-t border-slate-100 pt-4">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:text-[#1b75a6]">
-            Advanced
-          </summary>
-          <div className="mt-3 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-            {advancedParams.map(renderField)}
-          </div>
-        </details>
-      ) : null}
     </div>
   );
 }

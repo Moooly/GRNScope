@@ -163,7 +163,7 @@ export default function AlgorithmStep({
                           isCustomized={customizedIds?.includes(algorithm.id)}
                         />
                         {isExpanded && expandedAlgorithm && onApplyAlgorithmParameters ? (
-                          <div className="col-span-full">
+                          <div className="col-span-full my-1">
                             <AlgorithmInlineParameters
                               algorithm={expandedAlgorithm}
                               currentOverrides={

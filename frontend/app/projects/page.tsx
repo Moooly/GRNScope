@@ -533,7 +533,7 @@ function ProjectsPageContent() {
                 }}
               />
             ) : (
-              <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
+              <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(17.25rem,1fr))] gap-4">
                 {displayedProjects.map((project) => (
                   <div
                     key={project.id}
