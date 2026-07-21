@@ -19,9 +19,9 @@ import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSecti
 import JobProgressBanner from "./_components/JobProgressBanner";
 import DatasetValidationStatus from "./_components/DatasetValidationStatus";
 import DatasetValidationIssuesSection from "./_components/DatasetValidationIssuesSection";
-import AlgorithmWarningsSection, {
+import AlgorithmWarningPopover, {
   type AlgorithmWarning,
-} from "./_components/AlgorithmWarningsSection";
+} from "./_components/AlgorithmWarningPopover";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector from "./_components/ResultsHubViewSelector";
 import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSection";
@@ -282,6 +282,10 @@ export default function ProjectDetailPage() {
     };
     anchorElement: HTMLElement;
   } | null>(null);
+  const [activeAlgorithmWarnings, setActiveAlgorithmWarnings] = useState<{
+    warnings: AlgorithmWarning[];
+    anchorElement: HTMLElement;
+  } | null>(null);
   const [pendingAlgorithmAction, setPendingAlgorithmAction] = useState<{
     type: "stop" | "rerun";
     algorithmId: string;
@@ -522,6 +526,16 @@ export default function ProjectDetailPage() {
 
     return warnings;
   }, [metadata, project, rawJobTasks]);
+  const warningsByAlgorithm = useMemo(() => {
+    const grouped = new Map<string, AlgorithmWarning[]>();
+    for (const warning of algorithmWarnings) {
+      const key = warning.algorithmId.toUpperCase();
+      const existing = grouped.get(key);
+      if (existing) existing.push(warning);
+      else grouped.set(key, [warning]);
+    }
+    return grouped;
+  }, [algorithmWarnings]);
   const cellOracleTask = useMemo(
     () => allJobTasks.find((task) => task.algorithm_id.toUpperCase() === "CELLORACLE") ?? null,
     [allJobTasks]
@@ -2014,12 +2028,12 @@ useEffect(() => {
                   />
                 ) : null}
 
-                {/* <AlgorithmWarningsSection warnings={algorithmWarnings} /> */}
-
                 <AlgorithmCardsSection
                   tasks={allJobTasks}
                   algorithmMetaMap={algorithmMetaMap}
+                  warningsByAlgorithm={warningsByAlgorithm}
                   onOpenAlgorithmError={(task, anchorElement) => setActiveAlgorithmError({ task, anchorElement })}
+                  onOpenAlgorithmWarnings={(warnings, anchorElement) => setActiveAlgorithmWarnings({ warnings, anchorElement })}
                   onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
                   onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
                   compact
@@ -2190,6 +2204,12 @@ useEffect(() => {
             task={activeAlgorithmError?.task ?? null}
             anchorElement={activeAlgorithmError?.anchorElement ?? null}
             onClose={() => setActiveAlgorithmError(null)}
+          />
+
+          <AlgorithmWarningPopover
+            warnings={activeAlgorithmWarnings?.warnings ?? null}
+            anchorElement={activeAlgorithmWarnings?.anchorElement ?? null}
+            onClose={() => setActiveAlgorithmWarnings(null)}
           />
 
           {pendingAlgorithmAction && (

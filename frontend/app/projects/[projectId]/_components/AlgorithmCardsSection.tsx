@@ -3,6 +3,7 @@
 import type { MouseEvent } from "react";
 import { runtimeLabel, runtimeTitle } from "../_lib/runtime";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
+import type { AlgorithmWarning } from "./AlgorithmWarningPopover";
 
 type AlgorithmTask = {
   algorithm_id: string;
@@ -29,7 +30,9 @@ type AlgorithmErrorTask = {
 type AlgorithmCardsSectionProps = {
   tasks: AlgorithmTask[];
   algorithmMetaMap: Map<string, AlgorithmMeta>;
+  warningsByAlgorithm?: Map<string, AlgorithmWarning[]>;
   onOpenAlgorithmError: (task: AlgorithmErrorTask, anchorElement: HTMLElement) => void;
+  onOpenAlgorithmWarnings?: (warnings: AlgorithmWarning[], anchorElement: HTMLElement) => void;
   onStopAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   onRerunAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   compact?: boolean;
@@ -44,7 +47,9 @@ type AlgorithmCardsSectionProps = {
 export default function AlgorithmCardsSection({
   tasks,
   algorithmMetaMap,
+  warningsByAlgorithm,
   onOpenAlgorithmError,
+  onOpenAlgorithmWarnings,
   onStopAlgorithm,
   onRerunAlgorithm,
   compact = false,
@@ -74,6 +79,10 @@ export default function AlgorithmCardsSection({
           const isFailed = task.status === "Failed";
           const isStopped = task.status === "Stopped";
           const canStop = task.status === "Running" || task.status === "Queued";
+          const taskWarnings =
+            warningsByAlgorithm?.get(task.algorithm_id.toUpperCase()) ?? [];
+          const showWarningGlyph =
+            !isFailed && taskWarnings.length > 0 && Boolean(onOpenAlgorithmWarnings);
           const algorithmRuntimeLabel = runtimeLabel(
             task.status,
             task.elapsed_seconds,
@@ -94,16 +103,20 @@ export default function AlgorithmCardsSection({
                 ? `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
-                      : isCompleted
-                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                        : "border-slate-200 bg-white"
+                      : showWarningGlyph
+                        ? "border-amber-200 bg-amber-50/50"
+                        : isCompleted
+                          ? "border-[#1b75a6]/25 bg-[#f7fbff]"
+                          : "border-slate-200 bg-white"
                   }`
                 : `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
-                      : isCompleted
-                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                        : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
+                      : showWarningGlyph
+                        ? "border-amber-200 bg-amber-50/50"
+                        : isCompleted
+                          ? "border-[#1b75a6]/25 bg-[#f7fbff]"
+                          : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
                   }`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -151,6 +164,33 @@ export default function AlgorithmCardsSection({
                   </p>
                 </div>
               </div>
+              {showWarningGlyph ? (
+                <button
+                  type="button"
+                  onClick={(event) =>
+                    onOpenAlgorithmWarnings?.(taskWarnings, event.currentTarget)
+                  }
+                  aria-label={`${taskWarnings.length} ${taskWarnings.length === 1 ? "warning" : "warnings"} for ${name}`}
+                  title={taskWarnings.length === 1 ? "View warning" : `View ${taskWarnings.length} warnings`}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-amber-500 transition hover:bg-amber-100/70 hover:text-amber-600"
+                >
+                  <svg viewBox="0 0 16 16" className="h-5 w-5" fill="none" aria-hidden="true">
+                    <path
+                      d="M8 1.75 L14.5 13.5 H1.5 Z"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M8 6 v3.5"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="8" cy="11.5" r="0.85" fill="currentColor" />
+                  </svg>
+                </button>
+              ) : null}
             </div>
           );
         })}
