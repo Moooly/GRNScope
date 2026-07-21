@@ -42,7 +42,7 @@ export default function DatasetHelpModal({ open, onClose }: DatasetHelpModalProp
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-sm font-bold text-slate-950">Gene filtering</h4>
+            <h4 className="text-sm font-bold text-slate-950">Gene filter</h4>
             <p className="mt-1 text-xs leading-5 text-slate-600">
               Controls how many highly variable genes are retained before inference. Keeping all genes means no top-variable-gene reduction was applied.
             </p>

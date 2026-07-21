@@ -412,7 +412,7 @@ export default function CreateProjectFlow({
       hasCellOracleSettingsConfigured,
       hasGroundTruth: false,
       preprocessingSummary: [
-        `Gene filtering: ${formatTopVariableGenes(topVariableGenes)}`,
+        `Gene filter: ${formatTopVariableGenes(topVariableGenes)}`,
         `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
         `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
         `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
@@ -681,12 +681,12 @@ export default function CreateProjectFlow({
         parsedTopGenes <= 0
       )
     ) {
-      validationErrors.push("Gene filtering must be \"all\" or a positive integer.");
+      validationErrors.push("Gene filter must be \"all\" or a positive integer.");
     } else if (!useAllGenes && geneCount !== null && parsedTopGenes > geneCount) {
-      validationErrors.push("Gene filtering cannot be larger than the uploaded gene count.");
+      validationErrors.push("Gene filter cannot be larger than the uploaded gene count.");
     } else if (!useAllGenes && parsedTopGenes > MAX_PREPROCESSED_GENES) {
       validationErrors.push(
-        `Gene filtering cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()} when using a numeric cutoff.`,
+        `Gene filter cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()} when using a numeric cutoff.`,
       );
     }
 

@@ -668,7 +668,7 @@ export default function CreateProjectModal({
                   <div className="grid items-center gap-6 sm:grid-cols-2">
                     <div className="flex items-center gap-3">
                       <span className="whitespace-nowrap text-sm font-semibold text-slate-950">
-                        Gene filtering
+                        Gene filter
                       </span>
                       <input
                         type="text"
@@ -709,7 +709,7 @@ export default function CreateProjectModal({
                             setTopVariableGenes("all");
                           }
                         }}
-                        aria-label="Gene filtering"
+                        aria-label="Gene filter"
                         className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
                       />
                     </div>
@@ -849,7 +849,7 @@ export default function CreateProjectModal({
               </p>
               <div className="space-y-3">
                 <p>
-                  <span className="font-bold text-slate-950">Gene filtering:</span> defaults to the uploaded matrix gene count. Enter a smaller number when you want to retain only the most variable genes.
+                  <span className="font-bold text-slate-950">Gene filter:</span> defaults to the uploaded matrix gene count and applies to every selected algorithm. Enter a smaller number to keep only the most variable genes. A few algorithms (PIDC, SINGE, SCRIBE, SINCERITIES) also cap gene counts further inside their own parameters.
                 </p>
                 <p>
                   <span className="font-bold text-slate-950">Max edges per target:</span> the number of strongest regulators kept for each target gene in the final ranked network. Higher values give a denser network; the maximum adapts to your gene count (up to 100).

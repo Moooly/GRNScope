@@ -134,11 +134,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "maxGenes",
-                "label": "Gene filtering",
+                "label": "Gene filter",
                 "description": (
-                    "Maximum number of highest-variance genes PIDC analyzes after "
-                    "the project-wide gene filter. PIDC evaluates gene triplets, so "
-                    "larger values can increase runtime very quickly."
+                    "PIDC's own gene cap, applied after the project-wide gene filter. "
+                    "PIDC evaluates every gene triplet, so its runtime rises very "
+                    "quickly with gene count. When more genes remain than this cap, "
+                    "PIDC keeps only the highest-variance ones."
                 ),
                 "default": 500,
                 "required": False,
@@ -573,11 +574,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "maxGenes",
-                "label": "Gene filtering",
+                "label": "Gene filter",
                 "description": (
-                    "Maximum number of highest-variance genes SINCERITIES analyzes "
-                    "after the project-wide gene filter. GRNScope may lower this "
-                    "further so the partial-correlation step has more cells than genes."
+                    "SINCERITIES' own gene cap, applied after the project-wide gene "
+                    "filter. GRNScope may lower it further so the partial-correlation "
+                    "step has more cells than genes. When more genes remain than this "
+                    "cap, SINCERITIES keeps only the highest-variance ones."
                 ),
                 "default": 500,
                 "required": False,
@@ -637,11 +639,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "maxGenes",
-                "label": "Gene filtering",
+                "label": "Gene filter",
                 "description": (
-                    "Number of highest-variance genes SCRIBE analyzes after the "
-                    "project-wide gene filter. SCRIBE evaluates every directed "
-                    "gene pair, so larger values can increase runtime very quickly."
+                    "SCRIBE's own gene cap, applied after the project-wide gene filter. "
+                    "SCRIBE evaluates every directed gene pair, so its runtime rises "
+                    "very quickly with gene count. When more genes remain than this "
+                    "cap, SCRIBE keeps only the highest-variance ones."
                 ),
                 "default": 300,
                 "required": False,
@@ -749,11 +752,12 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "parameters": [
             {
                 "name": "maxGenes",
-                "label": "Gene filtering",
+                "label": "Gene filter",
                 "description": (
-                    "Number of highest-variance genes SINGE analyzes after the "
-                    "project-wide gene filter. SINGE fits lagged regulator-target "
-                    "models, so larger values can increase runtime very quickly."
+                    "SINGE's own gene cap, applied after the project-wide gene filter. "
+                    "SINGE fits lagged regulator–target models, so its runtime "
+                    "rises very quickly with gene count. When more genes remain than "
+                    "this cap, SINGE keeps only the highest-variance ones."
                 ),
                 "default": 500,
                 "required": False,

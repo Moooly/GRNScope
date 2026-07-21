@@ -37,7 +37,7 @@ export default function DatasetPreprocessingSection({
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const preprocessingItems = [
     { label: "Matrix size", value: expressionMatrixLabel },
-    { label: "Gene filtering", value: topVariableGenesLabel },
+    { label: "Gene filter", value: topVariableGenesLabel },
     { label: "TF override", value: tfOverrideLabel },
     { label: "Normalization", value: normalizationLabel },
     { label: "log₂(x + 1)", value: logTransformLabel },
