@@ -954,6 +954,19 @@ ALGORITHMS: list[AlgorithmInfo] = [
         ],
         "parameters": [
             {
+                "name": "maxGenes",
+                "label": "Gene filter",
+                "description": (
+                    "Maximum number of highest-variance genes analyzed by GRISLI. "
+                    "Lower values reduce runtime and memory use."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "int",
+                "minimum": 3,
+                "maximum": 8000,
+            },
+            {
                 "name": "L",
                 "label": "L",
                 "description": "GRISLI L parameter.",
@@ -1023,7 +1036,25 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Trajectory-based datasets.",
             "Comparing Bayesian GRN inference methods.",
         ],
-        "parameters": [],
+        "parameters": [
+            {
+                "name": "maxGenes",
+                "label": "Gene filter",
+                "description": (
+                    "GRNVBEM's own gene cap, applied after the project-wide gene "
+                    "filter. GRNVBEM performs dense variational Bayesian calculations "
+                    "for every target gene, so its runtime and memory use rise very "
+                    "quickly with gene count. When more genes remain than this cap, "
+                    "GRNVBEM keeps only the highest-variance ones."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "integer",
+                "minimum": 3,
+                "maximum": 8000,
+                "step": 100,
+            },
+        ],
     },
     {
         "id": "JUMP3",

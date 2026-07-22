@@ -480,6 +480,52 @@ export default function ProjectDetailPage() {
       }
     }
 
+    if (selectedAlgorithmIds.has("GRNVBEM")) {
+      const configuredGrnvbemMaxGenes =
+        project?.algorithm_parameters?.GRNVBEM?.maxGenes ??
+        project?.resolved_algorithm_parameters?.GRNVBEM?.maxGenes ??
+        metadata?.algorithm_parameters?.GRNVBEM?.maxGenes ??
+        metadata?.resolved_algorithm_parameters?.GRNVBEM?.maxGenes ??
+        500;
+      const parsedGrnvbemMaxGenes = Number(configuredGrnvbemMaxGenes);
+      const grnvbemMaxGenes =
+        Number.isFinite(parsedGrnvbemMaxGenes) && parsedGrnvbemMaxGenes > 0
+          ? Math.floor(parsedGrnvbemMaxGenes)
+          : 500;
+
+      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > grnvbemMaxGenes) {
+        warnings.push({
+          code: "grnvbem-gene-filtering",
+          algorithmId: "GRNVBEM",
+          title: "GRNVBEM uses a runtime-focused gene set",
+          message: `GRNVBEM is currently configured to use ${grnvbemMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its dense variational Bayesian calculations become much slower and require substantially more memory as gene count increases. You can change this value in GRNVBEM's parameter settings.`,
+        });
+      }
+    }
+
+    if (selectedAlgorithmIds.has("GRISLI")) {
+      const configuredGrisliMaxGenes =
+        project?.algorithm_parameters?.GRISLI?.maxGenes ??
+        project?.resolved_algorithm_parameters?.GRISLI?.maxGenes ??
+        metadata?.algorithm_parameters?.GRISLI?.maxGenes ??
+        metadata?.resolved_algorithm_parameters?.GRISLI?.maxGenes ??
+        500;
+      const parsedGrisliMaxGenes = Number(configuredGrisliMaxGenes);
+      const grisliMaxGenes =
+        Number.isFinite(parsedGrisliMaxGenes) && parsedGrisliMaxGenes > 0
+          ? Math.floor(parsedGrisliMaxGenes)
+          : 500;
+
+      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > grisliMaxGenes) {
+        warnings.push({
+          code: "grisli-gene-filtering",
+          algorithmId: "GRISLI",
+          title: "GRISLI uses a runtime-focused gene set",
+          message: `GRISLI is currently configured to use ${grisliMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its velocity inference and repeated stability-selection calculations require substantially more memory as gene count increases. You can change this value in GRISLI's parameter settings.`,
+        });
+      }
+    }
+
     if (
       selectedAlgorithmIds.has("SINCERITIES") &&
       typeof uploadedGeneCount === "number" &&

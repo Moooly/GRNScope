@@ -44,6 +44,8 @@ const SINCERITIES_DEFAULT_MAX_GENES = 500;
 const SINCERITIES_SAFE_CELL_FRACTION = 0.75;
 const SCRIBE_DEFAULT_MAX_GENES = 300;
 const SINGE_DEFAULT_MAX_GENES = 500;
+const GRISLI_DEFAULT_MAX_GENES = 500;
+const GRNVBEM_DEFAULT_MAX_GENES = 500;
 const CELLORACLE_INTERNAL_BASE_GRN = "auto";
 
 function formatTopVariableGenes(value: string) {
@@ -393,6 +395,20 @@ export default function CreateProjectFlow({
         : SINGE_DEFAULT_MAX_GENES,
     [effectiveGeneCount],
   );
+  const grnvbemDefaultMaxGenes = useMemo(
+    () =>
+      effectiveGeneCount !== null && effectiveGeneCount >= 3
+        ? Math.min(GRNVBEM_DEFAULT_MAX_GENES, effectiveGeneCount)
+        : GRNVBEM_DEFAULT_MAX_GENES,
+    [effectiveGeneCount],
+  );
+  const grisliDefaultMaxGenes = useMemo(
+    () =>
+      effectiveGeneCount !== null && effectiveGeneCount >= 3
+        ? Math.min(GRISLI_DEFAULT_MAX_GENES, effectiveGeneCount)
+        : GRISLI_DEFAULT_MAX_GENES,
+    [effectiveGeneCount],
+  );
 
   // Keep the edge cap within its dynamic max as gene filtering changes; this also
   // lowers the default to the gene count when there are fewer than 20 genes.
@@ -616,6 +632,12 @@ export default function CreateProjectFlow({
       if (algorithmId === "SINGE" && overrides.maxGenes === undefined) {
         overrides.maxGenes = singeDefaultMaxGenes;
       }
+      if (algorithmId === "GRNVBEM" && overrides.maxGenes === undefined) {
+        overrides.maxGenes = grnvbemDefaultMaxGenes;
+      }
+      if (algorithmId === "GRISLI" && overrides.maxGenes === undefined) {
+        overrides.maxGenes = grisliDefaultMaxGenes;
+      }
       if (Object.keys(overrides).length > 0) {
         selectedParameterOverrides[algorithmId] = overrides;
       }
@@ -828,6 +850,8 @@ export default function CreateProjectFlow({
       sinceritiesDefaultMaxGenes={sinceritiesDefaultMaxGenes}
       scribeDefaultMaxGenes={scribeDefaultMaxGenes}
       singeDefaultMaxGenes={singeDefaultMaxGenes}
+      grnvbemDefaultMaxGenes={grnvbemDefaultMaxGenes}
+      grisliDefaultMaxGenes={grisliDefaultMaxGenes}
       cellOracleSpecies={cellOracleSpecies}
       hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}

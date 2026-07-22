@@ -1670,6 +1670,8 @@ def prepare_algorithm_expression_source(
         "SINCERITIES",
         "SCRIBE",
         "SINGE",
+        "GRISLI",
+        "GRNVBEM",
     }:
         return preprocessed_expression
 

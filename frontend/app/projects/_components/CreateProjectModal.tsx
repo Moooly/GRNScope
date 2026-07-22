@@ -57,6 +57,8 @@ interface CreateProjectModalProps {
   sinceritiesDefaultMaxGenes: number;
   scribeDefaultMaxGenes: number;
   singeDefaultMaxGenes: number;
+  grnvbemDefaultMaxGenes: number;
+  grisliDefaultMaxGenes: number;
   cellOracleSpecies: string;
   hasCellOracleSettingsConfigured: boolean;
   estimatePseudotime: boolean;
@@ -118,6 +120,8 @@ export default function CreateProjectModal({
   sinceritiesDefaultMaxGenes,
   scribeDefaultMaxGenes,
   singeDefaultMaxGenes,
+  grnvbemDefaultMaxGenes,
+  grisliDefaultMaxGenes,
   cellOracleSpecies,
   hasCellOracleSettingsConfigured,
   estimatePseudotime,
@@ -174,6 +178,8 @@ export default function CreateProjectModal({
       if (algorithmId === "SINCERITIES") return { maxGenes: sinceritiesDefaultMaxGenes };
       if (algorithmId === "SCRIBE") return { maxGenes: scribeDefaultMaxGenes };
       if (algorithmId === "SINGE") return { maxGenes: singeDefaultMaxGenes };
+      if (algorithmId === "GRNVBEM") return { maxGenes: grnvbemDefaultMaxGenes };
+      if (algorithmId === "GRISLI") return { maxGenes: grisliDefaultMaxGenes };
       return EMPTY_ALGORITHM_PARAMETER_VALUES;
     },
     [
@@ -181,6 +187,8 @@ export default function CreateProjectModal({
       sinceritiesDefaultMaxGenes,
       scribeDefaultMaxGenes,
       singeDefaultMaxGenes,
+      grnvbemDefaultMaxGenes,
+      grisliDefaultMaxGenes,
     ],
   );
   const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -835,7 +843,7 @@ export default function CreateProjectModal({
               </p>
               <div className="space-y-3">
                 <p>
-                  <span className="font-bold text-slate-950">Gene filter:</span> defaults to the uploaded matrix gene count and applies to every selected algorithm. Enter a smaller number to keep only the most variable genes. A few algorithms (PIDC, SINGE, SCRIBE, SINCERITIES) also cap gene counts further inside their own parameters.
+                  <span className="font-bold text-slate-950">Gene filter:</span> defaults to the uploaded matrix gene count and applies to every selected algorithm. Enter a smaller number to keep only the most variable genes. A few algorithms (PIDC, SINGE, SCRIBE, SINCERITIES, GRISLI, GRNVBEM) also cap gene counts further inside their own parameters.
                 </p>
                 <p>
                   <span className="font-bold text-slate-950">Max edges per target:</span> the number of strongest regulators kept for each target gene in the final ranked network. Higher values give a denser network; the maximum adapts to your gene count (up to 100).

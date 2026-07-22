@@ -202,5 +202,91 @@ class SCRIBEGeneFilterTests(unittest.TestCase):
             )
 
 
+class GRNVBEMGeneFilterTests(unittest.TestCase):
+    def test_default_and_override_gene_limits_are_resolved(self):
+        self.assertEqual(resolve_algorithm_gene_limit("GRNVBEM", {}, "maxGenes"), 500)
+        self.assertEqual(
+            resolve_algorithm_gene_limit(
+                "GRNVBEM",
+                {"algorithm_parameters": {"GRNVBEM": {"maxGenes": 300}}},
+                "maxGenes",
+            ),
+            300,
+        )
+
+    def test_grnvbem_uses_one_shared_highest_variance_gene_set(self):
+        with tempfile.TemporaryDirectory(prefix="grnvbem-filter-test-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "ExpressionData.csv"
+            source.write_text(
+                ",cell-1,cell-2,cell-3\n"
+                "gene-a,0,0,0\n"
+                "gene-b,0,1,2\n"
+                "gene-c,0,2,4\n"
+                "gene-d,1,1,1\n"
+                "gene-e,0,3,6\n",
+                encoding="utf-8",
+            )
+
+            result = prepare_algorithm_expression_source(
+                runtime_root=root / "runtime",
+                algorithm_id="GRNVBEM",
+                project_manifest={
+                    "algorithm_parameters": {"GRNVBEM": {"maxGenes": 3}},
+                },
+                preprocessed_expression=source,
+            )
+
+            with result.open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.reader(handle))
+            self.assertEqual(
+                [row[0] for row in rows[1:]],
+                ["gene-b", "gene-c", "gene-e"],
+            )
+
+
+class GRISLIGeneFilterTests(unittest.TestCase):
+    def test_default_and_override_gene_limits_are_resolved(self):
+        self.assertEqual(resolve_algorithm_gene_limit("GRISLI", {}, "maxGenes"), 500)
+        self.assertEqual(
+            resolve_algorithm_gene_limit(
+                "GRISLI",
+                {"algorithm_parameters": {"GRISLI": {"maxGenes": 300}}},
+                "maxGenes",
+            ),
+            300,
+        )
+
+    def test_grisli_uses_one_shared_highest_variance_gene_set(self):
+        with tempfile.TemporaryDirectory(prefix="grisli-filter-test-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "ExpressionData.csv"
+            source.write_text(
+                ",cell-1,cell-2,cell-3\n"
+                "gene-a,0,0,0\n"
+                "gene-b,0,1,2\n"
+                "gene-c,0,2,4\n"
+                "gene-d,1,1,1\n"
+                "gene-e,0,3,6\n",
+                encoding="utf-8",
+            )
+
+            result = prepare_algorithm_expression_source(
+                runtime_root=root / "runtime",
+                algorithm_id="GRISLI",
+                project_manifest={
+                    "algorithm_parameters": {"GRISLI": {"maxGenes": 3}},
+                },
+                preprocessed_expression=source,
+            )
+
+            with result.open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.reader(handle))
+            self.assertEqual(
+                [row[0] for row in rows[1:]],
+                ["gene-b", "gene-c", "gene-e"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

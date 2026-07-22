@@ -43,7 +43,8 @@ NON_DEFAULT_PARAMETERS = {
         "num_replicates": 2,
     },
     "LEAP": {"maxLag": 0.2},
-    "GRISLI": {"L": 2, "R": 3, "alphaMin": 0.2},
+    "GRISLI": {"maxGenes": 300, "L": 2, "R": 3, "alphaMin": 0.2},
+    "GRNVBEM": {"maxGenes": 300},
     "SCSGL": {"pos_density": 0.2, "neg_density": 0.3, "assoc": "dotprod"},
 }
 
@@ -148,6 +149,18 @@ class AlgorithmParameterValidationTests(unittest.TestCase):
         self.assertEqual(
             resolve_algorithm_parameters("SCRIBE")["maxGenes"],
             300,
+        )
+
+    def test_grnvbem_defaults_to_five_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("GRNVBEM"),
+            {"maxGenes": 500},
+        )
+
+    def test_grisli_defaults_to_five_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("GRISLI")["maxGenes"],
+            500,
         )
 
     def test_scsgl_association_is_allowlisted(self):
