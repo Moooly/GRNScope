@@ -33,6 +33,7 @@ from ..services.beeline_service import (
     detect_csv_dialect_from_file,
     ensure_project_preprocessed_expression,
     find_algorithm_runtime_roots,
+    parse_bool,
     read_delimited_header,
     run_beeline_with_progress,
     summarize_expression_matrix_issues,
@@ -255,6 +256,23 @@ def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool
             project_manifest,
         )
         sync_project_dataset_dimensions(project_dir, project_manifest, source_expression)
+
+        # If the project asked us to estimate pseudotime (and none was uploaded),
+        # produce it here — once, before any algorithm runs. ensure_estimated_
+        # pseudotime is locked and idempotent, so parallel workers don't launch
+        # duplicate estimations. A failure is non-fatal: non-trajectory methods
+        # still run, and the trajectory ones surface their own "no pseudotime"
+        # failure, while the estimation status records what went wrong.
+        if parse_bool(project_manifest.get("estimate_pseudotime")) and not project_manifest.get(
+            "pseudotime_path"
+        ):
+            try:
+                from .pseudotime_service import ensure_estimated_pseudotime
+
+                ensure_estimated_pseudotime(project_id)
+            except Exception:
+                pass
+
         mark_project_dataset_validated(project_dir, job_id)
         return True
     except MatrixValidationRuntimeError as exc:

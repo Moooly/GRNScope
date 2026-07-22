@@ -248,6 +248,7 @@ export default function ProjectDetailPage() {
     project,
     metadata,
     latestJob,
+    pseudotimeEstimation,
     algorithmResults,
     algorithmCatalog,
     isLoadingCompletedResults,
@@ -2116,6 +2117,7 @@ useEffect(() => {
                               setIsStopProjectModalOpen(true);
                             }
                       }
+                      estimationStatus={pseudotimeEstimation}
                     />
                   )
                 )}

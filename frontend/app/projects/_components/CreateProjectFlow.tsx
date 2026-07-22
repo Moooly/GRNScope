@@ -228,6 +228,7 @@ export default function CreateProjectFlow({
 
   const [expressionFile, setExpressionFile] = useState<File | null>(null);
   const [pseudotimeFile, setPseudotimeFile] = useState<File | null>(null);
+  const [estimatePseudotime, setEstimatePseudotime] = useState(false);
   const [clusterLabelsFile, setClusterLabelsFile] = useState<File | null>(null);
   const [expressionFileName, setExpressionFileName] = useState("");
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
@@ -272,6 +273,7 @@ export default function CreateProjectFlow({
     setProjectDescription(initialValues?.projectDescription ?? "");
     setExpressionFile(null);
     setPseudotimeFile(null);
+    setEstimatePseudotime(false);
     setClusterLabelsFile(null);
     setExpressionFileName("");
     setPseudotimeFileName("");
@@ -407,7 +409,9 @@ export default function CreateProjectFlow({
         geneCount !== null && cellCount !== null
           ? `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`
           : "Matrix size pending upload validation",
-      hasPseudotime: Boolean(pseudotimeFile),
+      // Trajectory methods are available when the user has (or will have via
+      // estimation) a pseudotime.
+      hasPseudotime: Boolean(pseudotimeFile) || estimatePseudotime,
       hasClusterLabels: Boolean(clusterLabelsFile),
       hasCellOracleSettingsConfigured,
       hasGroundTruth: false,
@@ -422,6 +426,7 @@ export default function CreateProjectFlow({
       geneCount,
       cellCount,
       pseudotimeFile,
+      estimatePseudotime,
       clusterLabelsFile,
       topVariableGenes,
       includeAllTFs,
@@ -566,6 +571,20 @@ export default function CreateProjectFlow({
     setPseudotimeFileName("");
   };
 
+  // Uploading a pseudotime file and estimating one are mutually exclusive.
+  const handleSetPseudotimeFile = (file: File | null) => {
+    setPseudotimeFile(file);
+    if (file) setEstimatePseudotime(false);
+  };
+
+  const handleToggleEstimatePseudotime = (next: boolean) => {
+    setEstimatePseudotime(next);
+    if (next) {
+      setPseudotimeFile(null);
+      setPseudotimeFileName("");
+    }
+  };
+
   const clearClusterLabelsFile = () => {
     setClusterLabelsFile(null);
     setClusterLabelsFileName("");
@@ -608,6 +627,7 @@ export default function CreateProjectFlow({
     formData.append("expression_filename", expressionFileName);
     formData.append("pseudotime_filename", pseudotimeFileName);
     formData.append("cluster_labels_filename", clusterLabelsFileName);
+    formData.append("estimate_pseudotime", JSON.stringify(estimatePseudotime));
 
     const response = await apiFetch(`${API_BASE}/projects/create-pending`, {
       method: "POST",
@@ -827,9 +847,11 @@ export default function CreateProjectFlow({
       onToggleAlgorithm={toggleAlgorithm}
       setProjectName={setProjectName}
       setProjectDescription={setProjectDescription}
+      estimatePseudotime={estimatePseudotime}
+      onToggleEstimatePseudotime={handleToggleEstimatePseudotime}
       setExpressionFile={setExpressionFile}
       setExpressionFileName={setExpressionFileName}
-      setPseudotimeFile={setPseudotimeFile}
+      setPseudotimeFile={handleSetPseudotimeFile}
       setPseudotimeFileName={setPseudotimeFileName}
       setClusterLabelsFile={setClusterLabelsFile}
       setClusterLabelsFileName={setClusterLabelsFileName}

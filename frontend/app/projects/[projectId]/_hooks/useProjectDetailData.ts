@@ -166,10 +166,20 @@ type UseProjectDetailDataArgs = {
   isDemoRoute: boolean;
 };
 
+export type PseudotimeEstimationState = {
+  status?: string;
+  error_message?: string | null;
+  is_estimated?: boolean;
+  has_pseudotime?: boolean;
+  lineage_count?: number | null;
+} | null;
+
 export default function useProjectDetailData({ projectId, isDemoRoute }: UseProjectDetailDataArgs) {
   const [project, setProject] = useState<ProjectManifest | null>(null);
   const [metadata, setMetadata] = useState<MetadataManifest | null>(null);
   const [latestJob, setLatestJob] = useState<ProjectJob | null>(null);
+  const [pseudotimeEstimation, setPseudotimeEstimation] =
+    useState<PseudotimeEstimationState>(null);
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
   const [algorithmCatalog, setAlgorithmCatalog] = useState<AlgorithmCatalogItem[]>([]);
   const [isLoadingCompletedResults, setIsLoadingCompletedResults] = useState(false);
@@ -203,6 +213,9 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
         const projectData = await projectResponse.json();
         setProject((projectData.project ?? null) as ProjectManifest | null);
         setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
+        setPseudotimeEstimation(
+          (projectData.pseudotime_estimation ?? null) as PseudotimeEstimationState,
+        );
       }
 
       const metadataResponse = await apiFetch(`${API_BASE}/projects/${projectId}/metadata`);
@@ -309,6 +322,9 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
             fetchedLatestJob = (projectData.latest_job ?? null) as ProjectJob | null;
             setProject((projectData.project ?? null) as ProjectManifest | null);
             setLatestJob(fetchedLatestJob);
+            setPseudotimeEstimation(
+              (projectData.pseudotime_estimation ?? null) as PseudotimeEstimationState,
+            );
             projectLoaded = true;
             break;
           }
@@ -421,6 +437,9 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           if (!cancelled) {
             setProject((projectData.project ?? null) as ProjectManifest | null);
             setLatestJob((projectData.latest_job ?? null) as ProjectJob | null);
+            setPseudotimeEstimation(
+              (projectData.pseudotime_estimation ?? null) as PseudotimeEstimationState,
+            );
           }
         }
 
@@ -473,6 +492,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
     project,
     metadata,
     latestJob,
+    pseudotimeEstimation,
     algorithmResults,
     algorithmCatalog,
     isLoadingCompletedResults,

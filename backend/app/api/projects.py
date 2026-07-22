@@ -69,6 +69,7 @@ from ..services.job_service import (
     update_job_state,
 )
 from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
+from ..services.pseudotime_service import get_pseudotime_estimation_state
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
 
 router = APIRouter()
@@ -329,6 +330,7 @@ async def create_pending_project(
     expression_filename: str = Form(""),
     pseudotime_filename: str = Form(""),
     cluster_labels_filename: str = Form(""),
+    estimate_pseudotime: str = Form("false"),
 ):
     owner_id = get_or_create_client_id(request, response)
     project_id = uuid.uuid4().hex[:12]
@@ -382,6 +384,7 @@ async def create_pending_project(
         "expression_path": None,
         "pseudotime_path": None,
         "cluster_labels_path": None,
+        "estimate_pseudotime": estimate_pseudotime,
         "preprocessed_expression_path": str(
             project_dir / "preprocessed" / "ExpressionData.csv"
         ),
@@ -1098,6 +1101,7 @@ async def get_project(project_id: str, request: Request, response: Response):
             "ok": True,
             "project": project_manifest,
             "latest_job": latest_job,
+            "pseudotime_estimation": get_pseudotime_estimation_state(project_dir),
         }
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -59,6 +59,8 @@ interface CreateProjectModalProps {
   singeDefaultMaxGenes: number;
   cellOracleSpecies: string;
   hasCellOracleSettingsConfigured: boolean;
+  estimatePseudotime: boolean;
+  onToggleEstimatePseudotime: (value: boolean) => void;
   selectedIds: string[];
   algorithmParameters: Record<string, Record<string, unknown>>;
   onApplyAlgorithmParameters: (
@@ -118,6 +120,8 @@ export default function CreateProjectModal({
   singeDefaultMaxGenes,
   cellOracleSpecies,
   hasCellOracleSettingsConfigured,
+  estimatePseudotime,
+  onToggleEstimatePseudotime,
   selectedIds,
   algorithmParameters,
   onApplyAlgorithmParameters,
@@ -604,6 +608,8 @@ export default function CreateProjectModal({
               <OptionalInputsPanel
                 pseudotimeFileName={pseudotimeFileName}
                 cellOracleConfigLabel={cellOracleConfigLabel}
+                estimatePseudotime={estimatePseudotime}
+                onToggleEstimatePseudotime={onToggleEstimatePseudotime}
                 onSelectPseudotime={selectPseudotimeFile}
                 onClearPseudotime={clearPseudotimeFile}
                 onOpenCellOracleSettings={handleOpenCellOracleSettings}
@@ -886,12 +892,16 @@ export default function CreateProjectModal({
 function OptionalInputsPanel({
   pseudotimeFileName,
   cellOracleConfigLabel,
+  estimatePseudotime,
+  onToggleEstimatePseudotime,
   onSelectPseudotime,
   onClearPseudotime,
   onOpenCellOracleSettings,
 }: {
   pseudotimeFileName: string;
   cellOracleConfigLabel: string;
+  estimatePseudotime: boolean;
+  onToggleEstimatePseudotime: (value: boolean) => void;
   onSelectPseudotime: (file: File | null) => void;
   onClearPseudotime: () => void;
   onOpenCellOracleSettings: () => void;
@@ -910,13 +920,12 @@ function OptionalInputsPanel({
       </div>
 
       <div className="mt-4 space-y-3">
-        <OptionalFileInputRow
-          title="Pseudotime CSV"
-          description="Used by trajectory-aware methods."
+        <PseudotimeInputRow
           fileName={pseudotimeFileName}
-          uploadLabel={pseudotimeFileName ? "Replace" : "Upload"}
+          estimate={estimatePseudotime}
           onSelect={onSelectPseudotime}
           onClear={onClearPseudotime}
+          onToggleEstimate={onToggleEstimatePseudotime}
         />
 
         <div className="grid gap-3">
@@ -1169,61 +1178,97 @@ function CellOracleSettingsModal({
   );
 }
 
-function OptionalFileInputRow({
-  title,
-  description,
+function PseudotimeInputRow({
   fileName,
-  uploadLabel,
+  estimate,
   onSelect,
   onClear,
+  onToggleEstimate,
 }: {
-  title: string;
-  description: string;
   fileName: string;
-  uploadLabel: string;
+  estimate: boolean;
   onSelect: (file: File | null) => void;
   onClear: () => void;
+  onToggleEstimate: (value: boolean) => void;
 }) {
   const compactFileName = formatFileNameForDisplay(fileName, 28);
+  const uploadLabel = fileName ? "Replace" : estimate ? "Upload instead" : "Upload";
 
   return (
-    <div className="grid gap-3 rounded-[1.25rem] border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div>
-        <h4 className="text-base font-semibold text-slate-900">{title}</h4>
-        <p className="mt-1 text-sm leading-5 text-slate-600">{description}</p>
+    <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div>
+          <h4 className="text-base font-semibold text-slate-900">Pseudotime CSV</h4>
+          <p className="mt-1 text-sm leading-5 text-slate-600">Used by trajectory-aware methods.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {fileName ? (
+            <span
+              className="max-w-56 truncate rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-[#178a62]"
+              title={fileName}
+            >
+              {compactFileName}
+            </span>
+          ) : null}
+          <label className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
+            {uploadLabel}
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                onSelect(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          {fileName ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {fileName ? (
-          <span
-            className="max-w-56 truncate rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-[#178a62]"
-            title={fileName}
-          >
-            {compactFileName}
-          </span>
-        ) : null}
-        <label className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
-          {uploadLabel}
-          <input
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              onSelect(file);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        {fileName ? (
+
+      {!fileName ? (
+        <div
+          className={`mt-3 flex items-center justify-between gap-4 rounded-xl border px-3.5 py-2.5 transition ${
+            estimate
+              ? "border-[#1b75a6]/30 bg-[#f2f9fc]"
+              : "border-slate-100 bg-slate-50/60"
+          }`}
+        >
+          <div className="min-w-0 max-w-md">
+            <p className="text-[13px] font-medium text-slate-700">Estimate it for me</p>
+            <p className="mt-0.5 text-xs leading-5 text-slate-500">
+              {estimate
+                ? "Trajectory methods unlocked — estimation runs first (approximate)."
+                : "We'll estimate a trajectory so the ordered methods can run."}
+            </p>
+          </div>
           <button
             type="button"
-            onClick={onClear}
-            className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+            role="switch"
+            aria-checked={estimate}
+            aria-label="Estimate pseudotime"
+            onClick={() => onToggleEstimate(!estimate)}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+              estimate ? "bg-[#1b75a6]" : "bg-slate-300"
+            }`}
           >
-            Remove
+            <span
+              className={`h-5 w-5 rounded-full bg-white shadow-sm transition ${
+                estimate ? "translate-x-[1.35rem]" : "translate-x-0.5"
+              }`}
+            />
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

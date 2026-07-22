@@ -14,12 +14,18 @@ type JobTask = {
   completed_at?: string | null;
 };
 
+type PseudotimeEstimation = {
+  status?: string;
+  error_message?: string | null;
+} | null;
+
 type JobProgressBannerProps = {
   tasks: JobTask[];
   algorithmMetaMap?: Map<string, { name: string }>;
   notificationEmail?: string | null;
   onSaveNotificationEmail?: (email: string) => Promise<boolean>;
   onStopProject?: () => void;
+  estimationStatus?: PseudotimeEstimation;
 };
 
 /**
@@ -31,6 +37,7 @@ export default function JobProgressBanner({
   notificationEmail = null,
   onSaveNotificationEmail,
   onStopProject,
+  estimationStatus = null,
 }: JobProgressBannerProps) {
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState(notificationEmail ?? "");
@@ -152,15 +159,24 @@ export default function JobProgressBanner({
     };
   });
   const primaryRunningItem = runningItems[0];
-  const activeWorkSummary = primaryRunningItem
-    ? `Running ${primaryRunningItem.name}${
-        runningItems.length > 1 ? ` + ${runningItems.length - 1} more` : ""
-      }`
-    : isWaitingForUpload
-      ? "Waiting for dataset upload"
-      : stopping.length > 0
-        ? `${stopping.length} ${stopping.length === 1 ? "method" : "methods"} stopping`
-        : `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`;
+  // Pseudotime estimation runs as the job's first step, before any method — surface
+  // it here so the user isn't staring at "N methods waiting" with no visible reason.
+  const isEstimatingPseudotime = estimationStatus?.status === "Running";
+  const activeWorkSummary = isEstimatingPseudotime
+    ? "Estimating pseudotime…"
+    : primaryRunningItem
+      ? `Running ${primaryRunningItem.name}${
+          runningItems.length > 1 ? ` + ${runningItems.length - 1} more` : ""
+        }`
+      : isWaitingForUpload
+        ? "Waiting for dataset upload"
+        : stopping.length > 0
+          ? `${stopping.length} ${stopping.length === 1 ? "method" : "methods"} stopping`
+          : `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`;
+  const estimationSecondary =
+    isEstimatingPseudotime && queued.length > 0
+      ? `${queued.length} ${queued.length === 1 ? "method" : "methods"} will run next`
+      : null;
   const timingSummary =
     primaryRunningItem?.detail === "Estimating time remaining"
       ? null
@@ -211,6 +227,9 @@ export default function JobProgressBanner({
           </span>
           <p className="mr-2 min-w-0 truncate text-sm font-semibold text-slate-700 sm:mr-5">
             <span className="font-bold text-slate-900">{activeWorkSummary}</span>
+            {estimationSecondary ? (
+              <span className="hidden font-medium text-slate-400 sm:inline"> · {estimationSecondary}</span>
+            ) : null}
               <span className="hidden">
                 {completionSummary.length > 0 ? (
                   <>
@@ -267,12 +286,12 @@ export default function JobProgressBanner({
               type="button"
               onClick={onStopProject}
               aria-label="Stop project"
-              title="Stop all running algorithms"
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-bold text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
+              title="Stop all running methods"
+              className="group/stop inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
             >
-              <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
-                <rect x="4.5" y="4.5" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
+              <span className="flex h-4 w-4 items-center justify-center rounded-[3px] bg-slate-400 transition group-hover/stop:bg-amber-500">
+                <span className="h-1.5 w-1.5 rounded-[1px] bg-white" />
+              </span>
               <span className="hidden sm:inline">Stop</span>
             </button>
           ) : null}
