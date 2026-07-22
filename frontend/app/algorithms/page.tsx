@@ -213,7 +213,7 @@ export default function AlgorithmsPage() {
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_10px_35px_rgba(15,23,42,0.035)]">
-              <div className={`hidden gap-x-4 border-b border-slate-200 bg-slate-50/70 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500 md:grid ${GRID_TEMPLATE}`}>
+              <div className={`hidden gap-x-4 border-b border-slate-200 bg-slate-50/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 md:grid ${GRID_TEMPLATE}`}>
                 <span>Algorithm</span>
                 <span className="text-center">Pseudotime</span>
                 <span className="text-center">Direction</span>
@@ -520,16 +520,16 @@ function AlgorithmRow({ algorithm }: { algorithm: AlgorithmEntry }) {
     >
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-[15px] font-bold leading-5 tracking-[-0.015em] text-slate-950 transition group-hover:text-[#155f87]">
+          <h3 className="truncate text-base font-bold leading-6 tracking-[-0.015em] text-slate-950 transition group-hover:text-[#155f87]">
             {displayName}
           </h3>
           {algorithm.recommended ? (
-            <span className="shrink-0 rounded-full bg-[#e5f5f2] px-2 py-0.5 text-[10px] font-bold text-[#23796f]">
+            <span className="shrink-0 rounded-full bg-[#e5f5f2] px-2 py-0.5 text-[11px] font-bold text-[#23796f]">
               Recommended
             </span>
           ) : null}
         </div>
-        <p className="mt-1 truncate text-xs leading-5 text-slate-600" title={algorithm.tagline}>
+        <p className="mt-1 truncate text-[13px] leading-5 text-slate-600" title={algorithm.tagline}>
           {algorithm.category}
         </p>
       </div>
@@ -594,13 +594,13 @@ function AlgorithmProperty({
 }) {
   return (
     <div className="min-w-0 md:block">
-      <dt className="mb-1.5 truncate text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 md:sr-only">
+      <dt className="mb-1.5 truncate text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 md:sr-only">
         {label}
       </dt>
       <dd className="md:text-center">
         <span
           title={title}
-          className={`inline-flex max-w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold sm:text-[11px] ${
+          className={`inline-flex max-w-full items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold sm:text-xs ${
             toneClass ?? TONE_CLASS[tone]
           }`}
         >
