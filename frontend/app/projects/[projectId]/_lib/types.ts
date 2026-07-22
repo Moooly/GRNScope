@@ -408,6 +408,15 @@ export type PerturbationResult = {
     random_dx: number;
     random_dy: number;
   }>;
+  // Pseudotime-derived development flow (arrows following natural differentiation).
+  development_vectors?: Array<{ x: number; y: number; dx: number; dy: number }>;
+  // Trajectory-specific perturbation flow used by CellOracle to calculate the
+  // development inner product. This intentionally differs from whole-dataset
+  // grid_vectors when pseudotime covers only a subset of cells.
+  development_perturbation_vectors?: Array<{ x: number; y: number; dx: number; dy: number }>;
+  // Per-grid inner product of the perturbation shift vs the development direction:
+  // score > 0 = perturbation promotes development, < 0 = blocks it.
+  inner_product_grid?: Array<{ x: number; y: number; score: number }>;
 };
 
 export type PerturbationState = {

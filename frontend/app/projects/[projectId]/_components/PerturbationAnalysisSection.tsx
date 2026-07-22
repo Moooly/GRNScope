@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { createPortal } from "react-dom";
 import type {
   PointerEvent as ReactPointerEvent,
+  ReactNode,
   RefObject,
 } from "react";
 import { API_BASE } from "../../../_lib/apiConfig";
@@ -64,6 +65,7 @@ type GridVectorFields = {
   randomized: DisplayVector[];
 };
 type PlotViewport = typeof DEFAULT_PLOT_VIEWPORT;
+type NormalizedPlotViewport = { x: number; y: number; width: number; height: number };
 type PlotKind = "predicted" | "randomized";
 type SafariGestureEvent = Event & {
   clientX: number;
@@ -189,6 +191,54 @@ function buildComparisonFigureSvg({
 </svg>`;
 }
 
+function buildDevelopmentFigureSvg({
+  panels,
+  subtitle,
+  limit,
+}: {
+  panels: Array<{ svg: SVGSVGElement; title: string }>;
+  subtitle: string;
+  limit: number;
+}) {
+  const panelWidth = panels.length === 1 ? 1080 : 740;
+  const panelHeight = 470;
+  const panelY = 158;
+  const panelXs = panels.length === 1 ? [260] : [40, 820];
+  const panelMarkup = panels.map(({ svg, title }, index) => {
+    const viewBox = svg.getAttribute("viewBox") ?? "0 0 480 330";
+    const x = panelXs[index];
+    return `
+  <text x="${x}" y="137" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(title)}</text>
+  <rect x="${x}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" rx="18" fill="#f7fbff" stroke="#e2e8f0" stroke-width="2"/>
+  <svg x="${x}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" viewBox="${escapeXml(viewBox)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">${cleanPlotSvgContents(svg)}</svg>`;
+  }).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_WIDTH}" height="${FIGURE_HEIGHT}" viewBox="0 0 ${FIGURE_WIDTH} ${FIGURE_HEIGHT}" role="img" aria-label="Development impact comparison">
+  <defs>
+    <linearGradient id="development-alignment-scale" x1="0" x2="1">
+      <stop offset="0" stop-color="rgb(226,75,74)"/>
+      <stop offset="0.5" stop-color="rgb(226,232,240)"/>
+      <stop offset="1" stop-color="rgb(22,163,120)"/>
+    </linearGradient>
+  </defs>
+  <rect width="${FIGURE_WIDTH}" height="${FIGURE_HEIGHT}" fill="#ffffff"/>
+  <text x="40" y="46" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Development impact</text>
+  <text x="40" y="76" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="16">${escapeXml(subtitle)}</text>
+  <g transform="translate(1200 32)" font-family="Arial, Helvetica, sans-serif">
+    <text x="0" y="14" fill="#64748b" font-size="13" font-weight="700">Blocks</text>
+    <text x="130" y="14" fill="#64748b" font-size="13" font-weight="700" text-anchor="middle">Neutral</text>
+    <text x="260" y="14" fill="#64748b" font-size="13" font-weight="700" text-anchor="end">Promotes</text>
+    <rect x="0" y="23" width="260" height="10" rx="5" fill="url(#development-alignment-scale)"/>
+    <text x="0" y="52" fill="#94a3b8" font-size="12">${escapeXml(formatScoreLimit(-limit))}</text>
+    <text x="130" y="52" fill="#94a3b8" font-size="12" text-anchor="middle">0</text>
+    <text x="260" y="52" fill="#94a3b8" font-size="12" text-anchor="end">${escapeXml(formatScoreLimit(limit))}</text>
+  </g>${panelMarkup}
+  <line x1="40" y1="658" x2="1560" y2="658" stroke="#e2e8f0"/>
+  <text x="40" y="682" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="13">Current synchronized view · Natural flow follows pseudotime · Alignment is descriptive</text>
+</svg>`;
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -281,6 +331,26 @@ function zoomViewportAtPoint(
   return {
     x: clamp(worldX - pointerX * nextWidth, 0, PLOT_WIDTH - nextWidth),
     y: clamp(worldY - pointerY * nextHeight, 0, PLOT_HEIGHT - nextHeight),
+    width: nextWidth,
+    height: nextHeight,
+  };
+}
+
+const DEFAULT_NORMALIZED_VIEWPORT: NormalizedPlotViewport = { x: 0, y: 0, width: 1, height: 1 };
+
+function zoomNormalizedViewportAtPoint(
+  viewport: NormalizedPlotViewport,
+  factor: number,
+  pointerX: number,
+  pointerY: number,
+): NormalizedPlotViewport {
+  const nextWidth = clamp(viewport.width * factor, 0.36, 1);
+  const nextHeight = nextWidth;
+  const worldX = viewport.x + pointerX * viewport.width;
+  const worldY = viewport.y + pointerY * viewport.height;
+  return {
+    x: clamp(worldX - pointerX * nextWidth, 0, 1 - nextWidth),
+    y: clamp(worldY - pointerY * nextHeight, 0, 1 - nextHeight),
     width: nextWidth,
     height: nextHeight,
   };
@@ -1390,6 +1460,865 @@ type ClusterSummaryView = {
   top_genes: Array<{ gene: string; mean_change: number }>;
 };
 
+// --- Shared projection for the development-direction panels -----------------
+// The development-flow quiver, the perturbation quiver and the promotes/blocks
+// overlay are all drawn on the SAME grid + cell embedding, so they share one
+// bounding box and one aspect-preserving projector. Preserving aspect ratio keeps
+// arrow angles honest (independent x/y scaling would shear them). The bounds
+// include the cell embedding so every cell is visible as a background dot.
+type DevBounds = { minX: number; maxX: number; minY: number; maxY: number };
+type DevProjector = ReturnType<typeof makeDevProjector>;
+type XY = { x: number; y: number };
+type Arrow = { x: number; y: number; dx: number; dy: number };
+type ScorePoint = { x: number; y: number; score: number };
+
+const DEV_PLOT_LONG = 480; // long-axis viewBox length in SVG units
+const DEV_MARGIN_FRAC = 0.05; // breathing room around the data, as a fraction
+const DEV_ARROW_TARGET = 120; // keep the field readable without hiding the cells
+const DEV_CELL_TARGET = 2600; // cap on background cell dots for performance
+
+const DEV_NEUTRAL_RGB = [226, 232, 240] as const; // slate-200, the zero color
+const DEV_GREEN_RGB = [22, 163, 120] as const; // promotes
+const DEV_RED_RGB = [226, 75, 74] as const; // blocks
+
+function computeDevBounds(points: Array<XY>): DevBounds | null {
+  if (points.length === 0) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+function mergeDevBounds(...parts: Array<DevBounds | null>): DevBounds | null {
+  let out: DevBounds | null = null;
+  for (const part of parts) {
+    if (!part) continue;
+    out = out
+      ? {
+          minX: Math.min(out.minX, part.minX),
+          maxX: Math.max(out.maxX, part.maxX),
+          minY: Math.min(out.minY, part.minY),
+          maxY: Math.max(out.maxY, part.maxY),
+        }
+      : part;
+  }
+  return out;
+}
+
+function makeDevProjector(bounds: DevBounds) {
+  const rawW = Math.max(1e-9, bounds.maxX - bounds.minX);
+  const rawH = Math.max(1e-9, bounds.maxY - bounds.minY);
+  const margin = Math.max(rawW, rawH) * DEV_MARGIN_FRAC;
+  const minX = bounds.minX - margin;
+  const minY = bounds.minY - margin;
+  const dataW = rawW + margin * 2;
+  const dataH = rawH + margin * 2;
+  // viewBox matches the data aspect ratio -> a single uniform scale, no shear,
+  // and no letterboxing when the SVG is rendered with w-full h-auto.
+  const vbW = dataW >= dataH ? DEV_PLOT_LONG : DEV_PLOT_LONG * (dataW / dataH);
+  const vbH = dataH >= dataW ? DEV_PLOT_LONG : DEV_PLOT_LONG * (dataH / dataW);
+  const scale = DEV_PLOT_LONG / Math.max(dataW, dataH);
+  const mapX = (value: number) => (value - minX) * scale;
+  const mapY = (value: number) => vbH - (value - minY) * scale; // invert data-y
+  return { mapX, mapY, vbW, vbH, scale, span: Math.min(vbW, vbH) };
+}
+
+// Sorted unique values, collapsing coordinates within `tol` (grid coords are
+// regular but carry float noise). Used to recover the lattice step.
+function uniqueSorted(values: number[], tol: number): number[] {
+  const sorted = [...values].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const value of sorted) {
+    if (out.length === 0 || Math.abs(value - out[out.length - 1]) > tol) out.push(value);
+  }
+  return out;
+}
+
+function medianSpacing(sortedUnique: number[]): number | null {
+  if (sortedUnique.length < 2) return null;
+  const diffs: number[] = [];
+  for (let i = 1; i < sortedUnique.length; i += 1) diffs.push(sortedUnique[i] - sortedUnique[i - 1]);
+  diffs.sort((a, b) => a - b);
+  return diffs[Math.floor(diffs.length / 2)] || null;
+}
+
+// Recover the regular grid step (data units) in x and y, so tiles can be sized
+// to actually tile instead of guessing from a point count.
+function gridSpacing(points: Array<XY>): { sx: number; sy: number } | null {
+  if (points.length < 4) return null;
+  const bounds = computeDevBounds(points);
+  if (!bounds) return null;
+  const tolX = Math.max(1e-9, (bounds.maxX - bounds.minX) / 2000);
+  const tolY = Math.max(1e-9, (bounds.maxY - bounds.minY) / 2000);
+  const sx = medianSpacing(uniqueSorted(points.map((p) => p.x), tolX));
+  const sy = medianSpacing(uniqueSorted(points.map((p) => p.y), tolY));
+  if (!sx || !sy) return null;
+  return { sx, sy };
+}
+
+// Thin a lattice of arrows down toward `target` by keeping every k-th grid line
+// in both axes, so what remains is still an even field (not a random subset).
+function thinLatticeArrows(vectors: Array<Arrow>, target: number): Array<Arrow> {
+  if (vectors.length <= target) return vectors;
+  const spacing = gridSpacing(vectors);
+  if (!spacing) {
+    const stride = Math.ceil(vectors.length / target);
+    return vectors.filter((_, index) => index % stride === 0);
+  }
+  const bounds = computeDevBounds(vectors);
+  if (!bounds) return vectors;
+  const step = Math.max(1, Math.round(Math.sqrt(vectors.length / target)));
+  return vectors.filter((vector) => {
+    const col = Math.round((vector.x - bounds.minX) / spacing.sx);
+    const row = Math.round((vector.y - bounds.minY) / spacing.sy);
+    return col % step === 0 && row % step === 0;
+  });
+}
+
+function subsampleCells(points: Array<XY>, max: number): Array<XY> {
+  if (points.length <= max) return points;
+  const stride = Math.ceil(points.length / max);
+  return points.filter((_, index) => index % stride === 0);
+}
+
+// Continuous, zero-centred diverging color: red (blocks) -> neutral (~0) -> green
+// (promotes). `absLimit` is a robust symmetric limit so one outlier can't wash
+// out the scale. Alpha ramps with magnitude so near-zero tiles stay faint and let
+// the cell manifold show through.
+function divergingScoreColor(score: number, absLimit: number): string {
+  const t = clamp(score / absLimit, -1, 1);
+  const mag = Math.abs(t);
+  const target = t >= 0 ? DEV_GREEN_RGB : DEV_RED_RGB;
+  const r = Math.round(DEV_NEUTRAL_RGB[0] + (target[0] - DEV_NEUTRAL_RGB[0]) * mag);
+  const g = Math.round(DEV_NEUTRAL_RGB[1] + (target[1] - DEV_NEUTRAL_RGB[1]) * mag);
+  const b = Math.round(DEV_NEUTRAL_RGB[2] + (target[2] - DEV_NEUTRAL_RGB[2]) * mag);
+  const alpha = 0.22 + 0.7 * mag;
+  return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+}
+
+function robustScoreLimit(grid: Array<ScorePoint>): number {
+  if (grid.length === 0) return 1e-9;
+  return Math.max(1e-9, quantile(grid.map((point) => Math.abs(point.score)), 0.98));
+}
+
+// Faint cell embedding so the arrows and tiles sit on the real manifold (and a
+// detached island can be confirmed to actually contain cells).
+function renderCellPoints(cells: Array<XY>, proj: DevProjector) {
+  const r = Math.max(0.8, proj.span * 0.0034);
+  return cells.map((cell, index) => (
+    <circle key={`c${index}`} cx={proj.mapX(cell.x)} cy={proj.mapY(cell.y)} r={r} fill="#cbd5e1" opacity={0.5} />
+  ));
+}
+
+// Score tiles sized from the true grid spacing (no rounded corners / gaps, which
+// otherwise read as a checkerboard). A hair of overlap kills anti-alias seams.
+function renderScoreTiles(grid: Array<ScorePoint>, proj: DevProjector, absLimit: number) {
+  const spacing = gridSpacing(grid);
+  const fallback = proj.span / Math.max(6, Math.sqrt(grid.length));
+  const w = Math.max(2, (spacing ? spacing.sx * proj.scale : fallback)) * 1.03;
+  const h = Math.max(2, (spacing ? spacing.sy * proj.scale : fallback)) * 1.03;
+  return grid.map((point, index) => (
+    <rect
+      key={`t${index}`}
+      x={proj.mapX(point.x) - w / 2}
+      y={proj.mapY(point.y) - h / 2}
+      width={w}
+      height={h}
+      fill={divergingScoreColor(point.score, absLimit)}
+      shapeRendering="crispEdges"
+    />
+  ));
+}
+
+// Neutral arrows (charcoal) so hue is reserved exclusively for the signed score.
+// `onColor` lightens them slightly for contrast over the colored tiles.
+function renderFlowArrows(vectors: Array<Arrow>, proj: DevProjector, onColor = false) {
+  // Over the colored tiles, use a sparser field so the heatmap reads through.
+  const drawn = thinLatticeArrows(vectors, onColor ? 85 : DEV_ARROW_TARGET);
+  const magnitudes = drawn.map((vector) => Math.hypot(vector.dx, vector.dy));
+  const referenceMagnitude = Math.max(1e-9, quantile(magnitudes, 0.9));
+  // On the alignment map, hide the faintest third of arrows — they add clutter
+  // without direction the eye can read at this scale.
+  const minMagnitude = onColor ? quantile(magnitudes, 0.33) : 0;
+  const arrowScale = (proj.span * 0.042) / referenceMagnitude;
+  const maxArrowLength = proj.span * 0.058;
+  const stroke = onColor ? "#1e293b" : "#334155"; // slate-800 / slate-700
+  const strokeWidth = 1.05;
+  const opacity = onColor ? 0.85 : 0.8;
+  const headSize = 2.9;
+  return drawn.map((vector, index) => {
+    const magnitude = Math.hypot(vector.dx, vector.dy);
+    if (magnitude < 1e-9 || magnitude < minMagnitude) return null;
+    const startX = proj.mapX(vector.x);
+    const startY = proj.mapY(vector.y);
+    const length = Math.min(magnitude * arrowScale, maxArrowLength);
+    const unitX = vector.dx / magnitude;
+    const unitY = -vector.dy / magnitude; // screen y is inverted vs data y
+    const endX = startX + unitX * length;
+    const endY = startY + unitY * length;
+    const angle = Math.atan2(endY - startY, endX - startX);
+    return (
+      <g key={`a${index}`} stroke={stroke} strokeWidth={strokeWidth} opacity={opacity} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <line x1={startX} y1={startY} x2={endX} y2={endY} />
+        <path
+          d={`M ${endX - headSize * Math.cos(angle - Math.PI / 6)} ${endY - headSize * Math.sin(angle - Math.PI / 6)} L ${endX} ${endY} L ${endX - headSize * Math.cos(angle + Math.PI / 6)} ${endY - headSize * Math.sin(angle + Math.PI / 6)}`}
+        />
+      </g>
+    );
+  });
+}
+
+const DEV_SVG_CLASS = "h-auto w-full rounded-xl border border-slate-100 bg-[#f7fbff]";
+
+function InteractiveDevelopmentSvg({
+  proj,
+  viewport,
+  onViewportChange,
+  svgRef,
+  label,
+  children,
+}: {
+  proj: DevProjector;
+  viewport: NormalizedPlotViewport;
+  onViewportChange: (viewport: NormalizedPlotViewport) => void;
+  svgRef?: RefObject<SVGSVGElement | null>;
+  label: string;
+  children: ReactNode;
+}) {
+  const localSvgRef = useRef<SVGSVGElement | null>(null);
+  const viewportRef = useRef(viewport);
+  const gestureStartViewportRef = useRef<NormalizedPlotViewport | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    viewport: NormalizedPlotViewport;
+  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+
+  const setSvgElement = useCallback((node: SVGSVGElement | null) => {
+    localSvgRef.current = node;
+    if (svgRef) svgRef.current = node;
+  }, [svgRef]);
+
+  useEffect(() => {
+    const svg = localSvgRef.current;
+    if (!svg) return;
+    const pointerPosition = (clientX: number, clientY: number) => {
+      const bounds = svg.getBoundingClientRect();
+      return {
+        x: clamp((clientX - bounds.left) / bounds.width, 0, 1),
+        y: clamp((clientY - bounds.top) / bounds.height, 0, 1),
+      };
+    };
+    const updateViewport = (nextViewport: NormalizedPlotViewport) => {
+      viewportRef.current = nextViewport;
+      onViewportChange(nextViewport);
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      const pointer = pointerPosition(event.clientX, event.clientY);
+      const pixelDelta = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
+      const factor = Math.exp(clamp(pixelDelta, -120, 120) * 0.008);
+      updateViewport(zoomNormalizedViewportAtPoint(viewportRef.current, factor, pointer.x, pointer.y));
+    };
+    const handleGestureStart = (event: Event) => {
+      event.preventDefault();
+      gestureStartViewportRef.current = viewportRef.current;
+    };
+    const handleGestureChange = (event: Event) => {
+      event.preventDefault();
+      const gestureEvent = event as SafariGestureEvent;
+      const startViewport = gestureStartViewportRef.current ?? viewportRef.current;
+      const pointer = pointerPosition(gestureEvent.clientX, gestureEvent.clientY);
+      const scale = Number.isFinite(gestureEvent.scale) && gestureEvent.scale > 0 ? gestureEvent.scale : 1;
+      updateViewport(zoomNormalizedViewportAtPoint(startViewport, 1 / scale, pointer.x, pointer.y));
+    };
+    const handleGestureEnd = (event: Event) => {
+      event.preventDefault();
+      gestureStartViewportRef.current = null;
+    };
+
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    svg.addEventListener("gesturestart", handleGestureStart, { passive: false });
+    svg.addEventListener("gesturechange", handleGestureChange, { passive: false });
+    svg.addEventListener("gestureend", handleGestureEnd, { passive: false });
+    return () => {
+      svg.removeEventListener("wheel", handleWheel);
+      svg.removeEventListener("gesturestart", handleGestureStart);
+      svg.removeEventListener("gesturechange", handleGestureChange);
+      svg.removeEventListener("gestureend", handleGestureEnd);
+    };
+  }, [onViewportChange]);
+
+  const canPan = viewport.width < 0.999;
+  const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!canPan || event.button !== 0 || event.pointerType !== "mouse") return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      viewport,
+    };
+    setIsDragging(true);
+  };
+  const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const deltaX = ((event.clientX - drag.clientX) / bounds.width) * drag.viewport.width;
+    const deltaY = ((event.clientY - drag.clientY) / bounds.height) * drag.viewport.height;
+    onViewportChange({
+      ...drag.viewport,
+      x: clamp(drag.viewport.x - deltaX, 0, 1 - drag.viewport.width),
+      y: clamp(drag.viewport.y - deltaY, 0, 1 - drag.viewport.height),
+    });
+  };
+  const finishPointerDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setIsDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  return (
+    <svg
+      ref={setSvgElement}
+      viewBox={`${viewport.x * proj.vbW} ${viewport.y * proj.vbH} ${viewport.width * proj.vbW} ${viewport.height * proj.vbH}`}
+      className={`${DEV_SVG_CLASS} ${canPan ? isDragging ? "cursor-grabbing" : "cursor-grab" : ""}`}
+      role="img"
+      aria-label={`${label}. Pinch to zoom. When zoomed in, drag with a mouse to pan.`}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointerDrag}
+      onPointerCancel={finishPointerDrag}
+    >
+      <title>{label}</title>
+      {children}
+    </svg>
+  );
+}
+
+function DevelopmentZoomControls({
+  viewport,
+  onViewportChange,
+  connected = false,
+}: {
+  viewport: NormalizedPlotViewport;
+  onViewportChange: (viewport: NormalizedPlotViewport) => void;
+  connected?: boolean;
+}) {
+  const isFullyZoomedOut = viewport.width >= 0.999;
+  const isFullyZoomedIn = viewport.width <= 0.361;
+  return (
+    <div
+      className={connected ? "inline-flex h-full" : "inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"}
+      aria-label="Shared development map zoom"
+    >
+      <button
+        type="button"
+        onClick={() => onViewportChange(zoomNormalizedViewportAtPoint(viewport, 1.2, 0.5, 0.5))}
+        disabled={isFullyZoomedOut}
+        className="inline-flex w-10 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600"
+        aria-label="Zoom out development maps"
+        title="Zoom out"
+      >
+        −
+      </button>
+      <button
+        type="button"
+        onClick={() => onViewportChange(zoomNormalizedViewportAtPoint(viewport, 0.84, 0.5, 0.5))}
+        disabled={isFullyZoomedIn}
+        className={`inline-flex w-10 items-center justify-center text-base font-bold text-slate-700 transition hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white disabled:hover:text-slate-600 ${connected ? "border-r border-slate-200" : ""}`}
+        aria-label="Zoom in development maps"
+        title="Zoom in"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// Development-flow reference quiver over the cell manifold.
+function DevelopmentFlowPlot({ vectors, cells, proj, viewport, onViewportChange, svgRef }: { vectors: Array<Arrow>; cells: Array<XY>; proj: DevProjector; viewport: NormalizedPlotViewport; onViewportChange: (viewport: NormalizedPlotViewport) => void; svgRef?: RefObject<SVGSVGElement | null> }) {
+  return (
+    <InteractiveDevelopmentSvg proj={proj} viewport={viewport} onViewportChange={onViewportChange} svgRef={svgRef} label="Development flow — natural differentiation direction">
+      {renderCellPoints(cells, proj)}
+      {renderFlowArrows(vectors, proj)}
+    </InteractiveDevelopmentSvg>
+  );
+}
+
+// Promotes/blocks tiles over the cell manifold.
+function DirectionalityPlot({ grid, cells, proj, absLimit, viewport, onViewportChange, svgRef }: { grid: Array<ScorePoint>; cells: Array<XY>; proj: DevProjector; absLimit: number; viewport: NormalizedPlotViewport; onViewportChange: (viewport: NormalizedPlotViewport) => void; svgRef?: RefObject<SVGSVGElement | null> }) {
+  return (
+    <InteractiveDevelopmentSvg proj={proj} viewport={viewport} onViewportChange={onViewportChange} svgRef={svgRef} label="Perturbation directionality — promotes vs blocks development">
+      {renderCellPoints(cells, proj)}
+      {renderScoreTiles(grid, proj, absLimit)}
+    </InteractiveDevelopmentSvg>
+  );
+}
+
+// Combined view: score tiles with the (perturbation or development) arrows drawn
+// on top — the canonical CellOracle figure. All three layers share `proj`, so an
+// arrow and the tile beneath it describe the exact same grid point.
+function CombinedFieldPlot({
+  vectors,
+  grid,
+  cells,
+  proj,
+  absLimit,
+  viewport,
+  onViewportChange,
+  svgRef,
+}: {
+  vectors: Array<Arrow>;
+  grid: Array<ScorePoint>;
+  cells: Array<XY>;
+  proj: DevProjector;
+  absLimit: number;
+  viewport: NormalizedPlotViewport;
+  onViewportChange: (viewport: NormalizedPlotViewport) => void;
+  svgRef?: RefObject<SVGSVGElement | null>;
+}) {
+  return (
+    <InteractiveDevelopmentSvg proj={proj} viewport={viewport} onViewportChange={onViewportChange} svgRef={svgRef} label="Perturbation flow overlaid on promotes-vs-blocks map">
+      {renderCellPoints(cells, proj)}
+      {renderScoreTiles(grid, proj, absLimit)}
+      {renderFlowArrows(vectors, proj, true)}
+    </InteractiveDevelopmentSvg>
+  );
+}
+
+// Placeholder shown when one panel of the development-direction pair has no data
+// (e.g. a perturbation computed before the development-flow field was captured).
+// Matches the plot's aspect ratio so the two-column layout stays balanced.
+function DevelopmentPlotPlaceholder({ message }: { message: string }) {
+  return (
+    <div className="flex aspect-[520/330] w-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-[#f7fbff] px-6 text-center">
+      <p className="max-w-[16rem] text-xs leading-5 text-slate-400">{message}</p>
+    </div>
+  );
+}
+
+function formatScoreLimit(value: number): string {
+  const abs = Math.abs(value);
+  const body = abs >= 0.1 ? abs.toFixed(2) : abs >= 0.001 ? abs.toFixed(3) : abs.toExponential(1);
+  return value < 0 ? `−${body}` : `+${body}`;
+}
+
+// Continuous zero-centred color bar with numeric limits (replaces the old
+// two-swatch legend). The neutral centre is exactly the score = 0 point.
+function DirectionalityColorBar({ limit }: { limit: number }) {
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex w-44 items-center justify-between text-[11px] font-semibold text-slate-500">
+        <span>Blocks</span>
+        <span>Neutral</span>
+        <span>Promotes</span>
+      </div>
+      <div
+        className="h-2 w-44 rounded-full"
+        style={{
+          background:
+            "linear-gradient(to right, rgba(226,75,74,0.92), rgb(226,232,240) 50%, rgba(22,163,120,0.92))",
+        }}
+      />
+      <div className="flex w-44 items-center justify-between text-[10px] font-medium text-slate-400">
+        <span>{formatScoreLimit(-limit)}</span>
+        <span>0</span>
+        <span>{formatScoreLimit(limit)}</span>
+      </div>
+    </div>
+  );
+}
+
+type DevelopmentImpactLayout = "side-by-side" | "overlay";
+
+// Development flow and perturbation alignment answer one biological question,
+// so they live in one view. Side-by-side is the explanatory default; overlay is
+// available when the user wants to inspect both fields at the same coordinates.
+function DevelopmentImpactPanel({
+  projectId,
+  result,
+  controlsHost,
+}: {
+  projectId: string;
+  result: PerturbationResult;
+  controlsHost: HTMLDivElement | null;
+}) {
+  const developmentVectors = result.development_vectors ?? [];
+  const innerProductGrid = result.inner_product_grid ?? [];
+  // Use only the trajectory-specific flow CellOracle multiplied by ref_flow to
+  // produce inner_product_grid. Whole-dataset grid_vectors can point elsewhere
+  // when pseudotime covers a subset, so legacy results safely show score-only.
+  const perturbationArrows = useMemo<Array<Arrow>>(
+    () => (result.development_perturbation_vectors ?? []).map((vector) => ({ x: vector.x, y: vector.y, dx: vector.dx, dy: vector.dy })),
+    [result.development_perturbation_vectors],
+  );
+  const hasField = developmentVectors.length > 0 || innerProductGrid.length > 0;
+  const hasDevArrows = developmentVectors.length > 0;
+  const hasPerturbationArrows = perturbationArrows.length > 0;
+
+  const [isEstimating, setIsEstimating] = useState(false);
+  const [estimateMessage, setEstimateMessage] = useState<string | null>(null);
+  const [layout, setLayout] = useState<DevelopmentImpactLayout>("side-by-side");
+  const [viewport, setViewport] = useState<NormalizedPlotViewport>(DEFAULT_NORMALIZED_VIEWPORT);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [exportMenu, setExportMenu] = useState<"main" | "expanded" | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const mainFlowSvgRef = useRef<SVGSVGElement | null>(null);
+  const mainAlignmentSvgRef = useRef<SVGSVGElement | null>(null);
+  const expandedFlowSvgRef = useRef<SVGSVGElement | null>(null);
+  const expandedAlignmentSvgRef = useRef<SVGSVGElement | null>(null);
+  const mainExportMenuRef = useRef<HTMLDivElement | null>(null);
+  const expandedExportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Faint cell manifold shared by every panel (capped for performance).
+  const cells = useMemo(
+    () => subsampleCells(result.embedding_points ?? [], DEV_CELL_TARGET),
+    [result.embedding_points],
+  );
+  // Robust, symmetric color limit so one extreme grid point can't wash out the scale.
+  const absLimit = useMemo(() => robustScoreLimit(result.inner_product_grid ?? []), [result.inner_product_grid]);
+
+  // One bounding box + projector shared by every panel. Frame to the analyzed
+  // region (the gradient grid + arrow fields), NOT the full embedding: the
+  // embedding's sparse stragglers otherwise pad the plot with empty space. Cells
+  // that fall outside this region are simply clipped by the SVG viewport, and the
+  // grid only exists where cells have mass, so the manifold stays visible.
+  const proj = useMemo(() => {
+    const bounds =
+      mergeDevBounds(
+        computeDevBounds(result.development_vectors ?? []),
+        computeDevBounds(result.inner_product_grid ?? []),
+        computeDevBounds(perturbationArrows),
+      ) ?? computeDevBounds(result.embedding_points ?? []);
+    return bounds ? makeDevProjector(bounds) : null;
+  }, [result.embedding_points, result.development_vectors, result.inner_product_grid, perturbationArrows]);
+
+  // CellOracle's combined view places the simulated perturbation field over
+  // the inner-product colors. The developmental field remains the reference
+  // panel at left rather than becoming an interchangeable overlay.
+  const canOverlay = innerProductGrid.length > 0 && hasPerturbationArrows;
+  const activeLayout = layout === "overlay" && canOverlay ? "overlay" : "side-by-side";
+
+  const estimatePseudotime = useCallback(async () => {
+    setIsEstimating(true);
+    setEstimateMessage(null);
+    try {
+      const response = await apiFetch(`${API_BASE}/projects/${projectId}/pseudotime/estimate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      setEstimateMessage(
+        response.ok
+          ? "Estimating pseudotime… once it finishes, re-run this perturbation to see the development comparison."
+          : "Couldn't start pseudotime estimation. Please try again.",
+      );
+    } catch {
+      setEstimateMessage("Couldn't reach the server to start estimation.");
+    } finally {
+      setIsEstimating(false);
+    }
+  }, [projectId]);
+
+  const handleDevelopmentExport = async (format: "svg" | "png", source: "main" | "expanded") => {
+    const flowSvg = source === "expanded" ? expandedFlowSvgRef.current : mainFlowSvgRef.current;
+    const alignmentSvg = source === "expanded" ? expandedAlignmentSvgRef.current : mainAlignmentSvgRef.current;
+    const panels = activeLayout === "overlay"
+      ? alignmentSvg
+        ? [{ svg: alignmentSvg, title: "Development impact · perturbation arrows" }]
+        : []
+      : [
+          ...(flowSvg ? [{ svg: flowSvg, title: "Natural development flow" }] : []),
+          ...(alignmentSvg ? [{ svg: alignmentSvg, title: "Perturbation alignment" }] : []),
+        ];
+    if (panels.length === 0 || (activeLayout === "side-by-side" && panels.length < 2)) {
+      setExportError("The development maps are not ready to export yet.");
+      return;
+    }
+
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const svgMarkup = buildDevelopmentFigureSvg({
+        panels,
+        subtitle: `${formatPerturbation(result.gene, result.perturbation_value)} · synchronized view`,
+        limit: absLimit,
+      });
+      const perturbationLabel = result.perturbation_value === 0
+        ? "knockout"
+        : `set-${formatScientific(result.perturbation_value)}`;
+      const filename = [
+        "celloracle",
+        result.gene,
+        perturbationLabel,
+        "development-impact",
+        activeLayout,
+      ].map(sanitizeFilenamePart).join("_");
+      if (format === "svg") {
+        downloadBlob(new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" }), `${filename}.svg`);
+      } else {
+        downloadBlob(await svgToPngBlob(svgMarkup), `${filename}.png`);
+      }
+      setExportMenu(null);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Figure export failed.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (exportMenu) setExportMenu(null);
+      else setIsExpanded(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [exportMenu, isExpanded]);
+
+  useEffect(() => {
+    if (!exportMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      const activeMenuRef = exportMenu === "expanded" ? expandedExportMenuRef : mainExportMenuRef;
+      if (target instanceof Node && !activeMenuRef.current?.contains(target)) setExportMenu(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [exportMenu]);
+
+  if (!hasField) {
+    const reason = result.perturbation_score_unavailable_reason;
+    const needsPseudotime = !result.pseudotime_trajectory;
+    return (
+      <div className="mt-4">
+        <p className="max-w-3xl text-sm leading-6 text-slate-600">
+          Compare this perturbation against the natural differentiation trajectory.{" "}
+          {reason ?? "This needs a pseudotime trajectory."}
+        </p>
+        {needsPseudotime ? (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={estimatePseudotime}
+              disabled={isEstimating}
+              className="inline-flex h-9 items-center rounded-full bg-[#1b75a6] px-4 text-xs font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isEstimating ? "Starting…" : "Estimate pseudotime"}
+            </button>
+            {estimateMessage ? (
+              <p className="mt-2 text-xs leading-5 text-slate-500">{estimateMessage}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const renderDevelopmentMaps = (source: "main" | "expanded") => {
+    const flowSvgRef = source === "expanded" ? expandedFlowSvgRef : mainFlowSvgRef;
+    const alignmentSvgRef = source === "expanded" ? expandedAlignmentSvgRef : mainAlignmentSvgRef;
+    if (activeLayout === "side-by-side") {
+      return (
+        <div className="mt-3 grid gap-5 xl:grid-cols-2">
+          <article className="min-w-0">
+            <div className="mb-3 flex min-h-9 flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-bold text-slate-950">Natural development flow</h4>
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-500" aria-label="Pseudotime runs from early to late">
+                <span>Early</span>
+                <span aria-hidden="true">→</span>
+                <span>Late</span>
+              </div>
+            </div>
+            {hasDevArrows && proj ? (
+              <DevelopmentFlowPlot vectors={developmentVectors} cells={cells} proj={proj} viewport={viewport} onViewportChange={setViewport} svgRef={flowSvgRef} />
+            ) : (
+              <DevelopmentPlotPlaceholder message="Re-run this CellOracle perturbation to generate the development-flow field." />
+            )}
+          </article>
+
+          <article className="min-w-0">
+            <div className="mb-3 flex min-h-9 flex-wrap items-center justify-between gap-3">
+              <h4 className="text-sm font-bold text-slate-950">Perturbation alignment</h4>
+            </div>
+            {innerProductGrid.length > 0 && proj ? (
+              hasPerturbationArrows ? (
+                <CombinedFieldPlot vectors={perturbationArrows} grid={innerProductGrid} cells={cells} proj={proj} absLimit={absLimit} viewport={viewport} onViewportChange={setViewport} svgRef={alignmentSvgRef} />
+              ) : (
+                <DirectionalityPlot grid={innerProductGrid} cells={cells} proj={proj} absLimit={absLimit} viewport={viewport} onViewportChange={setViewport} svgRef={alignmentSvgRef} />
+              )
+            ) : (
+              <DevelopmentPlotPlaceholder message="Re-run this CellOracle perturbation to generate the promotes-vs-blocks map." />
+            )}
+          </article>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-3">
+        <div className="mx-auto max-w-5xl">
+          {proj ? (
+            <CombinedFieldPlot vectors={perturbationArrows} grid={innerProductGrid} cells={cells} proj={proj} absLimit={absLimit} viewport={viewport} onViewportChange={setViewport} svgRef={alignmentSvgRef} />
+          ) : (
+            <DevelopmentPlotPlaceholder message="Re-run this CellOracle perturbation to generate the development-impact overlay." />
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+    {controlsHost ? createPortal(
+      <>
+        <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Development map view controls">
+          <DevelopmentZoomControls viewport={viewport} onViewportChange={setViewport} connected />
+          <ExpandComparisonButton
+            connected
+            onClick={() => {
+              setExportMenu(null);
+              setIsExpanded(true);
+            }}
+          />
+        </div>
+        <FigureExportMenu
+          menuRef={mainExportMenuRef}
+          isOpen={exportMenu === "main"}
+          isExporting={isExporting}
+          error={exportError}
+          onToggle={() => {
+            setExportError(null);
+            setExportMenu((current) => current === "main" ? null : "main");
+          }}
+          onExport={(format) => handleDevelopmentExport(format, "main")}
+        />
+      </>,
+      controlsHost,
+    ) : null}
+    <div className="mt-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <h4 className="text-sm font-bold text-slate-950">Development comparison</h4>
+          {canOverlay ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Layout</span>
+              <div
+                className="inline-flex rounded-full border border-slate-200 bg-white p-0.5 text-[11px] font-semibold"
+                role="tablist"
+                aria-label="Development impact layout"
+              >
+                {(["side-by-side", "overlay"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeLayout === option}
+                    onClick={() => setLayout(option)}
+                    className={
+                      activeLayout === option
+                        ? "rounded-full bg-slate-800 px-2.5 py-0.5 text-white"
+                        : "rounded-full px-2.5 py-0.5 text-slate-500 transition hover:text-slate-700"
+                    }
+                  >
+                    {option === "side-by-side" ? "Side by side" : "Overlay"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        {innerProductGrid.length > 0 ? <DirectionalityColorBar limit={absLimit} /> : null}
+      </div>
+
+      {renderDevelopmentMaps("main")}
+    </div>
+    {isExpanded && (
+      <div
+        className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm animate-modal-overlay"
+        onClick={() => {
+          setExportMenu(null);
+          setIsExpanded(false);
+        }}
+        role="presentation"
+      >
+        <div
+          className="max-h-[96vh] w-[calc(100vw-2rem)] max-w-[1500px] overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl shadow-slate-950/25 animate-modal-panel"
+          onClick={(event) => event.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded development impact comparison"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-950">Development impact comparison</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {formatPerturbation(result.gene, result.perturbation_value)} · synchronized view
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <DevelopmentZoomControls viewport={viewport} onViewportChange={setViewport} />
+              <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden="true" />
+              <FigureExportMenu
+                menuRef={expandedExportMenuRef}
+                isOpen={exportMenu === "expanded"}
+                isExporting={isExporting}
+                error={exportError}
+                onToggle={() => {
+                  setExportError(null);
+                  setExportMenu((current) => current === "expanded" ? null : "expanded");
+                }}
+                onExport={(format) => handleDevelopmentExport(format, "expanded")}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMenu(null);
+                  setIsExpanded(false);
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200"
+                aria-label="Close expanded development comparison"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          {renderDevelopmentMaps("expanded")}
+        </div>
+      </div>
+    )}
+    </>
+  );
+}
+
 function ClusterResponseView({
   result,
   clusters,
@@ -1397,19 +2326,16 @@ function ClusterResponseView({
   result: PerturbationResult;
   clusters: ClusterSummaryView[];
 }) {
-  const [selectedCluster, setSelectedCluster] = useState(clusters[0]?.cluster ?? "");
+  const [selectedClusterId, setSelectedClusterId] = useState(clusters[0]?.cluster ?? "");
   const [plotViewport, setPlotViewport] = useState<PlotViewport>(DEFAULT_PLOT_VIEWPORT);
   const [hoveredVectorIndex, setHoveredVectorIndex] = useState<number | null>(null);
   const [hoveredVectorPlot, setHoveredVectorPlot] = useState<PlotKind | null>(null);
   const [pinnedVectorIndex, setPinnedVectorIndex] = useState<number | null>(null);
   const [pinnedVectorPlot, setPinnedVectorPlot] = useState<PlotKind | null>(null);
 
-  useEffect(() => {
-    if (!clusters.some((cluster) => cluster.cluster === selectedCluster)) {
-      setSelectedCluster(clusters[0]?.cluster ?? "");
-    }
-  }, [clusters, selectedCluster]);
-
+  const selectedCluster = clusters.some((cluster) => cluster.cluster === selectedClusterId)
+    ? selectedClusterId
+    : clusters[0]?.cluster ?? "";
   const selectedSummary = clusters.find((cluster) => cluster.cluster === selectedCluster) ?? clusters[0];
   const selectedPoints = useMemo(
     () => result.embedding_points.filter((point) => point.cluster === selectedSummary?.cluster),
@@ -1463,13 +2389,14 @@ function ClusterResponseView({
     setPinnedVectorPlot(plot);
   };
 
-  useEffect(() => {
+  const handleClusterChange = (cluster: string) => {
+    setSelectedClusterId(cluster);
     setPlotViewport(DEFAULT_PLOT_VIEWPORT);
     setHoveredVectorIndex(null);
     setHoveredVectorPlot(null);
     setPinnedVectorIndex(null);
     setPinnedVectorPlot(null);
-  }, [selectedCluster]);
+  };
 
   return (
     <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5">
@@ -1485,7 +2412,7 @@ function ClusterResponseView({
           <div className="relative flex h-11 items-center overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
             <select
               value={selectedCluster}
-              onChange={(event) => setSelectedCluster(event.target.value)}
+              onChange={(event) => handleClusterChange(event.target.value)}
               className="h-full w-full appearance-none bg-transparent px-3 pr-10 text-sm font-bold text-slate-900 outline-none"
             >
               {clusters.map((cluster) => (
@@ -1719,12 +2646,23 @@ function ResultSummary({
   const [pinnedVectorPlot, setPinnedVectorPlot] = useState<PlotKind | null>(null);
   const [plotViewport, setPlotViewport] = useState<PlotViewport>(DEFAULT_PLOT_VIEWPORT);
   const [isComparisonExpanded, setIsComparisonExpanded] = useState(false);
+  const [mapView, setMapView] = useState<"shift" | "development-impact">("shift");
+  const [mapControlsHost, setMapControlsHost] = useState<HTMLDivElement | null>(null);
+
+  // Keep the first decision biological, not graphical. Development flow and the
+  // promotes/blocks score are paired inside Development impact because neither is
+  // very meaningful without the other as context.
+  const mapTabs: Array<{ id: "shift" | "development-impact"; label: string }> = [
+    { id: "shift", label: "Cell-state shift" },
+    { id: "development-impact", label: "Development impact" },
+  ];
   const [figureExportMenu, setFigureExportMenu] = useState<"main" | "expanded" | null>(null);
   const [isFigureExporting, setIsFigureExporting] = useState(false);
   const [figureExportError, setFigureExportError] = useState<string | null>(null);
   const [showAllGenes, setShowAllGenes] = useState(false);
   const [expandedGene, setExpandedGene] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+  const howToReadRef = useRef<HTMLDetailsElement | null>(null);
   const figureExportMenuRef = useRef<HTMLDivElement | null>(null);
   const expandedFigureExportMenuRef = useRef<HTMLDivElement | null>(null);
   const predictedPlotSvgRef = useRef<SVGSVGElement | null>(null);
@@ -1794,11 +2732,12 @@ function ResultSummary({
   const selectedClusterSummary = resultScope === "global"
     ? null
     : clusterSummaries.find((cluster) => cluster.cluster === resultScope) ?? null;
+  const selectedClusterName = selectedClusterSummary?.cluster;
   const selectedClusterPoints = useMemo(
-    () => selectedClusterSummary
-      ? result.embedding_points.filter((point) => point.cluster === selectedClusterSummary.cluster)
+    () => selectedClusterName
+      ? result.embedding_points.filter((point) => point.cluster === selectedClusterName)
       : [],
-    [result.embedding_points, selectedClusterSummary?.cluster]
+    [result.embedding_points, selectedClusterName]
   );
   const selectedClusterVectors = useMemo<PlotVector[]>(
     () => selectedClusterPoints
@@ -1966,6 +2905,26 @@ function ResultSummary({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isDownloadDialogOpen]);
+
+  useEffect(() => {
+    const dismissHowToRead = () => {
+      if (howToReadRef.current) howToReadRef.current.open = false;
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      const popup = howToReadRef.current;
+      const target = event.target;
+      if (popup?.open && target instanceof Node && !popup.contains(target)) dismissHowToRead();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && howToReadRef.current?.open) dismissHowToRead();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     if (!figureExportMenu) return;
@@ -2169,87 +3128,149 @@ function ResultSummary({
       <section className="mt-5 border-t border-slate-100 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className={RESULT_SECTION_HEADING_CLASS}>Cell-state shift</h3>
-            <div className="mt-1.5 flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
-                Cells
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
-                Average local shift
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+            <h3 className={RESULT_SECTION_HEADING_CLASS}>Cell fate response</h3>
+            <details ref={howToReadRef} className="group relative">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 [&::-webkit-details-marker]:hidden">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold" aria-hidden="true">?</span>
+                How to read
+              </summary>
+              <div className="absolute left-0 top-8 z-30 w-[calc(100vw-3rem)] max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-950/10">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-950">Cell-state shift</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      Shows where the simulated perturbation moves cells compared with a randomized GRN control. Both maps use the same arrow scale.
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-950">Development impact</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      Flow arrows follow pseudotime. Green alignment follows development, red opposes it, and pale regions have little alignment.
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] leading-5 text-slate-500">
+                  In Overlay, perturbation arrows are drawn over the alignment colors; the separate development-flow map remains the natural reference. Alignment limits are symmetric and clipped at the 98th percentile.
+                  The predicted/control ratio is descriptive, not a significance test.
+                </p>
+              </div>
+            </details>
+            </div>
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-600">
+              How the predicted perturbation reshapes cell fate — where it pushes cells, and whether
+              that motion follows or fights their natural development.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div ref={setMapControlsHost} className="flex items-center gap-2">
+              {mapView === "shift" ? (
+                <>
+                  <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Plot view controls">
+                    <PlotZoomControls viewport={plotViewport} onViewportChange={setPlotViewport} connected />
+                    <ExpandComparisonButton
+                      connected
+                      onClick={() => {
+                        setFigureExportMenu(null);
+                        setIsComparisonExpanded(true);
+                      }}
+                    />
+                  </div>
+                  <FigureExportMenu
+                    menuRef={figureExportMenuRef}
+                    isOpen={figureExportMenu === "main"}
+                    isExporting={isFigureExporting}
+                    error={figureExportError}
+                    onToggle={() => {
+                      setFigureExportError(null);
+                      setFigureExportMenu((current) => current === "main" ? null : "main");
+                    }}
+                    onExport={handleFigureExport}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"
-              aria-label="Plot view controls"
-            >
-              <PlotZoomControls
-                viewport={plotViewport}
-                onViewportChange={setPlotViewport}
-                connected
-              />
-              <ExpandComparisonButton
-                connected
-                onClick={() => {
-                  setFigureExportMenu(null);
-                  setIsComparisonExpanded(true);
-                }}
-              />
-            </div>
-            <FigureExportMenu
-              menuRef={figureExportMenuRef}
-              isOpen={figureExportMenu === "main"}
-              isExporting={isFigureExporting}
-              error={figureExportError}
-              onToggle={() => {
-                setFigureExportError(null);
-                setFigureExportMenu((current) => current === "main" ? null : "main");
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="Perturbation map view"
+          className="mt-4 flex flex-wrap items-center gap-6 border-b border-slate-200"
+        >
+          {mapTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={mapView === tab.id}
+              onClick={() => {
+                setFigureExportMenu(null);
+                setMapView(tab.id);
               }}
-              onExport={handleFigureExport}
-            />
+              className={
+                "-mb-px border-b-2 pb-2.5 text-sm font-semibold transition focus-visible:outline-none " +
+                (mapView === tab.id
+                  ? "border-[#1b75a6] text-slate-950"
+                  : "border-transparent text-slate-500 hover:text-slate-700 focus-visible:text-slate-700")
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {mapView === "shift" ? (
+          <div className="mt-4">
+            <div className="flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
+                  Cells
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
+                  Average local shift
+                </span>
+            </div>
+
+            <div className="mt-4 grid gap-5 xl:grid-cols-2">
+              <VectorFieldPlot
+                title={predictedPlotTitle}
+                points={displayPoints}
+                vectors={gridVectorFields.predicted}
+                comparisonVectors={gridVectorFields.randomized}
+                referenceMagnitude={sharedVectorReferenceMagnitude}
+                viewport={plotViewport}
+                activeVectorIndex={activeVectorIndex}
+                pinnedVectorIndex={pinnedVectorPlot === "predicted" ? pinnedVectorIndex : null}
+                tooltipVisible={activeVectorPlot === "predicted"}
+                onViewportChange={setPlotViewport}
+                onHoverVector={(index) => handleVectorHover("predicted", index)}
+                onTogglePin={(index) => handleVectorPin("predicted", index)}
+                svgRef={predictedPlotSvgRef}
+              />
+              <VectorFieldPlot
+                title={randomizedPlotTitle}
+                points={displayPoints}
+                vectors={gridVectorFields.randomized}
+                comparisonVectors={gridVectorFields.predicted}
+                referenceMagnitude={sharedVectorReferenceMagnitude}
+                viewport={plotViewport}
+                activeVectorIndex={activeVectorIndex}
+                pinnedVectorIndex={pinnedVectorPlot === "randomized" ? pinnedVectorIndex : null}
+                tooltipVisible={activeVectorPlot === "randomized"}
+                onViewportChange={setPlotViewport}
+                onHoverVector={(index) => handleVectorHover("randomized", index)}
+                onTogglePin={(index) => handleVectorPin("randomized", index)}
+                svgRef={randomizedPlotSvgRef}
+                randomized
+              />
+            </div>
+
           </div>
-        </div>
-
-        <div className="mt-4 grid gap-5 xl:grid-cols-2">
-          <VectorFieldPlot
-            title={predictedPlotTitle}
-            points={displayPoints}
-            vectors={gridVectorFields.predicted}
-            comparisonVectors={gridVectorFields.randomized}
-            referenceMagnitude={sharedVectorReferenceMagnitude}
-            viewport={plotViewport}
-            activeVectorIndex={activeVectorIndex}
-            pinnedVectorIndex={pinnedVectorPlot === "predicted" ? pinnedVectorIndex : null}
-            tooltipVisible={activeVectorPlot === "predicted"}
-            onViewportChange={setPlotViewport}
-            onHoverVector={(index) => handleVectorHover("predicted", index)}
-            onTogglePin={(index) => handleVectorPin("predicted", index)}
-            svgRef={predictedPlotSvgRef}
-          />
-          <VectorFieldPlot
-            title={randomizedPlotTitle}
-            points={displayPoints}
-            vectors={gridVectorFields.randomized}
-            comparisonVectors={gridVectorFields.predicted}
-            referenceMagnitude={sharedVectorReferenceMagnitude}
-            viewport={plotViewport}
-            activeVectorIndex={activeVectorIndex}
-            pinnedVectorIndex={pinnedVectorPlot === "randomized" ? pinnedVectorIndex : null}
-            tooltipVisible={activeVectorPlot === "randomized"}
-            onViewportChange={setPlotViewport}
-            onHoverVector={(index) => handleVectorHover("randomized", index)}
-            onTogglePin={(index) => handleVectorPin("randomized", index)}
-            svgRef={randomizedPlotSvgRef}
-            randomized
-          />
-        </div>
-
-        <p className="mt-4 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
-          Arrows use CellOracle&apos;s density-smoothed grid field. Both panels remain synchronized and use the same arrow scale. The predicted/control ratio is descriptive and is not a significance test.
-        </p>
+        ) : (
+          <DevelopmentImpactPanel key={result.run_id} projectId={projectId} result={result} controlsHost={mapControlsHost} />
+        )}
       </section>
 
       {isComparisonExpanded && (
