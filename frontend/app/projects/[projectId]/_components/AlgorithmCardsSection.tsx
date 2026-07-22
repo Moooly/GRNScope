@@ -58,6 +58,13 @@ export default function AlgorithmCardsSection({
   const hasStartedTask = tasks.some(
     (task) => task.status !== "NotStarted" && task.status !== "Queued",
   );
+  const notedMethodCount = Boolean(onOpenAlgorithmWarnings)
+    ? tasks.filter(
+        (task) =>
+          task.status !== "Failed" &&
+          (warningsByAlgorithm?.get(task.algorithm_id.toUpperCase())?.length ?? 0) > 0,
+      ).length
+    : 0;
 
   return (
     <section className={compact
@@ -67,6 +74,21 @@ export default function AlgorithmCardsSection({
       <h2 className={compact ? "text-lg font-bold tracking-tight text-slate-950" : RESULT_SECTION_HEADING_CLASS}>
         {hasStartedTask ? "Algorithms executed" : "Algorithms selected"}
       </h2>
+
+      {notedMethodCount > 0 ? (
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-slate-500">
+          <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M8 7.25v3.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="8" cy="5.4" r="0.85" fill="currentColor" />
+          </svg>
+          <span>
+            {notedMethodCount} {notedMethodCount === 1 ? "method has" : "methods have"} a setup note
+            {" "}— mostly automatic gene filtering to keep large matrices fast. This is normal; open a
+            method (ⓘ) for details.
+          </span>
+        </p>
+      ) : null}
 
       <div className={compact
         ? "mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
@@ -79,10 +101,10 @@ export default function AlgorithmCardsSection({
           const isFailed = task.status === "Failed";
           const isStopped = task.status === "Stopped";
           const canStop = task.status === "Running" || task.status === "Queued";
-          const taskWarnings =
+          const taskNotes =
             warningsByAlgorithm?.get(task.algorithm_id.toUpperCase()) ?? [];
-          const showWarningGlyph =
-            !isFailed && taskWarnings.length > 0 && Boolean(onOpenAlgorithmWarnings);
+          const showNoteGlyph =
+            !isFailed && taskNotes.length > 0 && Boolean(onOpenAlgorithmWarnings);
           const algorithmRuntimeLabel = runtimeLabel(
             task.status,
             task.elapsed_seconds,
@@ -103,20 +125,16 @@ export default function AlgorithmCardsSection({
                 ? `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
-                      : showWarningGlyph
-                        ? "border-amber-200 bg-amber-50/50"
-                        : isCompleted
-                          ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                          : "border-slate-200 bg-white"
+                      : isCompleted
+                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
+                        : "border-slate-200 bg-white"
                   }`
                 : `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
-                      : showWarningGlyph
-                        ? "border-amber-200 bg-amber-50/50"
-                        : isCompleted
-                          ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                          : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
+                      : isCompleted
+                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
+                        : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
                   }`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -164,30 +182,20 @@ export default function AlgorithmCardsSection({
                   </p>
                 </div>
               </div>
-              {showWarningGlyph ? (
+              {showNoteGlyph ? (
                 <button
                   type="button"
                   onClick={(event) =>
-                    onOpenAlgorithmWarnings?.(taskWarnings, event.currentTarget)
+                    onOpenAlgorithmWarnings?.(taskNotes, event.currentTarget)
                   }
-                  aria-label={`${taskWarnings.length} ${taskWarnings.length === 1 ? "warning" : "warnings"} for ${name}`}
-                  title={taskWarnings.length === 1 ? "View warning" : `View ${taskWarnings.length} warnings`}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-amber-500 transition hover:bg-amber-100/70 hover:text-amber-600"
+                  aria-label={`${taskNotes.length} ${taskNotes.length === 1 ? "note" : "notes"} for ${name}`}
+                  title={taskNotes.length === 1 ? "View note" : `View ${taskNotes.length} notes`}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-300 transition hover:bg-[#eef7fb] hover:text-[#1b75a6]"
                 >
-                  <svg viewBox="0 0 16 16" className="h-5 w-5" fill="none" aria-hidden="true">
-                    <path
-                      d="M8 1.75 L14.5 13.5 H1.5 Z"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M8 6 v3.5"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                    />
-                    <circle cx="8" cy="11.5" r="0.85" fill="currentColor" />
+                  <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
+                    <path d="M8 7.25v3.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <circle cx="8" cy="5.4" r="0.85" fill="currentColor" />
                   </svg>
                 </button>
               ) : null}

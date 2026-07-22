@@ -26,6 +26,7 @@ export default function AlgorithmWarningPopover({
 
   useLayoutEffect(() => {
     if (!warnings || warnings.length === 0 || !anchorElement) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset popover position when it closes
       setPosition(null);
       return;
     }
@@ -90,7 +91,7 @@ export default function AlgorithmWarningPopover({
     <div
       ref={panelRef}
       role="dialog"
-      aria-label="Algorithm warning"
+      aria-label="Algorithm note"
       style={{
         position: "fixed",
         top: position?.top ?? 0,
@@ -109,7 +110,7 @@ export default function AlgorithmWarningPopover({
       ) : (
         <ul className="space-y-3">
           {warnings.map((warning) => (
-            <li key={warning.code} className="border-l-2 border-amber-300 pl-3">
+            <li key={warning.code} className="border-l-2 border-[#1b75a6]/25 pl-3">
               <p className="text-sm font-semibold text-slate-900">{warning.title}</p>
               <p className="mt-1 text-xs leading-5 text-slate-600">{warning.message}</p>
             </li>

@@ -242,6 +242,24 @@ export default function JobProgressBanner({
             {overall}%
           </span> */}
 
+          {onStopProject ? (
+            <button
+              type="button"
+              onClick={onStopProject}
+              aria-label="Stop project"
+              title="Analysis is running — click to stop all methods"
+              className="group/stop inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white pl-3 pr-3.5 text-xs font-bold text-slate-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+            >
+              {/* Live pulse (was the standalone dot) — blue while running, turns
+                  amber on hover to read as part of the stop action. */}
+              <span aria-hidden="true" className="relative flex h-3 w-3 items-center justify-center">
+                <span className="absolute h-3 w-3 animate-ping rounded-full bg-[#1b75a6]/25 transition group-hover/stop:bg-amber-500/25" />
+                <span className="h-2 w-2 rounded-full bg-[#1b75a6] transition group-hover/stop:bg-amber-500" />
+              </span>
+              Stop
+            </button>
+          ) : null}
+
           {onSaveNotificationEmail ? (
             <button
               type="button"
@@ -274,21 +292,6 @@ export default function JobProgressBanner({
               {hasNotificationEmail ? (
                 <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#20b779]" />
               ) : null}
-            </button>
-          ) : null}
-
-          {onStopProject ? (
-            <button
-              type="button"
-              onClick={onStopProject}
-              aria-label="Stop project"
-              title="Stop all running methods"
-              className="group/stop inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-            >
-              <span className="flex h-4 w-4 items-center justify-center rounded-[3px] bg-slate-400 transition group-hover/stop:bg-amber-500">
-                <span className="h-1.5 w-1.5 rounded-[1px] bg-white" />
-              </span>
-              <span className="hidden sm:inline">Stop</span>
             </button>
           ) : null}
         </>
