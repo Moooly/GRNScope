@@ -122,14 +122,14 @@ export default function AlgorithmCardsSection({
             <div
               key={task.algorithm_id}
               className={compact
-                ? `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
+                ? `group relative flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
                       : isCompleted
                         ? "border-[#1b75a6]/25 bg-[#f7fbff]"
                         : "border-slate-200 bg-white"
                   }`
-                : `group flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
+                : `group relative flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
                       : isCompleted
@@ -171,7 +171,10 @@ export default function AlgorithmCardsSection({
                   }
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-950" title={name}>
+                  <p
+                    className={`truncate text-sm font-semibold text-slate-950 ${showNoteGlyph ? "pr-6" : ""}`}
+                    title={name}
+                  >
                     {name}
                   </p>
                   <p
@@ -190,7 +193,7 @@ export default function AlgorithmCardsSection({
                   }
                   aria-label={`${taskNotes.length} ${taskNotes.length === 1 ? "note" : "notes"} for ${name}`}
                   title={taskNotes.length === 1 ? "View note" : `View ${taskNotes.length} notes`}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-300 transition hover:bg-[#eef7fb] hover:text-[#1b75a6]"
+                  className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full text-slate-300 transition hover:bg-[#eef7fb] hover:text-[#1b75a6]"
                 >
                   <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
                     <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
