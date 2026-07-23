@@ -193,22 +193,22 @@ function buildComparisonFigureSvg({
 
 function buildDevelopmentFigureSvg({
   panels,
-  subtitle,
+  title,
   limit,
 }: {
   panels: Array<{ svg: SVGSVGElement; title: string }>;
-  subtitle: string;
+  title: string;
   limit: number;
 }) {
   const panelWidth = panels.length === 1 ? 1080 : 740;
-  const panelHeight = 470;
-  const panelY = 158;
+  const panelHeight = 490;
+  const panelY = 130;
   const panelXs = panels.length === 1 ? [260] : [40, 820];
   const panelMarkup = panels.map(({ svg, title }, index) => {
     const viewBox = svg.getAttribute("viewBox") ?? "0 0 480 330";
     const x = panelXs[index];
     return `
-  <text x="${x}" y="137" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(title)}</text>
+  <text x="${x}" y="111" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(title)}</text>
   <rect x="${x}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" rx="18" fill="#f7fbff" stroke="#e2e8f0" stroke-width="2"/>
   <svg x="${x}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" viewBox="${escapeXml(viewBox)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">${cleanPlotSvgContents(svg)}</svg>`;
   }).join("");
@@ -223,8 +223,7 @@ function buildDevelopmentFigureSvg({
     </linearGradient>
   </defs>
   <rect width="${FIGURE_WIDTH}" height="${FIGURE_HEIGHT}" fill="#ffffff"/>
-  <text x="40" y="46" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Development impact</text>
-  <text x="40" y="76" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="16">${escapeXml(subtitle)}</text>
+  <text x="40" y="54" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">${escapeXml(title)}</text>
   <g transform="translate(1200 32)" font-family="Arial, Helvetica, sans-serif">
     <text x="0" y="14" fill="#64748b" font-size="13" font-weight="700">Blocks</text>
     <text x="130" y="14" fill="#64748b" font-size="13" font-weight="700" text-anchor="middle">Neutral</text>
@@ -234,8 +233,7 @@ function buildDevelopmentFigureSvg({
     <text x="130" y="52" fill="#94a3b8" font-size="12" text-anchor="middle">0</text>
     <text x="260" y="52" fill="#94a3b8" font-size="12" text-anchor="end">${escapeXml(formatScoreLimit(limit))}</text>
   </g>${panelMarkup}
-  <line x1="40" y1="658" x2="1560" y2="658" stroke="#e2e8f0"/>
-  <text x="40" y="682" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="13">Current synchronized view · Natural flow follows pseudotime · Alignment is descriptive</text>
+  <text x="40" y="666" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="13">Color shows the inner product of perturbation and developmental flow.</text>
 </svg>`;
 }
 
@@ -477,6 +475,7 @@ function VectorFieldPlot({
   onTogglePin,
   svgRef,
   randomized = false,
+  clusterColors,
 }: {
   title: string;
   points: PlotPoint[];
@@ -492,6 +491,7 @@ function VectorFieldPlot({
   onTogglePin: (index: number) => void;
   svgRef?: RefObject<SVGSVGElement | null>;
   randomized?: boolean;
+  clusterColors?: Map<string, string> | null;
 }) {
   const localSvgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef(viewport);
@@ -660,16 +660,19 @@ function VectorFieldPlot({
           onPointerCancel={finishPointerDrag}
         >
           <title>{title}</title>
-          {points.map((point, index) => (
-            <circle
-              key={`point-${index}`}
-              cx={mapX(point.x)}
-              cy={mapY(point.y)}
-              r="1.25"
-              fill="#9fb6c8"
-              fillOpacity="0.3"
-            />
-          ))}
+          {points.map((point, index) => {
+            const fill = clusterColors?.get(point.cluster) ?? "#9fb6c8";
+            return (
+              <circle
+                key={`point-${index}`}
+                cx={mapX(point.x)}
+                cy={mapY(point.y)}
+                r="1.25"
+                fill={fill}
+                fillOpacity={clusterColors ? 0.55 : 0.3}
+              />
+            );
+          })}
           {vectors.map((vector, index) => {
             const magnitude = Math.hypot(vector.dx, vector.dy);
             const isActive = activeVectorIndex === index;
@@ -1197,6 +1200,9 @@ function SelectedResultHeader({
     cluster,
     cell_count: clusterCounts.get(cluster) ?? 0,
   }))).sort((left, right) => left.cluster.localeCompare(right.cluster, undefined, { numeric: true }));
+  // Only offer the Global/per-cluster scope picker when a cluster annotation was
+  // actually uploaded (i.e. there is more than one cluster to choose between).
+  const hasSelectableClusters = clusterOptions.length > 1;
   const selectedCluster = result.cluster_summary?.find((cluster) => cluster.cluster === resultScope);
   const meanShift = resultScope === "global"
     ? result.mean_shift_magnitude
@@ -1275,30 +1281,34 @@ function SelectedResultHeader({
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:flex-nowrap lg:justify-end">
-            <label className="block w-full shrink-0 sm:w-[9.5rem]">
-              <span className="relative flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
-                <select
-                  value={resultScope}
-                  onChange={(event) => {
-                    setIsOodDetailsOpen(false);
-                    setShowAllOodGenes(false);
-                    onScopeChange(event.target.value);
-                  }}
-                  className="h-full w-full appearance-none bg-transparent pl-3.5 pr-9 outline-none"
-                  aria-label="Analysis scope"
-                >
-                  <option value="global">Global</option>
-                  {clusterOptions.map((cluster) => (
-                    <option key={cluster.cluster} value={cluster.cluster}>
-                      {cluster.cluster} ({cluster.cell_count.toLocaleString()})
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute right-3 text-slate-600"><SelectChevron /></span>
-              </span>
-            </label>
+            {hasSelectableClusters ? (
+              <>
+                <label className="block w-full shrink-0 sm:w-[9.5rem]">
+                  <span className="relative flex h-10 w-full items-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 transition focus-within:border-[#087ead] focus-within:ring-4 focus-within:ring-[#087ead]/10">
+                    <select
+                      value={resultScope}
+                      onChange={(event) => {
+                        setIsOodDetailsOpen(false);
+                        setShowAllOodGenes(false);
+                        onScopeChange(event.target.value);
+                      }}
+                      className="h-full w-full appearance-none bg-transparent pl-3.5 pr-9 outline-none"
+                      aria-label="Analysis scope"
+                    >
+                      <option value="global">Global</option>
+                      {clusterOptions.map((cluster) => (
+                        <option key={cluster.cluster} value={cluster.cluster}>
+                          {cluster.cluster} ({cluster.cell_count.toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 text-slate-600"><SelectChevron /></span>
+                  </span>
+                </label>
 
-            <span className="hidden h-5 w-px shrink-0 bg-slate-200 lg:block" aria-hidden="true" />
+                <span className="hidden h-5 w-px shrink-0 bg-slate-200 lg:block" aria-hidden="true" />
+              </>
+            ) : null}
 
             <PerturbationRunActions
               runCount={runCount}
@@ -1474,7 +1484,10 @@ type ScorePoint = { x: number; y: number; score: number };
 
 const DEV_PLOT_LONG = 480; // long-axis viewBox length in SVG units
 const DEV_MARGIN_FRAC = 0.05; // breathing room around the data, as a fraction
-const DEV_ARROW_TARGET = 120; // keep the field readable without hiding the cells
+// CellOracle draws every arrow of its 40x40 mass-filtered grid, so this is only a
+// safety cap for pathologically dense grids — a normal mass-filtered field
+// (~300-500 arrows) renders in full, at CellOracle's native density.
+const DEV_ARROW_TARGET = 900;
 const DEV_CELL_TARGET = 2600; // cap on background cell dots for performance
 
 const DEV_NEUTRAL_RGB = [226, 232, 240] as const; // slate-200, the zero color
@@ -1582,10 +1595,36 @@ function thinLatticeArrows(vectors: Array<Arrow>, target: number): Array<Arrow> 
   });
 }
 
-function subsampleCells(points: Array<XY>, max: number): Array<XY> {
+function subsampleCells<T extends XY>(points: Array<T>, max: number): Array<T> {
   if (points.length <= max) return points;
   const stride = Math.ceil(points.length / max);
   return points.filter((_, index) => index % stride === 0);
+}
+
+// Deterministic categorical palette for cluster coloring, assigned by sorted
+// cluster label so a cluster always keeps its color. Deliberately avoids
+// saturated red and green so cluster hues never rhyme with the promotes (green)
+// / blocks (red) diverging scale used on the perturbation-alignment map.
+const CLUSTER_PALETTE = [
+  "#4E79A7", "#F28E2B", "#B07AA1", "#76B7B2", "#EDC948", "#9C755F", "#5B8FB0", "#FFBE7D", "#D4A6C8", "#86BCB6",
+  "#B6992D", "#79706E", "#D37295", "#8CD0E8", "#C7A5CE", "#BAB0AC", "#9D8CC7", "#E8A752", "#7FB0C4", "#B5926A",
+];
+
+type CellPoint = { x: number; y: number; cluster?: string };
+
+// Cluster -> color map from the sorted labels (numeric-aware so "2" precedes
+// "10"). Returns null when there is nothing to distinguish (0 or 1 cluster), so
+// the manifold stays neutral gray.
+function buildClusterColorMap(points: Array<CellPoint>): Map<string, string> | null {
+  const labels = new Set<string>();
+  for (const point of points) {
+    if (point.cluster != null && point.cluster !== "") labels.add(point.cluster);
+  }
+  if (labels.size < 2) return null;
+  const sorted = [...labels].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const map = new Map<string, string>();
+  sorted.forEach((label, index) => map.set(label, CLUSTER_PALETTE[index % CLUSTER_PALETTE.length]));
+  return map;
 }
 
 // Continuous, zero-centred diverging color: red (blocks) -> neutral (~0) -> green
@@ -1610,11 +1649,15 @@ function robustScoreLimit(grid: Array<ScorePoint>): number {
 
 // Faint cell embedding so the arrows and tiles sit on the real manifold (and a
 // detached island can be confirmed to actually contain cells).
-function renderCellPoints(cells: Array<XY>, proj: DevProjector) {
+function renderCellPoints(cells: Array<CellPoint>, proj: DevProjector, clusterColors?: Map<string, string> | null) {
   const r = Math.max(0.8, proj.span * 0.0034);
-  return cells.map((cell, index) => (
-    <circle key={`c${index}`} cx={proj.mapX(cell.x)} cy={proj.mapY(cell.y)} r={r} fill="#cbd5e1" opacity={0.5} />
-  ));
+  const colored = clusterColors != null;
+  return cells.map((cell, index) => {
+    const fill = colored && cell.cluster != null ? clusterColors.get(cell.cluster) ?? "#cbd5e1" : "#cbd5e1";
+    return (
+      <circle key={`c${index}`} cx={proj.mapX(cell.x)} cy={proj.mapY(cell.y)} r={r} fill={fill} opacity={colored ? 0.62 : 0.5} />
+    );
+  });
 }
 
 // Score tiles sized from the true grid spacing (no rounded corners / gaps, which
@@ -1640,13 +1683,12 @@ function renderScoreTiles(grid: Array<ScorePoint>, proj: DevProjector, absLimit:
 // Neutral arrows (charcoal) so hue is reserved exclusively for the signed score.
 // `onColor` lightens them slightly for contrast over the colored tiles.
 function renderFlowArrows(vectors: Array<Arrow>, proj: DevProjector, onColor = false) {
-  // Over the colored tiles, use a sparser field so the heatmap reads through.
-  const drawn = thinLatticeArrows(vectors, onColor ? 85 : DEV_ARROW_TARGET);
+  // Render the full CellOracle grid (only thinned if pathologically dense), and
+  // keep every non-zero arrow — CellOracle draws all grid points, short ones
+  // included — so the field matches its native quiver density.
+  const drawn = thinLatticeArrows(vectors, DEV_ARROW_TARGET);
   const magnitudes = drawn.map((vector) => Math.hypot(vector.dx, vector.dy));
   const referenceMagnitude = Math.max(1e-9, quantile(magnitudes, 0.9));
-  // On the alignment map, hide the faintest third of arrows — they add clutter
-  // without direction the eye can read at this scale.
-  const minMagnitude = onColor ? quantile(magnitudes, 0.33) : 0;
   const arrowScale = (proj.span * 0.042) / referenceMagnitude;
   const maxArrowLength = proj.span * 0.058;
   const stroke = onColor ? "#1e293b" : "#334155"; // slate-800 / slate-700
@@ -1655,7 +1697,7 @@ function renderFlowArrows(vectors: Array<Arrow>, proj: DevProjector, onColor = f
   const headSize = 2.9;
   return drawn.map((vector, index) => {
     const magnitude = Math.hypot(vector.dx, vector.dy);
-    if (magnitude < 1e-9 || magnitude < minMagnitude) return null;
+    if (magnitude < 1e-9) return null;
     const startX = proj.mapX(vector.x);
     const startY = proj.mapY(vector.y);
     const length = Math.min(magnitude * arrowScale, maxArrowLength);
@@ -1856,10 +1898,10 @@ function DevelopmentZoomControls({
 }
 
 // Development-flow reference quiver over the cell manifold.
-function DevelopmentFlowPlot({ vectors, cells, proj, viewport, onViewportChange, svgRef }: { vectors: Array<Arrow>; cells: Array<XY>; proj: DevProjector; viewport: NormalizedPlotViewport; onViewportChange: (viewport: NormalizedPlotViewport) => void; svgRef?: RefObject<SVGSVGElement | null> }) {
+function DevelopmentFlowPlot({ vectors, cells, proj, viewport, onViewportChange, svgRef, clusterColors }: { vectors: Array<Arrow>; cells: Array<CellPoint>; proj: DevProjector; viewport: NormalizedPlotViewport; onViewportChange: (viewport: NormalizedPlotViewport) => void; svgRef?: RefObject<SVGSVGElement | null>; clusterColors?: Map<string, string> | null }) {
   return (
     <InteractiveDevelopmentSvg proj={proj} viewport={viewport} onViewportChange={onViewportChange} svgRef={svgRef} label="Development flow — natural differentiation direction">
-      {renderCellPoints(cells, proj)}
+      {renderCellPoints(cells, proj, clusterColors)}
       {renderFlowArrows(vectors, proj)}
     </InteractiveDevelopmentSvg>
   );
@@ -1949,6 +1991,26 @@ function DirectionalityColorBar({ limit }: { limit: number }) {
   );
 }
 
+// Compact swatch legend for the cluster-colored manifold. Caps the number of
+// visible entries so a high-cardinality annotation can't overrun the layout.
+function ClusterLegend({ colors, className = "mt-2" }: { colors: Map<string, string>; className?: string }) {
+  const entries = [...colors.entries()];
+  const MAX_SHOWN = 18;
+  const shown = entries.slice(0, MAX_SHOWN);
+  const extra = entries.length - shown.length;
+  return (
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium text-slate-500 ${className}`} aria-label="Cluster colors">
+      {shown.map(([label, color]) => (
+        <span key={label} className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
+          <span className="max-w-[9rem] truncate">{label}</span>
+        </span>
+      ))}
+      {extra > 0 ? <span className="text-slate-400">+{extra} more</span> : null}
+    </div>
+  );
+}
+
 type DevelopmentImpactLayout = "side-by-side" | "overlay";
 
 // Development flow and perturbation alignment answer one biological question,
@@ -1994,6 +2056,13 @@ function DevelopmentImpactPanel({
   // Faint cell manifold shared by every panel (capped for performance).
   const cells = useMemo(
     () => subsampleCells(result.embedding_points ?? [], DEV_CELL_TARGET),
+    [result.embedding_points],
+  );
+  // Color the manifold by uploaded cluster labels (null when there's nothing to
+  // distinguish). Used only in the development-flow panel — the alignment panel
+  // reserves hue for the promotes/blocks score.
+  const clusterColors = useMemo(
+    () => buildClusterColorMap(result.embedding_points ?? []),
     [result.embedding_points],
   );
   // Robust, symmetric color limit so one extreme grid point can't wash out the scale.
@@ -2046,7 +2115,7 @@ function DevelopmentImpactPanel({
     const alignmentSvg = source === "expanded" ? expandedAlignmentSvgRef.current : mainAlignmentSvgRef.current;
     const panels = activeLayout === "overlay"
       ? alignmentSvg
-        ? [{ svg: alignmentSvg, title: "Development impact · perturbation arrows" }]
+        ? [{ svg: alignmentSvg, title: "Perturbation alignment" }]
         : []
       : [
           ...(flowSvg ? [{ svg: flowSvg, title: "Natural development flow" }] : []),
@@ -2062,7 +2131,7 @@ function DevelopmentImpactPanel({
     try {
       const svgMarkup = buildDevelopmentFigureSvg({
         panels,
-        subtitle: `${formatPerturbation(result.gene, result.perturbation_value)} · synchronized view`,
+        title: `${formatPerturbation(result.gene, result.perturbation_value)} · Development impact`,
         limit: absLimit,
       });
       const perturbationLabel = result.perturbation_value === 0
@@ -2119,7 +2188,7 @@ function DevelopmentImpactPanel({
     const reason = result.perturbation_score_unavailable_reason;
     const needsPseudotime = !result.pseudotime_trajectory;
     return (
-      <div className="mt-4">
+      <div className="mt-3">
         <p className="max-w-3xl text-sm leading-6 text-slate-600">
           Compare this perturbation against the natural differentiation trajectory.{" "}
           {reason ?? "This needs a pseudotime trajectory."}
@@ -2159,7 +2228,7 @@ function DevelopmentImpactPanel({
               </div>
             </div>
             {hasDevArrows && proj ? (
-              <DevelopmentFlowPlot vectors={developmentVectors} cells={cells} proj={proj} viewport={viewport} onViewportChange={setViewport} svgRef={flowSvgRef} />
+              <DevelopmentFlowPlot vectors={developmentVectors} cells={cells} proj={proj} viewport={viewport} onViewportChange={setViewport} svgRef={flowSvgRef} clusterColors={clusterColors} />
             ) : (
               <DevelopmentPlotPlaceholder message="Re-run this CellOracle perturbation to generate the development-flow field." />
             )}
@@ -2223,7 +2292,7 @@ function DevelopmentImpactPanel({
       </>,
       controlsHost,
     ) : null}
-    <div className="mt-4">
+    <div className="mt-3">
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <h4 className="text-sm font-bold text-slate-950">Development comparison</h4>
@@ -2670,6 +2739,12 @@ function ResultSummary({
   const globalGridVectorFields = useMemo(
     () => resolveGridVectorFields(result),
     [result]
+  );
+  // Shared cluster -> color map so the cell-state and development maps agree on
+  // colors. Null when the upload has 0/1 cluster (nothing to distinguish).
+  const clusterColors = useMemo(
+    () => buildClusterColorMap(result.embedding_points ?? []),
+    [result.embedding_points]
   );
   const activeVectorIndex = pinnedVectorIndex ?? hoveredVectorIndex;
   const activeVectorPlot = pinnedVectorIndex !== null ? pinnedVectorPlot : hoveredVectorPlot;
@@ -3126,9 +3201,8 @@ function ResultSummary({
       </div>
 
       <section className="mt-5 border-t border-slate-100 pt-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className={RESULT_SECTION_HEADING_CLASS}>Cell fate response</h3>
             <details ref={howToReadRef} className="group relative">
               <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 [&::-webkit-details-marker]:hidden">
@@ -3156,84 +3230,80 @@ function ResultSummary({
                 </p>
               </div>
             </details>
-            </div>
-            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-600">
-              How the predicted perturbation reshapes cell fate — where it pushes cells, and whether
-              that motion follows or fights their natural development.
-            </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <div ref={setMapControlsHost} className="flex items-center gap-2">
-              {mapView === "shift" ? (
-                <>
-                  <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Plot view controls">
-                    <PlotZoomControls viewport={plotViewport} onViewportChange={setPlotViewport} connected />
-                    <ExpandComparisonButton
-                      connected
-                      onClick={() => {
-                        setFigureExportMenu(null);
-                        setIsComparisonExpanded(true);
-                      }}
-                    />
-                  </div>
-                  <FigureExportMenu
-                    menuRef={figureExportMenuRef}
-                    isOpen={figureExportMenu === "main"}
-                    isExporting={isFigureExporting}
-                    error={figureExportError}
-                    onToggle={() => {
-                      setFigureExportError(null);
-                      setFigureExportMenu((current) => current === "main" ? null : "main");
-                    }}
-                    onExport={handleFigureExport}
-                  />
-                </>
-              ) : null}
-            </div>
-          </div>
+          <p className="mt-1.5 text-sm leading-6 text-slate-600">
+            Predicted cell movement and its alignment with natural development.
+          </p>
         </div>
 
         <div
-          role="tablist"
-          aria-label="Perturbation map view"
-          className="mt-4 flex flex-wrap items-center gap-6 border-b border-slate-200"
+          className="mt-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-3 border-b border-slate-200"
         >
-          {mapTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={mapView === tab.id}
-              onClick={() => {
-                setFigureExportMenu(null);
-                setMapView(tab.id);
-              }}
-              className={
-                "-mb-px border-b-2 pb-2.5 text-sm font-semibold transition focus-visible:outline-none " +
-                (mapView === tab.id
-                  ? "border-[#1b75a6] text-slate-950"
-                  : "border-transparent text-slate-500 hover:text-slate-700 focus-visible:text-slate-700")
-              }
-            >
-              {tab.label}
-            </button>
-          ))}
+          <div role="tablist" aria-label="Perturbation map view" className="flex flex-wrap items-center gap-6">
+            {mapTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={mapView === tab.id}
+                onClick={() => {
+                  setFigureExportMenu(null);
+                  setMapView(tab.id);
+                }}
+                className={
+                  "-mb-px border-b-2 pb-2.5 text-sm font-semibold transition focus-visible:outline-none " +
+                  (mapView === tab.id
+                    ? "border-[#1b75a6] text-slate-950"
+                    : "border-transparent text-slate-500 hover:text-slate-700 focus-visible:text-slate-700")
+                }
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div ref={setMapControlsHost} className="mb-2 flex items-center gap-2">
+            {mapView === "shift" ? (
+              <>
+                <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Plot view controls">
+                  <PlotZoomControls viewport={plotViewport} onViewportChange={setPlotViewport} connected />
+                  <ExpandComparisonButton
+                    connected
+                    onClick={() => {
+                      setFigureExportMenu(null);
+                      setIsComparisonExpanded(true);
+                    }}
+                  />
+                </div>
+                <FigureExportMenu
+                  menuRef={figureExportMenuRef}
+                  isOpen={figureExportMenu === "main"}
+                  isExporting={isFigureExporting}
+                  error={figureExportError}
+                  onToggle={() => {
+                    setFigureExportError(null);
+                    setFigureExportMenu((current) => current === "main" ? null : "main");
+                  }}
+                  onExport={handleFigureExport}
+                />
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-500" aria-label="Plot legend">
+          {clusterColors ? (
+            <ClusterLegend colors={clusterColors} className="" />
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
+              Cells
+            </span>
+          )}
         </div>
 
         {mapView === "shift" ? (
-          <div className="mt-4">
-            <div className="flex items-center gap-4 text-xs font-semibold text-slate-500" aria-label="Plot legend">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
-                  Cells
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="text-base font-bold text-[#087ead]" aria-hidden="true">→</span>
-                  Average local shift
-                </span>
-            </div>
-
-            <div className="mt-4 grid gap-5 xl:grid-cols-2">
+          <div className="mt-3">
+            <div className="grid gap-5 xl:grid-cols-2">
               <VectorFieldPlot
                 title={predictedPlotTitle}
                 points={displayPoints}
@@ -3248,6 +3318,7 @@ function ResultSummary({
                 onHoverVector={(index) => handleVectorHover("predicted", index)}
                 onTogglePin={(index) => handleVectorPin("predicted", index)}
                 svgRef={predictedPlotSvgRef}
+                clusterColors={clusterColors}
               />
               <VectorFieldPlot
                 title={randomizedPlotTitle}
@@ -3264,6 +3335,7 @@ function ResultSummary({
                 onTogglePin={(index) => handleVectorPin("randomized", index)}
                 svgRef={randomizedPlotSvgRef}
                 randomized
+                clusterColors={clusterColors}
               />
             </div>
 
@@ -3338,6 +3410,7 @@ function ResultSummary({
                 onViewportChange={setPlotViewport}
                 onHoverVector={(index) => handleVectorHover("predicted", index)}
                 onTogglePin={(index) => handleVectorPin("predicted", index)}
+                clusterColors={clusterColors}
               />
               <VectorFieldPlot
                 title={randomizedPlotTitle}
@@ -3353,6 +3426,7 @@ function ResultSummary({
                 onHoverVector={(index) => handleVectorHover("randomized", index)}
                 onTogglePin={(index) => handleVectorPin("randomized", index)}
                 randomized
+                clusterColors={clusterColors}
               />
             </div>
           </div>
