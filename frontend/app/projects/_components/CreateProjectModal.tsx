@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DragEvent, ReactNode } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmStep from "./AlgorithmStep";
 import FileNameDisplay, { formatFileNameForDisplay } from "./FileNameDisplay";
 
-const MAX_PREPROCESSED_GENES = 8000;
 const EMPTY_ALGORITHM_PARAMETER_VALUES: Record<string, unknown> = {};
 
 const CELLORACLE_SPECIES_OPTIONS = [
@@ -20,6 +19,26 @@ const CELLORACLE_SPECIES_OPTIONS = [
   { value: "s_cerevisiae", label: "S. cerevisiae" },
 ];
 
+const DATASET_SPECIES_OPTIONS = [
+  ...CELLORACLE_SPECIES_OPTIONS,
+  { value: "other", label: "Other / Not listed" },
+];
+
+const MATRIX_STATE_OPTIONS = [
+  {
+    value: "raw",
+    label: "Raw counts",
+  },
+  {
+    value: "normalized",
+    label: "Normalized",
+  },
+  {
+    value: "log_normalized",
+    label: "Log-normalized",
+  },
+];
+
 const SELECT_CONTROL_CLASS =
   "mt-2 flex items-center rounded-[1rem] border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition focus-within:border-[#1b75a6]/40 focus-within:ring-4 focus-within:ring-[#1b75a6]/10";
 
@@ -28,6 +47,8 @@ const SELECT_INPUT_CLASS =
 
 type CellOracleHelpTopic = "base-grn" | "cluster-labels";
 type CellOracleBaseGrnSource = "built-in" | "upload";
+type AdvancedSection = "genes" | "inputs" | "algorithms" | "results";
+type GeneSelectionStage = "detection" | "trajectory" | "variance";
 
 interface DatasetSummary {
   dimensions: string;
@@ -41,16 +62,21 @@ interface CreateProjectModalProps {
   isCreateVisible: boolean;
   isCreateClosing: boolean;
   projectName: string;
-  projectDescription: string;
   expressionFileName: string;
   pseudotimeFileName: string;
   clusterLabelsFileName: string;
-  geneCount: number | null;
-  cellCount: number | null;
-  topVariableGenes: string;
+  matrixState: string;
+  datasetSpecies: string;
+  detectionThreshold: string;
+  geneSelectionMethod: "none" | "hvg" | "trajectory";
+  hvgGeneCount: string;
+  geneOrderingSource: "calculate" | "upload";
+  geneOrderingFileName: string;
+  trajectoryPValue: string;
+  trajectoryBonferroni: boolean;
+  trajectoryGeneCount: string;
+  includeSignificantTFs: boolean;
   includeAllTFs: boolean;
-  normalizeEnabled: boolean;
-  logTransformEnabled: boolean;
   maxEdgesPerTarget: string;
   maxEdgesLimit: number;
   pidcDefaultMaxGenes: number;
@@ -82,17 +108,25 @@ interface CreateProjectModalProps {
   onSelectAll: () => void;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
   setProjectName: (value: string) => void;
-  setProjectDescription: (value: string) => void;
+  setMatrixState: (value: string) => void;
+  setDatasetSpecies: (value: string) => void;
+  setDetectionThreshold: (value: string) => void;
+  setGeneSelectionMethod: (value: "none" | "hvg" | "trajectory") => void;
+  setHvgGeneCount: (value: string) => void;
+  setGeneOrderingSource: (value: "calculate" | "upload") => void;
+  setGeneOrderingFile: (file: File | null) => void;
+  setGeneOrderingFileName: (value: string) => void;
+  setTrajectoryPValue: (value: string) => void;
+  setTrajectoryBonferroni: (value: boolean) => void;
+  setTrajectoryGeneCount: (value: string) => void;
+  setIncludeSignificantTFs: (value: boolean) => void;
   setExpressionFile: (file: File | null) => void;
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
   setClusterLabelsFile: (file: File | null) => void;
   setClusterLabelsFileName: (value: string) => void;
-  setTopVariableGenes: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
-  setNormalizeEnabled: (value: boolean) => void;
-  setLogTransformEnabled: (value: boolean) => void;
   setMaxEdgesPerTarget: (value: string) => void;
   setCellOracleSpecies: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
@@ -104,16 +138,19 @@ export default function CreateProjectModal({
   isCreateVisible,
   isCreateClosing,
   projectName,
-  projectDescription,
   expressionFileName,
   pseudotimeFileName,
   clusterLabelsFileName,
-  geneCount,
-  cellCount,
-  topVariableGenes,
+  matrixState,
+  datasetSpecies,
+  detectionThreshold,
+  hvgGeneCount,
+  geneOrderingSource,
+  geneOrderingFileName,
+  trajectoryPValue,
+  trajectoryBonferroni,
+  includeSignificantTFs,
   includeAllTFs,
-  normalizeEnabled,
-  logTransformEnabled,
   maxEdgesPerTarget,
   maxEdgesLimit,
   pidcDefaultMaxGenes,
@@ -142,17 +179,24 @@ export default function CreateProjectModal({
   onSelectAll,
   onToggleAlgorithm,
   setProjectName,
-  setProjectDescription,
+  setMatrixState,
+  setDatasetSpecies,
+  setDetectionThreshold,
+  setGeneSelectionMethod,
+  setHvgGeneCount,
+  setGeneOrderingSource,
+  setGeneOrderingFile,
+  setGeneOrderingFileName,
+  setTrajectoryPValue,
+  setTrajectoryBonferroni,
+  setIncludeSignificantTFs,
   setExpressionFile,
   setExpressionFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
   setClusterLabelsFile,
   setClusterLabelsFileName,
-  setTopVariableGenes,
   setIncludeAllTFs,
-  setNormalizeEnabled,
-  setLogTransformEnabled,
   setMaxEdgesPerTarget,
   setCellOracleSpecies,
   setHasCellOracleSettingsConfigured,
@@ -163,8 +207,8 @@ export default function CreateProjectModal({
   const autoSelectedDatasetRef = useRef<string | null>(null);
   const [isOutsideClosing, setIsOutsideClosing] = useState(false);
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
-  const [isPreprocessingHelpOpen, setIsPreprocessingHelpOpen] = useState(false);
-  const [isPreprocessingHelpClosing, setIsPreprocessingHelpClosing] = useState(false);
+  const [openAdvancedSection, setOpenAdvancedSection] =
+    useState<AdvancedSection | null>(null);
   const [isCellOracleSettingsOpen, setIsCellOracleSettingsOpen] = useState(false);
   const [isCellOracleSettingsClosing, setIsCellOracleSettingsClosing] = useState(false);
   const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] =
@@ -172,6 +216,9 @@ export default function CreateProjectModal({
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(null);
+  const [enabledGeneSelectionStages, setEnabledGeneSelectionStages] = useState<
+    GeneSelectionStage[]
+  >(["detection"]);
   const getAlgorithmContextualDefaults = useCallback(
     (algorithmId: string): Record<string, unknown> => {
       if (algorithmId === "PIDC") return { maxGenes: pidcDefaultMaxGenes };
@@ -194,10 +241,6 @@ export default function CreateProjectModal({
   const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
-  const compactExpressionFileName = formatFileNameForDisplay(expressionFileName, 38);
-  const datasetReady = hasExpressionFile;
-  const maxTopVariableGenes =
-    geneCount === null ? MAX_PREPROCESSED_GENES : Math.min(geneCount, MAX_PREPROCESSED_GENES);
 
   const selectExpressionFile = (file: File | null) => {
     setExpressionFile(file);
@@ -226,14 +269,14 @@ export default function CreateProjectModal({
       /* eslint-disable react-hooks/set-state-in-effect -- reset modal-local state on open */
       setIsOutsideClosing(false);
       setIsCustomizeOpen(false);
-      setIsPreprocessingHelpOpen(false);
-      setIsPreprocessingHelpClosing(false);
+      setOpenAdvancedSection(null);
       setIsCellOracleSettingsOpen(false);
       setIsCellOracleSettingsClosing(false);
       setCellOracleBaseGrnSource("built-in");
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
       setExpandedAlgorithmId(null);
+      setEnabledGeneSelectionStages(["detection"]);
       /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
     }
@@ -262,7 +305,7 @@ export default function CreateProjectModal({
   }, [expandedAlgorithmId, selectedIds]);
 
   useEffect(() => {
-    if (!datasetReady || isLoadingAlgorithms || compatibleAlgorithms.length === 0) {
+    if (!hasExpressionFile || isLoadingAlgorithms || compatibleAlgorithms.length === 0) {
       return;
     }
 
@@ -276,7 +319,7 @@ export default function CreateProjectModal({
     onSelectAll();
   }, [
     compatibleAlgorithms.length,
-    datasetReady,
+    hasExpressionFile,
     datasetSummary.hasPseudotime,
     expressionFileName,
     isLoadingAlgorithms,
@@ -295,17 +338,6 @@ export default function CreateProjectModal({
     closeTimeoutRef.current = setTimeout(() => {
       setIsOutsideClosing(false);
       onClose();
-    }, 480);
-  };
-
-  const handlePreprocessingHelpClose = () => {
-    if (isPreprocessingHelpClosing) return;
-
-    setIsPreprocessingHelpClosing(true);
-
-    window.setTimeout(() => {
-      setIsPreprocessingHelpOpen(false);
-      setIsPreprocessingHelpClosing(false);
     }, 480);
   };
 
@@ -390,47 +422,38 @@ export default function CreateProjectModal({
   const startDisabled =
     isSubmitting ||
     !hasExpressionFile ||
+    !matrixState ||
+    !datasetSpecies ||
     selectedAlgorithms.length === 0 ||
     isLoadingAlgorithms;
 
+  // Named so the footer can explain a disabled Start instead of just greying out.
+  const missingRequirements = [
+    !hasExpressionFile ? "an expression matrix" : null,
+    !matrixState ? "matrix values" : null,
+    !datasetSpecies ? "a species" : null,
+    !isLoadingAlgorithms && selectedAlgorithms.length === 0
+      ? "at least one algorithm"
+      : null,
+  ].filter((item): item is string => item !== null);
+
   const willRunSummary = (() => {
-    if (!hasExpressionFile) return "Upload an expression matrix to begin.";
-    if (selectedAlgorithms.length === 0) return "No algorithms selected — open Advanced settings to choose at least one.";
-
-    const algoLabel =
+    const selectionLabels = [
+      enabledGeneSelectionStages.includes("detection")
+        ? `Detection ≥${detectionThreshold || "—"}%`
+        : null,
+      enabledGeneSelectionStages.includes("trajectory")
+        ? "trajectory-aware"
+        : null,
+      enabledGeneSelectionStages.includes("variance")
+        ? `top ${hvgGeneCount || "—"} by variance`
+        : null,
+    ].filter((label): label is string => label !== null);
+    const algorithmLabel =
       selectedAlgorithms.length === 1
-        ? `1 algorithm (${selectedAlgorithms[0].name})`
+        ? "1 algorithm"
         : `${selectedAlgorithms.length} algorithms`;
-
-    const settings: string[] = [];
-
-    if (topVariableGenes.trim().toLowerCase() === "all") {
-      settings.push("all genes retained");
-    } else if (topVariableGenes && Number(topVariableGenes) > 0) {
-      settings.push(`top ${Number(topVariableGenes).toLocaleString()} variable genes`);
-    }
-
-    if (includeAllTFs) {
-      settings.push("known TFs included");
-    }
-
-    if (normalizeEnabled) {
-      settings.push("normalization enabled");
-    }
-
-    if (logTransformEnabled) {
-      settings.push("log transform enabled");
-    }
-
-    if (datasetSummary.hasClusterLabels) {
-      settings.push("cluster labels included");
-    }
-
-    // Removed ensembleEnabled block
-
-    const settingsLabel = settings.length > 0 ? ` with ${settings.join(", ")}` : "";
-
-    return `Will run ${algoLabel}${settingsLabel}.`;
+    return `${selectionLabels.length ? selectionLabels.join(" → ") : "No gene filtering"} • ${algorithmLabel}`;
   })();
 
   const cellOracleSpeciesLabel =
@@ -441,6 +464,32 @@ export default function CreateProjectModal({
         clusterLabelsFileName ? " + labels" : ""
       }`
     : "";
+  const geneSelectionSummary = [
+    enabledGeneSelectionStages.includes("detection")
+      ? `Detection ≥${detectionThreshold || "—"}%`
+      : null,
+    enabledGeneSelectionStages.includes("trajectory")
+      ? "Trajectory-aware"
+      : null,
+    enabledGeneSelectionStages.includes("variance")
+      ? `Top ${hvgGeneCount || "—"} by variance`
+      : null,
+  ]
+    .filter((label): label is string => label !== null)
+    .join(" · ") || "No gene filtering";
+  const optionalInputsSummary = `${
+    pseudotimeFileName
+      ? "Pseudotime uploaded"
+      : estimatePseudotime
+        ? "Pseudotime will be estimated"
+        : "No pseudotime"
+  } · ${hasCellOracleSettingsConfigured ? "CellOracle configured" : "CellOracle not configured"}`;
+  const unavailableAlgorithmCount = Math.max(
+    0,
+    algorithms.length - compatibleAlgorithms.length,
+  );
+  const algorithmSectionSummary = `${selectedAlgorithms.length} selected · ${unavailableAlgorithmCount} unavailable`;
+  const resultSettingsSummary = `${maxEdgesPerTarget || "—"} edges per target`;
 
   return (
     <div
@@ -448,7 +497,6 @@ export default function CreateProjectModal({
         isModalClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
       }`}
       onClick={
-        isPreprocessingHelpOpen ||
         isCellOracleSettingsOpen ||
         cellOracleHelpTopic
           ? undefined
@@ -457,39 +505,66 @@ export default function CreateProjectModal({
     >
       <div
         data-create-project-modal
-        className={`relative max-h-[calc(100vh-5rem)] w-full max-w-[56rem] overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
+        className={`relative flex max-h-[calc(100vh-5rem)] w-full max-w-[56rem] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
           isModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#1b75a6]">
-              Workspace setup
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-              Start an analysis
-            </h2>
-          </div>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-950">
+            Start an analysis
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="-mr-2 -mt-2 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-lg leading-none text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            aria-label="Close create analysis dialog"
+          >
+            ×
+          </button>
         </div>
 
-        <div className="mt-6 space-y-6">
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr] lg:items-stretch">
-              <div>
-                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#178a62]">
-                  Required
-                </span>
-                <h3 className="mt-4 text-lg font-semibold text-slate-950">
-                  Expression matrix
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  CSV with rows = genes and columns = cells. This is the only required input before GRNScope can prepare an analysis.
-                </p>
+        <div className="mt-5 min-h-0 flex-1 scroll-pb-24 space-y-6 overflow-y-auto pb-24 pr-4 [scrollbar-gutter:stable]">
+          <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
+            {expressionFileName ? (
+              <div className="flex min-h-20 items-center justify-between gap-4 rounded-[1rem] border border-slate-200 bg-slate-50/60 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
+                    Expression matrix
+                  </p>
+                  <p
+                    className="mt-1 truncate text-sm font-semibold text-slate-800"
+                    title={expressionFileName}
+                  >
+                    {formatFileNameForDisplay(expressionFileName, 42)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
+                    Replace
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        selectExpressionFile(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => selectExpressionFile(null)}
+                    className="cursor-pointer text-sm font-medium text-slate-500 transition hover:text-rose-600"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-
+            ) : (
               <label
-                className="relative flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-10 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+                className="relative flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-5 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
                 onDragEnter={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -510,60 +585,132 @@ export default function CreateProjectModal({
                   }}
                 />
                 <FileNameDisplay
-                  fileName={expressionFileName}
+                  fileName=""
                   placeholder="Drop expression matrix CSV here"
                 />
-                <span className="mt-2 text-sm text-slate-500">
-                  {expressionFileName ? "Click to replace" : "or click to browse"}
+                <span className="mt-1.5 text-sm text-slate-500">
+                  or click to browse
+                </span>
+                <span className="mt-2 text-xs text-slate-400">
+                  Rows = genes; columns = cells
                 </span>
               </label>
-            </div>
-
-            {hasExpressionFile && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 px-1 text-sm">
-                {datasetReady ? (
-                  <>
-                    <span className="inline-flex min-w-0 max-w-full items-center gap-2 font-semibold text-[#178a62]">
-                      <span className="h-2 w-2 rounded-full bg-[#20b779]" />
-                      <span
-                        className="min-w-0 max-w-full truncate"
-                        title={expressionFileName}
-                      >
-                        {compactExpressionFileName}
-                      </span>
-                    </span>
-                    {geneCount !== null && cellCount !== null && (
-                      <span className="font-medium text-slate-700">
-                        {geneCount.toLocaleString()} genes ×{" "}
-                        {cellCount.toLocaleString()} cells
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span
-                    className="min-w-0 max-w-full truncate font-medium text-slate-600"
-                    title={expressionFileName}
-                  >
-                    {compactExpressionFileName}
-                  </span>
-                )}
-              </div>
             )}
+
+            <div>
+              <fieldset>
+                <legend className="text-sm font-semibold text-slate-800">
+                  Matrix values
+                  {!matrixState ? (
+                    <span className="ml-1.5 text-xs font-semibold text-[#1b75a6]/80">
+                      · required
+                    </span>
+                  ) : null}
+                </legend>
+                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
+                  {MATRIX_STATE_OPTIONS.map((option) => {
+                    const selected = matrixState === option.value;
+                    return (
+                      <label
+                        key={option.value}
+                        className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"
+                      >
+                        <input
+                          type="radio"
+                          name="matrix-state"
+                          value={option.value}
+                          checked={selected}
+                          onChange={() => setMatrixState(option.value)}
+                          className="sr-only"
+                        />
+                        {/* Round, not square: these options are mutually
+                            exclusive, and a checkbox shape would imply
+                            multi-select. */}
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                            selected
+                              ? "border-[#1b75a6] bg-white"
+                              : "border-slate-300 bg-white"
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {selected ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#1b75a6]" />
+                          ) : null}
+                        </span>
+                        {option.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <label className="mt-7 block">
+                <span className="text-sm font-semibold text-slate-800">
+                  Dataset species
+                  {!datasetSpecies ? (
+                    <span className="ml-1.5 text-xs font-semibold text-[#1b75a6]/80">
+                      · required
+                    </span>
+                  ) : null}
+                </span>
+                <span className="relative mt-0.5 flex items-center">
+                  <select
+                    value={datasetSpecies}
+                    onChange={(event) => setDatasetSpecies(event.target.value)}
+                    className="w-full appearance-none border-0 border-b border-slate-200 bg-transparent px-0 py-2.5 pr-7 text-sm font-medium text-slate-800 outline-none transition focus:border-[#1b75a6]"
+                  >
+                    <option value="">Select species</option>
+                    {DATASET_SPECIES_OPTIONS.map((species) => (
+                      <option key={species.value} value={species.value}>
+                        {species.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-0 text-sm text-slate-500" aria-hidden="true">
+                    ▾
+                  </span>
+                </span>
+                {datasetSpecies === "other" ? (
+                  <span className="mt-2 block text-xs leading-5 text-slate-500">
+                    Some species-specific features may be unavailable.
+                  </span>
+                ) : null}
+              </label>
+            </div>
           </div>
 
-          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Sits after the upload because it is auto-filled from that file. */}
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-800">
+              Analysis name
+            </span>
+            <input
+              id="projectName"
+              type="text"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="Auto-filled from uploaded expression matrix"
+              className="mt-1.5 w-full border-0 border-b border-slate-200 bg-transparent px-0 py-2.5 text-sm font-medium text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-[#1b75a6]"
+            />
+          </label>
+
+          <div className="pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-50/80 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
                   Advanced settings
                 </p>
-                <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
+                <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
                   {willRunSummary}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsCustomizeOpen((prev) => !prev)}
+                onClick={() => {
+                  if (isCustomizeOpen) setOpenAdvancedSection(null);
+                  setIsCustomizeOpen((prev) => !prev);
+                }}
                 className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
                 aria-expanded={isCustomizeOpen}
               >
@@ -573,201 +720,152 @@ export default function CreateProjectModal({
           </div>
 
           {isCustomizeOpen && (
-            <div className="space-y-5 rounded-[1.5rem] border border-slate-200 bg-slate-50/40 p-5">
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-800">
-                      Project name
-                    </span>
-                    <input
-                      id="projectName"
-                      type="text"
-                      value={
-                        projectName === expressionFileName.replace(/\.[^/.]+$/, "")
-                          ? ""
-                          : projectName || ""
-                      }
-                      onChange={(event) => setProjectName(event.target.value)}
-                      placeholder={
-                        expressionFileName
-                          ? expressionFileName.replace(/\.[^/.]+$/, "")
-                          : "Auto-filled from uploaded expression matrix"
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                    />
-                  </label>
+            <div className="rounded-[1.25rem] border border-slate-200 bg-white">
+              <AdvancedAccordionSection
+                title="Gene selection"
+                summary={geneSelectionSummary}
+                open={openAdvancedSection === "genes"}
+                onToggle={() =>
+                  setOpenAdvancedSection((current) =>
+                    current === "genes" ? null : "genes",
+                  )
+                }
+              >
+                <GeneSelectionPanel
+                  detectionThreshold={detectionThreshold}
+                  enabledStages={enabledGeneSelectionStages}
+                  hvgGeneCount={hvgGeneCount}
+                  includeAllTFs={includeAllTFs}
+                  geneOrderingSource={geneOrderingSource}
+                  geneOrderingFileName={geneOrderingFileName}
+                  trajectoryPValue={trajectoryPValue}
+                  trajectoryBonferroni={trajectoryBonferroni}
+                  includeSignificantTFs={includeSignificantTFs}
+                  onDetectionThresholdChange={setDetectionThreshold}
+                  onEnabledStagesChange={(stages) => {
+                    setEnabledGeneSelectionStages(stages);
+                    // Keep the existing submission model intact until the
+                    // composable preprocessing backend is implemented.
+                    setGeneSelectionMethod(
+                      stages.includes("trajectory")
+                        ? "trajectory"
+                        : stages.includes("variance")
+                          ? "hvg"
+                          : "none",
+                    );
+                  }}
+                  onHvgGeneCountChange={setHvgGeneCount}
+                  onIncludeAllTFsChange={setIncludeAllTFs}
+                  onGeneOrderingSourceChange={setGeneOrderingSource}
+                  onGeneOrderingFileChange={(file) => {
+                    setGeneOrderingFile(file);
+                    setGeneOrderingFileName(file?.name ?? "");
+                  }}
+                  onTrajectoryPValueChange={setTrajectoryPValue}
+                  onTrajectoryBonferroniChange={setTrajectoryBonferroni}
+                  onIncludeSignificantTFsChange={setIncludeSignificantTFs}
+                />
+              </AdvancedAccordionSection>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-800">
-                      Description
-                    </span>
-                    <input
-                      type="text"
-                      value={projectDescription}
-                      onChange={(event) => setProjectDescription(event.target.value)}
-                      placeholder="Optional note for this analysis"
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                    />
-                  </label>
-                </div>
-              </div>
+              <AdvancedAccordionSection
+                title="Optional biological inputs"
+                summary={optionalInputsSummary}
+                open={openAdvancedSection === "inputs"}
+                onToggle={() =>
+                  setOpenAdvancedSection((current) =>
+                    current === "inputs" ? null : "inputs",
+                  )
+                }
+              >
+                <OptionalInputsPanel
+                  pseudotimeFileName={pseudotimeFileName}
+                  cellOracleConfigLabel={cellOracleConfigLabel}
+                  estimatePseudotime={estimatePseudotime}
+                  onToggleEstimatePseudotime={onToggleEstimatePseudotime}
+                  onSelectPseudotime={selectPseudotimeFile}
+                  onClearPseudotime={clearPseudotimeFile}
+                  onOpenCellOracleSettings={handleOpenCellOracleSettings}
+                />
+              </AdvancedAccordionSection>
 
-              <OptionalInputsPanel
-                pseudotimeFileName={pseudotimeFileName}
-                cellOracleConfigLabel={cellOracleConfigLabel}
-                estimatePseudotime={estimatePseudotime}
-                onToggleEstimatePseudotime={onToggleEstimatePseudotime}
-                onSelectPseudotime={selectPseudotimeFile}
-                onClearPseudotime={clearPseudotimeFile}
-                onOpenCellOracleSettings={handleOpenCellOracleSettings}
-              />
+              <AdvancedAccordionSection
+                title="Algorithms"
+                summary={algorithmSectionSummary}
+                open={openAdvancedSection === "algorithms"}
+                onToggle={() =>
+                  setOpenAdvancedSection((current) =>
+                    current === "algorithms" ? null : "algorithms",
+                  )
+                }
+              >
+                <AlgorithmStep
+                  algorithms={algorithms}
+                  selectedIds={selectedIds}
+                  datasetSummary={datasetSummary}
+                  isLoadingAlgorithms={isLoadingAlgorithms}
+                  algorithmLoadError={algorithmLoadError}
+                  onToggleAlgorithm={onToggleAlgorithm}
+                  expandedAlgorithmId={expandedAlgorithmId}
+                  onToggleAlgorithmExpanded={handleToggleAlgorithmExpanded}
+                  algorithmParameters={algorithmParameters}
+                  onApplyAlgorithmParameters={onApplyAlgorithmParameters}
+                  getContextualDefaults={getAlgorithmContextualDefaults}
+                  customizedIds={Object.keys(algorithmParameters)}
+                />
+              </AdvancedAccordionSection>
 
-              <AlgorithmStep
-                algorithms={algorithms}
-                selectedIds={selectedIds}
-                datasetSummary={datasetSummary}
-                isLoadingAlgorithms={isLoadingAlgorithms}
-                algorithmLoadError={algorithmLoadError}
-                onToggleAlgorithm={onToggleAlgorithm}
-                expandedAlgorithmId={expandedAlgorithmId}
-                onToggleAlgorithmExpanded={handleToggleAlgorithmExpanded}
-                algorithmParameters={algorithmParameters}
-                onApplyAlgorithmParameters={onApplyAlgorithmParameters}
-                getContextualDefaults={getAlgorithmContextualDefaults}
-                customizedIds={Object.keys(algorithmParameters)}
-              />
-
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-black">
-                      Analysis settings
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsPreprocessingHelpClosing(false);
-                        setIsPreprocessingHelpOpen(true);
+              <AdvancedAccordionSection
+                title="Result settings"
+                summary={resultSettingsSummary}
+                open={openAdvancedSection === "results"}
+                onToggle={() =>
+                  setOpenAdvancedSection((current) =>
+                    current === "results" ? null : "results",
+                  )
+                }
+              >
+                <div className="-mx-1">
+                  <div className="grid gap-4 rounded-xl border border-slate-200 bg-white px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        Maximum edges per target
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Keep only the strongest regulators for each target gene.
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center gap-2">
+                      <CompactNumberField
+                      value={maxEdgesPerTarget}
+                      onChange={(nextValue) => {
+                        if (nextValue === "") {
+                          setMaxEdgesPerTarget("");
+                          return;
+                        }
+                        const parsedValue = Number(nextValue);
+                        if (!Number.isInteger(parsedValue) || parsedValue < 1) return;
+                        setMaxEdgesPerTarget(
+                          String(Math.min(parsedValue, maxEdgesLimit)),
+                        );
                       }}
-                      className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-[#1b75a6]/25 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:bg-[#e8f5fb]"
-                      aria-label="Preprocessing help"
-                    >
-                      ?
-                    </button>
+                      onBlur={() => {
+                        const parsed = Number(maxEdgesPerTarget.trim());
+                        if (!Number.isInteger(parsed) || parsed < 1) {
+                          setMaxEdgesPerTarget(String(Math.min(20, maxEdgesLimit)));
+                        }
+                      }}
+                      min={1}
+                      max={maxEdgesLimit}
+                      step={1}
+                      ariaLabel="Max edges per target"
+                      />
+                      <span className="text-xs font-medium text-slate-500">
+                        edges
+                      </span>
+                    </span>
                   </div>
                 </div>
-
-                <div className="mt-5 space-y-5">
-                  <div className="grid items-center gap-6 sm:grid-cols-2">
-                    <div className="flex items-center gap-3">
-                      <span className="whitespace-nowrap text-sm font-semibold text-slate-950">
-                        Gene filter
-                      </span>
-                      <input
-                        type="text"
-                        value={topVariableGenes}
-                        onChange={(e) => {
-                          const nextValue = e.target.value;
-                          if (nextValue === "") {
-                            setTopVariableGenes("");
-                            return;
-                          }
-                          if ("all".startsWith(nextValue.toLowerCase())) {
-                            setTopVariableGenes(nextValue);
-                            return;
-                          }
-                          const parsedValue = Number(nextValue);
-                          if (
-                            Number.isNaN(parsedValue) ||
-                            !Number.isInteger(parsedValue) ||
-                            parsedValue <= 0
-                          ) {
-                            return;
-                          }
-                          if (parsedValue > maxTopVariableGenes) {
-                            setTopVariableGenes(String(maxTopVariableGenes));
-                            return;
-                          }
-                          setTopVariableGenes(nextValue);
-                        }}
-                        onBlur={() => {
-                          const normalizedValue = topVariableGenes.trim().toLowerCase();
-                          if (normalizedValue === "") {
-                            if (geneCount !== null && geneCount > 0) {
-                              setTopVariableGenes(String(geneCount));
-                            }
-                            return;
-                          }
-                          if ("all".startsWith(normalizedValue)) {
-                            setTopVariableGenes("all");
-                          }
-                        }}
-                        aria-label="Gene filter"
-                        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="whitespace-nowrap text-sm font-semibold text-slate-950">
-                        Max edges per target
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={maxEdgesPerTarget}
-                        onChange={(e) => {
-                          const nextValue = e.target.value;
-                          if (nextValue === "") {
-                            setMaxEdgesPerTarget("");
-                            return;
-                          }
-                          const parsedValue = Number(nextValue);
-                          if (
-                            Number.isNaN(parsedValue) ||
-                            !Number.isInteger(parsedValue) ||
-                            parsedValue < 1
-                          ) {
-                            return;
-                          }
-                          if (parsedValue > maxEdgesLimit) {
-                            setMaxEdgesPerTarget(String(maxEdgesLimit));
-                            return;
-                          }
-                          setMaxEdgesPerTarget(nextValue);
-                        }}
-                        onBlur={() => {
-                          const trimmed = maxEdgesPerTarget.trim();
-                          const parsed = Number(trimmed);
-                          if (!trimmed || Number.isNaN(parsed) || parsed < 1) {
-                            setMaxEdgesPerTarget(String(Math.min(20, maxEdgesLimit)));
-                          }
-                        }}
-                        aria-label="Max edges per target"
-                        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid items-center gap-6 border-t border-slate-100 pt-5 sm:grid-cols-3">
-                    <PreprocessingToggle
-                      label="Known TFs"
-                      enabled={includeAllTFs}
-                      onToggle={() => setIncludeAllTFs(!includeAllTFs)}
-                    />
-                    <PreprocessingToggle
-                      label="Normalization"
-                      enabled={normalizeEnabled}
-                      onToggle={() => setNormalizeEnabled(!normalizeEnabled)}
-                    />
-                    <PreprocessingToggle
-                      label="Log transform"
-                      enabled={logTransformEnabled}
-                      onToggle={() => setLogTransformEnabled(!logTransformEnabled)}
-                    />
-                  </div>
-                </div>
-              </div>
+              </AdvancedAccordionSection>
             </div>
           )}
 
@@ -783,85 +881,34 @@ export default function CreateProjectModal({
               </ul>
             </div>
           )}
+        </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="cursor-pointer rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-            >
-              Cancel
-            </button>
+        <div className="-mx-6 -mb-6 mt-5 flex shrink-0 flex-wrap items-center justify-end gap-3 bg-white px-6 py-4 sm:rounded-b-[2rem] lg:-mx-8 lg:-mb-8 lg:px-8">
+          {/* Say why Start is unavailable instead of leaving a dead button. */}
+          {!isSubmitting && missingRequirements.length > 0 ? (
+            <p className="mr-auto text-xs font-medium text-slate-500">
+              Add {missingRequirements.join(", ")} to continue.
+            </p>
+          ) : null}
 
-            <button
-              type="button"
-              onClick={onStartAnalysis}
-              disabled={startDisabled}
-              className="cursor-pointer rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? "Uploading dataset..." : "Start analysis"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onStartAnalysis}
+            disabled={startDisabled}
+            className="cursor-pointer rounded-full bg-[#1b75a6] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? "Uploading dataset..." : "Start analysis"}
+          </button>
         </div>
       </div>
-
-      {isPreprocessingHelpOpen && (
-        <div
-          className={`fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm ${
-            isPreprocessingHelpClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
-          }`}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div
-            className={`w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
-              isPreprocessingHelpClosing ? "animate-modal-panel-out" : "animate-modal-panel"
-            }`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-black">
-                  Preprocessing
-                </p>
-                <h3 className="mt-3 text-xl font-bold text-slate-950">
-                  What these settings mean
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={handlePreprocessingHelpClose}
-                aria-label="Close preprocessing help"
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-4 text-sm leading-6 text-slate-600">
-              <p>
-                These settings control how the uploaded expression matrix is prepared for the selected GRN inference algorithms, and how the resulting network is filtered.
-              </p>
-              <div className="space-y-3">
-                <p>
-                  <span className="font-bold text-slate-950">Gene filter:</span> defaults to the uploaded matrix gene count and applies to every selected algorithm. Enter a smaller number to keep only the most variable genes. A few algorithms (PIDC, SINGE, SCRIBE, SINCERITIES, GRISLI, GRNVBEM) also cap gene counts further inside their own parameters.
-                </p>
-                <p>
-                  <span className="font-bold text-slate-950">Max edges per target:</span> the number of strongest regulators kept for each target gene in the final ranked network. Higher values give a denser network; the maximum adapts to your gene count (up to 100).
-                </p>
-                <p>
-                  <span className="font-bold text-slate-950">Known TFs:</span> keeps known transcription factors even if they are outside the variable-gene cutoff.
-                </p>
-                <p>
-                  <span className="font-bold text-slate-950">Normalization:</span> adjusts expression values to reduce sequencing-depth differences between cells.
-                </p>
-                <p>
-                  <span className="font-bold text-slate-950">Log transform:</span> compresses large expression values after normalization using a log transform.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <CellOracleHelpModal
         topic={cellOracleHelpTopic}
@@ -897,6 +944,78 @@ export default function CreateProjectModal({
   );
 }
 
+function DisclosureChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      className={`h-4 w-4 transition-transform duration-200 ${
+        open ? "rotate-0" : "-rotate-90"
+      }`}
+      aria-hidden="true"
+    >
+      <path
+        d="m6 8 4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function AdvancedAccordionSection({
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  summary: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={`relative border-b border-slate-200 bg-white first:rounded-t-[1.2rem] first:[&>button]:rounded-t-[1.2rem] last:rounded-b-[1.2rem] last:border-b-0 ${
+        open
+          ? "last:[&>div]:rounded-b-[1.2rem]"
+          : "last:[&>button]:rounded-b-[1.2rem]"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex w-full cursor-pointer items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-slate-50/70 ${
+          open
+            ? "sticky top-0 z-20 bg-white/95 backdrop-blur-sm"
+            : "bg-white"
+        }`}
+        aria-expanded={open}
+      >
+        <span className="min-w-0">
+          <span className="block text-base font-bold text-slate-950">{title}</span>
+          <span className="mt-1 block truncate text-[13px] font-medium text-slate-500">
+            {summary}
+          </span>
+        </span>
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl leading-none text-slate-400 transition ${
+            open ? "bg-[#f2f9fc] text-[#1b75a6]" : ""
+          }`}
+          aria-hidden="true"
+        >
+          <DisclosureChevron open={open} />
+        </span>
+      </button>
+      {open ? <div className="border-t border-slate-100 px-5 py-5">{children}</div> : null}
+    </section>
+  );
+}
+
 function OptionalInputsPanel({
   pseudotimeFileName,
   cellOracleConfigLabel,
@@ -915,19 +1034,8 @@ function OptionalInputsPanel({
   onOpenCellOracleSettings: () => void;
 }) {
   return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-950">
-            Optional inputs
-          </h3>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Add these inputs when you want to make more algorithms available.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-3">
+    <div className="-mx-1">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <PseudotimeInputRow
           fileName={pseudotimeFileName}
           estimate={estimatePseudotime}
@@ -936,38 +1044,531 @@ function OptionalInputsPanel({
           onToggleEstimate={onToggleEstimatePseudotime}
         />
 
-        <div className="grid gap-3">
-          <div className="grid gap-3 rounded-[1.25rem] border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div>
-              <h4 className="text-base font-semibold text-slate-900">
-                CellOracle inputs
-              </h4>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                These settings apply only to CellOracle.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {cellOracleConfigLabel ? (
-                <span
-                  className="max-w-56 truncate rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-[#178a62]"
-                  title={cellOracleConfigLabel}
-                >
-                  {cellOracleConfigLabel}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={onOpenCellOracleSettings}
-                aria-haspopup="dialog"
-                className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+        <button
+          type="button"
+          onClick={onOpenCellOracleSettings}
+          aria-haspopup="dialog"
+          className="grid w-full cursor-pointer gap-3 border-t border-slate-200 px-4 py-4 text-left transition hover:bg-slate-50/70 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">
+              CellOracle inputs
+            </span>
+            <span className="mt-1 block text-sm leading-5 text-slate-500">
+              Species and base-GRN settings used only by CellOracle.
+            </span>
+          </span>
+          <span className="flex min-w-0 items-center justify-end gap-2">
+            {cellOracleConfigLabel ? (
+              <span
+                className="max-w-56 truncate text-xs font-semibold text-[#1b75a6]"
+                title={cellOracleConfigLabel}
               >
-                Configure
-              </button>
-            </div>
-          </div>
-        </div>
+                {cellOracleConfigLabel}
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-slate-400">
+                Not configured
+              </span>
+            )}
+            <span className="text-slate-400" aria-hidden="true">
+              <DisclosureChevron open={false} />
+            </span>
+          </span>
+        </button>
       </div>
     </div>
+  );
+}
+
+function GeneSelectionPanel({
+  detectionThreshold,
+  enabledStages,
+  hvgGeneCount,
+  includeAllTFs,
+  geneOrderingSource,
+  geneOrderingFileName,
+  trajectoryPValue,
+  trajectoryBonferroni,
+  includeSignificantTFs,
+  onDetectionThresholdChange,
+  onEnabledStagesChange,
+  onHvgGeneCountChange,
+  onIncludeAllTFsChange,
+  onGeneOrderingSourceChange,
+  onGeneOrderingFileChange,
+  onTrajectoryPValueChange,
+  onTrajectoryBonferroniChange,
+  onIncludeSignificantTFsChange,
+}: {
+  detectionThreshold: string;
+  enabledStages: GeneSelectionStage[];
+  hvgGeneCount: string;
+  includeAllTFs: boolean;
+  geneOrderingSource: "calculate" | "upload";
+  geneOrderingFileName: string;
+  trajectoryPValue: string;
+  trajectoryBonferroni: boolean;
+  includeSignificantTFs: boolean;
+  onDetectionThresholdChange: (value: string) => void;
+  onEnabledStagesChange: (value: GeneSelectionStage[]) => void;
+  onHvgGeneCountChange: (value: string) => void;
+  onIncludeAllTFsChange: (value: boolean) => void;
+  onGeneOrderingSourceChange: (value: "calculate" | "upload") => void;
+  onGeneOrderingFileChange: (file: File | null) => void;
+  onTrajectoryPValueChange: (value: string) => void;
+  onTrajectoryBonferroniChange: (value: boolean) => void;
+  onIncludeSignificantTFsChange: (value: boolean) => void;
+}) {
+  const [expandedStage, setExpandedStage] =
+    useState<GeneSelectionStage | null>(null);
+  const [isFilteringRulesOpen, setIsFilteringRulesOpen] = useState(false);
+  const stageOrder: GeneSelectionStage[] = [
+    "detection",
+    "trajectory",
+    "variance",
+  ];
+
+  const toggleStage = (stage: GeneSelectionStage) => {
+    const isEnabled = enabledStages.includes(stage);
+    const nextStages = isEnabled
+      ? enabledStages.filter((item) => item !== stage)
+      : stageOrder.filter((item) => item === stage || enabledStages.includes(item));
+
+    onEnabledStagesChange(nextStages);
+    setExpandedStage((current) => {
+      if (!isEnabled) return stage;
+      return current === stage ? null : current;
+    });
+  };
+
+  return (
+    <div className="-mx-1">
+      <div className="relative overflow-hidden rounded-xl border border-slate-200">
+        <span
+          aria-hidden="true"
+          className="absolute bottom-12 left-[1.625rem] top-12 w-px bg-slate-200"
+        />
+
+        <GeneSelectionStageRow
+          number={1}
+          title="Detection filtering"
+          description="Remove genes detected in too few cells."
+          summary={`≥${detectionThreshold || "—"}% of cells`}
+          enabled={enabledStages.includes("detection")}
+          expanded={expandedStage === "detection"}
+          onToggleEnabled={() => toggleStage("detection")}
+          onToggleExpanded={() =>
+            setExpandedStage((current) =>
+              current === "detection" ? null : "detection",
+            )
+          }
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">
+                Detection threshold
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Keep genes detected in at least this percentage of cells.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-2">
+              <CompactNumberField
+                value={detectionThreshold}
+                onChange={onDetectionThresholdChange}
+                min={1}
+                max={100}
+                step={1}
+                ariaLabel="Detection threshold percentage"
+              />
+              <span className="text-xs font-medium text-slate-500">
+                % of cells
+              </span>
+            </span>
+          </div>
+        </GeneSelectionStageRow>
+
+        <GeneSelectionStageRow
+          number={2}
+          title="Trajectory-aware filtering"
+          description="Keep genes associated with progression along pseudotime."
+          summary={`p ≤ ${trajectoryPValue || "—"}${trajectoryBonferroni ? " · corrected" : ""}`}
+          enabled={enabledStages.includes("trajectory")}
+          expanded={expandedStage === "trajectory"}
+          onToggleEnabled={() => toggleStage("trajectory")}
+          onToggleExpanded={() =>
+            setExpandedStage((current) =>
+              current === "trajectory" ? null : "trajectory",
+            )
+          }
+        >
+          <div role="radiogroup" aria-labelledby="gene-ordering-source-label">
+            <p
+              id="gene-ordering-source-label"
+              className="text-sm font-semibold text-slate-800"
+            >
+              Gene ordering source
+            </p>
+            <div className="mt-3 flex flex-wrap items-start gap-x-7 gap-y-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="radio"
+                  name="gene-ordering-source"
+                  value="upload"
+                  checked={geneOrderingSource === "upload"}
+                  onChange={() => onGeneOrderingSourceChange("upload")}
+                  className="h-4 w-4 accent-[#1b75a6]"
+                />
+                Upload CSV
+              </label>
+              <label className="flex max-w-md cursor-pointer items-start gap-2 text-slate-700">
+                <input
+                  type="radio"
+                  name="gene-ordering-source"
+                  value="calculate"
+                  checked={geneOrderingSource === "calculate"}
+                  onChange={() => {
+                    if (geneOrderingFileName) {
+                      onGeneOrderingFileChange(null);
+                    }
+                    onGeneOrderingSourceChange("calculate");
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#1b75a6]"
+                />
+                <span>
+                  <span className="block text-sm font-medium">
+                    Calculate for me
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    No GeneOrdering CSV? We&apos;ll generate it from uploaded
+                    pseudotime, or estimate pseudotime with Slingshot first.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {geneOrderingSource === "upload" ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
+              <span
+                className={`min-w-0 truncate text-xs font-medium ${
+                  geneOrderingFileName ? "text-[#178a62]" : "text-slate-400"
+                }`}
+                title={geneOrderingFileName || "No GeneOrdering CSV selected"}
+              >
+                {geneOrderingFileName
+                  ? formatFileNameForDisplay(geneOrderingFileName, 36)
+                  : "No CSV selected"}
+              </span>
+              <span className="flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
+                  {geneOrderingFileName ? "Replace" : "Upload"}
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(event) => {
+                      onGeneOrderingSourceChange("upload");
+                      onGeneOrderingFileChange(event.target.files?.[0] ?? null);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                {geneOrderingFileName ? (
+                  <button
+                    type="button"
+                    onClick={() => onGeneOrderingFileChange(null)}
+                    className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </span>
+            </div>
+          ) : null}
+
+          <div className="mt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsFilteringRulesOpen((current) => !current)}
+              aria-expanded={isFilteringRulesOpen}
+              aria-controls="trajectory-filtering-rules"
+              className="grid w-full cursor-pointer gap-2 py-3 text-left sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center"
+            >
+              <span className="text-sm font-semibold text-slate-800">
+                Filtering rules
+              </span>
+              <span className="flex min-w-0 items-center justify-between gap-3">
+                <span className="truncate text-xs font-semibold text-slate-500">
+                  p ≤ {trajectoryPValue || "—"}
+                  {trajectoryBonferroni ? " · Bonferroni" : ""}
+                  {includeSignificantTFs ? " · TFs retained" : ""}
+                </span>
+                <span
+                  className="shrink-0 text-slate-400"
+                  aria-hidden="true"
+                >
+                  <DisclosureChevron open={isFilteringRulesOpen} />
+                </span>
+              </span>
+            </button>
+
+            {isFilteringRulesOpen ? (
+              <div
+                id="trajectory-filtering-rules"
+                className="ml-2 space-y-4 border-l-2 border-[#1b75a6]/15 bg-white/45 py-4 pl-5 pr-2"
+              >
+                <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
+                  <span className="text-xs font-semibold text-slate-600">
+                    Significance threshold
+                  </span>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
+                      <span aria-hidden="true">p ≤</span>
+                      <CompactNumberField
+                        value={trajectoryPValue}
+                        onChange={onTrajectoryPValueChange}
+                        min={0}
+                        max={1}
+                        step={0.001}
+                        ariaLabel="P-value threshold"
+                      />
+                    </span>
+                    <PreprocessingToggle
+                      label="Apply Bonferroni correction"
+                      enabled={trajectoryBonferroni}
+                      compact
+                      onToggle={() =>
+                        onTrajectoryBonferroniChange(!trajectoryBonferroni)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
+                  <span className="text-xs font-semibold text-slate-600">
+                    TF retention
+                  </span>
+                  <PreprocessingToggle
+                    label="Retain significant TFs"
+                    enabled={includeSignificantTFs}
+                    compact
+                    onToggle={() =>
+                      onIncludeSignificantTFsChange(!includeSignificantTFs)
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </GeneSelectionStageRow>
+
+        <GeneSelectionStageRow
+          number={3}
+          title="Variable-gene selection"
+          description="Rank the remaining genes by variance and keep the top set."
+          summary={`Top ${hvgGeneCount || "—"}${includeAllTFs ? " · TFs included" : ""}`}
+          enabled={enabledStages.includes("variance")}
+          expanded={expandedStage === "variance"}
+          last
+          onToggleEnabled={() => toggleStage("variance")}
+          onToggleExpanded={() =>
+            setExpandedStage((current) =>
+              current === "variance" ? null : "variance",
+            )
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
+              <span className="text-sm font-semibold text-slate-800">
+                Genes to retain
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <CompactNumberField
+                  value={hvgGeneCount}
+                  onChange={onHvgGeneCountChange}
+                  min={1}
+                  step={1}
+                  ariaLabel="Genes to retain"
+                />
+                <span className="text-xs font-medium text-slate-500">
+                  genes
+                </span>
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
+              <span className="text-sm font-semibold text-slate-800">
+                TF retention
+              </span>
+              <PreprocessingToggle
+                label="Retain known TFs"
+                enabled={includeAllTFs}
+                onToggle={() => onIncludeAllTFsChange(!includeAllTFs)}
+              />
+            </div>
+          </div>
+        </GeneSelectionStageRow>
+      </div>
+    </div>
+  );
+}
+
+function GeneSelectionStageRow({
+  number,
+  title,
+  description,
+  summary,
+  enabled,
+  expanded,
+  last = false,
+  onToggleEnabled,
+  onToggleExpanded,
+  children,
+}: {
+  number: number;
+  title: string;
+  description: string;
+  summary: string;
+  enabled: boolean;
+  expanded: boolean;
+  last?: boolean;
+  onToggleEnabled: () => void;
+  onToggleExpanded: () => void;
+  children: ReactNode;
+}) {
+  const panelId = `gene-selection-stage-${number}`;
+
+  return (
+    <section
+      className={`${last ? "" : "border-b border-slate-200"} relative bg-white`}
+    >
+      <div className="relative z-10 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-4">
+        <label className="relative flex cursor-pointer items-center">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={onToggleEnabled}
+            className="peer sr-only"
+            aria-label={`Enable ${title}`}
+          />
+          <span
+            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition peer-focus-visible:ring-4 peer-focus-visible:ring-[#1b75a6]/15 ${
+              enabled
+                ? "border-[#1b75a6] bg-[#1b75a6]"
+                : "border-slate-300 bg-white"
+            }`}
+            aria-hidden="true"
+          >
+            {enabled ? (
+              <svg
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+                className="h-3.5 w-3.5"
+              >
+                <path
+                  d="M3.4 8.1 6.5 11.2 12.8 4.8"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ) : null}
+          </span>
+        </label>
+
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="min-w-0 cursor-pointer text-left"
+        >
+          <span className="block text-sm font-semibold text-slate-900">
+            {title}
+          </span>
+          <span className="mt-1 block text-xs leading-5 text-slate-500">
+            {description}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-right transition hover:bg-slate-50"
+        >
+          <span
+            className={`hidden text-xs font-semibold sm:block ${
+              enabled ? "text-[#1b75a6]" : "text-slate-400"
+            }`}
+          >
+            {enabled ? summary : "Off"}
+          </span>
+          <span
+            className="text-slate-400"
+            aria-hidden="true"
+          >
+            <DisclosureChevron open={expanded} />
+          </span>
+        </button>
+      </div>
+
+      {expanded ? (
+        <div
+          id={panelId}
+          className="relative z-10 border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]"
+        >
+          <fieldset
+            disabled={!enabled}
+            className={
+              enabled
+                ? ""
+                : "pointer-events-none opacity-45 grayscale-[20%]"
+            }
+          >
+            {children}
+          </fieldset>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function CompactNumberField({
+  value,
+  onChange,
+  onBlur,
+  min,
+  max,
+  step = 1,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  ariaLabel: string;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      aria-label={ariaLabel}
+      onChange={(event) => onChange(event.target.value)}
+      onBlur={onBlur}
+      className="w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-900 outline-none transition [appearance:textfield] focus:border-[#1b75a6]/50 focus:ring-4 focus:ring-[#1b75a6]/10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    />
   );
 }
 
@@ -1084,7 +1685,7 @@ function CellOracleSettingsModal({
             {isBuiltInGrn ? (
               <label className="mt-4 block">
                 <span className="text-sm font-semibold text-slate-800">
-                  Species
+                  CellOracle species
                 </span>
                 <span className={SELECT_CONTROL_CLASS}>
                   <select
@@ -1199,85 +1800,137 @@ function PseudotimeInputRow({
   onClear: () => void;
   onToggleEstimate: (value: boolean) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [source, setSource] = useState<"upload" | "estimate" | null>(() =>
+    fileName ? "upload" : estimate ? "estimate" : null,
+  );
   const compactFileName = formatFileNameForDisplay(fileName, 28);
-  const uploadLabel = fileName ? "Replace" : estimate ? "Upload instead" : "Upload";
+  const summary = fileName
+    ? compactFileName
+    : estimate
+      ? "Estimate with Slingshot"
+      : "Not provided";
 
   return (
-    <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div>
-          <h4 className="text-base font-semibold text-slate-900">Pseudotime CSV</h4>
-          <p className="mt-1 text-sm leading-5 text-slate-600">Used by trajectory-aware methods.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {fileName ? (
-            <span
-              className="max-w-56 truncate rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-[#178a62]"
-              title={fileName}
-            >
-              {compactFileName}
-            </span>
-          ) : null}
-          <label className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
-            {uploadLabel}
-            <input
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                onSelect(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
-          {fileName ? (
-            <button
-              type="button"
-              onClick={onClear}
-              className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {!fileName ? (
-        <div
-          className={`mt-3 flex items-center justify-between gap-4 rounded-xl border px-3.5 py-2.5 transition ${
-            estimate
-              ? "border-[#1b75a6]/30 bg-[#f2f9fc]"
-              : "border-slate-100 bg-slate-50/60"
-          }`}
-        >
-          <div className="min-w-0 max-w-md">
-            <p className="text-[13px] font-medium text-slate-700">Estimate it for me</p>
-            <p className="mt-0.5 text-xs leading-5 text-slate-500">
-              {estimate
-                ? "Trajectory methods unlocked — estimation runs first (approximate)."
-                : "We'll estimate a trajectory so the ordered methods can run."}
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={estimate}
-            aria-label="Estimate pseudotime"
-            onClick={() => onToggleEstimate(!estimate)}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
-              estimate ? "bg-[#1b75a6]" : "bg-slate-300"
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="grid w-full cursor-pointer gap-3 px-4 py-4 text-left transition hover:bg-slate-50/70 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        aria-expanded={open}
+      >
+        <span>
+          <span className="block text-sm font-semibold text-slate-900">
+            Pseudotime
+          </span>
+          <span className="mt-1 block text-sm leading-5 text-slate-500">
+            Used by trajectory-aware methods.
+          </span>
+        </span>
+        <span className="flex min-w-0 items-center justify-end gap-2">
+          <span
+            className={`max-w-56 truncate text-xs font-semibold ${
+              fileName || estimate ? "text-[#1b75a6]" : "text-slate-400"
             }`}
+            title={fileName || summary}
           >
-            <span
-              className={`h-5 w-5 rounded-full bg-white shadow-sm transition ${
-                estimate ? "translate-x-[1.35rem]" : "translate-x-0.5"
-              }`}
-            />
-          </button>
+            {summary}
+          </span>
+          <span
+            className={`text-slate-400 transition ${
+              open ? "text-[#1b75a6]" : ""
+            }`}
+            aria-hidden="true"
+          >
+            <DisclosureChevron open={open} />
+          </span>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]">
+          <p className="text-sm font-semibold text-slate-800">
+            Pseudotime source
+          </p>
+          <div className="mt-3 flex flex-wrap items-start gap-x-7 gap-y-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="radio"
+                name="pseudotime-source"
+                checked={source === "upload"}
+                onChange={() => {
+                  setSource("upload");
+                  onToggleEstimate(false);
+                }}
+                className="h-4 w-4 accent-[#1b75a6]"
+              />
+              Upload CSV
+            </label>
+            <label className="flex max-w-md cursor-pointer items-start gap-2 text-slate-700">
+              <input
+                type="radio"
+                name="pseudotime-source"
+                checked={source === "estimate"}
+                onChange={() => {
+                  setSource("estimate");
+                  if (fileName) onClear();
+                  onToggleEstimate(true);
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#1b75a6]"
+              />
+              <span>
+                <span className="block text-sm font-medium">
+                  Estimate with Slingshot
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  No pseudotime? Slingshot will calculate it when this analysis
+                  starts.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {source === "upload" ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
+              <span
+                className={`min-w-0 truncate text-xs font-medium ${
+                  fileName ? "text-[#178a62]" : "text-slate-400"
+                }`}
+                title={fileName || "No pseudotime CSV selected"}
+              >
+                {fileName ? compactFileName : "No CSV selected"}
+              </span>
+              <span className="flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
+                  {fileName ? "Replace" : "Upload"}
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setSource("upload");
+                      onToggleEstimate(false);
+                      onSelect(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                {fileName ? (
+                  <button
+                    type="button"
+                    onClick={onClear}
+                    className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 
@@ -1384,117 +2037,16 @@ AAACGGGTCCTA,erythroid`}</pre>
   );
 }
 
-function AdditionalInputCard({
-  title,
-  badge,
-  fileName,
-  placeholder,
-  helperText,
-  minHeightClassName = "min-h-28",
-  compact = false,
-  stretchDropZone = false,
-  onDrop,
-  onSelect,
-  onClear,
-}: {
-  title: string;
-  badge?: string;
-  fileName: string;
-  placeholder: string;
-  helperText: string;
-  minHeightClassName?: string;
-  compact?: boolean;
-  stretchDropZone?: boolean;
-  onDrop: (event: DragEvent<HTMLLabelElement>) => void;
-  onSelect: (file: File | null) => void;
-  onClear: () => void;
-}) {
-  const dropZone = (
-    <label
-      className={`relative flex ${minHeightClassName} ${
-        stretchDropZone ? "h-full flex-1" : ""
-      } cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-4 py-4 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]`}
-      onDragEnter={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-      onDrop={onDrop}
-    >
-      <input
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] ?? null;
-          onSelect(file);
-        }}
-      />
-      <FileNameDisplay fileName={fileName} placeholder={placeholder} />
-      <span className="mt-1 text-xs text-slate-500">
-        {fileName ? "Click to replace" : helperText}
-      </span>
-    </label>
-  );
-
-  if (compact) {
-    return (
-      <div className="space-y-2">
-        {dropZone}
-        {fileName ? (
-          <button
-            type="button"
-            onClick={onClear}
-            className="text-xs font-semibold text-slate-500 transition hover:text-rose-600"
-          >
-            Remove file
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm ${
-        stretchDropZone ? "flex h-full flex-col" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
-        {badge ? (
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-            {badge}
-          </span>
-        ) : null}
-      </div>
-      <div className={stretchDropZone ? "mt-4 flex flex-1" : "mt-4"}>
-        {dropZone}
-      </div>
-      {fileName ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="mt-3 text-xs font-semibold text-slate-500 transition hover:text-rose-600"
-        >
-          Remove file
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 function PreprocessingToggle({
   label,
   enabled,
   onToggle,
+  compact = false,
 }: {
   label: string;
   enabled: boolean;
   onToggle: () => void;
+  compact?: boolean;
 }) {
   return (
     <button
@@ -1527,7 +2079,15 @@ function PreprocessingToggle({
           </svg>
         )}
       </span>
-      <span className="text-sm font-bold text-slate-950">{label}</span>
+      <span
+        className={
+          compact
+            ? "text-xs font-semibold text-slate-700"
+            : "text-sm font-bold text-slate-950"
+        }
+      >
+        {label}
+      </span>
     </button>
   );
 }

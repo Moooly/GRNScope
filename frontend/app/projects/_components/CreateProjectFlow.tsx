@@ -35,7 +35,7 @@ type BackendAlgorithmEntry = {
   parameters: AlgorithmParameter[];
 };
 
-const DEFAULT_TOP_VARIABLE_GENES = "";
+const DEFAULT_TOP_VARIABLE_GENES = "all";
 const ALL_GENES_VALUE = "all";
 const MAX_PREPROCESSED_GENES = 8000;
 const RANKED_EDGES_HARD_MAX = 100;
@@ -47,88 +47,6 @@ const SINGE_DEFAULT_MAX_GENES = 500;
 const GRISLI_DEFAULT_MAX_GENES = 500;
 const GRNVBEM_DEFAULT_MAX_GENES = 500;
 const CELLORACLE_INTERNAL_BASE_GRN = "auto";
-
-function formatTopVariableGenes(value: string) {
-  const normalizedValue = value.trim().toLowerCase();
-  if (normalizedValue === ALL_GENES_VALUE) return "All genes retained";
-  return value || "Gene count pending";
-}
-
-function inferGeneCountFromFileName(fileName: string) {
-  const match = fileName.match(/(?:^|[_\-\s])(?:top)?(\d+)[_\-\s]*genes?(?:[_\-\s.]|$)/i);
-  if (!match) return null;
-
-  const value = Number(match[1]);
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
-
-function countCsvColumns(line: string) {
-  let columns = 1;
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    const nextCharacter = line[index + 1];
-
-    if (character === "\"") {
-      if (inQuotes && nextCharacter === "\"") {
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (character === "," && !inQuotes) {
-      columns += 1;
-    }
-  }
-
-  return columns;
-}
-
-async function readExpressionMatrixDimensions(file: File) {
-  const reader = file.stream().getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let headerLine: string | null = null;
-  let nonEmptyLineCount = 0;
-
-  const processLine = (rawLine: string) => {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    if (line.trim() === "") return;
-    nonEmptyLineCount += 1;
-    headerLine ??= line;
-  };
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      let lineEnd = buffer.indexOf("\n");
-      while (lineEnd !== -1) {
-        processLine(buffer.slice(0, lineEnd));
-        buffer = buffer.slice(lineEnd + 1);
-        lineEnd = buffer.indexOf("\n");
-      }
-    }
-
-    buffer += decoder.decode();
-    if (buffer.length > 0) {
-      processLine(buffer);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  if (!headerLine) {
-    throw new Error("Expression matrix is empty.");
-  }
-
-  return {
-    geneCount: Math.max(0, nonEmptyLineCount - 1),
-    cellCount: Math.max(0, countCsvColumns(headerLine) - 1),
-  };
-}
 
 type CreateProjectResponsePayload = {
   ok?: boolean;
@@ -194,6 +112,8 @@ interface CreateProjectFlowProps {
 
 export type CreateProjectPrefill = {
   projectName?: string;
+  // Retained for compatibility with existing rerun prefills; the creation UI
+  // intentionally no longer exposes a description field.
   projectDescription?: string;
   topVariableGenes?: string;
   includeAllTFs?: boolean;
@@ -226,8 +146,6 @@ export default function CreateProjectFlow({
   const [isClosing, setIsClosing] = useState(false);
 
   const [projectName, setProjectName] = useState("");
-  const [projectDescription, setProjectDescription] = useState("");
-
   const [expressionFile, setExpressionFile] = useState<File | null>(null);
   const [pseudotimeFile, setPseudotimeFile] = useState<File | null>(null);
   const [estimatePseudotime, setEstimatePseudotime] = useState(false);
@@ -236,16 +154,34 @@ export default function CreateProjectFlow({
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
   const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
 
-  const [geneCount, setGeneCount] = useState<number | null>(null);
-  const [cellCount, setCellCount] = useState<number | null>(null);
+  // Matrix contents are intentionally not parsed in the creation modal.
+  // Validation and dimension discovery happen after navigation on the detail page.
+  const geneCount: number | null = null;
+  const cellCount: number | null = null;
 
   const [topVariableGenes, setTopVariableGenes] = useState(DEFAULT_TOP_VARIABLE_GENES);
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
-  const [normalizeEnabled, setNormalizeEnabled] = useState(true);
-  const [logTransformEnabled, setLogTransformEnabled] = useState(true);
+  const [matrixState, setMatrixState] = useState("");
+  const [datasetSpecies, setDatasetSpecies] = useState("");
+  const [detectionThreshold, setDetectionThreshold] = useState("10");
+  const [geneSelectionMethod, setGeneSelectionMethod] = useState<
+    "none" | "hvg" | "trajectory"
+  >("none");
+  const [hvgGeneCount, setHvgGeneCount] = useState("500");
+  const [geneOrderingSource, setGeneOrderingSource] = useState<"calculate" | "upload">(
+    "calculate",
+  );
+  const [geneOrderingFile, setGeneOrderingFile] = useState<File | null>(null);
+  const [geneOrderingFileName, setGeneOrderingFileName] = useState("");
+  const [trajectoryPValue, setTrajectoryPValue] = useState("0.01");
+  const [trajectoryBonferroni, setTrajectoryBonferroni] = useState(true);
+  const [trajectoryGeneCount, setTrajectoryGeneCount] = useState("500");
+  const [includeSignificantTFs, setIncludeSignificantTFs] = useState(true);
   const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
+  const normalizeEnabled = matrixState === "raw";
+  const logTransformEnabled = matrixState === "raw" || matrixState === "normalized";
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasUserAdjustedAlgorithms, setHasUserAdjustedAlgorithms] = useState(false);
@@ -272,7 +208,6 @@ export default function CreateProjectFlow({
     setIsClosing(false);
     setErrors([]);
     setProjectName(initialValues?.projectName ?? "");
-    setProjectDescription(initialValues?.projectDescription ?? "");
     setExpressionFile(null);
     setPseudotimeFile(null);
     setEstimatePseudotime(false);
@@ -280,12 +215,20 @@ export default function CreateProjectFlow({
     setExpressionFileName("");
     setPseudotimeFileName("");
     setClusterLabelsFileName("");
-    setGeneCount(null);
-    setCellCount(null);
     setTopVariableGenes(initialValues?.topVariableGenes ?? DEFAULT_TOP_VARIABLE_GENES);
     setIncludeAllTFs(initialValues?.includeAllTFs ?? true);
-    setNormalizeEnabled(initialValues?.normalizeEnabled ?? true);
-    setLogTransformEnabled(initialValues?.logTransformEnabled ?? true);
+    setMatrixState("");
+    setDatasetSpecies("");
+    setDetectionThreshold("10");
+    setGeneSelectionMethod("none");
+    setHvgGeneCount("500");
+    setGeneOrderingSource("calculate");
+    setGeneOrderingFile(null);
+    setGeneOrderingFileName("");
+    setTrajectoryPValue("0.01");
+    setTrajectoryBonferroni(true);
+    setTrajectoryGeneCount("500");
+    setIncludeSignificantTFs(true);
     setMaxEdgesPerTarget(initialValues?.maxEdgesPerTarget ?? DEFAULT_MAX_EDGES_PER_TARGET);
     setCellOracleSpecies(initialValues?.cellOracleSpecies ?? "human");
     setHasCellOracleSettingsConfigured(
@@ -421,10 +364,7 @@ export default function CreateProjectFlow({
 
   const datasetSummary = useMemo(
     () => ({
-      dimensions:
-        geneCount !== null && cellCount !== null
-          ? `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`
-          : "Matrix size pending upload validation",
+      dimensions: "Matrix validation runs after project creation",
       // Trajectory methods are available when the user has (or will have via
       // estimation) a pseudotime.
       hasPseudotime: Boolean(pseudotimeFile) || estimatePseudotime,
@@ -432,22 +372,22 @@ export default function CreateProjectFlow({
       hasCellOracleSettingsConfigured,
       hasGroundTruth: false,
       preprocessingSummary: [
-        `Gene filter: ${formatTopVariableGenes(topVariableGenes)}`,
+        `Matrix values: ${matrixState || "not selected"}`,
+        `Dataset species: ${datasetSpecies || "not selected"}`,
+        `Detection threshold: ${detectionThreshold}%`,
+        `Additional selection: ${geneSelectionMethod}`,
         `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
-        `Library-size normalization: ${normalizeEnabled ? "enabled" : "disabled"}`,
-        `log₂(x + 1) transformation: ${logTransformEnabled ? "enabled" : "disabled"}`,
       ],
     }),
     [
-      geneCount,
-      cellCount,
       pseudotimeFile,
       estimatePseudotime,
       clusterLabelsFile,
-      topVariableGenes,
+      matrixState,
+      datasetSpecies,
+      detectionThreshold,
+      geneSelectionMethod,
       includeAllTFs,
-      normalizeEnabled,
-      logTransformEnabled,
       hasCellOracleSettingsConfigured,
     ],
   );
@@ -479,7 +419,15 @@ export default function CreateProjectFlow({
   // Auto-fill project name from the uploaded filename, but only when the user
   // hasn't typed something custom.
   useEffect(() => {
-    if (!expressionFileName) return;
+    if (!expressionFileName) {
+      setProjectName((current) => {
+        const wasAutoFilled =
+          current.trim() !== "" && current.trim() === lastAutoProjectNameRef.current;
+        lastAutoProjectNameRef.current = "";
+        return wasAutoFilled ? "" : current;
+      });
+      return;
+    }
     const baseName = expressionFileName.replace(/\.csv$/i, "").trim();
     if (!baseName) return;
 
@@ -492,47 +440,6 @@ export default function CreateProjectFlow({
       return baseName;
     });
   }, [expressionFileName]);
-
-  // Selecting files should stay local and instant. Server work starts only after
-  // the user clicks Start analysis.
-  useEffect(() => {
-    if (!expressionFile) {
-      setGeneCount(null);
-      setCellCount(null);
-      setTopVariableGenes(initialValues?.topVariableGenes ?? DEFAULT_TOP_VARIABLE_GENES);
-      return;
-    }
-
-    let isCancelled = false;
-    const inferredGeneCount = inferGeneCountFromFileName(expressionFile.name);
-    setGeneCount(null);
-    setCellCount(null);
-    setTopVariableGenes(inferredGeneCount ? String(inferredGeneCount) : DEFAULT_TOP_VARIABLE_GENES);
-
-    const readDimensions = async () => {
-      try {
-        const dimensions = await readExpressionMatrixDimensions(expressionFile);
-        if (isCancelled) return;
-        setGeneCount(dimensions.geneCount);
-        setCellCount(dimensions.cellCount);
-        if (dimensions.geneCount > 0) {
-          setTopVariableGenes(String(dimensions.geneCount));
-        }
-      } catch (error) {
-        if (isCancelled) return;
-        setGeneCount(null);
-        setCellCount(null);
-        setTopVariableGenes(DEFAULT_TOP_VARIABLE_GENES);
-        console.error("Could not read expression matrix dimensions:", error);
-      }
-    };
-
-    void readDimensions();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [expressionFile, initialValues?.topVariableGenes]);
 
   // Auto-select all compatible algorithms by default. Stops syncing once the
   // user manually toggles anything in the algorithm grid.
@@ -609,11 +516,27 @@ export default function CreateProjectFlow({
   const createPendingProject = async (safeSelectedIds: string[]) => {
     const formData = new FormData();
     formData.append("project_name", projectName);
-    formData.append("project_description", projectDescription);
-    formData.append("top_variable_genes", topVariableGenes);
+    const legacyGeneLimit =
+      geneSelectionMethod === "hvg"
+        ? hvgGeneCount
+        : geneSelectionMethod === "trajectory"
+          ? trajectoryGeneCount
+          : "all";
+    formData.append("top_variable_genes", legacyGeneLimit);
     formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
     formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
     formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
+    formData.append("matrix_state", matrixState);
+    formData.append("dataset_species", datasetSpecies);
+    formData.append("detection_threshold_percent", detectionThreshold);
+    formData.append("gene_selection_method", geneSelectionMethod);
+    formData.append("hvg_gene_count", hvgGeneCount);
+    formData.append("gene_ordering_source", geneOrderingSource);
+    formData.append("gene_ordering_filename", geneOrderingFileName);
+    formData.append("trajectory_p_value", trajectoryPValue);
+    formData.append("trajectory_bonferroni", JSON.stringify(trajectoryBonferroni));
+    formData.append("trajectory_gene_count", trajectoryGeneCount);
+    formData.append("include_significant_tfs", JSON.stringify(includeSignificantTFs));
     formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
     // Only submit overrides for algorithms that are actually selected.
@@ -695,6 +618,12 @@ export default function CreateProjectFlow({
         validationErrors.push("Expression matrix file size must be 500 MB or smaller.");
       }
     }
+    if (!matrixState) {
+      validationErrors.push("Select the current state of the matrix values.");
+    }
+    if (!datasetSpecies) {
+      validationErrors.push("Select the species represented by the matrix.");
+    }
     if (pseudotimeFile) {
       if (!pseudotimeFile.name.toLowerCase().endsWith(".csv")) {
         validationErrors.push("Pseudotime file must be a CSV file.");
@@ -712,24 +641,32 @@ export default function CreateProjectFlow({
       }
     }
 
-    const trimmedTopGenes = topVariableGenes.trim();
-    const useAllGenes = trimmedTopGenes.toLowerCase() === ALL_GENES_VALUE;
-    const parsedTopGenes = Number(trimmedTopGenes);
+    const parsedDetectionThreshold = Number(detectionThreshold);
     if (
-      !useAllGenes &&
-      (
-        !trimmedTopGenes ||
-        !Number.isInteger(parsedTopGenes) ||
-        parsedTopGenes <= 0
-      )
+      !Number.isFinite(parsedDetectionThreshold) ||
+      parsedDetectionThreshold <= 0 ||
+      parsedDetectionThreshold > 100
     ) {
-      validationErrors.push("Gene filter must be \"all\" or a positive integer.");
-    } else if (!useAllGenes && geneCount !== null && parsedTopGenes > geneCount) {
-      validationErrors.push("Gene filter cannot be larger than the uploaded gene count.");
-    } else if (!useAllGenes && parsedTopGenes > MAX_PREPROCESSED_GENES) {
-      validationErrors.push(
-        `Gene filter cannot be larger than ${MAX_PREPROCESSED_GENES.toLocaleString()} when using a numeric cutoff.`,
-      );
+      validationErrors.push("Detection threshold must be between 1 and 100 percent.");
+    }
+    if (geneSelectionMethod === "hvg") {
+      const parsedHvgGenes = Number(hvgGeneCount);
+      if (!Number.isInteger(parsedHvgGenes) || parsedHvgGenes <= 0) {
+        validationErrors.push("Highly variable gene count must be a positive integer.");
+      }
+    }
+    if (geneSelectionMethod === "trajectory") {
+      if (geneOrderingSource === "upload" && !geneOrderingFile) {
+        validationErrors.push("Upload a GeneOrdering CSV or choose Calculate for me.");
+      }
+      const parsedPValue = Number(trajectoryPValue);
+      if (!Number.isFinite(parsedPValue) || parsedPValue <= 0 || parsedPValue > 1) {
+        validationErrors.push("Trajectory p-value threshold must be greater than 0 and at most 1.");
+      }
+      const parsedTrajectoryGenes = Number(trajectoryGeneCount);
+      if (!Number.isInteger(parsedTrajectoryGenes) || parsedTrajectoryGenes <= 0) {
+        validationErrors.push("Trajectory gene count must be a positive integer.");
+      }
     }
 
     const trimmedMaxEdges = maxEdgesPerTarget.trim();
@@ -779,8 +716,7 @@ export default function CreateProjectFlow({
       const createdProject: Project = {
         id: data.project_id,
         name: projectName,
-        description:
-          projectDescription || "Single-cell RNA-seq dataset for GRN inference.",
+        description: "Single-cell RNA-seq dataset for GRN inference.",
         createdAt: now
           .toLocaleString("en-CA", {
             year: "numeric",
@@ -834,16 +770,21 @@ export default function CreateProjectFlow({
       isCreateVisible={open}
       isCreateClosing={isClosing}
       projectName={projectName}
-      projectDescription={projectDescription}
       expressionFileName={expressionFileName}
       pseudotimeFileName={pseudotimeFileName}
       clusterLabelsFileName={clusterLabelsFileName}
-      geneCount={geneCount}
-      cellCount={cellCount}
-      topVariableGenes={topVariableGenes}
+      matrixState={matrixState}
+      datasetSpecies={datasetSpecies}
+      detectionThreshold={detectionThreshold}
+      geneSelectionMethod={geneSelectionMethod}
+      hvgGeneCount={hvgGeneCount}
+      geneOrderingSource={geneOrderingSource}
+      geneOrderingFileName={geneOrderingFileName}
+      trajectoryPValue={trajectoryPValue}
+      trajectoryBonferroni={trajectoryBonferroni}
+      trajectoryGeneCount={trajectoryGeneCount}
+      includeSignificantTFs={includeSignificantTFs}
       includeAllTFs={includeAllTFs}
-      normalizeEnabled={normalizeEnabled}
-      logTransformEnabled={logTransformEnabled}
       maxEdgesPerTarget={maxEdgesPerTarget}
       maxEdgesLimit={maxEdgesLimit}
       pidcDefaultMaxGenes={pidcDefaultMaxGenes}
@@ -870,7 +811,18 @@ export default function CreateProjectFlow({
       onSelectAll={handleSelectAll}
       onToggleAlgorithm={toggleAlgorithm}
       setProjectName={setProjectName}
-      setProjectDescription={setProjectDescription}
+      setMatrixState={setMatrixState}
+      setDatasetSpecies={setDatasetSpecies}
+      setDetectionThreshold={setDetectionThreshold}
+      setGeneSelectionMethod={setGeneSelectionMethod}
+      setHvgGeneCount={setHvgGeneCount}
+      setGeneOrderingSource={setGeneOrderingSource}
+      setGeneOrderingFile={setGeneOrderingFile}
+      setGeneOrderingFileName={setGeneOrderingFileName}
+      setTrajectoryPValue={setTrajectoryPValue}
+      setTrajectoryBonferroni={setTrajectoryBonferroni}
+      setTrajectoryGeneCount={setTrajectoryGeneCount}
+      setIncludeSignificantTFs={setIncludeSignificantTFs}
       estimatePseudotime={estimatePseudotime}
       onToggleEstimatePseudotime={handleToggleEstimatePseudotime}
       setExpressionFile={setExpressionFile}
@@ -879,10 +831,7 @@ export default function CreateProjectFlow({
       setPseudotimeFileName={setPseudotimeFileName}
       setClusterLabelsFile={setClusterLabelsFile}
       setClusterLabelsFileName={setClusterLabelsFileName}
-      setTopVariableGenes={setTopVariableGenes}
       setIncludeAllTFs={setIncludeAllTFs}
-      setNormalizeEnabled={setNormalizeEnabled}
-      setLogTransformEnabled={setLogTransformEnabled}
       setMaxEdgesPerTarget={setMaxEdgesPerTarget}
       setCellOracleSpecies={setCellOracleSpecies}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}

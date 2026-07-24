@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AlgorithmParameter, ProjectAlgorithm } from "../page";
+import NumericStepper from "./NumericStepper";
 
 interface AlgorithmInlineParametersProps {
   algorithm: ProjectAlgorithm;
@@ -267,6 +268,17 @@ export default function AlgorithmInlineParameters({
     const options = parameter.options ?? [];
     const fieldId = `inline-${algorithm.id}-${parameter.name}`;
     const errorId = `${fieldId}-error`;
+    const numericStep = parameter.step ?? (isIntegerParam(parameter) ? 1 : 0.1);
+    const numericMinimum =
+      parameter.minimum ??
+      (typeof parameter.exclusive_minimum === "number"
+        ? parameter.exclusive_minimum + numericStep
+        : undefined);
+    const numericMaximum =
+      parameter.maximum ??
+      (typeof parameter.exclusive_maximum === "number"
+        ? parameter.exclusive_maximum - numericStep
+        : undefined);
     const controlClass = `box-border h-9 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 outline-none transition focus:ring-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
       error
         ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
@@ -308,14 +320,24 @@ export default function AlgorithmInlineParameters({
               <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
+        ) : isNumberParam(parameter) ? (
+          <NumericStepper
+            value={String(value ?? "")}
+            onChange={(nextValue) => setField(parameter.name, nextValue)}
+            onStep={(nextValue) => setField(parameter.name, nextValue, true)}
+            onBlur={() => commitField(parameter.name)}
+            min={numericMinimum}
+            max={numericMaximum}
+            step={numericStep}
+            ariaLabel={parameter.label ?? parameter.name}
+            className="mt-1.5 w-full"
+            invalid={Boolean(error)}
+          />
         ) : (
           <input
             id={fieldId}
-            type={isNumberParam(parameter) ? "number" : "text"}
+            type="text"
             value={String(value ?? "")}
-            min={isNumberParam(parameter) ? parameter.minimum : undefined}
-            max={isNumberParam(parameter) ? parameter.maximum : undefined}
-            step={isNumberParam(parameter) ? parameter.step : undefined}
             onChange={(event) => setField(parameter.name, event.target.value)}
             onBlur={() => commitField(parameter.name)}
             aria-invalid={Boolean(error)}

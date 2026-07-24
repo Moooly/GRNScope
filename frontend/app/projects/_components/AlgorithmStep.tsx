@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmCard from "./AlgorithmCard";
 import AlgorithmInlineParameters from "./AlgorithmInlineParameters";
@@ -43,6 +43,7 @@ export default function AlgorithmStep({
   getContextualDefaults,
   customizedIds,
 }: AlgorithmStepProps) {
+  const [showUnavailable, setShowUnavailable] = useState(false);
   const getUnavailableReason = (algorithm: ProjectAlgorithm) => {
     if (algorithm.id === "SCSGL" && !datasetSummary.hasGroundTruth) {
       return "Requires a ground-truth network file named GroundTruthNetwork.csv.";
@@ -85,7 +86,7 @@ export default function AlgorithmStep({
     if (unavailableGroupAlgorithms.length === 0) return null;
 
     return (
-      <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/60 p-4">
+      <div>
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
           {title}
         </p>
@@ -109,23 +110,17 @@ export default function AlgorithmStep({
     : null;
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-6">
+    <div>
+      <section>
         {algorithmLoadError ? (
-          <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {algorithmLoadError}
           </div>
         ) : null}
 
-        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black">
-              Algorithm selection
-            </p>
-          </div>
-
+        <div>
           {isLoadingAlgorithms ? (
-            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {Array.from({ length: 8 }).map((_, index) => (
                 <div
                   key={index}
@@ -138,7 +133,7 @@ export default function AlgorithmStep({
               ))}
             </div>
           ) : (
-            <div className="mt-5 space-y-8">
+            <div className="space-y-5">
               <div>
                 <div className="grid grid-flow-row-dense grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                   {availableAlgorithms.map((algorithm) => {
@@ -183,21 +178,41 @@ export default function AlgorithmStep({
               </div>
 
               {hasUnavailableAlgorithms ? (
-                <div>
-                  <div>
-                    <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">
-                      Unavailable methods
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      These methods need one more input or setup step before they can run.
-                    </p>
-                  </div>
+                <div className="border-t border-slate-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowUnavailable((current) => !current)}
+                    className="flex w-full cursor-pointer items-center justify-between gap-4 text-left"
+                    aria-expanded={showUnavailable}
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-800">
+                        {unavailablePseudotimeAlgorithms.length +
+                          unavailableGroundTruthAlgorithms.length +
+                          unavailableCellOracleAlgorithms.length}{" "}
+                        methods unavailable
+                      </span>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        Add pseudotime or CellOracle inputs to unlock more methods.
+                      </span>
+                    </span>
+                    <span
+                      className={`text-slate-400 transition ${
+                        showUnavailable ? "rotate-180 text-[#1b75a6]" : ""
+                      }`}
+                      aria-hidden="true"
+                    >
+                      ↓
+                    </span>
+                  </button>
 
-                  <div className="mt-4 space-y-4">
-                    {renderUnavailableGroup("Need pseudotime CSV", unavailablePseudotimeAlgorithms)}
-                    {renderUnavailableGroup("Need CellOracle setup", unavailableCellOracleAlgorithms)}
-                    {renderUnavailableGroup("Need ground-truth network", unavailableGroundTruthAlgorithms)}
-                  </div>
+                  {showUnavailable ? (
+                    <div className="mt-5 space-y-5">
+                      {renderUnavailableGroup("Need pseudotime CSV", unavailablePseudotimeAlgorithms)}
+                      {renderUnavailableGroup("Need CellOracle setup", unavailableCellOracleAlgorithms)}
+                      {renderUnavailableGroup("Need ground-truth network", unavailableGroundTruthAlgorithms)}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
