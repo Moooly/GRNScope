@@ -27,6 +27,7 @@ from ..algorithm_registry import (
 )
 from ..atomic_io import atomic_write_json
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
+from ..preprocessing_contract import build_preprocessing_config
 from .client_identity import (
     get_or_create_client_id,
     project_belongs_to_client,
@@ -42,11 +43,8 @@ from ..repositories.project_repository import (
     read_project_manifest,
     write_project_manifest,
 )
-from ..storage import move_temp_upload_to_project, temp_metadata_path
 from ..storage import save_upload_file
 from ..schemas import (
-    CreateProjectFromTempRequest,
-    CreateProjectFromTempResponse,
     CreateProjectResponse,
     UpdateNotificationEmailRequest,
     UpdateProjectNameRequest,
@@ -71,27 +69,20 @@ from ..services.job_service import (
 from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
 from ..services.pseudotime_service import get_pseudotime_estimation_state
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
+from ..services.tf_reference_service import (
+    load_custom_tf_reference,
+    load_species_tf_reference,
+)
 
 router = APIRouter()
 
 
-def load_known_tf_gene_names() -> list[str]:
-    candidate_paths = [
-        PROJECTS_ROOT.parent / "data" / "known_tf_gene_names.txt",
-        PROJECTS_ROOT.parent / "reference" / "known_tf_gene_names.txt",
-        PROJECTS_ROOT.parent / "data" / "human_tf_gene_names.txt",
-        PROJECTS_ROOT.parent / "reference" / "human_tf_gene_names.txt",
-    ]
-
-    for path in candidate_paths:
-        if path.exists() and path.is_file():
-            return [
-                line.strip()
-                for line in path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-
-    return []
+def load_known_tf_gene_names(dataset_species: str = "human") -> list[str]:
+    genes, _reference = load_species_tf_reference(
+        dataset_species,
+        reference_root=PROJECTS_ROOT.parent,
+    )
+    return genes
 
 
 def backfill_dataset_dimensions(
@@ -187,8 +178,6 @@ def normalize_celloracle_settings(
 # the frontend cap; the backend still clamps to the actual gene count at run time.
 RANKED_EDGES_PER_TARGET_DEFAULT = 20
 RANKED_EDGES_PER_TARGET_MAX = 100
-
-
 def normalize_ranked_edges_per_target(raw: str) -> int:
     """Parse and bound the 'Max edges per target' form value to [1, 100]."""
     try:
@@ -317,10 +306,17 @@ async def create_pending_project(
     response: Response,
     project_name: str = Form(...),
     project_description: str = Form(""),
-    top_variable_genes: str = Form(...),
-    include_all_tfs: str = Form(...),
-    normalize_enabled: str = Form(...),
-    log_transform_enabled: str = Form(...),
+    matrix_state: str = Form(...),
+    dataset_species: str = Form(...),
+    enabled_gene_selection_stages: str = Form(...),
+    detection_threshold_percent: str = Form("10"),
+    variance_gene_count: str = Form("500"),
+    include_known_tfs: str = Form(...),
+    gene_ordering_source: str = Form("calculate"),
+    gene_ordering_filename: str = Form(""),
+    trajectory_p_value: str = Form("0.01"),
+    trajectory_bonferroni: str = Form("true"),
+    include_significant_tfs: str = Form("true"),
     ranked_edges_per_target: str = Form("20"),
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
@@ -330,6 +326,7 @@ async def create_pending_project(
     expression_filename: str = Form(""),
     pseudotime_filename: str = Form(""),
     cluster_labels_filename: str = Form(""),
+    custom_tf_list_filename: str = Form(""),
     estimate_pseudotime: str = Form("false"),
 ):
     owner_id = get_or_create_client_id(request, response)
@@ -347,12 +344,28 @@ async def create_pending_project(
         resolved_algorithm_parameters = resolve_selected_algorithm_parameters(
             selected_algorithms_list, validated_algorithm_parameters
         )
+        preprocessing_config = build_preprocessing_config(
+            matrix_state=matrix_state,
+            dataset_species=dataset_species,
+            enabled_gene_selection_stages=enabled_gene_selection_stages,
+            detection_threshold_percent=detection_threshold_percent,
+            variance_gene_count=variance_gene_count,
+            include_known_tfs=include_known_tfs,
+            gene_ordering_source=gene_ordering_source,
+            gene_ordering_filename=gene_ordering_filename,
+            trajectory_p_value=trajectory_p_value,
+            trajectory_bonferroni=trajectory_bonferroni,
+            include_significant_tfs=include_significant_tfs,
+        )
     except Exception as exc:
         return CreateProjectResponse(ok=False, errors=[str(exc)])
 
     project_dir = PROJECTS_ROOT / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
-    known_tf_gene_names = load_known_tf_gene_names()
+    known_tf_gene_names, known_tf_reference = load_species_tf_reference(
+        preprocessing_config["dataset_species"],
+        reference_root=PROJECTS_ROOT.parent,
+    )
 
     job_manifest = build_job_manifest(
         project_id,
@@ -372,10 +385,7 @@ async def create_pending_project(
         "created_at": time.time(),
         "created_at_display": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
         "notification_email": None,
-        "top_variable_genes": top_variable_genes,
-        "include_all_tfs": include_all_tfs,
-        "normalize_enabled": normalize_enabled,
-        "log_transform_enabled": log_transform_enabled,
+        "preprocessing": preprocessing_config,
         "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
         "selected_algorithms": selected_algorithms_list,
         "algorithm_parameters": validated_algorithm_parameters,
@@ -384,10 +394,24 @@ async def create_pending_project(
         "expression_path": None,
         "pseudotime_path": None,
         "cluster_labels_path": None,
+        "gene_ordering_path": None,
+        "custom_tf_list_path": None,
+        "custom_tf_list_filename": custom_tf_list_filename or None,
+        "known_tf_gene_names": known_tf_gene_names,
+        "known_tf_reference": known_tf_reference,
+        "gene_ordering_validation": {
+            "status": (
+                "waiting_for_upload"
+                if preprocessing_config["trajectory"]["enabled"]
+                and preprocessing_config["trajectory"]["gene_ordering_source"] == "upload"
+                else "not_required"
+            ),
+        },
         "estimate_pseudotime": estimate_pseudotime,
         "preprocessed_expression_path": str(
             project_dir / "preprocessed" / "ExpressionData.csv"
         ),
+        "preprocessing_status": "waiting_for_upload",
         "upload_status": "waiting_for_upload",
         "celloracle": {
             "species": normalized_celloracle_species,
@@ -404,24 +428,38 @@ async def create_pending_project(
         "expression_filename": expression_filename or None,
         "pseudotime_filename": pseudotime_filename or None,
         "cluster_labels_filename": cluster_labels_filename or None,
+        "gene_ordering_filename": (
+            preprocessing_config["trajectory"]["gene_ordering_filename"]
+            if preprocessing_config["trajectory"]["enabled"]
+            and preprocessing_config["trajectory"]["gene_ordering_source"] == "upload"
+            else None
+        ),
         "gene_count": None,
         "cell_count": None,
         "gene_names": [],
         "cell_names": [],
         "known_tf_gene_names": known_tf_gene_names,
+        "known_tf_reference": known_tf_reference,
+        "custom_tf_list_filename": custom_tf_list_filename or None,
+        "has_custom_tf_list": False,
         "has_pseudotime": bool(pseudotime_filename),
         "pseudotime_count": None,
         "has_cluster_labels": bool(cluster_labels_filename),
+        "has_gene_ordering": False,
+        "gene_ordering_validation": {
+            "status": (
+                "waiting_for_upload"
+                if preprocessing_config["trajectory"]["enabled"]
+                and preprocessing_config["trajectory"]["gene_ordering_source"] == "upload"
+                else "not_required"
+            ),
+        },
         "cluster_label_count": None,
         "cluster_count": None,
         "cluster_names": [],
         "cluster_cell_counts": {},
-        "preprocessing": {
-            "top_variable_genes": top_variable_genes,
-            "include_all_tfs": include_all_tfs,
-            "normalize_enabled": normalize_enabled,
-            "log_transform_enabled": log_transform_enabled,
-        },
+        "preprocessing": preprocessing_config,
+        "preprocessing_status": "waiting_for_upload",
         "celloracle": {
             "species": normalized_celloracle_species,
             "base_grn": normalized_celloracle_base_grn,
@@ -463,6 +501,8 @@ async def upload_project_dataset_and_start(
     expression_matrix: UploadFile = File(...),
     pseudotime: UploadFile | None = File(default=None),
     cluster_labels: UploadFile | None = File(default=None),
+    gene_ordering: UploadFile | None = File(default=None),
+    custom_tf_list: UploadFile | None = File(default=None),
 ):
     owner_id = get_or_create_client_id(request, response)
     project_dir = PROJECTS_ROOT / project_id
@@ -490,6 +530,34 @@ async def upload_project_dataset_and_start(
             cluster_ext_error = validate_csv_extension(cluster_labels.filename or "")
             if cluster_ext_error:
                 errors.append(f"Cluster labels: {cluster_ext_error}")
+        if gene_ordering:
+            ordering_ext_error = validate_csv_extension(gene_ordering.filename or "")
+            if ordering_ext_error:
+                errors.append(f"GeneOrdering: {ordering_ext_error}")
+        if custom_tf_list:
+            tf_list_ext_error = validate_csv_extension(custom_tf_list.filename or "")
+            if tf_list_ext_error:
+                errors.append(f"Custom TF list: {tf_list_ext_error}")
+            dataset_species = str(
+                project_manifest.get("preprocessing", {}).get("dataset_species") or ""
+            )
+            if dataset_species != "other":
+                errors.append(
+                    "A custom TF list can only be used when dataset species is "
+                    "Other / Not listed."
+                )
+
+        trajectory_config = (
+            project_manifest.get("preprocessing", {}).get("trajectory", {})
+        )
+        gene_ordering_required = bool(trajectory_config.get("enabled")) and (
+            trajectory_config.get("gene_ordering_source") == "upload"
+        )
+        if gene_ordering_required and gene_ordering is None:
+            errors.append(
+                "GeneOrdering CSV is required when trajectory-aware filtering "
+                "uses an uploaded ordering."
+            )
 
         if errors:
             message = "\n".join(errors)
@@ -526,6 +594,37 @@ async def upload_project_dataset_and_start(
             )
             save_upload_file(cluster_labels, cluster_labels_path)
 
+        gene_ordering_path: Path | None = None
+        if gene_ordering:
+            gene_ordering_path = (
+                project_dir
+                / (
+                    "gene_ordering__"
+                    f"{Path(gene_ordering.filename or 'GeneOrdering.csv').name}"
+                )
+            )
+            save_upload_file(gene_ordering, gene_ordering_path)
+
+        custom_tf_list_path: Path | None = None
+        if custom_tf_list:
+            custom_tf_list_path = (
+                project_dir
+                / (
+                    "custom_tf_list__"
+                    f"{Path(custom_tf_list.filename or 'custom_tf_list.csv').name}"
+                )
+            )
+            save_upload_file(custom_tf_list, custom_tf_list_path)
+            custom_tf_gene_names, custom_tf_reference = load_custom_tf_reference(
+                custom_tf_list_path,
+                dataset_species=project_manifest.get("preprocessing", {}).get(
+                    "dataset_species", "other"
+                ),
+            )
+            custom_tf_reference["source_filename"] = custom_tf_list.filename
+            project_manifest["known_tf_gene_names"] = custom_tf_gene_names
+            project_manifest["known_tf_reference"] = custom_tf_reference
+
         project_manifest["expression_path"] = str(expression_path)
         project_manifest["pseudotime_path"] = (
             str(pseudotime_path) if pseudotime_path else None
@@ -533,7 +632,22 @@ async def upload_project_dataset_and_start(
         project_manifest["cluster_labels_path"] = (
             str(cluster_labels_path) if cluster_labels_path else None
         )
+        project_manifest["gene_ordering_path"] = (
+            str(gene_ordering_path) if gene_ordering_path else None
+        )
+        project_manifest["custom_tf_list_path"] = (
+            str(custom_tf_list_path) if custom_tf_list_path else None
+        )
+        project_manifest["custom_tf_list_filename"] = (
+            custom_tf_list.filename if custom_tf_list else None
+        )
+        project_manifest["gene_ordering_validation"] = {
+            "status": "pending" if gene_ordering_path else "not_required",
+        }
         project_manifest["upload_status"] = "uploaded"
+        project_manifest["preprocessing_status"] = "pending"
+        project_manifest.pop("preprocessing_result", None)
+        project_manifest.pop("preprocessing_error", None)
         write_project_manifest(project_dir, project_manifest)
 
         metadata_path = project_dir / "metadata.json"
@@ -549,13 +663,30 @@ async def upload_project_dataset_and_start(
                 ),
                 "has_pseudotime": pseudotime is not None,
                 "has_cluster_labels": cluster_labels is not None,
+                "gene_ordering_filename": (
+                    gene_ordering.filename if gene_ordering else None
+                ),
+                "has_gene_ordering": gene_ordering is not None,
+                "custom_tf_list_filename": (
+                    custom_tf_list.filename if custom_tf_list else None
+                ),
+                "has_custom_tf_list": custom_tf_list is not None,
+                "known_tf_gene_names": project_manifest.get(
+                    "known_tf_gene_names", []
+                ),
+                "known_tf_reference": project_manifest.get(
+                    "known_tf_reference", {}
+                ),
+                "gene_ordering_validation": {
+                    "status": "pending" if gene_ordering_path else "not_required",
+                },
                 "upload_status": "uploaded",
+                "preprocessing_status": "pending",
             }
         )
-        metadata_path.write_text(
-            json.dumps(metadata_manifest, indent=2),
-            encoding="utf-8",
-        )
+        metadata_manifest.pop("preprocessing_result", None)
+        metadata_manifest.pop("preprocessing_error", None)
+        atomic_write_json(metadata_path, metadata_manifest)
 
         update_job_state(project_dir, job_id, overall_status="Queued")
         for algorithm_id in selected_algorithms_list:
@@ -623,203 +754,6 @@ async def mark_project_upload_failed(
         return {"ok": True, "project_id": project_id, "job_id": job_id, "errors": []}
     except Exception as exc:
         return {"ok": False, "project_id": project_id, "errors": [str(exc)]}
-
-
-@router.post("/api/projects/create-from-temp", response_model=CreateProjectResponse)
-async def create_project_from_temp(
-    background_tasks: BackgroundTasks,
-    request: Request,
-    response: Response,
-    temp_upload_id: str = Form(...),
-    project_name: str = Form(...),
-    project_description: str = Form(""),
-    top_variable_genes: str = Form(...),
-    include_all_tfs: str = Form(...),
-    normalize_enabled: str = Form(...),
-    log_transform_enabled: str = Form(...),
-    ranked_edges_per_target: str = Form("20"),
-    selected_algorithms: str = Form(...),
-    ensemble_enabled: str = Form(...),
-    celloracle_species: str = Form("human"),
-    celloracle_base_grn: str = Form("auto"),
-    algorithm_parameters: str = Form("{}"),
-):
-    owner_id = get_or_create_client_id(request, response)
-    meta_path = temp_metadata_path(temp_upload_id)
-    if not meta_path.exists():
-        return CreateProjectResponse(
-            ok=False,
-            errors=["Temporary upload not found or expired."],
-        )
-
-    project_id = uuid.uuid4().hex[:12]
-    job_id = uuid.uuid4().hex[:12]
-
-    try:
-        selected_algorithms_list = sort_algorithm_ids_by_difficulty(
-            json.loads(selected_algorithms)
-        )
-        normalized_celloracle_species = (celloracle_species or "human").strip()
-        normalized_celloracle_base_grn = (celloracle_base_grn or "auto").strip()
-
-        if normalized_celloracle_species not in CELLORACLE_SPECIES_OPTIONS:
-            return CreateProjectResponse(
-                ok=False,
-                errors=[
-                    "Unsupported CellOracle species: "
-                    f"{normalized_celloracle_species}."
-                ],
-            )
-        if normalized_celloracle_base_grn not in CELLORACLE_BASE_GRN_OPTIONS:
-            return CreateProjectResponse(
-                ok=False,
-                errors=[
-                    "Unsupported CellOracle base GRN: "
-                    f"{normalized_celloracle_base_grn}."
-                ],
-            )
-
-        validated_algorithm_parameters = parse_algorithm_parameters(
-            algorithm_parameters, selected_algorithms_list
-        )
-        resolved_algorithm_parameters = resolve_selected_algorithm_parameters(
-            selected_algorithms_list, validated_algorithm_parameters
-        )
-
-        move_result = move_temp_upload_to_project(temp_upload_id, project_id)
-        project_dir = Path(move_result["project_dir"])
-
-        upload_metadata_path = project_dir / "upload_metadata.json"
-        upload_metadata = {}
-        if upload_metadata_path.exists():
-            upload_metadata = json.loads(
-                upload_metadata_path.read_text(encoding="utf-8")
-            )
-        known_tf_gene_names = load_known_tf_gene_names()
-
-        job_manifest = {
-            "job_id": job_id,
-            "project_id": project_id,
-            "overall_status": "Queued",
-            "ensemble_enabled": ensemble_enabled,
-            "algorithm_parameters": validated_algorithm_parameters,
-            "algorithm_parameter_overrides": validated_algorithm_parameters,
-            "resolved_algorithm_parameters": resolved_algorithm_parameters,
-            "tasks": [
-                {
-                    "algorithm_id": algorithm_id,
-                    "status": "Queued",
-                    "elapsed_seconds": 0,
-                    "error_message": None,
-                    "error_type": None,
-                    "result_path": None,
-                    "started_at": None,
-                    "started_at_timestamp": None,
-                    "completed_at": None,
-                    "completed_at_timestamp": None,
-                    "progress_percent": 0,
-                    "progress_label": "Queued",
-                }
-                for algorithm_id in selected_algorithms_list
-            ],
-        }
-
-        project_manifest = {
-            "project_id": project_id,
-            "owner_id": owner_id,
-            "project_name": project_name,
-            "project_description": project_description,
-            "created_at": time.time(),
-            "created_at_display": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
-            "notification_email": None,
-            "top_variable_genes": top_variable_genes,
-            "include_all_tfs": include_all_tfs,
-            "normalize_enabled": normalize_enabled,
-            "log_transform_enabled": log_transform_enabled,
-            "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
-            "selected_algorithms": selected_algorithms_list,
-            "algorithm_parameters": validated_algorithm_parameters,
-            "resolved_algorithm_parameters": resolved_algorithm_parameters,
-            "ensemble_enabled": ensemble_enabled,
-            "expression_path": move_result["expression_path"],
-            "pseudotime_path": move_result.get("pseudotime_path"),
-            "cluster_labels_path": move_result.get("cluster_labels_path"),
-            "preprocessed_expression_path": str(
-                project_dir / "preprocessed" / "ExpressionData.csv"
-            ),
-            "celloracle": {
-                "species": normalized_celloracle_species,
-                "base_grn": normalized_celloracle_base_grn,
-            },
-            "latest_job_id": job_id,
-        }
-
-        metadata_manifest = {
-            "project_id": project_id,
-            "owner_id": owner_id,
-            "project_name": project_name,
-            "project_description": project_description,
-            "expression_filename": upload_metadata.get("expression_filename"),
-            "pseudotime_filename": upload_metadata.get("pseudotime_filename"),
-            "cluster_labels_filename": upload_metadata.get("cluster_labels_filename"),
-            "gene_count": upload_metadata.get("gene_count"),
-            "cell_count": upload_metadata.get("cell_count"),
-            "gene_names": upload_metadata.get("gene_names", []),
-            "cell_names": upload_metadata.get("cell_names", []),
-            "known_tf_gene_names": known_tf_gene_names,
-            "has_pseudotime": upload_metadata.get("has_pseudotime"),
-            "pseudotime_count": upload_metadata.get("pseudotime_count"),
-            "has_cluster_labels": upload_metadata.get("has_cluster_labels"),
-            "cluster_label_count": upload_metadata.get("cluster_label_count"),
-            "cluster_count": upload_metadata.get("cluster_count"),
-            "cluster_names": upload_metadata.get("cluster_names", []),
-            "cluster_cell_counts": upload_metadata.get("cluster_cell_counts", {}),
-            "preprocessing": {
-                "top_variable_genes": top_variable_genes,
-                "include_all_tfs": include_all_tfs,
-                "normalize_enabled": normalize_enabled,
-                "log_transform_enabled": log_transform_enabled,
-            },
-            "celloracle": {
-                "species": normalized_celloracle_species,
-                "base_grn": normalized_celloracle_base_grn,
-            },
-            "selected_algorithms": selected_algorithms_list,
-            "algorithm_parameters": validated_algorithm_parameters,
-            "resolved_algorithm_parameters": resolved_algorithm_parameters,
-            "results_directory": str(project_dir / "results"),
-            "ensemble_enabled": ensemble_enabled,
-            "job": {
-                "job_id": job_id,
-                "overall_status": "Queued",
-            },
-        }
-
-        atomic_write_json(project_dir / "project.json", project_manifest)
-        atomic_write_json(project_dir / "metadata.json", metadata_manifest)
-        atomic_write_json(project_dir / "jobs.json", [job_manifest])
-
-        if upload_metadata_path.exists():
-            upload_metadata_path.unlink()
-
-        if queue_enabled():
-            enqueue_algorithm_job(project_id, job_id, selected_algorithms_list)
-        else:
-            background_tasks.add_task(
-                launch_independent_algorithm_tasks,
-                project_id,
-                job_id,
-                selected_algorithms_list,
-            )
-
-        return CreateProjectResponse(
-            ok=True,
-            project_id=project_id,
-            job_id=job_id,
-            errors=[],
-        )
-    except Exception as e:
-        return CreateProjectResponse(ok=False, errors=[str(e)])
 
 
 @router.patch("/api/projects/{project_id}/notification-email")
@@ -1146,14 +1080,31 @@ async def get_project_metadata(project_id: str, request: Request, response: Resp
                 "cell_count": dataset.get("cell_count"),
                 "gene_names": [],
                 "cell_names": [],
-                "known_tf_gene_names": load_known_tf_gene_names(),
+                "known_tf_gene_names": load_known_tf_gene_names("human"),
                 "has_pseudotime": dataset.get("has_pseudotime", True),
                 "has_ground_truth": dataset.get("has_ground_truth", False),
                 "preprocessing": {
-                    "top_variable_genes": "All genes retained",
-                    "include_all_tfs": True,
-                    "normalize_enabled": True,
-                    "log_transform_enabled": True,
+                    "schema_version": PREPROCESSING_SCHEMA_VERSION,
+                    "matrix_state": "log_normalized",
+                    "dataset_species": "human",
+                    "enabled_stages": [],
+                    "detection": {
+                        "enabled": False,
+                        "minimum_cell_percent": 10,
+                    },
+                    "trajectory": {
+                        "enabled": False,
+                        "gene_ordering_source": "calculate",
+                        "gene_ordering_filename": None,
+                        "p_value_threshold": 0.01,
+                        "bonferroni_correction": True,
+                        "retain_significant_tfs": True,
+                    },
+                    "variance": {
+                        "enabled": False,
+                        "gene_count": 500,
+                        "include_known_tfs": True,
+                    },
                 },
                 "selected_algorithms": manifest.get("algorithms", []),
                 "ensemble_enabled": True,

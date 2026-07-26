@@ -30,10 +30,29 @@ class DatasetValidationStateTests(unittest.TestCase):
                 "preprocessed_expression_path": str(
                     project_dir / "preprocessed" / "ExpressionData.csv"
                 ),
-                "top_variable_genes": "all",
-                "include_all_tfs": False,
-                "normalize_enabled": True,
-                "log_transform_enabled": True,
+                "preprocessing": {
+                    "schema_version": 1,
+                    "matrix_state": "raw",
+                    "dataset_species": "human",
+                    "enabled_stages": ["detection"],
+                    "detection": {
+                        "enabled": True,
+                        "minimum_cell_percent": 10,
+                    },
+                    "trajectory": {
+                        "enabled": False,
+                        "gene_ordering_source": "calculate",
+                        "gene_ordering_filename": None,
+                        "p_value_threshold": 0.01,
+                        "bonferroni_correction": True,
+                        "retain_significant_tfs": True,
+                    },
+                    "variance": {
+                        "enabled": False,
+                        "gene_count": 500,
+                        "include_known_tfs": False,
+                    },
+                },
             }
             metadata_manifest = {"project_id": project_id}
             jobs_manifest = [
@@ -113,10 +132,29 @@ class DatasetValidationStateTests(unittest.TestCase):
                         "preprocessed_expression_path": str(
                             project_dir / "preprocessed" / "ExpressionData.csv"
                         ),
-                        "top_variable_genes": "all",
-                        "include_all_tfs": False,
-                        "normalize_enabled": True,
-                        "log_transform_enabled": True,
+                        "preprocessing": {
+                            "schema_version": 1,
+                            "matrix_state": "raw",
+                            "dataset_species": "human",
+                            "enabled_stages": ["detection"],
+                            "detection": {
+                                "enabled": True,
+                                "minimum_cell_percent": 10,
+                            },
+                            "trajectory": {
+                                "enabled": False,
+                                "gene_ordering_source": "calculate",
+                                "gene_ordering_filename": None,
+                                "p_value_threshold": 0.01,
+                                "bonferroni_correction": True,
+                                "retain_significant_tfs": True,
+                            },
+                            "variance": {
+                                "enabled": False,
+                                "gene_count": 500,
+                                "include_known_tfs": False,
+                            },
+                        },
                     }
                 ),
                 encoding="utf-8",

@@ -23,7 +23,12 @@ import AlgorithmWarningPopover, {
   type AlgorithmWarning,
 } from "./_components/AlgorithmWarningPopover";
 import ResultsHubSection from "./_components/ResultsHubSection";
-import ResultsHubViewSelector from "./_components/ResultsHubViewSelector";
+import ResultsHubViewSelector, {
+  type ResultsHubView,
+} from "./_components/ResultsHubViewSelector";
+import ResultsInsightsSection, {
+  type VisualizationContext,
+} from "./_components/ResultsInsightsSection";
 import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSection";
 import AnalysisSetupSection from "./_components/AnalysisSetupSection";
 import StopProjectModal from "../_components/StopProjectModal";
@@ -306,7 +311,10 @@ export default function ProjectDetailPage() {
   const [isStopProjectModalOpen, setIsStopProjectModalOpen] = useState(false);
   const [isStopProjectModalClosing, setIsStopProjectModalClosing] = useState(false);
   const [isStoppingProject, setIsStoppingProject] = useState(false);
-  const [resultsHubView, setResultsHubView] = useState<"network" | "perturbation">("network");
+  const [resultsHubView, setResultsHubView] = useState<ResultsHubView>("network");
+  const [visualizationContext, setVisualizationContext] =
+    useState<VisualizationContext | null>(null);
+  const [isVisualizationContextLoading, setIsVisualizationContextLoading] = useState(false);
 
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
   const seededProjectIdRef = useRef<string | null>(null);
@@ -317,6 +325,32 @@ export default function ProjectDetailPage() {
   const demoProjectFlag = project as (ProjectManifest & { is_demo?: boolean; read_only?: boolean }) | null;
   const demoMetadataFlag = metadata as (MetadataManifest & { is_demo?: boolean; read_only?: boolean }) | null;
   const isDemoProject = isDemoRoute || demoProjectFlag?.is_demo === true || demoMetadataFlag?.is_demo === true;
+
+  useEffect(() => {
+    if (!projectId || (!project && !metadata)) {
+      setVisualizationContext(null);
+      return;
+    }
+    const controller = new AbortController();
+    setIsVisualizationContextLoading(true);
+    void apiFetch(`${API_BASE}/projects/${projectId}/visualization-context`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Visualization context is unavailable.");
+        return response.json() as Promise<VisualizationContext>;
+      })
+      .then((payload) => {
+        if (!controller.signal.aborted) setVisualizationContext(payload);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setVisualizationContext(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsVisualizationContextLoading(false);
+      });
+    return () => controller.abort();
+  }, [metadata, project, projectId]);
 
   useEffect(() => {
     return () => {
@@ -347,20 +381,32 @@ export default function ProjectDetailPage() {
       : isDemoProject
         ? "19 genes × 2,000 cells"
         : "Pending";
+  const enabledPreprocessingStages = metadata?.preprocessing?.enabled_stages ?? [];
   const topVariableGenesLabel = isDemoProject
-    ? "All 19 genes retained"
-    : metadata?.preprocessing?.top_variable_genes?.trim().toLowerCase() === "all"
-      ? "All genes retained"
-      : metadata?.preprocessing?.top_variable_genes || "-";
+    ? "Demo preprocessing"
+    : enabledPreprocessingStages.length > 0
+      ? enabledPreprocessingStages
+          .map((stage) =>
+            stage === "variance"
+              ? `Top ${metadata?.preprocessing?.variance?.gene_count ?? "—"} by variance`
+              : stage === "trajectory"
+                ? "Trajectory-aware"
+                : `Detection ≥${metadata?.preprocessing?.detection?.minimum_cell_percent ?? "—"}%`,
+          )
+          .join(" → ")
+      : "No gene filtering";
   const tfOverrideLabel = isDemoProject
     ? "Enabled"
-    : boolText(metadata?.preprocessing?.include_all_tfs);
+    : boolText(metadata?.preprocessing?.variance?.include_known_tfs);
   const normalizationLabel = isDemoProject
     ? "Enabled"
-    : boolText(metadata?.preprocessing?.normalize_enabled);
+    : boolText(metadata?.preprocessing?.matrix_state === "raw");
   const logTransformLabel = isDemoProject
     ? "Enabled"
-    : boolText(metadata?.preprocessing?.log_transform_enabled);
+    : boolText(
+        metadata?.preprocessing?.matrix_state === "raw" ||
+          metadata?.preprocessing?.matrix_state === "normalized",
+      );
 
 
   const rawJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
@@ -2251,6 +2297,14 @@ useEffect(() => {
                 onChange={setResultsHubView}
                 cellOracleReady={cellOracleReady}
                 cellOracleStatus={cellOracleTask?.status}
+                hasTrajectory={
+                  metadata?.has_pseudotime === true ||
+                  visualizationContext?.trajectory?.available === true
+                }
+                hasGroundTruth={
+                  metadata?.has_ground_truth === true ||
+                  visualizationContext?.ground_truth?.available === true
+                }
               />
             )}
           />
@@ -2293,6 +2347,17 @@ useEffect(() => {
                       {resultsAvailabilityNotice.description}
                     </p>
                   </div>
+                  ) : resultsHubView !== "network" && resultsHubView !== "perturbation" ? (
+                    <ResultsInsightsSection
+                      view={resultsHubView}
+                      activeEdges={activeEdges}
+                      algorithmResults={algorithmResults}
+                      activeAlgorithmIds={activeAlgorithmIds}
+                      tasks={allJobTasks}
+                      networkNodes={networkNodes}
+                      visualizationContext={visualizationContext}
+                      isContextLoading={isVisualizationContextLoading}
+                    />
                   ) : (
                   <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
                     <div className="space-y-6">

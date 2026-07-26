@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -14,28 +14,6 @@ class TempUploadResponse(BaseModel):
     has_pseudotime: Optional[bool] = None
     has_cluster_labels: Optional[bool] = None
     cluster_count: Optional[int] = None
-    errors: list[str] = []
-
-
-class CreateProjectFromTempRequest(BaseModel):
-    temp_upload_id: str
-    project_name: str
-    project_description: Optional[str] = None
-    selected_algorithms: list[str]
-    # Optional per-algorithm parameter overrides: {algorithm_id: {param: value}}.
-    # Validated against the algorithm registry at project creation.
-    algorithm_parameters: dict[str, dict[str, Any]] = {}
-    top_variable_genes: int
-    include_all_tfs: bool
-    normalize_enabled: bool
-    log_transform_enabled: bool
-    ensemble_enabled: bool = False
-
-
-class CreateProjectFromTempResponse(BaseModel):
-    ok: bool
-    project_id: Optional[str] = None
-    job_id: Optional[str] = None
     errors: list[str] = []
 
 

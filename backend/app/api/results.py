@@ -17,6 +17,7 @@ from ..services.demo_service import (
     get_demo_ranked_edges_path,
     is_demo_project,
 )
+from ..services.visualization_context_service import build_visualization_context
 
 
 
@@ -40,6 +41,41 @@ CLIENT_RESULT_EDGE_FIELDS = {
     "edge_weight",
     "algorithm_id",
 }
+
+
+@router.get("/api/projects/{project_id}/visualization-context")
+async def get_visualization_context(
+    project_id: str,
+    request: Request,
+    response: Response,
+    genes: str | None = None,
+):
+    owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        project_dir = get_demo_project_root()
+    else:
+        project_dir = PROJECTS_ROOT / project_id
+        require_project_owner(project_dir, owner_id)
+
+    requested_genes = [
+        value.strip()
+        for value in str(genes or "").split(",")
+        if value.strip()
+    ]
+    try:
+        context = build_visualization_context(
+            project_dir=project_dir,
+            requested_genes=requested_genes,
+        )
+        return {
+            "ok": True,
+            "project_id": project_id,
+            **context,
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def compact_result_for_client(result: dict) -> dict:

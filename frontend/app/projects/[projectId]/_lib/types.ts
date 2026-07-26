@@ -55,12 +55,12 @@ export type ProjectManifest = {
   pseudotime_filename?: string | null;
   cluster_labels_path?: string | null;
   cluster_labels_filename?: string | null;
+  gene_ordering_path?: string | null;
+  gene_ordering_filename?: string | null;
+  gene_ordering_validation?: GeneOrderingValidation;
   selected_algorithms?: string[];
   ensemble_enabled?: boolean | string;
-  top_variable_genes?: string | number | null;
-  include_all_tfs?: boolean | string;
-  normalize_enabled?: boolean | string;
-  log_transform_enabled?: boolean | string;
+  preprocessing?: PreprocessingConfig;
   ranked_edges_per_target_limit?: number | string | null;
   algorithm_parameters?: Record<string, Record<string, unknown>>;
   resolved_algorithm_parameters?: Record<string, Record<string, unknown>>;
@@ -87,6 +87,7 @@ export type MetadataManifest = {
   expression_filename?: string | null;
   pseudotime_filename?: string | null;
   cluster_labels_filename?: string | null;
+  gene_ordering_filename?: string | null;
   gene_count?: number | null;
   cell_count?: number | null;
   gene_names?: string[];
@@ -102,6 +103,8 @@ export type MetadataManifest = {
   known_tf_gene_names?: string[];
   has_pseudotime?: boolean | null;
   has_cluster_labels?: boolean | null;
+  has_gene_ordering?: boolean | null;
+  gene_ordering_validation?: GeneOrderingValidation;
   cluster_count?: number | null;
   cluster_names?: string[];
   cluster_cell_counts?: Record<string, number>;
@@ -125,11 +128,40 @@ export type MetadataManifest = {
     job_id?: string;
     overall_status?: string;
   };
-  preprocessing?: {
-    top_variable_genes?: string;
-    include_all_tfs?: boolean | string;
-    normalize_enabled?: boolean | string;
-    log_transform_enabled?: boolean | string;
+  preprocessing?: PreprocessingConfig;
+};
+
+export type GeneOrderingValidation = {
+  status?: "waiting_for_upload" | "pending" | "validated" | "failed" | "not_required" | string;
+  gene_count?: number;
+  matching_gene_count?: number;
+  unmatched_gene_count?: number;
+  unmatched_gene_names?: string[];
+  has_variance?: boolean;
+  error?: string;
+};
+
+export type PreprocessingConfig = {
+  schema_version?: number;
+  matrix_state?: "raw" | "normalized" | "log_normalized";
+  dataset_species?: string;
+  enabled_stages?: Array<"detection" | "trajectory" | "variance">;
+  detection?: {
+    enabled?: boolean;
+    minimum_cell_percent?: number;
+  };
+  trajectory?: {
+    enabled?: boolean;
+    gene_ordering_source?: "calculate" | "upload";
+    gene_ordering_filename?: string | null;
+    p_value_threshold?: number;
+    bonferroni_correction?: boolean;
+    retain_significant_tfs?: boolean;
+  };
+  variance?: {
+    enabled?: boolean;
+    gene_count?: number;
+    include_known_tfs?: boolean;
   };
 };
 

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CreateProjectFlow, {
   type CreateProjectPrefill,
 } from "./_components/CreateProjectFlow";
+import type { GeneSelectionStage } from "./_components/CreateProjectModal";
 import ProjectCard, { getProjectStatusLabel } from "./_components/ProjectCard";
 import ProjectsToolbar, {
   type ProjectSortKey,
@@ -180,16 +181,49 @@ function ProjectsPageContent() {
           if (response.ok) {
             const data = await response.json();
             const source = data.project ?? {};
+            const preprocessing = source.preprocessing ?? {};
+            const enabledGeneSelectionStages = Array.isArray(
+              preprocessing.enabled_stages,
+            )
+              ? preprocessing.enabled_stages.filter(
+                  (stage: unknown): stage is GeneSelectionStage =>
+                    stage === "detection" ||
+                    stage === "trajectory" ||
+                    stage === "variance",
+                )
+              : ["detection"];
             const sourceName = String(source.project_name ?? "Untitled project").trim();
             nextPrefill = {
               projectName: sourceName.toLowerCase().endsWith("(corrected)")
                 ? sourceName
                 : `${sourceName} (corrected)`,
               projectDescription: String(source.project_description ?? ""),
-              topVariableGenes: String(source.top_variable_genes ?? ""),
-              includeAllTFs: readPrefillBoolean(source.include_all_tfs, true),
-              normalizeEnabled: readPrefillBoolean(source.normalize_enabled, true),
-              logTransformEnabled: readPrefillBoolean(source.log_transform_enabled, true),
+              matrixState: String(preprocessing.matrix_state ?? ""),
+              datasetSpecies: String(preprocessing.dataset_species ?? ""),
+              enabledGeneSelectionStages,
+              detectionThreshold: String(
+                preprocessing.detection?.minimum_cell_percent ?? "10",
+              ),
+              hvgGeneCount: String(preprocessing.variance?.gene_count ?? "500"),
+              includeAllTFs: readPrefillBoolean(
+                preprocessing.variance?.include_known_tfs,
+                true,
+              ),
+              geneOrderingSource:
+                preprocessing.trajectory?.gene_ordering_source === "upload"
+                  ? "upload"
+                  : "calculate",
+              trajectoryPValue: String(
+                preprocessing.trajectory?.p_value_threshold ?? "0.01",
+              ),
+              trajectoryBonferroni: readPrefillBoolean(
+                preprocessing.trajectory?.bonferroni_correction,
+                true,
+              ),
+              includeSignificantTFs: readPrefillBoolean(
+                preprocessing.trajectory?.retain_significant_tfs,
+                true,
+              ),
               maxEdgesPerTarget: String(source.ranked_edges_per_target_limit ?? "20"),
               selectedIds: Array.isArray(source.selected_algorithms)
                 ? source.selected_algorithms.map(String)

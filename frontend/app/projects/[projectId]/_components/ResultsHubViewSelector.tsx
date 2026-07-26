@@ -1,12 +1,21 @@
 "use client";
 
-type ResultsHubView = "network" | "perturbation";
+export type ResultsHubView =
+  | "network"
+  | "regulators"
+  | "agreement"
+  | "trajectory"
+  | "benchmark"
+  | "diagnostics"
+  | "perturbation";
 
 type ResultsHubViewSelectorProps = {
   view: ResultsHubView;
   onChange: (view: ResultsHubView) => void;
   cellOracleReady: boolean;
   cellOracleStatus?: string | null;
+  hasTrajectory?: boolean;
+  hasGroundTruth?: boolean;
 };
 
 type PerturbationAvailability =
@@ -39,6 +48,8 @@ export default function ResultsHubViewSelector({
   onChange,
   cellOracleReady,
   cellOracleStatus,
+  hasTrajectory = false,
+  hasGroundTruth = false,
 }: ResultsHubViewSelectorProps) {
   const availability = getPerturbationAvailability(cellOracleReady, cellOracleStatus);
   const isPerturbationDisabled = availability.kind !== "ready";
@@ -58,20 +69,32 @@ export default function ResultsHubViewSelector({
     return "Perturbation — not available";
   })();
 
+  const views: Array<{ id: ResultsHubView; label: string }> = [
+    { id: "network", label: "Network" },
+    { id: "regulators", label: "Regulators" },
+    { id: "agreement", label: "Agreement" },
+    ...(hasTrajectory ? [{ id: "trajectory" as const, label: "Trajectory" }] : []),
+    ...(hasGroundTruth ? [{ id: "benchmark" as const, label: "Benchmark" }] : []),
+    { id: "diagnostics", label: "Diagnostics" },
+  ];
+
   return (
-    <div className="flex items-center gap-7" role="group" aria-label="Results view">
-      <button
-        type="button"
-        aria-pressed={view === "network"}
-        onClick={() => onChange("network")}
-        className={`relative pb-3 text-sm font-bold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 ${
-          view === "network"
-            ? "text-[#087ead] after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:rounded-full after:bg-[#087ead]"
-            : "text-slate-500 hover:text-slate-900"
-        }`}
-      >
-        Network
-      </button>
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2" role="group" aria-label="Results view">
+      {views.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed={view === item.id}
+          onClick={() => onChange(item.id)}
+          className={`relative pb-3 text-sm font-bold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 ${
+            view === item.id
+              ? "text-[#087ead] after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:rounded-full after:bg-[#087ead]"
+              : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
       <button
         type="button"
         aria-pressed={view === "perturbation"}

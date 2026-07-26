@@ -17,14 +17,32 @@ import threading
 import time
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from itertools import chain
-from math import fsum, isfinite, log2
+from math import fsum, isfinite
 from pathlib import Path
 from statistics import median
 
 from ..algorithm_registry import get_algorithm_by_id
 from ..config import BEELINE_ROOT_CANDIDATES, PROJECTS_ROOT
 from ..repositories.project_repository import read_project_manifest
+from .matrix_transformation_service import (
+    MatrixTransformationError,
+    matrix_transformation_signature,
+    read_expression_frame,
+    transform_expression_matrix,
+)
+from .gene_selection_service import (
+    GeneSelectionError,
+    apply_detection_filter,
+    apply_trajectory_filter,
+    apply_variance_filter,
+    detection_filter_signature,
+    trajectory_filter_signature,
+    variance_filter_signature,
+)
+from .gene_ordering_service import (
+    GeneOrderingGenerationError,
+    generate_gene_ordering_csv,
+)
 
 
 # Confidence bootstrap run bounds. Applied uniformly to every dataset size:
@@ -42,7 +60,6 @@ DEFAULT_CONFIDENCE_STOP_RHO = 0.95
 DEFAULT_CONFIDENCE_STOP_STREAK = 2
 DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
 SINGE_MAX_CONSECUTIVE_EMPTY_RUNS = 3
-DEFAULT_MAX_PREPROCESSED_GENES = 8000
 DEFAULT_SPACE_FREE_LINK_ROOT = Path.home() / ".grnscope" / "beeline_links"
 DEFAULT_SPACE_FREE_RUNTIME_ROOT = Path.home() / ".grnscope" / "beeline_runtime"
 BEELINE_MIRROR_ENTRIES = ("BLRunner.py", "BLRun", "Algorithms", "utils")
@@ -50,6 +67,7 @@ _BEELINE_MIRROR_LOCK = threading.Lock()
 PROJECT_PREPROCESSED_DIRNAME = "preprocessed"
 PROJECT_PREPROCESSED_EXPRESSION_FILENAME = "ExpressionData.csv"
 PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
+PROJECT_GENERATED_GENE_ORDERING_FILENAME = "GeneOrdering.csv"
 PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
 RUN_TIMINGS_FILENAME = "run_timings.json"
 RUNNER_PHASE_TIMINGS_FILENAME = "phase_timings.json"
@@ -63,6 +81,10 @@ class AlgorithmStoppedError(RuntimeError):
 
 
 class MatrixValidationRuntimeError(ValueError):
+    pass
+
+
+class PreprocessingRuntimeError(ValueError):
     pass
 
 
@@ -601,13 +623,6 @@ def resolve_confidence_min_runs() -> int:
     return DEFAULT_CONFIDENCE_MIN_RUNS
 
 
-def resolve_max_preprocessed_genes() -> int:
-    return (
-        parse_positive_int(os.environ.get("GRNSCOPE_MAX_PREPROCESSED_GENES"))
-        or DEFAULT_MAX_PREPROCESSED_GENES
-    )
-
-
 def count_expression_gene_rows(expression_path: Path) -> int:
     dialect = detect_csv_dialect_from_file(expression_path)
     row_count = 0
@@ -754,42 +769,6 @@ def detect_csv_dialect_from_file(source_path: Path) -> csv.Dialect | type[csv.Di
     return detect_csv_dialect(sample)
 
 
-def resolve_known_tf_list_path(project_manifest: dict) -> Path | None:
-    explicit_path = project_manifest.get("known_tf_list_path") or os.environ.get("KNOWN_TF_LIST_PATH")
-    candidate_paths: list[Path] = []
-    if explicit_path:
-        candidate_paths.append(Path(str(explicit_path)))
-
-    project_root = PROJECTS_ROOT.parent
-    candidate_paths.extend(
-        [
-            project_root / "reference" / "human_tf_gene_names.txt",
-            project_root / "reference" / "known_tf_gene_names.txt",
-            project_root / "data" / "human_tf_gene_names.txt",
-            project_root / "data" / "known_tf_gene_names.txt",
-        ]
-    )
-
-    for candidate in candidate_paths:
-        resolved = candidate if candidate.is_absolute() else candidate.resolve()
-        if resolved.exists() and resolved.is_file():
-            return resolved
-    return None
-
-
-def load_known_tf_genes(project_manifest: dict) -> set[str]:
-    tf_list_path = resolve_known_tf_list_path(project_manifest)
-    if not tf_list_path:
-        return set()
-
-    return {
-        line.strip()
-        for line in tf_list_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
-
-
-
 def compute_row_variance(values: Iterable[float]) -> float:
     count = 0
     mean_value = 0.0
@@ -830,39 +809,18 @@ def build_preprocessing_signature(
     project_manifest: dict,
 ) -> dict:
     source_stat = source_expression.stat()
-    include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
-    known_tf_path = (
-        resolve_known_tf_list_path(project_manifest) if include_all_tfs else None
-    )
+    preprocessing_config = project_manifest.get("preprocessing") or {}
+    matrix_state = str(preprocessing_config.get("matrix_state") or "").strip().lower()
 
-    signature = {
+    return {
         "source_expression_path": str(source_expression.resolve()),
         "source_expression_size": source_stat.st_size,
         "source_expression_mtime_ns": source_stat.st_mtime_ns,
-        "top_variable_genes": project_manifest.get("top_variable_genes"),
-        "max_preprocessed_genes": resolve_max_preprocessed_genes(),
-        "include_all_tfs": project_manifest.get("include_all_tfs"),
-        "normalize_enabled": project_manifest.get("normalize_enabled"),
-        "log_transform_enabled": project_manifest.get("log_transform_enabled"),
+        "matrix_transformation": matrix_transformation_signature(matrix_state),
+        "detection_filter": detection_filter_signature(preprocessing_config),
+        "trajectory_filter": trajectory_filter_signature(project_manifest),
+        "variance_filter": variance_filter_signature(project_manifest),
     }
-
-    if known_tf_path:
-        known_tf_stat = known_tf_path.stat()
-        signature.update(
-            {
-                "known_tf_path": str(known_tf_path.resolve()),
-                "known_tf_size": known_tf_stat.st_size,
-                "known_tf_mtime_ns": known_tf_stat.st_mtime_ns,
-            }
-        )
-    else:
-        signature["known_tf_path"] = None
-
-    return signature
-
-
-def all_genes_requested(value: object) -> bool:
-    return str(value or "").strip().lower() in {"all", "all genes", "all_genes"}
 
 
 def read_preprocessed_manifest(manifest_path: Path) -> dict | None:
@@ -956,10 +914,13 @@ def ensure_project_preprocessed_expression(
     preprocessed_dir = preprocessed_expression.parent
     preprocessed_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = preprocessed_dir / PROJECT_PREPROCESSED_MANIFEST_FILENAME
-    expected_signature = build_preprocessing_signature(
-        source_expression,
-        project_manifest,
-    )
+    try:
+        expected_signature = build_preprocessing_signature(
+            source_expression,
+            project_manifest,
+        )
+    except MatrixTransformationError as exc:
+        raise PreprocessingRuntimeError(str(exc)) from exc
 
     if preprocessed_cache_is_valid(
         preprocessed_expression,
@@ -985,18 +946,170 @@ def ensure_project_preprocessed_expression(
         temporary_manifest = manifest_path.with_name(
             f".{manifest_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )
+        temporary_ordering = preprocessed_dir / (
+            f".{PROJECT_GENERATED_GENE_ORDERING_FILENAME}."
+            f"{os.getpid()}.{threading.get_ident()}.tmp"
+        )
 
         try:
-            preprocess_expression_matrix(
-                source_expression=source_expression,
-                destination_expression=temporary_expression,
-                project_manifest=project_manifest,
+            preprocessing_config = project_manifest.get("preprocessing") or {}
+            try:
+                transformation = transform_expression_matrix(
+                    source_expression=source_expression,
+                    destination_expression=temporary_expression,
+                    matrix_state=str(
+                        preprocessing_config.get("matrix_state") or ""
+                    ),
+                )
+            except MatrixTransformationError as exc:
+                raise PreprocessingRuntimeError(str(exc)) from exc
+
+            gene_selection: list[dict] = []
+            detection_config = preprocessing_config.get("detection") or {}
+            if bool(detection_config.get("enabled")):
+                detection_output = temporary_expression.with_name(
+                    f"{temporary_expression.name}.detection"
+                )
+                try:
+                    detection_result = apply_detection_filter(
+                        source_expression=temporary_expression,
+                        destination_expression=detection_output,
+                        minimum_cell_percent=float(
+                            detection_config.get("minimum_cell_percent", 10)
+                        ),
+                    )
+                except (GeneSelectionError, TypeError, ValueError) as exc:
+                    detection_output.unlink(missing_ok=True)
+                    raise PreprocessingRuntimeError(str(exc)) from exc
+                detection_output.replace(temporary_expression)
+                gene_selection.append(detection_result)
+
+            trajectory_config = preprocessing_config.get("trajectory") or {}
+            generated_gene_ordering: dict | None = None
+            generated_ordering_path = (
+                preprocessed_dir / PROJECT_GENERATED_GENE_ORDERING_FILENAME
             )
+            if bool(trajectory_config.get("enabled")):
+                ordering_source = str(
+                    trajectory_config.get("gene_ordering_source") or "calculate"
+                ).strip().lower()
+                if ordering_source == "upload":
+                    ordering_path_value = project_manifest.get("gene_ordering_path")
+                    if not ordering_path_value:
+                        raise PreprocessingRuntimeError(
+                            "GeneOrdering CSV is required for trajectory-aware filtering."
+                        )
+                    active_ordering_path = Path(str(ordering_path_value))
+                else:
+                    pseudotime_path_value = project_manifest.get("pseudotime_path")
+                    if not pseudotime_path_value:
+                        raise PreprocessingRuntimeError(
+                            "Pseudotime is required to calculate GeneOrdering."
+                        )
+                    try:
+                        generated_gene_ordering = generate_gene_ordering_csv(
+                            source_expression=temporary_expression,
+                            pseudotime_path=Path(str(pseudotime_path_value)),
+                            destination_path=temporary_ordering,
+                        )
+                    except GeneOrderingGenerationError as exc:
+                        temporary_ordering.unlink(missing_ok=True)
+                        raise PreprocessingRuntimeError(str(exc)) from exc
+                    active_ordering_path = temporary_ordering
+
+                trajectory_output = temporary_expression.with_name(
+                    f"{temporary_expression.name}.trajectory"
+                )
+                try:
+                    trajectory_result = apply_trajectory_filter(
+                        source_expression=temporary_expression,
+                        destination_expression=trajectory_output,
+                        gene_ordering_path=active_ordering_path,
+                        p_value_threshold=float(
+                            trajectory_config.get("p_value_threshold", 0.01)
+                        ),
+                        bonferroni_correction=bool(
+                            trajectory_config.get("bonferroni_correction")
+                        ),
+                        retain_significant_tfs=bool(
+                            trajectory_config.get("retain_significant_tfs")
+                        ),
+                        known_tf_gene_names={
+                            str(gene_name)
+                            for gene_name in (
+                                project_manifest.get("known_tf_gene_names") or []
+                            )
+                        },
+                    )
+                except (GeneSelectionError, TypeError, ValueError) as exc:
+                    trajectory_output.unlink(missing_ok=True)
+                    raise PreprocessingRuntimeError(str(exc)) from exc
+                trajectory_output.replace(temporary_expression)
+                if generated_gene_ordering is not None:
+                    temporary_ordering.replace(generated_ordering_path)
+                    generated_gene_ordering["path"] = str(generated_ordering_path)
+                    trajectory_result["generated_gene_ordering"] = (
+                        generated_gene_ordering
+                    )
+                gene_selection.append(trajectory_result)
+
+            variance_config = preprocessing_config.get("variance") or {}
+            if bool(variance_config.get("enabled")):
+                configured_include_known_tfs = bool(
+                    variance_config.get("include_known_tfs")
+                )
+                retain_significant_trajectory_tfs = bool(
+                    trajectory_config.get("enabled")
+                    and trajectory_config.get("retain_significant_tfs")
+                )
+                effective_include_known_tfs = (
+                    configured_include_known_tfs
+                    or retain_significant_trajectory_tfs
+                )
+                variance_output = temporary_expression.with_name(
+                    f"{temporary_expression.name}.variance"
+                )
+                try:
+                    variance_result = apply_variance_filter(
+                        source_expression=temporary_expression,
+                        destination_expression=variance_output,
+                        gene_count=int(variance_config.get("gene_count", 500)),
+                        include_known_tfs=effective_include_known_tfs,
+                        known_tf_gene_names={
+                            str(gene_name)
+                            for gene_name in (
+                                project_manifest.get("known_tf_gene_names") or []
+                            )
+                        },
+                    )
+                except (GeneSelectionError, TypeError, ValueError) as exc:
+                    variance_output.unlink(missing_ok=True)
+                    raise PreprocessingRuntimeError(str(exc)) from exc
+                variance_output.replace(temporary_expression)
+                variance_result["configured_include_known_tfs"] = (
+                    configured_include_known_tfs
+                )
+                variance_result["retain_significant_trajectory_tfs"] = (
+                    retain_significant_trajectory_tfs
+                )
+                gene_selection.append(variance_result)
+
+            try:
+                final_frame = read_expression_frame(temporary_expression)
+            except MatrixTransformationError as exc:
+                raise PreprocessingRuntimeError(str(exc)) from exc
+            if generated_gene_ordering is None:
+                generated_ordering_path.unlink(missing_ok=True)
             temporary_manifest.write_text(
                 json.dumps(
                     {
                         "signature": expected_signature,
+                        "transformation": transformation,
+                        "gene_selection": gene_selection,
+                        "generated_gene_ordering": generated_gene_ordering,
                         "created_at": time.time(),
+                        "gene_count": int(final_frame.shape[0]),
+                        "cell_count": int(final_frame.shape[1]),
                         "preprocessed_expression_path": str(preprocessed_expression),
                     },
                     indent=2,
@@ -1008,6 +1121,7 @@ def ensure_project_preprocessed_expression(
         finally:
             temporary_expression.unlink(missing_ok=True)
             temporary_manifest.unlink(missing_ok=True)
+            temporary_ordering.unlink(missing_ok=True)
 
     return preprocessed_expression
 
@@ -1368,24 +1482,6 @@ def summarize_expression_matrix_issues(issues: list[dict]) -> str:
     return message
 
 
-def transform_expression_values(
-    values: Iterable[float],
-    *,
-    column_sums: list[float] | None,
-    normalize_enabled: bool,
-    log_transform_enabled: bool,
-) -> Iterator[float]:
-    for column_index, value in enumerate(values):
-        transformed_value = value
-        if normalize_enabled and column_sums is not None:
-            column_sum = column_sums[column_index] if column_index < len(column_sums) else 0.0
-            if column_sum > 0:
-                transformed_value = (value / column_sum) * 10000.0
-        if log_transform_enabled:
-            transformed_value = log2(max(transformed_value, 0.0) + 1.0)
-        yield transformed_value
-
-
 def iter_expression_data_rows(
     source_expression: Path,
     dialect: csv.Dialect | type[csv.Dialect],
@@ -1408,160 +1504,6 @@ def iter_expression_data_rows(
             raise MatrixValidationRuntimeError(
                 f"Expression matrix could not be parsed as CSV{location}: {exc}."
             ) from exc
-
-
-def preprocess_expression_matrix(
-    source_expression: Path,
-    destination_expression: Path,
-    project_manifest: dict,
-) -> None:
-    dialect = detect_csv_dialect_from_file(source_expression)
-
-    with source_expression.open("r", encoding="utf-8", newline="") as source_file:
-        reader = csv.reader(source_file, dialect=dialect)
-        try:
-            header = next(reader)
-        except StopIteration as exc:
-            raise MatrixValidationRuntimeError("Expression matrix file is empty.") from exc
-
-    cell_names = validate_preprocessing_header(header)
-    cell_count = len(cell_names)
-    requested_all_genes = all_genes_requested(project_manifest.get("top_variable_genes"))
-    requested_top_variable_genes = parse_positive_int(project_manifest.get("top_variable_genes"))
-    max_preprocessed_genes = resolve_max_preprocessed_genes()
-    if requested_all_genes:
-        top_variable_genes = None
-    elif requested_top_variable_genes is not None:
-        top_variable_genes = min(requested_top_variable_genes, max_preprocessed_genes)
-    else:
-        top_variable_genes = max_preprocessed_genes
-    include_all_tfs = parse_bool(project_manifest.get("include_all_tfs"))
-    normalize_enabled = parse_bool(project_manifest.get("normalize_enabled"))
-    log_transform_enabled = parse_bool(project_manifest.get("log_transform_enabled"))
-
-    tf_genes = load_known_tf_genes(project_manifest) if include_all_tfs else set()
-
-    column_sums: list[float] | None = None
-    parsed_row_count = 0
-    if normalize_enabled:
-        column_sums = [0.0] * cell_count
-        for index, row in iter_expression_data_rows(source_expression, dialect):
-            row_number = index + 2
-            gene_name = validate_preprocessing_gene_name(row, row_number)
-            for column_index, value in enumerate(
-                parse_expression_numeric_values(
-                    row,
-                    cell_count,
-                    row_number=row_number,
-                    gene_name=gene_name,
-                    cell_names=cell_names,
-                )
-            ):
-                column_sums[column_index] += value
-            parsed_row_count += 1
-    else:
-        for _index, _row in iter_expression_data_rows(source_expression, dialect):
-            parsed_row_count += 1
-
-    if parsed_row_count == 0:
-        raise MatrixValidationRuntimeError(
-            "Expression matrix must include gene rows below the header."
-        )
-
-    scored_rows: list[tuple[float, int, str]] = []
-    seen_gene_names: set[str] = set()
-    for index, row in iter_expression_data_rows(source_expression, dialect):
-        row_number = index + 2
-        gene_name = validate_preprocessing_gene_name(row, row_number)
-        if gene_name in seen_gene_names:
-            raise MatrixValidationRuntimeError(
-                f"Gene name '{preview_matrix_identifier(gene_name, 'unnamed gene')}' "
-                f"is duplicated at row {row_number}."
-            )
-        seen_gene_names.add(gene_name)
-        variance = compute_row_variance(
-            transform_expression_values(
-                parse_expression_numeric_values(
-                    row,
-                    cell_count,
-                    row_number=row_number,
-                    gene_name=gene_name,
-                    cell_names=cell_names,
-                ),
-                column_sums=column_sums,
-                normalize_enabled=normalize_enabled,
-                log_transform_enabled=log_transform_enabled,
-            )
-        )
-        scored_rows.append((variance, index, gene_name))
-
-    if not scored_rows:
-        shutil.copy2(source_expression, destination_expression)
-        return
-
-    sorted_rows = sorted(scored_rows, key=lambda item: (-item[0], item[1]))
-    retained_indices: set[int]
-    if top_variable_genes is None or top_variable_genes >= len(scored_rows):
-        retained_indices = {index for _, index, _ in scored_rows}
-    else:
-        retained_indices = {index for _, index, _ in sorted_rows[:top_variable_genes]}
-
-    if include_all_tfs and tf_genes:
-        for _, index, gene_name in scored_rows:
-            if gene_name in tf_genes:
-                retained_indices.add(index)
-
-    if not requested_all_genes and len(retained_indices) > max_preprocessed_genes:
-        prioritized_rows = sorted(
-            (
-                (variance, index, gene_name)
-                for variance, index, gene_name in scored_rows
-                if index in retained_indices
-            ),
-            key=lambda item: (
-                0 if item[2] in tf_genes else 1,
-                -item[0],
-                item[1],
-            ),
-        )
-        retained_indices = {
-            index for _variance, index, _gene_name in prioritized_rows[:max_preprocessed_genes]
-        }
-
-    destination_expression.parent.mkdir(parents=True, exist_ok=True)
-    with destination_expression.open("w", encoding="utf-8", newline="") as output_file:
-        writer = csv.writer(
-            output_file,
-            delimiter=getattr(dialect, "delimiter", ","),
-            quotechar=getattr(dialect, "quotechar", '"'),
-            lineterminator="\n",
-        )
-        writer.writerow(header)
-
-        for index, row in iter_expression_data_rows(source_expression, dialect):
-            if index not in retained_indices:
-                continue
-
-            row_number = index + 2
-            gene_name = validate_preprocessing_gene_name(row, row_number)
-            transformed_values = transform_expression_values(
-                parse_expression_numeric_values(
-                    row,
-                    cell_count,
-                    row_number=row_number,
-                    gene_name=gene_name,
-                    cell_names=cell_names,
-                ),
-                column_sums=column_sums,
-                normalize_enabled=normalize_enabled,
-                log_transform_enabled=log_transform_enabled,
-            )
-            writer.writerow(
-                chain(
-                    [gene_name],
-                    (f"{value:.10f}" for value in transformed_values),
-                )
-            )
 
 
 def resolve_algorithm_gene_limit(

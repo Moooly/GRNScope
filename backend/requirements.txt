@@ -2,6 +2,8 @@ fastapi
 uvicorn
 python-multipart
 pandas
+scanpy>=1.11,<2
+scipy>=1.11,<2
 pyyaml
 tqdm
 redis

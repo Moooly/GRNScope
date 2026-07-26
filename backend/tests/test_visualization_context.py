@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from app.services.visualization_context_service import (
+    build_visualization_context,
+    read_ground_truth_edges,
+)
+
+
+class VisualizationContextTests(unittest.TestCase):
+    def test_reads_named_ground_truth_columns_and_deduplicates_edges(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ground_truth_path = Path(temp_dir) / "ground_truth.tsv"
+            ground_truth_path.write_text(
+                "regulator\ttarget\teffect\n"
+                "TF1\tG1\tactivation\n"
+                "TF1\tG1\tactivation\n"
+                "TF2\tG2\trepression\n",
+                encoding="utf-8",
+            )
+
+            edges = read_ground_truth_edges(ground_truth_path)
+
+        self.assertEqual(
+            edges,
+            [
+                {"source": "TF1", "target": "G1", "sign": "activation"},
+                {"source": "TF2", "target": "G2", "sign": "repression"},
+            ],
+        )
+
+    def test_builds_trajectory_and_ground_truth_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            expression_path = project_dir / "ExpressionData.csv"
+            expression_path.write_text(
+                ",c1,c2,c3,c4,c5,c6\n"
+                "G1,0,1,2,3,4,5\n"
+                "G2,5,4,3,2,1,0\n"
+                "G3,1,1,1,1,1,1\n",
+                encoding="utf-8",
+            )
+            pseudotime_path = project_dir / "PseudoTime.csv"
+            pseudotime_path.write_text(
+                ",PseudoTime1\n"
+                "c1,0.0\n"
+                "c2,0.2\n"
+                "c3,0.4\n"
+                "c4,0.6\n"
+                "c5,0.8\n"
+                "c6,1.0\n",
+                encoding="utf-8",
+            )
+            ground_truth_path = project_dir / "ground_truth.csv"
+            ground_truth_path.write_text(
+                "source,target\nG1,G2\nG2,G3\n",
+                encoding="utf-8",
+            )
+            (project_dir / "project.json").write_text(
+                json.dumps(
+                    {
+                        "expression_filename": expression_path.name,
+                        "pseudotime_filename": pseudotime_path.name,
+                        "ground_truth_filename": ground_truth_path.name,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            context = build_visualization_context(
+                project_dir=project_dir,
+                requested_genes=["G2", "G1"],
+            )
+
+        trajectory = context["trajectory"]
+        self.assertTrue(trajectory["available"])
+        self.assertEqual(trajectory["genes"], ["G2", "G1"])
+        self.assertEqual(trajectory["lineages"][0]["cell_count"], 6)
+        self.assertEqual(len(trajectory["lineages"][0]["bins"]), 6)
+        self.assertEqual(
+            set(trajectory["lineages"][0]["bins"][0]["scaled_expression"]),
+            {"G1", "G2"},
+        )
+
+        ground_truth = context["ground_truth"]
+        self.assertTrue(ground_truth["available"])
+        self.assertEqual(ground_truth["edge_count"], 2)
+        self.assertEqual(
+            ground_truth["edges"][0],
+            {"source": "G1", "target": "G2"},
+        )
+
+    def test_marks_optional_context_unavailable_when_files_are_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            (project_dir / "project.json").write_text("{}", encoding="utf-8")
+
+            context = build_visualization_context(
+                project_dir=project_dir,
+                requested_genes=[],
+            )
+
+        self.assertFalse(context["trajectory"]["available"])
+        self.assertFalse(context["ground_truth"]["available"])
+
+
+if __name__ == "__main__":
+    unittest.main()

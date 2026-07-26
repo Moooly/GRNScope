@@ -16,6 +16,7 @@ from itertools import chain
 from pathlib import Path
 
 from ..algorithm_registry import sort_algorithm_ids_by_difficulty
+from ..atomic_io import atomic_write_json
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from ..repositories.job_repository import (
     jobs_manifest_lock,
@@ -25,9 +26,11 @@ from ..repositories.job_repository import (
 from ..repositories.project_repository import read_project_manifest
 from ..repositories.project_repository import write_project_manifest
 from ..species_inference import infer_species_from_gene_names
+from ..validators import read_expression_gene_names, validate_gene_ordering_csv
 from ..services.beeline_service import (
     AlgorithmStoppedError,
     MatrixValidationRuntimeError,
+    PreprocessingRuntimeError,
     collect_expression_matrix_issues,
     count_expression_gene_rows,
     detect_csv_dialect_from_file,
@@ -180,7 +183,10 @@ def mark_project_setup_failure(
                 manifest["upload_status"] = "validation_failed"
             else:
                 manifest["upload_status"] = "failed"
-            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+            if manifest_name == "project.json":
+                write_project_manifest(project_dir, manifest)
+            else:
+                atomic_write_json(manifest_path, manifest)
         except Exception:
             continue
 
@@ -199,7 +205,10 @@ def mark_project_dataset_validated(project_dir: Path, job_id: str) -> None:
             manifest.pop("dataset_validation_issues", None)
             manifest.pop("setup_error_type", None)
             manifest.pop("setup_error_message", None)
-            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+            if manifest_name == "project.json":
+                write_project_manifest(project_dir, manifest)
+            else:
+                atomic_write_json(manifest_path, manifest)
         except Exception:
             continue
 
@@ -215,6 +224,60 @@ def mark_project_dataset_validated(project_dir: Path, job_id: str) -> None:
         write_jobs_manifest(project_dir, jobs_manifest)
 
 
+def sync_project_preprocessing_state(
+    project_dir: Path,
+    status: str,
+    *,
+    result: dict | None = None,
+    error: str | None = None,
+) -> None:
+    for manifest_name in ("project.json", "metadata.json"):
+        manifest_path = project_dir / manifest_name
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        manifest["preprocessing_status"] = status
+        if result is not None:
+            manifest["preprocessing_result"] = result
+        elif status != "completed":
+            manifest.pop("preprocessing_result", None)
+        if error:
+            manifest["preprocessing_error"] = error
+        else:
+            manifest.pop("preprocessing_error", None)
+        if manifest_name == "project.json":
+            write_project_manifest(project_dir, manifest)
+        else:
+            atomic_write_json(manifest_path, manifest)
+
+
+def load_preprocessing_result(
+    project_dir: Path,
+    preprocessed_expression: Path,
+) -> dict:
+    manifest_path = project_dir / "preprocessed" / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PreprocessingRuntimeError(
+            "Preprocessing finished, but its result manifest could not be read."
+        ) from exc
+    return {
+        "status": "completed",
+        "completed_at": manifest.get("created_at"),
+        "gene_count": manifest.get("gene_count"),
+        "cell_count": manifest.get("cell_count"),
+        "transformation": manifest.get("transformation"),
+        "gene_selection": manifest.get("gene_selection") or [],
+        "generated_gene_ordering": manifest.get("generated_gene_ordering"),
+        "preprocessed_expression_path": str(preprocessed_expression),
+        "manifest_path": str(manifest_path),
+    }
+
+
 def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool:
     """Validate and preprocess the dataset before any algorithm starts."""
 
@@ -223,8 +286,6 @@ def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool
         project_manifest = read_project_manifest(project_dir)
         if project_manifest.get("dataset_validation_status") == "failed":
             return False
-        if project_manifest.get("dataset_validation_status") == "validated":
-            return True
 
         expression_path = project_manifest.get("expression_path")
         if not expression_path:
@@ -250,28 +311,176 @@ def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool
             return False
         validation_report_path.unlink(missing_ok=True)
 
-        ensure_project_preprocessed_expression(
+        trajectory_config = (
+            project_manifest.get("preprocessing", {}).get("trajectory", {})
+        )
+        trajectory_enabled = bool(trajectory_config.get("enabled"))
+        gene_ordering_source = str(
+            trajectory_config.get("gene_ordering_source") or "calculate"
+        ).strip().lower()
+        if trajectory_enabled and gene_ordering_source == "upload":
+            gene_ordering_path_value = project_manifest.get("gene_ordering_path")
+            if not gene_ordering_path_value:
+                message = (
+                    "GeneOrdering CSV is required for the selected "
+                    "trajectory-aware filtering source."
+                )
+                sync_gene_ordering_validation(
+                    project_dir,
+                    project_manifest,
+                    {"status": "failed", "error": message},
+                )
+                sync_project_preprocessing_state(
+                    project_dir,
+                    "failed",
+                    error=message,
+                )
+                mark_project_setup_failure(
+                    project_dir,
+                    job_id,
+                    message,
+                    error_type="gene_ordering_validation",
+                )
+                return False
+
+            gene_ordering_path = Path(str(gene_ordering_path_value))
+            if not gene_ordering_path.exists():
+                message = "The uploaded GeneOrdering CSV could not be found."
+                sync_gene_ordering_validation(
+                    project_dir,
+                    project_manifest,
+                    {"status": "failed", "error": message},
+                )
+                sync_project_preprocessing_state(
+                    project_dir,
+                    "failed",
+                    error=message,
+                )
+                mark_project_setup_failure(
+                    project_dir,
+                    job_id,
+                    message,
+                    error_type="gene_ordering_validation",
+                )
+                return False
+
+            try:
+                gene_ordering_validation = validate_gene_ordering_csv(
+                    gene_ordering_path,
+                    read_expression_gene_names(source_expression),
+                )
+            except ValueError as exc:
+                message = str(exc)
+                sync_gene_ordering_validation(
+                    project_dir,
+                    project_manifest,
+                    {"status": "failed", "error": message},
+                )
+                sync_project_preprocessing_state(
+                    project_dir,
+                    "failed",
+                    error=message,
+                )
+                mark_project_setup_failure(
+                    project_dir,
+                    job_id,
+                    message,
+                    error_type="gene_ordering_validation",
+                )
+                return False
+
+            sync_gene_ordering_validation(
+                project_dir,
+                project_manifest,
+                gene_ordering_validation,
+            )
+
+        # Calculated GeneOrdering depends on pseudotime, so estimation must
+        # finish before the preprocessing pipeline reaches trajectory filtering.
+        # Uploaded pseudotime always wins because this only runs when no
+        # pseudotime path is present.
+        should_estimate_pseudotime = (
+            parse_bool(project_manifest.get("estimate_pseudotime"))
+            and not project_manifest.get("pseudotime_path")
+        )
+        if should_estimate_pseudotime:
+            from .pseudotime_service import (
+                ensure_estimated_pseudotime,
+                read_estimation_status,
+            )
+
+            estimation_error: str | None = None
+            try:
+                estimated = ensure_estimated_pseudotime(project_id)
+            except Exception as exc:
+                estimated = False
+                estimation_error = str(exc)
+            project_manifest = read_project_manifest(project_dir)
+            if not estimated and trajectory_enabled and gene_ordering_source == "calculate":
+                estimation_status = read_estimation_status(project_dir) or {}
+                message = str(
+                    estimation_status.get("error_message")
+                    or estimation_error
+                    or (
+                        "Pseudotime estimation failed, so GeneOrdering could "
+                        "not be calculated."
+                    )
+                )
+                sync_project_preprocessing_state(
+                    project_dir,
+                    "failed",
+                    error=message,
+                )
+                mark_project_setup_failure(
+                    project_dir,
+                    job_id,
+                    message,
+                    error_type="pseudotime_estimation",
+                )
+                return False
+
+        if (
+            trajectory_enabled
+            and gene_ordering_source == "calculate"
+            and not project_manifest.get("pseudotime_path")
+        ):
+            message = (
+                "Pseudotime is required to calculate GeneOrdering. Upload "
+                "pseudotime or enable Slingshot estimation."
+            )
+            sync_project_preprocessing_state(
+                project_dir,
+                "failed",
+                error=message,
+            )
+            mark_project_setup_failure(
+                project_dir,
+                job_id,
+                message,
+                error_type="gene_ordering_generation",
+            )
+            return False
+
+        sync_project_preprocessing_state(project_dir, "running")
+        preprocessed_expression = ensure_project_preprocessed_expression(
             project_id,
             source_expression,
             project_manifest,
         )
-        sync_project_dataset_dimensions(project_dir, project_manifest, source_expression)
-
-        # If the project asked us to estimate pseudotime (and none was uploaded),
-        # produce it here — once, before any algorithm runs. ensure_estimated_
-        # pseudotime is locked and idempotent, so parallel workers don't launch
-        # duplicate estimations. A failure is non-fatal: non-trajectory methods
-        # still run, and the trajectory ones surface their own "no pseudotime"
-        # failure, while the estimation status records what went wrong.
-        if parse_bool(project_manifest.get("estimate_pseudotime")) and not project_manifest.get(
-            "pseudotime_path"
-        ):
-            try:
-                from .pseudotime_service import ensure_estimated_pseudotime
-
-                ensure_estimated_pseudotime(project_id)
-            except Exception:
-                pass
+        preprocessing_result = load_preprocessing_result(
+            project_dir,
+            preprocessed_expression,
+        )
+        sync_project_preprocessing_state(
+            project_dir,
+            "completed",
+            result=preprocessing_result,
+        )
+        sync_project_dataset_dimensions(
+            project_dir,
+            read_project_manifest(project_dir),
+            source_expression,
+        )
 
         mark_project_dataset_validated(project_dir, job_id)
         return True
@@ -283,6 +492,56 @@ def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool
             error_type="matrix_validation",
         )
         return False
+    except PreprocessingRuntimeError as exc:
+        sync_project_preprocessing_state(
+            project_dir,
+            "failed",
+            error=str(exc),
+        )
+        mark_project_setup_failure(
+            project_dir,
+            job_id,
+            str(exc),
+            error_type="preprocessing",
+        )
+        return False
+    except Exception as exc:
+        message = f"Preprocessing failed unexpectedly: {exc}"
+        traceback.print_exc()
+        sync_project_preprocessing_state(
+            project_dir,
+            "failed",
+            error=message,
+        )
+        mark_project_setup_failure(
+            project_dir,
+            job_id,
+            message,
+            error_type="preprocessing",
+        )
+        return False
+
+
+def sync_gene_ordering_validation(
+    project_dir: Path,
+    project_manifest: dict,
+    validation: dict,
+) -> None:
+    project_manifest["gene_ordering_validation"] = validation
+    write_project_manifest(project_dir, project_manifest)
+
+    metadata_path = project_dir / "metadata.json"
+    if not metadata_path.exists():
+        return
+    try:
+        metadata_manifest = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    metadata_manifest["gene_ordering_validation"] = validation
+    metadata_manifest["has_gene_ordering"] = bool(
+        project_manifest.get("gene_ordering_path")
+    )
+    atomic_write_json(metadata_path, metadata_manifest)
 
 
 def sync_project_dataset_dimensions(
@@ -325,10 +584,7 @@ def sync_project_dataset_dimensions(
     metadata_manifest["gene_names"] = gene_names
     metadata_manifest["species_inference"] = infer_species_from_gene_names(gene_names)
     metadata_manifest["upload_status"] = "validated"
-    metadata_path.write_text(
-        json.dumps(metadata_manifest, indent=2),
-        encoding="utf-8",
-    )
+    atomic_write_json(metadata_path, metadata_manifest)
 
 
 def safe_scope_id(scope_type: str, label: str) -> str:

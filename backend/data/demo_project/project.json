@@ -6,10 +6,32 @@
   "created_at": 1779177623.1786757,
   "created_at_display": "2026-05-19 08:00",
   "notification_email": "immoooly@gmail.com",
-  "top_variable_genes": "19",
-  "include_all_tfs": "true",
-  "normalize_enabled": "true",
-  "log_transform_enabled": "true",
+  "preprocessing": {
+    "schema_version": 1,
+    "matrix_state": "raw",
+    "dataset_species": "human",
+    "enabled_stages": [
+      "detection",
+      "variance"
+    ],
+    "detection": {
+      "enabled": true,
+      "minimum_cell_percent": 10
+    },
+    "trajectory": {
+      "enabled": false,
+      "gene_ordering_source": "calculate",
+      "gene_ordering_filename": null,
+      "p_value_threshold": 0.01,
+      "bonferroni_correction": true,
+      "retain_significant_tfs": true
+    },
+    "variance": {
+      "enabled": true,
+      "gene_count": 19,
+      "include_known_tfs": true
+    }
+  },
   "selected_algorithms": [
     "PEARSON",
     "PPCOR",

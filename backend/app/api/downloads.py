@@ -391,10 +391,10 @@ async def download_analysis_metadata_file(
                     "dimensions": dataset.get("dimensions"),
                 },
                 "preprocessing": {
-                    "top_variable_genes": "Demo",
-                    "include_all_tfs": True,
-                    "normalize_enabled": "Demo",
-                    "log_transform_enabled": "Demo",
+                    "schema_version": 1,
+                    "matrix_state": "log_normalized",
+                    "dataset_species": "human",
+                    "enabled_stages": [],
                 },
                 "algorithms": algorithms_summary,
                 "current_export_settings": {
@@ -476,7 +476,11 @@ async def download_analysis_metadata_file(
                     "columns": column_count,
                 }
 
-        preprocessing_config = metadata.get("preprocessing") or {}
+        preprocessing_config = (
+            metadata.get("preprocessing")
+            or project_manifest.get("preprocessing")
+            or {}
+        )
         if not isinstance(preprocessing_config, dict):
             preprocessing_config = {}
 
@@ -588,12 +592,7 @@ async def download_analysis_metadata_file(
                 or project_manifest.get("pseudotime_filename"),
                 "dimensions": dataset_dimensions,
             },
-            "preprocessing": {
-                "top_variable_genes": preprocessing_config.get("top_variable_genes"),
-                "include_all_tfs": preprocessing_config.get("include_all_tfs"),
-                "normalize_enabled": preprocessing_config.get("normalize_enabled"),
-                "log_transform_enabled": preprocessing_config.get("log_transform_enabled"),
-            },
+            "preprocessing": preprocessing_config,
             "algorithms": algorithms_summary,
             "current_export_settings": {
                 "top_n": top_n,

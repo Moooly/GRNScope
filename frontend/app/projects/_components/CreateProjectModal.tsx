@@ -48,7 +48,7 @@ const SELECT_INPUT_CLASS =
 type CellOracleHelpTopic = "base-grn" | "cluster-labels";
 type CellOracleBaseGrnSource = "built-in" | "upload";
 type AdvancedSection = "genes" | "inputs" | "algorithms" | "results";
-type GeneSelectionStage = "detection" | "trajectory" | "variance";
+export type GeneSelectionStage = "detection" | "trajectory" | "variance";
 
 interface DatasetSummary {
   dimensions: string;
@@ -63,18 +63,19 @@ interface CreateProjectModalProps {
   isCreateClosing: boolean;
   projectName: string;
   expressionFileName: string;
+  expressionMatrixDimensions: string | null;
   pseudotimeFileName: string;
   clusterLabelsFileName: string;
   matrixState: string;
   datasetSpecies: string;
+  customTfListFileName: string;
   detectionThreshold: string;
-  geneSelectionMethod: "none" | "hvg" | "trajectory";
+  enabledGeneSelectionStages: GeneSelectionStage[];
   hvgGeneCount: string;
   geneOrderingSource: "calculate" | "upload";
   geneOrderingFileName: string;
   trajectoryPValue: string;
   trajectoryBonferroni: boolean;
-  trajectoryGeneCount: string;
   includeSignificantTFs: boolean;
   includeAllTFs: boolean;
   maxEdgesPerTarget: string;
@@ -110,15 +111,16 @@ interface CreateProjectModalProps {
   setProjectName: (value: string) => void;
   setMatrixState: (value: string) => void;
   setDatasetSpecies: (value: string) => void;
+  setCustomTfListFile: (file: File | null) => void;
+  setCustomTfListFileName: (value: string) => void;
   setDetectionThreshold: (value: string) => void;
-  setGeneSelectionMethod: (value: "none" | "hvg" | "trajectory") => void;
+  setEnabledGeneSelectionStages: (value: GeneSelectionStage[]) => void;
   setHvgGeneCount: (value: string) => void;
   setGeneOrderingSource: (value: "calculate" | "upload") => void;
   setGeneOrderingFile: (file: File | null) => void;
   setGeneOrderingFileName: (value: string) => void;
   setTrajectoryPValue: (value: string) => void;
   setTrajectoryBonferroni: (value: boolean) => void;
-  setTrajectoryGeneCount: (value: string) => void;
   setIncludeSignificantTFs: (value: boolean) => void;
   setExpressionFile: (file: File | null) => void;
   setExpressionFileName: (value: string) => void;
@@ -139,11 +141,14 @@ export default function CreateProjectModal({
   isCreateClosing,
   projectName,
   expressionFileName,
+  expressionMatrixDimensions,
   pseudotimeFileName,
   clusterLabelsFileName,
   matrixState,
   datasetSpecies,
+  customTfListFileName,
   detectionThreshold,
+  enabledGeneSelectionStages,
   hvgGeneCount,
   geneOrderingSource,
   geneOrderingFileName,
@@ -181,8 +186,10 @@ export default function CreateProjectModal({
   setProjectName,
   setMatrixState,
   setDatasetSpecies,
+  setCustomTfListFile,
+  setCustomTfListFileName,
   setDetectionThreshold,
-  setGeneSelectionMethod,
+  setEnabledGeneSelectionStages,
   setHvgGeneCount,
   setGeneOrderingSource,
   setGeneOrderingFile,
@@ -209,16 +216,11 @@ export default function CreateProjectModal({
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [openAdvancedSection, setOpenAdvancedSection] =
     useState<AdvancedSection | null>(null);
-  const [isCellOracleSettingsOpen, setIsCellOracleSettingsOpen] = useState(false);
-  const [isCellOracleSettingsClosing, setIsCellOracleSettingsClosing] = useState(false);
   const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] =
     useState<CellOracleBaseGrnSource>("built-in");
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(null);
-  const [enabledGeneSelectionStages, setEnabledGeneSelectionStages] = useState<
-    GeneSelectionStage[]
-  >(["detection"]);
   const getAlgorithmContextualDefaults = useCallback(
     (algorithmId: string): Record<string, unknown> => {
       if (algorithmId === "PIDC") return { maxGenes: pidcDefaultMaxGenes };
@@ -238,7 +240,6 @@ export default function CreateProjectModal({
       grisliDefaultMaxGenes,
     ],
   );
-  const cellOracleSettingsCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
 
@@ -270,8 +271,6 @@ export default function CreateProjectModal({
       setIsOutsideClosing(false);
       setIsCustomizeOpen(false);
       setOpenAdvancedSection(null);
-      setIsCellOracleSettingsOpen(false);
-      setIsCellOracleSettingsClosing(false);
       setCellOracleBaseGrnSource("built-in");
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
@@ -286,9 +285,6 @@ export default function CreateProjectModal({
     return () => {
       if (closeTimeoutRef.current) {
         clearTimeout(closeTimeoutRef.current);
-      }
-      if (cellOracleSettingsCloseTimeoutRef.current) {
-        clearTimeout(cellOracleSettingsCloseTimeoutRef.current);
       }
     };
   }, []);
@@ -341,38 +337,6 @@ export default function CreateProjectModal({
     }, 480);
   };
 
-  const handleOpenCellOracleSettings = () => {
-    if (cellOracleSettingsCloseTimeoutRef.current) {
-      clearTimeout(cellOracleSettingsCloseTimeoutRef.current);
-      cellOracleSettingsCloseTimeoutRef.current = null;
-    }
-
-    setIsCellOracleSettingsClosing(false);
-    setIsCellOracleSettingsOpen(true);
-  };
-
-  const handleCloseCellOracleSettings = useCallback(() => {
-    if (!isCellOracleSettingsOpen || isCellOracleSettingsClosing) return;
-
-    setHasCellOracleSettingsConfigured(cellOracleBaseGrnSource === "built-in");
-    setIsCellOracleSettingsClosing(true);
-
-    if (cellOracleSettingsCloseTimeoutRef.current) {
-      clearTimeout(cellOracleSettingsCloseTimeoutRef.current);
-    }
-
-    cellOracleSettingsCloseTimeoutRef.current = setTimeout(() => {
-      setIsCellOracleSettingsOpen(false);
-      setIsCellOracleSettingsClosing(false);
-      cellOracleSettingsCloseTimeoutRef.current = null;
-    }, 480);
-  }, [
-    cellOracleBaseGrnSource,
-    isCellOracleSettingsClosing,
-    isCellOracleSettingsOpen,
-    setHasCellOracleSettingsConfigured,
-  ]);
-
   const handleOpenCellOracleHelp = (topic: CellOracleHelpTopic) => {
     setIsCellOracleHelpClosing(false);
     setCellOracleHelpTopic(topic);
@@ -401,19 +365,6 @@ export default function CreateProjectModal({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [cellOracleHelpTopic, handleCloseCellOracleHelp]);
-
-  useEffect(() => {
-    if (!isCellOracleSettingsOpen || cellOracleHelpTopic) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        handleCloseCellOracleSettings();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cellOracleHelpTopic, handleCloseCellOracleSettings, isCellOracleSettingsOpen]);
 
   if (!isCreateVisible) {
     return null;
@@ -496,12 +447,7 @@ export default function CreateProjectModal({
       className={`fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm sm:px-6 lg:py-14 ${
         isModalClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
       }`}
-      onClick={
-        isCellOracleSettingsOpen ||
-        cellOracleHelpTopic
-          ? undefined
-          : handleOutsideClose
-      }
+      onClick={cellOracleHelpTopic ? undefined : handleOutsideClose}
     >
       <div
         data-create-project-modal
@@ -527,7 +473,7 @@ export default function CreateProjectModal({
         <div className="mt-5 min-h-0 flex-1 scroll-pb-24 space-y-6 overflow-y-auto pb-24 pr-4 [scrollbar-gutter:stable]">
           <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
             {expressionFileName ? (
-              <div className="flex min-h-20 items-center justify-between gap-4 rounded-[1rem] border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <div className="flex min-h-40 items-center justify-between gap-4 rounded-[1.25rem] border border-slate-200 bg-slate-50/60 px-6 py-5">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
                     Expression matrix
@@ -538,6 +484,11 @@ export default function CreateProjectModal({
                   >
                     {formatFileNameForDisplay(expressionFileName, 42)}
                   </p>
+                  {expressionMatrixDimensions !== null ? (
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      {expressionMatrixDimensions}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
@@ -645,17 +596,21 @@ export default function CreateProjectModal({
                 </div>
               </fieldset>
 
-              <label className="mt-7 block">
-                <span className="text-sm font-semibold text-slate-800">
+              <div className="mt-7">
+                <label
+                  htmlFor="datasetSpecies"
+                  className="text-sm font-semibold text-slate-800"
+                >
                   Dataset species
                   {!datasetSpecies ? (
                     <span className="ml-1.5 text-xs font-semibold text-[#1b75a6]/80">
                       · required
                     </span>
                   ) : null}
-                </span>
+                </label>
                 <span className="relative mt-0.5 flex items-center">
                   <select
+                    id="datasetSpecies"
                     value={datasetSpecies}
                     onChange={(event) => setDatasetSpecies(event.target.value)}
                     className="w-full appearance-none border-0 border-b border-slate-200 bg-transparent px-0 py-2.5 pr-7 text-sm font-medium text-slate-800 outline-none transition focus:border-[#1b75a6]"
@@ -672,11 +627,56 @@ export default function CreateProjectModal({
                   </span>
                 </span>
                 {datasetSpecies === "other" ? (
-                  <span className="mt-2 block text-xs leading-5 text-slate-500">
-                    Some species-specific features may be unavailable.
-                  </span>
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800">
+                          Custom TF list
+                        </p>
+                        <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                          Uploading a TF list can improve prediction performance.
+                        </p>
+                      </div>
+                      <label className="shrink-0 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#f6fbfe]">
+                        {customTfListFileName ? "Replace" : "Choose CSV"}
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          className="sr-only"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] ?? null;
+                            setCustomTfListFile(file);
+                            setCustomTfListFileName(file?.name ?? "");
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-xs text-slate-500">
+                      <span className="truncate">
+                        {customTfListFileName || (
+                          <>
+                            Required column: <code>gene_symbol</code>. Optional:{" "}
+                            <code>reference_gene_id</code>.
+                          </>
+                        )}
+                      </span>
+                      {customTfListFileName ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomTfListFile(null);
+                            setCustomTfListFileName("");
+                          }}
+                          className="shrink-0 font-semibold text-slate-500 transition hover:text-slate-800"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : null}
-              </label>
+              </div>
             </div>
           </div>
 
@@ -742,18 +742,7 @@ export default function CreateProjectModal({
                   trajectoryBonferroni={trajectoryBonferroni}
                   includeSignificantTFs={includeSignificantTFs}
                   onDetectionThresholdChange={setDetectionThreshold}
-                  onEnabledStagesChange={(stages) => {
-                    setEnabledGeneSelectionStages(stages);
-                    // Keep the existing submission model intact until the
-                    // composable preprocessing backend is implemented.
-                    setGeneSelectionMethod(
-                      stages.includes("trajectory")
-                        ? "trajectory"
-                        : stages.includes("variance")
-                          ? "hvg"
-                          : "none",
-                    );
-                  }}
+                  onEnabledStagesChange={setEnabledGeneSelectionStages}
                   onHvgGeneCountChange={setHvgGeneCount}
                   onIncludeAllTFsChange={setIncludeAllTFs}
                   onGeneOrderingSourceChange={setGeneOrderingSource}
@@ -780,11 +769,34 @@ export default function CreateProjectModal({
                 <OptionalInputsPanel
                   pseudotimeFileName={pseudotimeFileName}
                   cellOracleConfigLabel={cellOracleConfigLabel}
+                  cellOracleBaseGrnSource={cellOracleBaseGrnSource}
+                  cellOracleSpecies={cellOracleSpecies}
+                  clusterLabelsFileName={clusterLabelsFileName}
                   estimatePseudotime={estimatePseudotime}
                   onToggleEstimatePseudotime={onToggleEstimatePseudotime}
                   onSelectPseudotime={selectPseudotimeFile}
                   onClearPseudotime={clearPseudotimeFile}
-                  onOpenCellOracleSettings={handleOpenCellOracleSettings}
+                  onActivateCellOracle={() => {
+                    if (cellOracleBaseGrnSource === "built-in") {
+                      setHasCellOracleSettingsConfigured(true);
+                    }
+                  }}
+                  onCellOracleBaseGrnSourceChange={(value) => {
+                    setCellOracleBaseGrnSource(value);
+                    setHasCellOracleSettingsConfigured(value === "built-in");
+                  }}
+                  onSetCellOracleSpecies={(value) => {
+                    setHasCellOracleSettingsConfigured(true);
+                    setCellOracleSpecies(value);
+                  }}
+                  onSelectClusterLabels={(file) => {
+                    if (file && cellOracleBaseGrnSource === "built-in") {
+                      setHasCellOracleSettingsConfigured(true);
+                    }
+                    selectClusterLabelsFile(file);
+                  }}
+                  onClearClusterLabels={clearClusterLabelsFile}
+                  onShowCellOracleHelp={handleOpenCellOracleHelp}
                 />
               </AdvancedAccordionSection>
 
@@ -915,31 +927,6 @@ export default function CreateProjectModal({
         isClosing={isCellOracleHelpClosing}
         onClose={handleCloseCellOracleHelp}
       />
-
-      <CellOracleSettingsModal
-        open={isCellOracleSettingsOpen}
-        isClosing={isCellOracleSettingsClosing}
-        baseGrnSource={cellOracleBaseGrnSource}
-        cellOracleSpecies={cellOracleSpecies}
-        clusterLabelsFileName={clusterLabelsFileName}
-        onBaseGrnSourceChange={(value) => {
-          setCellOracleBaseGrnSource(value);
-          setHasCellOracleSettingsConfigured(value === "built-in");
-        }}
-        onSetCellOracleSpecies={(value) => {
-          setHasCellOracleSettingsConfigured(true);
-          setCellOracleSpecies(value);
-        }}
-        onSelectClusterLabels={(file) => {
-          if (file && cellOracleBaseGrnSource === "built-in") {
-            setHasCellOracleSettingsConfigured(true);
-          }
-          selectClusterLabelsFile(file);
-        }}
-        onClearClusterLabels={clearClusterLabelsFile}
-        onShowHelp={handleOpenCellOracleHelp}
-        onClose={handleCloseCellOracleSettings}
-      />
     </div>
   );
 }
@@ -1019,19 +1006,35 @@ function AdvancedAccordionSection({
 function OptionalInputsPanel({
   pseudotimeFileName,
   cellOracleConfigLabel,
+  cellOracleBaseGrnSource,
+  cellOracleSpecies,
+  clusterLabelsFileName,
   estimatePseudotime,
   onToggleEstimatePseudotime,
   onSelectPseudotime,
   onClearPseudotime,
-  onOpenCellOracleSettings,
+  onActivateCellOracle,
+  onCellOracleBaseGrnSourceChange,
+  onSetCellOracleSpecies,
+  onSelectClusterLabels,
+  onClearClusterLabels,
+  onShowCellOracleHelp,
 }: {
   pseudotimeFileName: string;
   cellOracleConfigLabel: string;
+  cellOracleBaseGrnSource: CellOracleBaseGrnSource;
+  cellOracleSpecies: string;
+  clusterLabelsFileName: string;
   estimatePseudotime: boolean;
   onToggleEstimatePseudotime: (value: boolean) => void;
   onSelectPseudotime: (file: File | null) => void;
   onClearPseudotime: () => void;
-  onOpenCellOracleSettings: () => void;
+  onActivateCellOracle: () => void;
+  onCellOracleBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
+  onSetCellOracleSpecies: (value: string) => void;
+  onSelectClusterLabels: (file: File | null) => void;
+  onClearClusterLabels: () => void;
+  onShowCellOracleHelp: (topic: CellOracleHelpTopic) => void;
 }) {
   return (
     <div className="-mx-1">
@@ -1044,40 +1047,230 @@ function OptionalInputsPanel({
           onToggleEstimate={onToggleEstimatePseudotime}
         />
 
-        <button
-          type="button"
-          onClick={onOpenCellOracleSettings}
-          aria-haspopup="dialog"
-          className="grid w-full cursor-pointer gap-3 border-t border-slate-200 px-4 py-4 text-left transition hover:bg-slate-50/70 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-        >
-          <span>
-            <span className="block text-sm font-semibold text-slate-900">
-              CellOracle inputs
-            </span>
-            <span className="mt-1 block text-sm leading-5 text-slate-500">
-              Species and base-GRN settings used only by CellOracle.
-            </span>
-          </span>
-          <span className="flex min-w-0 items-center justify-end gap-2">
-            {cellOracleConfigLabel ? (
-              <span
-                className="max-w-56 truncate text-xs font-semibold text-[#1b75a6]"
-                title={cellOracleConfigLabel}
-              >
-                {cellOracleConfigLabel}
-              </span>
-            ) : (
-              <span className="text-xs font-semibold text-slate-400">
-                Not configured
-              </span>
-            )}
-            <span className="text-slate-400" aria-hidden="true">
-              <DisclosureChevron open={false} />
-            </span>
-          </span>
-        </button>
+        <CellOracleInputRow
+          configLabel={cellOracleConfigLabel}
+          baseGrnSource={cellOracleBaseGrnSource}
+          cellOracleSpecies={cellOracleSpecies}
+          clusterLabelsFileName={clusterLabelsFileName}
+          onActivate={onActivateCellOracle}
+          onBaseGrnSourceChange={onCellOracleBaseGrnSourceChange}
+          onSetCellOracleSpecies={onSetCellOracleSpecies}
+          onSelectClusterLabels={onSelectClusterLabels}
+          onClearClusterLabels={onClearClusterLabels}
+          onShowHelp={onShowCellOracleHelp}
+        />
       </div>
     </div>
+  );
+}
+
+function CellOracleInputRow({
+  configLabel,
+  baseGrnSource,
+  cellOracleSpecies,
+  clusterLabelsFileName,
+  onActivate,
+  onBaseGrnSourceChange,
+  onSetCellOracleSpecies,
+  onSelectClusterLabels,
+  onClearClusterLabels,
+  onShowHelp,
+}: {
+  configLabel: string;
+  baseGrnSource: CellOracleBaseGrnSource;
+  cellOracleSpecies: string;
+  clusterLabelsFileName: string;
+  onActivate: () => void;
+  onBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
+  onSetCellOracleSpecies: (value: string) => void;
+  onSelectClusterLabels: (file: File | null) => void;
+  onClearClusterLabels: () => void;
+  onShowHelp: (topic: CellOracleHelpTopic) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const clusterLabelsInputRef = useRef<HTMLInputElement | null>(null);
+  const isBuiltInGrn = baseGrnSource === "built-in";
+
+  return (
+    <section className="border-t border-slate-200">
+      <button
+        type="button"
+        onClick={() => {
+          if (!open) {
+            onActivate();
+          }
+          setOpen((current) => !current);
+        }}
+        className="grid w-full cursor-pointer gap-3 px-4 py-4 text-left transition hover:bg-slate-50/70 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        aria-expanded={open}
+      >
+        <span>
+          <span className="block text-sm font-semibold text-slate-900">
+            CellOracle inputs
+          </span>
+          <span className="mt-1 block text-sm leading-5 text-slate-500">
+            Species, prior-network, and cell-grouping settings.
+          </span>
+        </span>
+        <span className="flex min-w-0 items-center justify-end gap-2">
+          <span
+            className={`max-w-56 truncate text-xs font-semibold ${
+              configLabel ? "text-[#1b75a6]" : "text-slate-400"
+            }`}
+            title={configLabel || "Not configured"}
+          >
+            {configLabel || "Not configured"}
+          </span>
+          <span
+            className={`text-slate-400 transition ${
+              open ? "text-[#1b75a6]" : ""
+            }`}
+            aria-hidden="true"
+          >
+            <DisclosureChevron open={open} />
+          </span>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]">
+          <div className="inline-flex items-center gap-2">
+            <p className="text-sm font-semibold text-slate-800">
+              Base GRN source
+            </p>
+            <CellOracleHelpButton
+              label="Base GRN CSV format"
+              onClick={() => onShowHelp("base-grn")}
+            />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-7 gap-y-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="radio"
+                name="celloracle-base-grn-source"
+                checked={isBuiltInGrn}
+                onChange={() => onBaseGrnSourceChange("built-in")}
+                className="h-4 w-4 accent-[#1b75a6]"
+              />
+              Built-in GRN
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="radio"
+                name="celloracle-base-grn-source"
+                checked={!isBuiltInGrn}
+                onChange={() => onBaseGrnSourceChange("upload")}
+                className="h-4 w-4 accent-[#1b75a6]"
+              />
+              Upload GRN
+            </label>
+          </div>
+
+          {isBuiltInGrn ? (
+            <label className="mt-4 grid gap-2 border-t border-slate-200/70 pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,0.85fr)] sm:items-center sm:gap-5">
+              <span>
+                <span className="block text-sm font-semibold text-slate-800">
+                  CellOracle species
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  Independent from the dataset species selected above.
+                </span>
+              </span>
+              <span className="flex items-center border-b border-slate-200 py-2 transition focus-within:border-[#1b75a6]">
+                <select
+                  value={cellOracleSpecies}
+                  onChange={(event) =>
+                    onSetCellOracleSpecies(event.target.value)
+                  }
+                  className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none"
+                >
+                  {CELLORACLE_SPECIES_OPTIONS.map((species) => (
+                    <option key={species.value} value={species.value}>
+                      {species.label}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  className="-ml-5 text-sm text-slate-400"
+                  aria-hidden="true"
+                >
+                  ▾
+                </span>
+              </span>
+            </label>
+          ) : (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
+              <span className="text-xs font-medium text-slate-400">
+                Custom base GRN upload is not available yet.
+              </span>
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-400"
+              >
+                Coming soon
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 border-t border-slate-200/70 pt-4">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div>
+                <div className="inline-flex items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-800">
+                    Cell grouping
+                  </p>
+                  <CellOracleHelpButton
+                    label="Cluster labels CSV format"
+                    onClick={() => onShowHelp("cluster-labels")}
+                  />
+                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Optional labels for cluster-specific networks.
+                </p>
+              </div>
+              <input
+                ref={clusterLabelsInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  onSelectClusterLabels(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => clusterLabelsInputRef.current?.click()}
+                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+              >
+                {clusterLabelsFileName ? "Replace" : "Choose CSV"}
+              </button>
+            </div>
+
+            {clusterLabelsFileName ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-3">
+                <span
+                  className="min-w-0 truncate text-xs font-semibold text-[#178a62]"
+                  title={clusterLabelsFileName}
+                >
+                  {formatFileNameForDisplay(clusterLabelsFileName, 46)}
+                </span>
+                <button
+                  type="button"
+                  onClick={onClearClusterLabels}
+                  className="text-xs font-semibold text-slate-500 transition hover:text-rose-600"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1614,173 +1807,205 @@ function CellOracleSettingsModal({
       }}
     >
       <div
-        className={`max-h-[82vh] w-full max-w-3xl overflow-y-auto rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
+        className={`flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white text-slate-900 shadow-2xl shadow-slate-900/20 ${
           isClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="flex shrink-0 items-start justify-between gap-5 px-6 pb-5 pt-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-              CellOracle configuration
-            </p>
-            <h3 className="mt-2 text-xl font-bold text-slate-950">
+            <h3 className="text-2xl font-bold text-slate-950">
               CellOracle inputs
             </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Choose a built-in species GRN, or upload your own TF-target prior once custom GRN upload is available.
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Configure the prior network and optional cell grouping used by CellOracle.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
+            aria-label="Close CellOracle settings"
+            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-xl font-semibold text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
-            Done
+            ×
           </button>
         </div>
 
-        <div className="mt-5 space-y-4">
-          <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-            <div className="inline-flex items-center gap-2">
-              <h4 className="text-base font-semibold text-slate-900">
-                Base GRN source
-              </h4>
-              <CellOracleHelpButton
-                label="Base GRN CSV format"
-                onClick={() => onShowHelp("base-grn")}
-              />
-            </div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Built-in mode only needs species selection. GRNScope chooses the corresponding pre-built base GRN internally.
-            </p>
-
-            <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
-              <button
-                type="button"
-                onClick={() => onBaseGrnSourceChange("built-in")}
-                className={`rounded-[0.875rem] px-3 py-2.5 text-sm font-semibold transition ${
-                  isBuiltInGrn
-                    ? "bg-white text-[#1b75a6] shadow-sm"
-                    : "text-slate-500 hover:text-[#1b75a6]"
-                }`}
-                aria-pressed={isBuiltInGrn}
-              >
-                Built-in GRN
-              </button>
-              <button
-                type="button"
-                onClick={() => onBaseGrnSourceChange("upload")}
-                className={`rounded-[0.875rem] px-3 py-2.5 text-sm font-semibold transition ${
-                  !isBuiltInGrn
-                    ? "bg-white text-[#1b75a6] shadow-sm"
-                    : "text-slate-500 hover:text-[#1b75a6]"
-                }`}
-                aria-pressed={!isBuiltInGrn}
-              >
-                Upload GRN
-              </button>
-            </div>
-
-            {isBuiltInGrn ? (
-              <label className="mt-4 block">
-                <span className="text-sm font-semibold text-slate-800">
-                  CellOracle species
-                </span>
-                <span className={SELECT_CONTROL_CLASS}>
-                  <select
-                    value={cellOracleSpecies}
-                    onChange={(event) => onSetCellOracleSpecies(event.target.value)}
-                    className={SELECT_INPUT_CLASS}
-                  >
-                    {CELLORACLE_SPECIES_OPTIONS.map((species) => (
-                      <option key={species.value} value={species.value}>
-                        {species.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="-ml-5 text-sm text-slate-500" aria-hidden="true">
-                    ▾
-                  </span>
-                </span>
-              </label>
-            ) : (
-              <div
-                className="mt-4 flex min-h-28 flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-slate-400"
-                aria-disabled="true"
-              >
-                <span className="text-sm font-semibold">
-                  Upload base GRN CSV
-                </span>
-                <span className="mt-1 text-xs">
-                  Coming soon
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-              <div>
-                <div className="inline-flex items-center gap-2">
-                  <h4 className="text-base font-semibold text-slate-900">
-                    Cell grouping
-                  </h4>
-                  <CellOracleHelpButton
-                    label="Cluster labels CSV format"
-                    onClick={() => onShowHelp("cluster-labels")}
-                  />
-                </div>
-                <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Add cluster labels for cluster-specific networks. Leave empty for one global network.
-                </p>
-              </div>
-              <input
-                ref={clusterLabelsInputRef}
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  onSelectClusterLabels(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => clusterLabelsInputRef.current?.click()}
-                className="min-w-36 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
-              >
-                {clusterLabelsFileName ? "Replace labels" : "Add labels"}
-              </button>
-            </div>
-
-            {clusterLabelsFileName && (
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-sky-100 bg-[#f7fbff] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#1b75a6] shadow-sm ring-1 ring-sky-100" aria-hidden="true">
-                    <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5">
-                      <path d="M5 2.75h6l4 4v10.5H5V2.75Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                      <path d="M11 2.75v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                    </svg>
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900" title={clusterLabelsFileName}>
-                      {formatFileNameForDisplay(clusterLabelsFileName, 52)}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">Cluster labels CSV selected</p>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div className="overflow-hidden rounded-[1.2rem] border border-slate-200 bg-white">
+            <section>
+              <div className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div>
+                  <div className="inline-flex items-center gap-2">
+                    <h4 className="text-base font-bold text-slate-950">
+                      Base GRN
+                    </h4>
+                    <CellOracleHelpButton
+                      label="Base GRN CSV format"
+                      onClick={() => onShowHelp("base-grn")}
+                    />
                   </div>
+                  <p className="mt-1 text-sm leading-5 text-slate-500">
+                    Select the TF-target prior used to initialize the network.
+                  </p>
                 </div>
+                <span
+                  className={`text-xs font-semibold ${
+                    isBuiltInGrn ? "text-[#1b75a6]" : "text-slate-400"
+                  }`}
+                >
+                  {isBuiltInGrn
+                    ? `Built-in · ${
+                        CELLORACLE_SPECIES_OPTIONS.find(
+                          (species) => species.value === cellOracleSpecies,
+                        )?.label ?? "Human"
+                      }`
+                    : "Custom upload"}
+                </span>
+              </div>
+
+              <div className="border-t border-slate-100 bg-slate-50/55 px-5 py-4 pl-[3.25rem]">
+                <p className="text-sm font-semibold text-slate-800">
+                  Base GRN source
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-x-7 gap-y-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                    <input
+                      type="radio"
+                      name="celloracle-base-grn-source"
+                      checked={isBuiltInGrn}
+                      onChange={() => onBaseGrnSourceChange("built-in")}
+                      className="h-4 w-4 accent-[#1b75a6]"
+                    />
+                    Built-in GRN
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                    <input
+                      type="radio"
+                      name="celloracle-base-grn-source"
+                      checked={!isBuiltInGrn}
+                      onChange={() => onBaseGrnSourceChange("upload")}
+                      className="h-4 w-4 accent-[#1b75a6]"
+                    />
+                    Upload GRN
+                  </label>
+                </div>
+
+                {isBuiltInGrn ? (
+                  <label className="mt-4 grid gap-2 border-t border-slate-200/70 pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.9fr)] sm:items-center sm:gap-5">
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-800">
+                        CellOracle species
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        Independent from the dataset species selected above.
+                      </span>
+                    </span>
+                    <span className="flex items-center border-b border-slate-200 py-2 transition focus-within:border-[#1b75a6]">
+                      <select
+                        value={cellOracleSpecies}
+                        onChange={(event) =>
+                          onSetCellOracleSpecies(event.target.value)
+                        }
+                        className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none"
+                      >
+                        {CELLORACLE_SPECIES_OPTIONS.map((species) => (
+                          <option key={species.value} value={species.value}>
+                            {species.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span
+                        className="-ml-5 text-sm text-slate-400"
+                        aria-hidden="true"
+                      >
+                        ▾
+                      </span>
+                    </span>
+                  </label>
+                ) : (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
+                    <span className="text-xs font-medium text-slate-400">
+                      Custom base GRN upload is not available yet.
+                    </span>
+                    <button
+                      type="button"
+                      disabled
+                      className="cursor-not-allowed rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-400"
+                    >
+                      Coming soon
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="border-t border-slate-200">
+              <div className="grid gap-4 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div>
+                  <div className="inline-flex items-center gap-2">
+                    <h4 className="text-base font-bold text-slate-950">
+                      Cell grouping
+                    </h4>
+                    <CellOracleHelpButton
+                      label="Cluster labels CSV format"
+                      onClick={() => onShowHelp("cluster-labels")}
+                    />
+                  </div>
+                  <p className="mt-1 text-sm leading-5 text-slate-500">
+                    Add cluster labels for cluster-specific networks. Leave
+                    empty for one global network.
+                  </p>
+                </div>
+                <input
+                  ref={clusterLabelsInputRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    onSelectClusterLabels(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
                 <button
                   type="button"
-                  onClick={onClearClusterLabels}
-                  className="self-start text-xs font-semibold text-slate-500 transition hover:text-rose-600 sm:self-auto"
+                  onClick={() => clusterLabelsInputRef.current?.click()}
+                  className="min-w-32 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
                 >
-                  Remove
+                  {clusterLabelsFileName ? "Replace" : "Choose CSV"}
                 </button>
               </div>
-            )}
+
+              {clusterLabelsFileName ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/55 px-5 py-4 pl-[3.25rem]">
+                  <span
+                    className="min-w-0 truncate text-xs font-semibold text-[#178a62]"
+                    title={clusterLabelsFileName}
+                  >
+                    {formatFileNameForDisplay(clusterLabelsFileName, 52)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onClearClusterLabels}
+                    className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : null}
+            </section>
           </div>
+        </div>
+
+        <div className="flex shrink-0 justify-end border-t border-slate-100 bg-white px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-32 cursor-pointer rounded-full bg-[#1b75a6] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#155f87]"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>

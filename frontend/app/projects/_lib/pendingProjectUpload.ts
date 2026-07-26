@@ -6,6 +6,8 @@ export type PendingProjectUpload = {
   expressionFile: File;
   pseudotimeFile: File | null;
   clusterLabelsFile: File | null;
+  geneOrderingFile: File | null;
+  customTfListFile: File | null;
 };
 
 type PendingProjectUploadRecord = {
@@ -50,6 +52,12 @@ function uploadProjectFilesWithXhr(
     }
     if (upload.clusterLabelsFile) {
       formData.append("cluster_labels", upload.clusterLabelsFile);
+    }
+    if (upload.geneOrderingFile) {
+      formData.append("gene_ordering", upload.geneOrderingFile);
+    }
+    if (upload.customTfListFile) {
+      formData.append("custom_tf_list", upload.customTfListFile);
     }
 
     const request = new XMLHttpRequest();

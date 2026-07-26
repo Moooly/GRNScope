@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import CreateProjectModal from "./CreateProjectModal";
+import type { GeneSelectionStage } from "./CreateProjectModal";
 import type { AlgorithmParameter, ProjectAlgorithm } from "../page";
 import type { Project } from "../_types/project";
 import { getApiBase } from "../../_lib/apiConfig";
@@ -35,8 +36,6 @@ type BackendAlgorithmEntry = {
   parameters: AlgorithmParameter[];
 };
 
-const DEFAULT_TOP_VARIABLE_GENES = "all";
-const ALL_GENES_VALUE = "all";
 const MAX_PREPROCESSED_GENES = 8000;
 const RANKED_EDGES_HARD_MAX = 100;
 const DEFAULT_MAX_EDGES_PER_TARGET = "20";
@@ -96,6 +95,68 @@ function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): ProjectAlgorithm
   };
 }
 
+function countDelimitedFields(line: string, delimiter: string): number {
+  let fieldCount = 1;
+  let insideQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (insideQuotes && line[index + 1] === '"') {
+        index += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+    } else if (character === delimiter && !insideQuotes) {
+      fieldCount += 1;
+    }
+  }
+
+  return fieldCount;
+}
+
+function detectMatrixDelimiter(header: string): string {
+  return [",", "\t", ";"].reduce((bestDelimiter, delimiter) =>
+    countDelimitedFields(header, delimiter) >
+    countDelimitedFields(header, bestDelimiter)
+      ? delimiter
+      : bestDelimiter,
+  );
+}
+
+async function readMatrixDimensions(file: File): Promise<string> {
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder();
+  let pendingText = "";
+  let header: string | null = null;
+  let geneCount = 0;
+
+  const processLine = (rawLine: string) => {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    if (header === null) {
+      if (line.trim()) header = line.replace(/^\uFEFF/, "");
+      return;
+    }
+    if (line.trim()) geneCount += 1;
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    pendingText += decoder.decode(value, { stream: !done });
+    const lines = pendingText.split("\n");
+    pendingText = lines.pop() ?? "";
+    lines.forEach(processLine);
+    if (done) break;
+  }
+
+  if (pendingText) processLine(pendingText);
+  if (header === null) throw new Error("The expression matrix is empty.");
+
+  const delimiter = detectMatrixDelimiter(header);
+  const cellCount = Math.max(0, countDelimitedFields(header, delimiter) - 1);
+  return `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`;
+}
+
 interface CreateProjectFlowProps {
   /** Whether the modal is currently open. */
   open: boolean;
@@ -115,10 +176,16 @@ export type CreateProjectPrefill = {
   // Retained for compatibility with existing rerun prefills; the creation UI
   // intentionally no longer exposes a description field.
   projectDescription?: string;
-  topVariableGenes?: string;
+  matrixState?: string;
+  datasetSpecies?: string;
+  enabledGeneSelectionStages?: GeneSelectionStage[];
+  detectionThreshold?: string;
+  hvgGeneCount?: string;
   includeAllTFs?: boolean;
-  normalizeEnabled?: boolean;
-  logTransformEnabled?: boolean;
+  geneOrderingSource?: "calculate" | "upload";
+  trajectoryPValue?: string;
+  trajectoryBonferroni?: boolean;
+  includeSignificantTFs?: boolean;
   maxEdgesPerTarget?: string;
   selectedIds?: string[];
   algorithmParameters?: Record<string, Record<string, unknown>>;
@@ -151,22 +218,48 @@ export default function CreateProjectFlow({
   const [estimatePseudotime, setEstimatePseudotime] = useState(false);
   const [clusterLabelsFile, setClusterLabelsFile] = useState<File | null>(null);
   const [expressionFileName, setExpressionFileName] = useState("");
+  const [expressionMatrixDimensions, setExpressionMatrixDimensions] = useState<
+    string | null
+  >(null);
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
   const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
 
-  // Matrix contents are intentionally not parsed in the creation modal.
-  // Validation and dimension discovery happen after navigation on the detail page.
+  // Full validation still happens after project creation. This lightweight,
+  // streaming pass only counts rows and header columns for the upload summary.
   const geneCount: number | null = null;
   const cellCount: number | null = null;
 
-  const [topVariableGenes, setTopVariableGenes] = useState(DEFAULT_TOP_VARIABLE_GENES);
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!expressionFile) {
+      setExpressionMatrixDimensions(null);
+      return;
+    }
+
+    setExpressionMatrixDimensions("Reading dimensions…");
+    void readMatrixDimensions(expressionFile)
+      .then((dimensions) => {
+        if (!cancelled) setExpressionMatrixDimensions(dimensions);
+      })
+      .catch(() => {
+        if (!cancelled) setExpressionMatrixDimensions("Dimensions unavailable");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expressionFile]);
+
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [matrixState, setMatrixState] = useState("");
   const [datasetSpecies, setDatasetSpecies] = useState("");
+  const [customTfListFile, setCustomTfListFile] = useState<File | null>(null);
+  const [customTfListFileName, setCustomTfListFileName] = useState("");
   const [detectionThreshold, setDetectionThreshold] = useState("10");
-  const [geneSelectionMethod, setGeneSelectionMethod] = useState<
-    "none" | "hvg" | "trajectory"
-  >("none");
+  const [enabledGeneSelectionStages, setEnabledGeneSelectionStages] = useState<
+    GeneSelectionStage[]
+  >(["detection"]);
   const [hvgGeneCount, setHvgGeneCount] = useState("500");
   const [geneOrderingSource, setGeneOrderingSource] = useState<"calculate" | "upload">(
     "calculate",
@@ -175,13 +268,10 @@ export default function CreateProjectFlow({
   const [geneOrderingFileName, setGeneOrderingFileName] = useState("");
   const [trajectoryPValue, setTrajectoryPValue] = useState("0.01");
   const [trajectoryBonferroni, setTrajectoryBonferroni] = useState(true);
-  const [trajectoryGeneCount, setTrajectoryGeneCount] = useState("500");
   const [includeSignificantTFs, setIncludeSignificantTFs] = useState(true);
   const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
-  const normalizeEnabled = matrixState === "raw";
-  const logTransformEnabled = matrixState === "raw" || matrixState === "normalized";
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasUserAdjustedAlgorithms, setHasUserAdjustedAlgorithms] = useState(false);
@@ -215,20 +305,22 @@ export default function CreateProjectFlow({
     setExpressionFileName("");
     setPseudotimeFileName("");
     setClusterLabelsFileName("");
-    setTopVariableGenes(initialValues?.topVariableGenes ?? DEFAULT_TOP_VARIABLE_GENES);
     setIncludeAllTFs(initialValues?.includeAllTFs ?? true);
-    setMatrixState("");
-    setDatasetSpecies("");
-    setDetectionThreshold("10");
-    setGeneSelectionMethod("none");
-    setHvgGeneCount("500");
-    setGeneOrderingSource("calculate");
+    setMatrixState(initialValues?.matrixState ?? "");
+    setDatasetSpecies(initialValues?.datasetSpecies ?? "");
+    setCustomTfListFile(null);
+    setCustomTfListFileName("");
+    setDetectionThreshold(initialValues?.detectionThreshold ?? "10");
+    setEnabledGeneSelectionStages(
+      initialValues?.enabledGeneSelectionStages ?? ["detection"],
+    );
+    setHvgGeneCount(initialValues?.hvgGeneCount ?? "500");
+    setGeneOrderingSource(initialValues?.geneOrderingSource ?? "calculate");
     setGeneOrderingFile(null);
     setGeneOrderingFileName("");
-    setTrajectoryPValue("0.01");
-    setTrajectoryBonferroni(true);
-    setTrajectoryGeneCount("500");
-    setIncludeSignificantTFs(true);
+    setTrajectoryPValue(initialValues?.trajectoryPValue ?? "0.01");
+    setTrajectoryBonferroni(initialValues?.trajectoryBonferroni ?? true);
+    setIncludeSignificantTFs(initialValues?.includeSignificantTFs ?? true);
     setMaxEdgesPerTarget(initialValues?.maxEdgesPerTarget ?? DEFAULT_MAX_EDGES_PER_TARGET);
     setCellOracleSpecies(initialValues?.cellOracleSpecies ?? "human");
     setHasCellOracleSettingsConfigured(
@@ -286,16 +378,15 @@ export default function CreateProjectFlow({
   // "Max edges per target" input: max = min(effectiveGenes, 100)).
   const effectiveGeneCount = useMemo(() => {
     if (geneCount === null) return null;
-    const trimmed = topVariableGenes.trim().toLowerCase();
-    if (!trimmed || trimmed === ALL_GENES_VALUE) {
+    if (!enabledGeneSelectionStages.includes("variance")) {
       return Math.min(geneCount, MAX_PREPROCESSED_GENES);
     }
-    const parsed = Number(trimmed);
+    const parsed = Number(hvgGeneCount.trim());
     if (!Number.isInteger(parsed) || parsed <= 0) {
       return Math.min(geneCount, MAX_PREPROCESSED_GENES);
     }
     return Math.min(parsed, geneCount, MAX_PREPROCESSED_GENES);
-  }, [geneCount, topVariableGenes]);
+  }, [enabledGeneSelectionStages, geneCount, hvgGeneCount]);
 
   const maxEdgesLimit = useMemo(
     () =>
@@ -375,7 +466,7 @@ export default function CreateProjectFlow({
         `Matrix values: ${matrixState || "not selected"}`,
         `Dataset species: ${datasetSpecies || "not selected"}`,
         `Detection threshold: ${detectionThreshold}%`,
-        `Additional selection: ${geneSelectionMethod}`,
+        `Enabled stages: ${enabledGeneSelectionStages.join(", ") || "none"}`,
         `Transcription factor override: ${includeAllTFs ? "enabled" : "disabled"}`,
       ],
     }),
@@ -386,7 +477,7 @@ export default function CreateProjectFlow({
       matrixState,
       datasetSpecies,
       detectionThreshold,
-      geneSelectionMethod,
+      enabledGeneSelectionStages,
       includeAllTFs,
       hasCellOracleSettingsConfigured,
     ],
@@ -513,29 +604,30 @@ export default function CreateProjectFlow({
     setClusterLabelsFileName("");
   };
 
+  const handleSetDatasetSpecies = (nextSpecies: string) => {
+    setDatasetSpecies(nextSpecies);
+    if (nextSpecies !== "other") {
+      setCustomTfListFile(null);
+      setCustomTfListFileName("");
+    }
+  };
+
   const createPendingProject = async (safeSelectedIds: string[]) => {
     const formData = new FormData();
     formData.append("project_name", projectName);
-    const legacyGeneLimit =
-      geneSelectionMethod === "hvg"
-        ? hvgGeneCount
-        : geneSelectionMethod === "trajectory"
-          ? trajectoryGeneCount
-          : "all";
-    formData.append("top_variable_genes", legacyGeneLimit);
-    formData.append("include_all_tfs", JSON.stringify(includeAllTFs));
-    formData.append("normalize_enabled", JSON.stringify(normalizeEnabled));
-    formData.append("log_transform_enabled", JSON.stringify(logTransformEnabled));
     formData.append("matrix_state", matrixState);
     formData.append("dataset_species", datasetSpecies);
+    formData.append(
+      "enabled_gene_selection_stages",
+      JSON.stringify(enabledGeneSelectionStages),
+    );
     formData.append("detection_threshold_percent", detectionThreshold);
-    formData.append("gene_selection_method", geneSelectionMethod);
-    formData.append("hvg_gene_count", hvgGeneCount);
+    formData.append("variance_gene_count", hvgGeneCount);
+    formData.append("include_known_tfs", JSON.stringify(includeAllTFs));
     formData.append("gene_ordering_source", geneOrderingSource);
     formData.append("gene_ordering_filename", geneOrderingFileName);
     formData.append("trajectory_p_value", trajectoryPValue);
     formData.append("trajectory_bonferroni", JSON.stringify(trajectoryBonferroni));
-    formData.append("trajectory_gene_count", trajectoryGeneCount);
     formData.append("include_significant_tfs", JSON.stringify(includeSignificantTFs));
     formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
@@ -572,6 +664,7 @@ export default function CreateProjectFlow({
     formData.append("expression_filename", expressionFileName);
     formData.append("pseudotime_filename", pseudotimeFileName);
     formData.append("cluster_labels_filename", clusterLabelsFileName);
+    formData.append("custom_tf_list_filename", customTfListFileName);
     formData.append("estimate_pseudotime", JSON.stringify(estimatePseudotime));
 
     const response = await apiFetch(`${API_BASE}/projects/create-pending`, {
@@ -624,6 +717,14 @@ export default function CreateProjectFlow({
     if (!datasetSpecies) {
       validationErrors.push("Select the species represented by the matrix.");
     }
+    if (customTfListFile) {
+      if (!customTfListFile.name.toLowerCase().endsWith(".csv")) {
+        validationErrors.push("Custom TF list must be a CSV file.");
+      }
+      if (customTfListFile.size > maxFileSize) {
+        validationErrors.push("Custom TF list file size must be 500 MB or smaller.");
+      }
+    }
     if (pseudotimeFile) {
       if (!pseudotimeFile.name.toLowerCase().endsWith(".csv")) {
         validationErrors.push("Pseudotime file must be a CSV file.");
@@ -649,24 +750,18 @@ export default function CreateProjectFlow({
     ) {
       validationErrors.push("Detection threshold must be between 1 and 100 percent.");
     }
-    if (geneSelectionMethod === "hvg") {
-      const parsedHvgGenes = Number(hvgGeneCount);
-      if (!Number.isInteger(parsedHvgGenes) || parsedHvgGenes <= 0) {
-        validationErrors.push("Highly variable gene count must be a positive integer.");
-      }
+    const parsedHvgGenes = Number(hvgGeneCount);
+    if (!Number.isInteger(parsedHvgGenes) || parsedHvgGenes <= 0) {
+      validationErrors.push("Highly variable gene count must be a positive integer.");
     }
-    if (geneSelectionMethod === "trajectory") {
+    if (enabledGeneSelectionStages.includes("trajectory")) {
       if (geneOrderingSource === "upload" && !geneOrderingFile) {
         validationErrors.push("Upload a GeneOrdering CSV or choose Calculate for me.");
       }
-      const parsedPValue = Number(trajectoryPValue);
-      if (!Number.isFinite(parsedPValue) || parsedPValue <= 0 || parsedPValue > 1) {
-        validationErrors.push("Trajectory p-value threshold must be greater than 0 and at most 1.");
-      }
-      const parsedTrajectoryGenes = Number(trajectoryGeneCount);
-      if (!Number.isInteger(parsedTrajectoryGenes) || parsedTrajectoryGenes <= 0) {
-        validationErrors.push("Trajectory gene count must be a positive integer.");
-      }
+    }
+    const parsedPValue = Number(trajectoryPValue);
+    if (!Number.isFinite(parsedPValue) || parsedPValue <= 0 || parsedPValue > 1) {
+      validationErrors.push("Trajectory p-value threshold must be greater than 0 and at most 1.");
     }
 
     const trimmedMaxEdges = maxEdgesPerTarget.trim();
@@ -710,6 +805,13 @@ export default function CreateProjectFlow({
         expressionFile,
         pseudotimeFile,
         clusterLabelsFile,
+        geneOrderingFile:
+          enabledGeneSelectionStages.includes("trajectory") &&
+          geneOrderingSource === "upload"
+            ? geneOrderingFile
+            : null,
+        customTfListFile:
+          datasetSpecies === "other" ? customTfListFile : null,
       });
 
       const now = new Date();
@@ -771,18 +873,19 @@ export default function CreateProjectFlow({
       isCreateClosing={isClosing}
       projectName={projectName}
       expressionFileName={expressionFileName}
+      expressionMatrixDimensions={expressionMatrixDimensions}
       pseudotimeFileName={pseudotimeFileName}
       clusterLabelsFileName={clusterLabelsFileName}
       matrixState={matrixState}
       datasetSpecies={datasetSpecies}
+      customTfListFileName={customTfListFileName}
       detectionThreshold={detectionThreshold}
-      geneSelectionMethod={geneSelectionMethod}
+      enabledGeneSelectionStages={enabledGeneSelectionStages}
       hvgGeneCount={hvgGeneCount}
       geneOrderingSource={geneOrderingSource}
       geneOrderingFileName={geneOrderingFileName}
       trajectoryPValue={trajectoryPValue}
       trajectoryBonferroni={trajectoryBonferroni}
-      trajectoryGeneCount={trajectoryGeneCount}
       includeSignificantTFs={includeSignificantTFs}
       includeAllTFs={includeAllTFs}
       maxEdgesPerTarget={maxEdgesPerTarget}
@@ -812,16 +915,17 @@ export default function CreateProjectFlow({
       onToggleAlgorithm={toggleAlgorithm}
       setProjectName={setProjectName}
       setMatrixState={setMatrixState}
-      setDatasetSpecies={setDatasetSpecies}
+      setDatasetSpecies={handleSetDatasetSpecies}
+      setCustomTfListFile={setCustomTfListFile}
+      setCustomTfListFileName={setCustomTfListFileName}
       setDetectionThreshold={setDetectionThreshold}
-      setGeneSelectionMethod={setGeneSelectionMethod}
+      setEnabledGeneSelectionStages={setEnabledGeneSelectionStages}
       setHvgGeneCount={setHvgGeneCount}
       setGeneOrderingSource={setGeneOrderingSource}
       setGeneOrderingFile={setGeneOrderingFile}
       setGeneOrderingFileName={setGeneOrderingFileName}
       setTrajectoryPValue={setTrajectoryPValue}
       setTrajectoryBonferroni={setTrajectoryBonferroni}
-      setTrajectoryGeneCount={setTrajectoryGeneCount}
       setIncludeSignificantTFs={setIncludeSignificantTFs}
       estimatePseudotime={estimatePseudotime}
       onToggleEstimatePseudotime={handleToggleEstimatePseudotime}
