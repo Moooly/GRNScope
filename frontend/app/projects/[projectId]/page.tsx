@@ -1356,6 +1356,17 @@ export default function ProjectDetailPage() {
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
   const activeEdges = uncappedActiveEdges;
+  const analysisEdges = useMemo(() => {
+    if (activeAlgorithmIds.length >= 2) return consensusCandidateRows;
+    if (activeAlgorithmIds.length === 1) {
+      return standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
+    }
+    return [];
+  }, [
+    activeAlgorithmIds,
+    consensusCandidateRows,
+    standardizedAlgorithmEdgeRows,
+  ]);
 
   // First-open safety net: seed the result filters from each project's own edge
   // distribution so the network and table always reveal a small, legible set of
@@ -2350,13 +2361,17 @@ useEffect(() => {
                   ) : resultsHubView !== "network" && resultsHubView !== "perturbation" ? (
                     <ResultsInsightsSection
                       view={resultsHubView}
-                      activeEdges={activeEdges}
+                      networkEdges={activeEdges}
+                      analysisEdges={analysisEdges}
+                      algorithmEdgeRows={standardizedAlgorithmEdgeRows}
+                      algorithmMetaMap={algorithmMetaMap}
                       algorithmResults={algorithmResults}
                       activeAlgorithmIds={activeAlgorithmIds}
                       tasks={allJobTasks}
                       networkNodes={networkNodes}
                       visualizationContext={visualizationContext}
                       isContextLoading={isVisualizationContextLoading}
+                      onSelectGene={(gene) => setSelectedGene(gene)}
                     />
                   ) : (
                   <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">

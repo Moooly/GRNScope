@@ -45,6 +45,11 @@ const SELECT_CONTROL_CLASS =
 const SELECT_INPUT_CLASS =
   "w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none";
 
+const CUSTOM_TF_LIST_SAMPLE = `gene_symbol,reference_gene_id
+TP53,ENSG00000141510
+MYC,ENSG00000136997
+`;
+
 type CellOracleHelpTopic = "base-grn" | "cluster-labels";
 type CellOracleBaseGrnSource = "built-in" | "upload";
 type AdvancedSection = "genes" | "inputs" | "algorithms" | "results";
@@ -214,6 +219,7 @@ export default function CreateProjectModal({
   const autoSelectedDatasetRef = useRef<string | null>(null);
   const [isOutsideClosing, setIsOutsideClosing] = useState(false);
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+  const [isCustomTfHelpOpen, setIsCustomTfHelpOpen] = useState(false);
   const [openAdvancedSection, setOpenAdvancedSection] =
     useState<AdvancedSection | null>(null);
   const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] =
@@ -270,6 +276,7 @@ export default function CreateProjectModal({
       /* eslint-disable react-hooks/set-state-in-effect -- reset modal-local state on open */
       setIsOutsideClosing(false);
       setIsCustomizeOpen(false);
+      setIsCustomTfHelpOpen(false);
       setOpenAdvancedSection(null);
       setCellOracleBaseGrnSource("built-in");
       setCellOracleHelpTopic(null);
@@ -627,53 +634,98 @@ export default function CreateProjectModal({
                   </span>
                 </span>
                 {datasetSpecies === "other" ? (
-                  <div className="mt-4 border-t border-slate-100 pt-4">
+                  <div className="mt-5">
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-800">
-                          Custom TF list
-                        </p>
-                        <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                          Uploading a TF list can improve prediction performance.
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-800">
+                            Upload your TF list
+                          </p>
+                          <CellOracleHelpButton
+                            label="Transcription factor list CSV format"
+                            onClick={() =>
+                              setIsCustomTfHelpOpen((current) => !current)
+                            }
+                            expanded={isCustomTfHelpOpen}
+                            controls="custom-tf-list-format"
+                          />
+                        </div>
+                        {customTfListFileName ? (
+                          <p
+                            className="mt-1 max-w-[15rem] truncate text-xs font-medium text-slate-500"
+                            title={customTfListFileName}
+                          >
+                            {formatFileNameForDisplay(customTfListFileName, 34)}
+                          </p>
+                        ) : null}
                       </div>
-                      <label className="shrink-0 cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#f6fbfe]">
-                        {customTfListFileName ? "Replace" : "Choose CSV"}
-                        <input
-                          type="file"
-                          accept=".csv,text/csv"
-                          className="sr-only"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0] ?? null;
-                            setCustomTfListFile(file);
-                            setCustomTfListFileName(file?.name ?? "");
-                            event.target.value = "";
-                          }}
-                        />
-                      </label>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {customTfListFileName ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomTfListFile(null);
+                              setCustomTfListFileName("");
+                            }}
+                            className="text-xs font-semibold text-slate-500 transition hover:text-slate-800"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                        <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#f6fbfe]">
+                          {customTfListFileName ? "Replace" : "Choose CSV"}
+                          <input
+                            type="file"
+                            accept=".csv,text/csv"
+                            className="sr-only"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] ?? null;
+                              setCustomTfListFile(file);
+                              setCustomTfListFileName(file?.name ?? "");
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
                     </div>
-                    <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-xs text-slate-500">
-                      <span className="truncate">
-                        {customTfListFileName || (
-                          <>
-                            Required column: <code>gene_symbol</code>. Optional:{" "}
-                            <code>reference_gene_id</code>.
-                          </>
-                        )}
-                      </span>
-                      {customTfListFileName ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomTfListFile(null);
-                            setCustomTfListFileName("");
-                          }}
-                          className="shrink-0 font-semibold text-slate-500 transition hover:text-slate-800"
-                        >
-                          Remove
-                        </button>
-                      ) : null}
-                    </div>
+                    {isCustomTfHelpOpen ? (
+                      <div
+                        id="custom-tf-list-format"
+                        className="mt-3 rounded-xl border border-[#1b75a6]/15 bg-[#f7fbfd] px-3.5 py-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">
+                              Required CSV format
+                            </p>
+                            <p className="mt-1 max-w-md text-xs leading-5 text-slate-600">
+                              Providing a transcription factor list can improve
+                              prediction performance.{" "}
+                              Use one TF per row. The{" "}
+                              <code className="font-semibold">gene_symbol</code>{" "}
+                              header is required;{" "}
+                              <code className="font-semibold">
+                                reference_gene_id
+                              </code>{" "}
+                              is optional. Identifiers should match gene rows in
+                              the expression matrix.
+                            </p>
+                          </div>
+                          <a
+                            href={`data:text/csv;charset=utf-8,${encodeURIComponent(
+                              CUSTOM_TF_LIST_SAMPLE,
+                            )}`}
+                            download="custom_tf_list_example.csv"
+                            className="shrink-0 text-xs font-semibold text-[#1b75a6] transition hover:text-[#145b82]"
+                          >
+                            Download sample
+                          </a>
+                        </div>
+                        <pre className="mt-2.5 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] leading-5 text-slate-600">
+                          {CUSTOM_TF_LIST_SAMPLE.trim()}
+                        </pre>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -2162,15 +2214,21 @@ function PseudotimeInputRow({
 function CellOracleHelpButton({
   label,
   onClick,
+  expanded,
+  controls,
 }: {
   label: string;
   onClick: () => void;
+  expanded?: boolean;
+  controls?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
+      aria-expanded={expanded}
+      aria-controls={controls}
       className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-[#1b75a6]/25 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/40 hover:bg-[#e8f5fb] focus:outline-none focus:ring-4 focus:ring-[#1b75a6]/10"
     >
       ?

@@ -75,7 +75,7 @@ export default function ResultsHubViewSelector({
     { id: "agreement", label: "Agreement" },
     ...(hasTrajectory ? [{ id: "trajectory" as const, label: "Trajectory" }] : []),
     ...(hasGroundTruth ? [{ id: "benchmark" as const, label: "Benchmark" }] : []),
-    { id: "diagnostics", label: "Diagnostics" },
+    { id: "diagnostics", label: "Statistics" },
   ];
 
   return (
