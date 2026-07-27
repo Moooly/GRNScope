@@ -1,10 +1,12 @@
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.services.beeline_service import (
     limit_expression_genes_by_variance,
+    load_algorithm_preprocessing_summary,
     prepare_algorithm_expression_source,
     resolve_algorithm_gene_limit,
 )
@@ -114,6 +116,35 @@ class SINCERITIESGeneFilterTests(unittest.TestCase):
                 [row[0] for row in rows[1:]],
                 ["gene-b", "gene-c", "gene-e", "gene-f"],
             )
+            self.assertEqual(
+                load_algorithm_preprocessing_summary(root / "runtime"),
+                {
+                    "algorithm_id": "SINCERITIES",
+                    "stage": "algorithm_variance_limit",
+                    "selection_method": "highest_variance",
+                    "reason_code": "numerical_stability",
+                    "configured_gene_limit": 500,
+                    "effective_gene_limit": 4,
+                    "input_gene_count": 6,
+                    "retained_gene_count": 4,
+                    "removed_gene_count": 2,
+                    "applied": True,
+                    "gene_audit_available": True,
+                },
+            )
+            audit = json.loads(
+                (
+                    root
+                    / "runtime"
+                    / "algorithm_preprocessed"
+                    / "gene_selection_audit.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                audit["retained_gene_names"],
+                ["gene-b", "gene-c", "gene-e", "gene-f"],
+            )
+            self.assertEqual(audit["removed_gene_names"], ["gene-a", "gene-d"])
 
 
 class SINGEGeneFilterTests(unittest.TestCase):
@@ -157,6 +188,50 @@ class SINGEGeneFilterTests(unittest.TestCase):
                 [row[0] for row in rows[1:]],
                 ["gene-b", "gene-c", "gene-e"],
             )
+            self.assertEqual(
+                load_algorithm_preprocessing_summary(root / "runtime"),
+                {
+                    "algorithm_id": "SINGE",
+                    "stage": "algorithm_variance_limit",
+                    "selection_method": "highest_variance",
+                    "reason_code": "runtime_guard",
+                    "configured_gene_limit": 3,
+                    "effective_gene_limit": 3,
+                    "input_gene_count": 5,
+                    "retained_gene_count": 3,
+                    "removed_gene_count": 2,
+                    "applied": True,
+                    "gene_audit_available": True,
+                },
+            )
+
+    def test_small_matrix_records_that_no_method_adjustment_was_applied(self):
+        with tempfile.TemporaryDirectory(prefix="singe-filter-test-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "ExpressionData.csv"
+            source.write_text(
+                ",cell-1,cell-2\n"
+                "gene-a,0,1\n"
+                "gene-b,1,0\n",
+                encoding="utf-8",
+            )
+
+            result = prepare_algorithm_expression_source(
+                runtime_root=root / "runtime",
+                algorithm_id="SINGE",
+                project_manifest={
+                    "algorithm_parameters": {"SINGE": {"maxGenes": 3}},
+                },
+                preprocessed_expression=source,
+            )
+
+            self.assertEqual(result, source)
+            summary = load_algorithm_preprocessing_summary(root / "runtime")
+            self.assertIsNotNone(summary)
+            self.assertEqual(summary["input_gene_count"], 2)
+            self.assertEqual(summary["retained_gene_count"], 2)
+            self.assertEqual(summary["removed_gene_count"], 0)
+            self.assertFalse(summary["applied"])
 
 
 class SCRIBEGeneFilterTests(unittest.TestCase):

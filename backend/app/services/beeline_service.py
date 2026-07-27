@@ -67,8 +67,11 @@ _BEELINE_MIRROR_LOCK = threading.Lock()
 PROJECT_PREPROCESSED_DIRNAME = "preprocessed"
 PROJECT_PREPROCESSED_EXPRESSION_FILENAME = "ExpressionData.csv"
 PROJECT_PREPROCESSED_MANIFEST_FILENAME = "manifest.json"
+PROJECT_GENE_AUDIT_DIRNAME = "gene_selection_audits"
 PROJECT_GENERATED_GENE_ORDERING_FILENAME = "GeneOrdering.csv"
 PROJECT_PREPROCESSED_LOCK_DIRNAME = ".preprocessing.lock"
+ALGORITHM_PREPROCESSING_SUMMARY_FILENAME = "gene_selection.json"
+ALGORITHM_GENE_AUDIT_FILENAME = "gene_selection_audit.json"
 RUN_TIMINGS_FILENAME = "run_timings.json"
 RUNNER_PHASE_TIMINGS_FILENAME = "phase_timings.json"
 SELECTED_CELLS_FILENAME = "selected_cells.json"
@@ -965,6 +968,27 @@ def ensure_project_preprocessed_expression(
                 raise PreprocessingRuntimeError(str(exc)) from exc
 
             gene_selection: list[dict] = []
+            gene_audits: dict[str, dict] = {}
+
+            def record_gene_selection_result(result: dict) -> None:
+                retained_gene_names = result.pop("retained_gene_names", [])
+                removed_gene_names = result.pop("removed_gene_names", [])
+                stage = str(result.get("stage") or "").strip().lower()
+                if stage and isinstance(retained_gene_names, list) and isinstance(
+                    removed_gene_names, list
+                ):
+                    gene_audits[stage] = {
+                        "stage": stage,
+                        "retained_gene_names": retained_gene_names,
+                        "removed_gene_names": removed_gene_names,
+                        "input_gene_count": result.get("input_gene_count"),
+                        "retained_gene_count": result.get("retained_gene_count"),
+                        "removed_gene_count": result.get("removed_gene_count"),
+                        "preprocessing_signature": expected_signature,
+                    }
+                    result["gene_audit_available"] = True
+                gene_selection.append(result)
+
             detection_config = preprocessing_config.get("detection") or {}
             if bool(detection_config.get("enabled")):
                 detection_output = temporary_expression.with_name(
@@ -982,7 +1006,7 @@ def ensure_project_preprocessed_expression(
                     detection_output.unlink(missing_ok=True)
                     raise PreprocessingRuntimeError(str(exc)) from exc
                 detection_output.replace(temporary_expression)
-                gene_selection.append(detection_result)
+                record_gene_selection_result(detection_result)
 
             trajectory_config = preprocessing_config.get("trajectory") or {}
             generated_gene_ordering: dict | None = None
@@ -1051,7 +1075,7 @@ def ensure_project_preprocessed_expression(
                     trajectory_result["generated_gene_ordering"] = (
                         generated_gene_ordering
                     )
-                gene_selection.append(trajectory_result)
+                record_gene_selection_result(trajectory_result)
 
             variance_config = preprocessing_config.get("variance") or {}
             if bool(variance_config.get("enabled")):
@@ -1092,7 +1116,7 @@ def ensure_project_preprocessed_expression(
                 variance_result["retain_significant_trajectory_tfs"] = (
                     retain_significant_trajectory_tfs
                 )
-                gene_selection.append(variance_result)
+                record_gene_selection_result(variance_result)
 
             try:
                 final_frame = read_expression_frame(temporary_expression)
@@ -1117,6 +1141,21 @@ def ensure_project_preprocessed_expression(
                 encoding="utf-8",
             )
             temporary_expression.replace(preprocessed_expression)
+            audit_dir = preprocessed_dir / PROJECT_GENE_AUDIT_DIRNAME
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            active_audit_stages = set(gene_audits)
+            for stale_stage in ("detection", "trajectory", "variance"):
+                if stale_stage not in active_audit_stages:
+                    (audit_dir / f"{stale_stage}.json").unlink(missing_ok=True)
+            for stage, audit_payload in gene_audits.items():
+                temporary_audit = audit_dir / (
+                    f".{stage}.{os.getpid()}.{threading.get_ident()}.tmp"
+                )
+                temporary_audit.write_text(
+                    json.dumps(audit_payload, indent=2),
+                    encoding="utf-8",
+                )
+                temporary_audit.replace(audit_dir / f"{stage}.json")
             temporary_manifest.replace(manifest_path)
         finally:
             temporary_expression.unlink(missing_ok=True)
@@ -1599,6 +1638,39 @@ def limit_expression_genes_by_variance(
     return destination_expression
 
 
+def algorithm_preprocessing_summary_path(runtime_root: Path) -> Path:
+    return (
+        runtime_root
+        / "algorithm_preprocessed"
+        / ALGORITHM_PREPROCESSING_SUMMARY_FILENAME
+    )
+
+
+def algorithm_gene_audit_path(runtime_root: Path) -> Path:
+    return (
+        runtime_root
+        / "algorithm_preprocessed"
+        / ALGORITHM_GENE_AUDIT_FILENAME
+    )
+
+
+def read_expression_gene_names(source_expression: Path) -> list[str]:
+    dialect = detect_csv_dialect_from_file(source_expression)
+    gene_names: list[str] = []
+    for index, row in iter_expression_data_rows(source_expression, dialect):
+        gene_names.append(validate_preprocessing_gene_name(row, index + 2))
+    return gene_names
+
+
+def load_algorithm_preprocessing_summary(runtime_root: Path) -> dict | None:
+    summary_path = algorithm_preprocessing_summary_path(runtime_root)
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return summary if isinstance(summary, dict) else None
+
+
 def prepare_algorithm_expression_source(
     *,
     runtime_root: Path,
@@ -1617,21 +1689,23 @@ def prepare_algorithm_expression_source(
     }:
         return preprocessed_expression
 
-    max_genes = resolve_algorithm_gene_limit(
+    configured_max_genes = resolve_algorithm_gene_limit(
         normalized_algorithm_id,
         project_manifest,
         "maxGenes",
     )
-    if max_genes is None:
+    if configured_max_genes is None:
         return preprocessed_expression
 
+    input_gene_count = count_expression_gene_rows(preprocessed_expression)
+    effective_max_genes = configured_max_genes
+    reason_code = "runtime_guard"
     if normalized_algorithm_id == "SINCERITIES":
         header, _dialect = read_delimited_header(preprocessed_expression)
         total_cell_count = max(0, len(header) - 1)
-        gene_count = count_expression_gene_rows(preprocessed_expression)
         confidence_settings = resolve_confidence_settings(
             project_manifest,
-            gene_count=gene_count,
+            gene_count=input_gene_count,
         )
         confidence_run_count = int(confidence_settings["bootstrap_runs"])
         confidence_cell_count = total_cell_count
@@ -1648,13 +1722,73 @@ def prepare_algorithm_expression_source(
         # ppcor's all-gene partial-correlation matrix needs fewer variables
         # than observations. Keep a final runtime guard even when the user
         # chooses a larger value in the settings UI.
-        max_genes = min(max_genes, max(2, confidence_cell_count - 1))
+        effective_max_genes = min(
+            configured_max_genes,
+            max(2, confidence_cell_count - 1),
+        )
+        reason_code = "numerical_stability"
 
-    return limit_expression_genes_by_variance(
+    selected_expression = limit_expression_genes_by_variance(
         preprocessed_expression,
         runtime_root / "algorithm_preprocessed" / "ExpressionData.csv",
-        max_genes,
+        effective_max_genes,
     )
+    retained_gene_count = (
+        input_gene_count
+        if selected_expression == preprocessed_expression
+        else count_expression_gene_rows(selected_expression)
+    )
+    input_gene_names = read_expression_gene_names(preprocessed_expression)
+    retained_gene_names = (
+        input_gene_names
+        if selected_expression == preprocessed_expression
+        else read_expression_gene_names(selected_expression)
+    )
+    retained_gene_set = set(retained_gene_names)
+    removed_gene_names = [
+        gene_name
+        for gene_name in input_gene_names
+        if gene_name not in retained_gene_set
+    ]
+    audit_path = algorithm_gene_audit_path(runtime_root)
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_path.write_text(
+        json.dumps(
+            {
+                "algorithm_id": normalized_algorithm_id,
+                "stage": "algorithm_variance_limit",
+                "retained_gene_names": retained_gene_names,
+                "removed_gene_names": removed_gene_names,
+                "input_gene_count": input_gene_count,
+                "retained_gene_count": retained_gene_count,
+                "removed_gene_count": input_gene_count - retained_gene_count,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    summary_path = algorithm_preprocessing_summary_path(runtime_root)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(
+            {
+                "algorithm_id": normalized_algorithm_id,
+                "stage": "algorithm_variance_limit",
+                "selection_method": "highest_variance",
+                "reason_code": reason_code,
+                "configured_gene_limit": configured_max_genes,
+                "effective_gene_limit": effective_max_genes,
+                "input_gene_count": input_gene_count,
+                "retained_gene_count": retained_gene_count,
+                "removed_gene_count": input_gene_count - retained_gene_count,
+                "applied": retained_gene_count < input_gene_count,
+                "gene_audit_available": True,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return selected_expression
 
 
 def read_delimited_header(
@@ -3083,6 +3217,138 @@ def spearman_stability_check(
     return result
 
 
+def summarize_repeat_run_spearman(
+    run_scores: dict[str, dict[tuple[str, str], float]],
+) -> dict:
+    """
+    Summarize pairwise rank stability across completed confidence runs.
+
+    Each run is aligned on the union of observed directed edges and missing
+    edges receive weight 0. Signed weights are retained. This follows
+    BEELINE's pairwise-run Spearman interpretation while using the inference
+    result universe available to GRNScope projects that do not have a ground
+    truth network.
+    """
+    usable_runs = {
+        str(run_id): scores
+        for run_id, scores in run_scores.items()
+        if isinstance(scores, dict) and scores
+    }
+    result = {
+        "method": "pairwise_spearman_rank_correlation",
+        "edge_universe": "observed_directed_edges",
+        "run_count": len(usable_runs),
+        "usable_run_count": 0,
+        "pair_count": 0,
+        "median_rho": None,
+        "mad_rho": None,
+        "minimum_rho": None,
+        "maximum_rho": None,
+        "pairs": [],
+        "status": "insufficient_runs",
+    }
+    if len(usable_runs) < 2:
+        return result
+
+    edge_universe = sorted(
+        {
+            edge_key
+            for scores in usable_runs.values()
+            for edge_key in scores
+            if all(edge_key)
+        }
+    )
+    if len(edge_universe) < 2:
+        result["status"] = "insufficient_edges"
+        return result
+
+    ranked_vectors: dict[str, list[float]] = {}
+    for run_id, scores in usable_runs.items():
+        values = [float(scores.get(edge_key, 0.0) or 0.0) for edge_key in edge_universe]
+        if all(value == values[0] for value in values):
+            continue
+        ranked_vectors[run_id] = _average_ranks(values)
+
+    run_ids = sorted(
+        ranked_vectors,
+        key=lambda run_id: (
+            parse_positive_int(run_id.rsplit("-", 1)[-1]) or sys.maxsize,
+            run_id,
+        ),
+    )
+    pair_rows: list[dict] = []
+    correlations: list[float] = []
+    for first_index, first_id in enumerate(run_ids):
+        first_ranks = ranked_vectors[first_id]
+        for second_id in run_ids[first_index + 1 :]:
+            second_ranks = ranked_vectors[second_id]
+            rho = spearman_rho(first_ranks, second_ranks)
+            if rho is None:
+                continue
+            correlations.append(rho)
+            pair_rows.append(
+                {
+                    "first_run": first_id,
+                    "second_run": second_id,
+                    "rho": rho,
+                }
+            )
+
+    result["usable_run_count"] = len(run_ids)
+    result["pair_count"] = len(correlations)
+    result["pairs"] = pair_rows
+    if not correlations:
+        result["status"] = "undefined"
+        return result
+
+    mean_rho = fsum(correlations) / len(correlations)
+    result.update(
+        {
+            "median_rho": median(correlations),
+            # BEELINE's MADSpearman is the mean absolute deviation from the
+            # mean, despite the compact historical column name.
+            "mad_rho": fsum(abs(rho - mean_rho) for rho in correlations)
+            / len(correlations),
+            "minimum_rho": min(correlations),
+            "maximum_rho": max(correlations),
+            "status": "available",
+        }
+    )
+    return result
+
+
+def compute_repeat_run_spearman_from_paths(
+    ranked_edge_paths: dict[str, str],
+    *,
+    max_edges_per_target: int | None = None,
+) -> dict:
+    run_scores: dict[str, dict[tuple[str, str], float]] = {}
+    for run_id, path_value in ranked_edge_paths.items():
+        try:
+            run_edges, _summary = parse_ranked_edges_csv(
+                Path(path_value),
+                max_edges_per_target=max_edges_per_target,
+            )
+        except (FileNotFoundError, ValueError, EmptyRankedEdgesError):
+            continue
+
+        scores: dict[tuple[str, str], float] = {}
+        for edge in run_edges:
+            source = str(edge.get("source", "")).strip()
+            target = str(edge.get("target", "")).strip()
+            if not source or not target or source == target:
+                continue
+            score = float(edge.get("score", 0.0) or 0.0)
+            key = (source, target)
+            current = scores.get(key)
+            if current is None or abs(score) > abs(current):
+                scores[key] = score
+        if scores:
+            run_scores[str(run_id)] = scores
+
+    return summarize_repeat_run_spearman(run_scores)
+
+
 def confidence_ranked_edges_path(
     output_dir: Path,
     dataset_id: str,
@@ -3514,6 +3780,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
         "project_id": project_id,
         "algorithm_id": algorithm_id,
         "docker_image_version": docker_image_version,
+        "algorithm_preprocessing": load_algorithm_preprocessing_summary(runtime_root),
         "network_summary": network_summary,
         "top_edges": top_edges,
         "confidence_summary": {
@@ -4104,6 +4371,11 @@ def run_beeline_with_progress(
         ] = round(final_aggregation_seconds, 6)
         write_run_timings(runtime_root, run_metadata)
 
+    repeat_run_stability = compute_repeat_run_spearman_from_paths(
+        ranked_edge_paths,
+        max_edges_per_target=ranked_edges_per_target_limit,
+    )
+
     update_job_state_fn(
         project_dir,
         job_id,
@@ -4117,6 +4389,7 @@ def run_beeline_with_progress(
         "project_id": project_id,
         "algorithm_id": algorithm_id,
         "docker_image_version": docker_image_version,
+        "algorithm_preprocessing": load_algorithm_preprocessing_summary(runtime_root),
         "network_summary": network_summary,
         "top_edges": top_edges,
         "confidence_summary": {
@@ -4125,6 +4398,7 @@ def run_beeline_with_progress(
             "planned_bootstrap_runs": total_run_count,
             "bootstrap_runs": int(network_summary.get("bootstrap_runs", total_run_count)),
             "early_stopping": early_stopping,
+            "repeat_run_stability": repeat_run_stability,
             "empty_runs": empty_run_summary,
             "run_metadata": run_metadata,
         },

@@ -5,23 +5,19 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Core } from "cytoscape";
 import ProjectHeader from "./_components/ProjectHeader";
-import ResultsSummarySection from "./_components/ResultsSummarySection";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
-import EdgeAnalysisTableSection from "./_components/EdgeAnalysisTableSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
 import AlgorithmErrorPopover from "./_components/AlgorithmErrorPopover";
 import ConfirmDownloadModal from "./_components/ConfirmDownloadModal";
-import DatasetHelpModal from "./_components/DatasetHelpModal";
 import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
 import ResultsGuideModal from "./_components/ResultsGuideModal";
 import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
-import DatasetPreprocessingSection from "./_components/DatasetPreprocessingSection";
+import DatasetPreprocessingSection, {
+  type MethodGeneAdjustment,
+} from "./_components/DatasetPreprocessingSection";
 import JobProgressBanner from "./_components/JobProgressBanner";
 import DatasetValidationStatus from "./_components/DatasetValidationStatus";
 import DatasetValidationIssuesSection from "./_components/DatasetValidationIssuesSection";
-import AlgorithmWarningPopover, {
-  type AlgorithmWarning,
-} from "./_components/AlgorithmWarningPopover";
 import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector, {
   type ResultsHubView,
@@ -44,10 +40,9 @@ import {
   type AlgorithmStoredResult,
   type MetadataManifest,
   type NodeInfo,
-  type OverlapEntry,
   type ProjectManifest,
 } from "./_lib/types";
-import { boolText, clamp } from "./_lib/utils";
+import { clamp } from "./_lib/utils";
 
 const CONFIDENCE_STABILITY_TOP_K = 10;
 const MODAL_ANIMATION_MS = 480;
@@ -56,6 +51,22 @@ const INITIAL_VISIBLE_EDGE_TARGET = 10;
 // Shown for algorithm failures that aren't user-actionable (most are internal).
 const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
+const ALGORITHM_GENE_LIMIT_DEFAULTS: Record<string, number> = {
+  PIDC: 500,
+  SINCERITIES: 500,
+  SCRIBE: 300,
+  SINGE: 500,
+  GRISLI: 500,
+  GRNVBEM: 500,
+};
+const ALGORITHM_GENE_ADJUSTMENT_REASONS: Record<string, string> = {
+  PIDC: "Keeps triplet calculations practical.",
+  SINCERITIES: "Keeps partial-correlation calculations stable.",
+  SCRIBE: "Keeps pairwise information calculations practical.",
+  SINGE: "Keeps lagged calculations practical.",
+  GRISLI: "Keeps velocity and stability calculations practical.",
+  GRNVBEM: "Keeps dense Bayesian calculations practical.",
+};
 
 type GeneCoordinateInfo = {
   chromosome?: string | null;
@@ -67,6 +78,16 @@ type GeneCoordinateInfo = {
 };
 
 const edgeKeyFor = (source: string, target: string) => `${source}|||${target}`;
+
+function median(values: number[]) {
+  if (values.length === 0) return null;
+  const sortedValues = [...values].sort((a, b) => a - b);
+  const midpoint = Math.floor(sortedValues.length / 2);
+
+  return sortedValues.length % 2 === 0
+    ? (sortedValues[midpoint - 1] + sortedValues[midpoint]) / 2
+    : sortedValues[midpoint];
+}
 
 function edgesForScope(
   result: AlgorithmStoredResult | undefined,
@@ -279,15 +300,9 @@ export default function ProjectDetailPage() {
   const [perturbationGenes, setPerturbationGenes] = useState<string[]>([]);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
-  const [visibleAlgorithmColumns, setVisibleAlgorithmColumns] = useState<string[]>([]);
-  const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
-  const [tablePage, setTablePage] = useState(1);
-  const [tableSortKey, setTableSortKey] = useState<"rank" | "source" | "target" | "score" | "count">("rank");
-  const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
-  const [isDatasetHelpOpen, setIsDatasetHelpOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
   const [activeAlgorithmError, setActiveAlgorithmError] = useState<{
     task: {
@@ -295,10 +310,6 @@ export default function ProjectDetailPage() {
       errorMessage: string;
       errorType?: string | null;
     };
-    anchorElement: HTMLElement;
-  } | null>(null);
-  const [activeAlgorithmWarnings, setActiveAlgorithmWarnings] = useState<{
-    warnings: AlgorithmWarning[];
     anchorElement: HTMLElement;
   } | null>(null);
   const [pendingAlgorithmAction, setPendingAlgorithmAction] = useState<{
@@ -315,8 +326,8 @@ export default function ProjectDetailPage() {
   const [visualizationContext, setVisualizationContext] =
     useState<VisualizationContext | null>(null);
   const [isVisualizationContextLoading, setIsVisualizationContextLoading] = useState(false);
+  const [trajectoryRequestedGenes, setTrajectoryRequestedGenes] = useState<string[]>([]);
 
-  const columnMenuRef = useRef<HTMLDivElement | null>(null);
   const seededProjectIdRef = useRef<string | null>(null);
   const networkGraphRef = useRef<Core | null>(null);
   const hasAppliedDemoDefaultsRef = useRef(false);
@@ -333,7 +344,10 @@ export default function ProjectDetailPage() {
     }
     const controller = new AbortController();
     setIsVisualizationContextLoading(true);
-    void apiFetch(`${API_BASE}/projects/${projectId}/visualization-context`, {
+    const query = trajectoryRequestedGenes.length
+      ? `?genes=${encodeURIComponent(trajectoryRequestedGenes.join(","))}`
+      : "";
+    void apiFetch(`${API_BASE}/projects/${projectId}/visualization-context${query}`, {
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -350,7 +364,7 @@ export default function ProjectDetailPage() {
         if (!controller.signal.aborted) setIsVisualizationContextLoading(false);
       });
     return () => controller.abort();
-  }, [metadata, project, projectId]);
+  }, [metadata, project, projectId, trajectoryRequestedGenes]);
 
   useEffect(() => {
     return () => {
@@ -375,39 +389,15 @@ export default function ProjectDetailPage() {
       });
   }, [isDemoRoute, projectId, refreshProjectData]);
 
-  const expressionMatrixLabel =
-    metadata?.gene_count && metadata?.cell_count
-      ? `${metadata.gene_count.toLocaleString()} genes × ${metadata.cell_count.toLocaleString()} cells`
-      : isDemoProject
-        ? "19 genes × 2,000 cells"
-        : "Pending";
-  const enabledPreprocessingStages = metadata?.preprocessing?.enabled_stages ?? [];
-  const topVariableGenesLabel = isDemoProject
-    ? "Demo preprocessing"
-    : enabledPreprocessingStages.length > 0
-      ? enabledPreprocessingStages
-          .map((stage) =>
-            stage === "variance"
-              ? `Top ${metadata?.preprocessing?.variance?.gene_count ?? "—"} by variance`
-              : stage === "trajectory"
-                ? "Trajectory-aware"
-                : `Detection ≥${metadata?.preprocessing?.detection?.minimum_cell_percent ?? "—"}%`,
-          )
-          .join(" → ")
-      : "No gene filtering";
-  const tfOverrideLabel = isDemoProject
-    ? "Enabled"
-    : boolText(metadata?.preprocessing?.variance?.include_known_tfs);
-  const normalizationLabel = isDemoProject
-    ? "Enabled"
-    : boolText(metadata?.preprocessing?.matrix_state === "raw");
-  const logTransformLabel = isDemoProject
-    ? "Enabled"
-    : boolText(
-        metadata?.preprocessing?.matrix_state === "raw" ||
-          metadata?.preprocessing?.matrix_state === "normalized",
-      );
-
+  const matrixTreatmentLabel = isDemoProject
+    ? "Already log-normalized"
+    : metadata?.preprocessing?.matrix_state === "raw"
+      ? "Normalized · log₂(x + 1)"
+      : metadata?.preprocessing?.matrix_state === "normalized"
+        ? "log₂(x + 1)"
+        : metadata?.preprocessing?.matrix_state === "log_normalized"
+          ? "Already log-normalized"
+          : "Pending";
 
   const rawJobTasks = useMemo(() => latestJob?.tasks ?? [], [latestJob]);
   const legacyMatrixValidationTask = useMemo(
@@ -445,159 +435,6 @@ export default function ProjectDetailPage() {
         : rawJobTasks,
     [matrixValidationError, rawJobTasks],
   );
-  const algorithmWarnings = useMemo<AlgorithmWarning[]>(() => {
-    const selectedAlgorithmIds = new Set(
-      [
-        ...(project?.selected_algorithms ?? []),
-        ...(metadata?.selected_algorithms ?? []),
-        ...rawJobTasks.map((task) => task.algorithm_id),
-      ].map((algorithmId) => String(algorithmId).toUpperCase()),
-    );
-    const warnings: AlgorithmWarning[] = [];
-
-    const uploadedGeneCount = metadata?.gene_count;
-    const uploadedCellCount = metadata?.cell_count;
-    if (selectedAlgorithmIds.has("PIDC")) {
-      const configuredPidcMaxGenes =
-        project?.algorithm_parameters?.PIDC?.maxGenes ??
-        project?.resolved_algorithm_parameters?.PIDC?.maxGenes ??
-        metadata?.algorithm_parameters?.PIDC?.maxGenes ??
-        metadata?.resolved_algorithm_parameters?.PIDC?.maxGenes ??
-        500;
-      const parsedPidcMaxGenes = Number(configuredPidcMaxGenes);
-      const pidcMaxGenes =
-        Number.isFinite(parsedPidcMaxGenes) && parsedPidcMaxGenes > 0
-          ? Math.floor(parsedPidcMaxGenes)
-          : 500;
-
-      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > pidcMaxGenes) {
-        warnings.push({
-          code: "pidc-gene-filtering",
-          algorithmId: "PIDC",
-          title: "PIDC applies its own gene filtering",
-          message: `PIDC will analyze at most ${pidcMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter. PIDC evaluates gene triplets, so increasing this value can cause a very large increase in runtime and memory use. You can change this value in PIDC's parameter settings.`,
-        });
-      }
-    }
-
-    if (selectedAlgorithmIds.has("SINGE")) {
-      const configuredSingeMaxGenes =
-        project?.algorithm_parameters?.SINGE?.maxGenes ??
-        project?.resolved_algorithm_parameters?.SINGE?.maxGenes ??
-        metadata?.algorithm_parameters?.SINGE?.maxGenes ??
-        metadata?.resolved_algorithm_parameters?.SINGE?.maxGenes ??
-        500;
-      const parsedSingeMaxGenes = Number(configuredSingeMaxGenes);
-      const singeMaxGenes =
-        Number.isFinite(parsedSingeMaxGenes) && parsedSingeMaxGenes > 0
-          ? Math.floor(parsedSingeMaxGenes)
-          : 500;
-
-      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > singeMaxGenes) {
-        warnings.push({
-          code: "singe-gene-filtering",
-          algorithmId: "SINGE",
-          title: "SINGE uses a runtime-focused gene set",
-          message: `SINGE is currently configured to use ${singeMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its lagged regulator-target calculations become much slower as gene count increases. You can change this value in SINGE's parameter settings.`,
-        });
-      }
-    }
-
-    if (selectedAlgorithmIds.has("SCRIBE")) {
-      const configuredScribeMaxGenes =
-        project?.algorithm_parameters?.SCRIBE?.maxGenes ??
-        project?.resolved_algorithm_parameters?.SCRIBE?.maxGenes ??
-        metadata?.algorithm_parameters?.SCRIBE?.maxGenes ??
-        metadata?.resolved_algorithm_parameters?.SCRIBE?.maxGenes ??
-        300;
-      const parsedScribeMaxGenes = Number(configuredScribeMaxGenes);
-      const scribeMaxGenes =
-        Number.isFinite(parsedScribeMaxGenes) && parsedScribeMaxGenes > 0
-          ? Math.floor(parsedScribeMaxGenes)
-          : 300;
-
-      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > scribeMaxGenes) {
-        warnings.push({
-          code: "scribe-gene-filtering",
-          algorithmId: "SCRIBE",
-          title: "SCRIBE uses a runtime-focused gene set",
-          message: `SCRIBE is currently configured to use ${scribeMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its directed-information calculation compares every gene pair and becomes very slow on larger matrices. You can change this value in SCRIBE's parameter settings.`,
-        });
-      }
-    }
-
-    if (selectedAlgorithmIds.has("GRNVBEM")) {
-      const configuredGrnvbemMaxGenes =
-        project?.algorithm_parameters?.GRNVBEM?.maxGenes ??
-        project?.resolved_algorithm_parameters?.GRNVBEM?.maxGenes ??
-        metadata?.algorithm_parameters?.GRNVBEM?.maxGenes ??
-        metadata?.resolved_algorithm_parameters?.GRNVBEM?.maxGenes ??
-        500;
-      const parsedGrnvbemMaxGenes = Number(configuredGrnvbemMaxGenes);
-      const grnvbemMaxGenes =
-        Number.isFinite(parsedGrnvbemMaxGenes) && parsedGrnvbemMaxGenes > 0
-          ? Math.floor(parsedGrnvbemMaxGenes)
-          : 500;
-
-      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > grnvbemMaxGenes) {
-        warnings.push({
-          code: "grnvbem-gene-filtering",
-          algorithmId: "GRNVBEM",
-          title: "GRNVBEM uses a runtime-focused gene set",
-          message: `GRNVBEM is currently configured to use ${grnvbemMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its dense variational Bayesian calculations become much slower and require substantially more memory as gene count increases. You can change this value in GRNVBEM's parameter settings.`,
-        });
-      }
-    }
-
-    if (selectedAlgorithmIds.has("GRISLI")) {
-      const configuredGrisliMaxGenes =
-        project?.algorithm_parameters?.GRISLI?.maxGenes ??
-        project?.resolved_algorithm_parameters?.GRISLI?.maxGenes ??
-        metadata?.algorithm_parameters?.GRISLI?.maxGenes ??
-        metadata?.resolved_algorithm_parameters?.GRISLI?.maxGenes ??
-        500;
-      const parsedGrisliMaxGenes = Number(configuredGrisliMaxGenes);
-      const grisliMaxGenes =
-        Number.isFinite(parsedGrisliMaxGenes) && parsedGrisliMaxGenes > 0
-          ? Math.floor(parsedGrisliMaxGenes)
-          : 500;
-
-      if (typeof uploadedGeneCount === "number" && uploadedGeneCount > grisliMaxGenes) {
-        warnings.push({
-          code: "grisli-gene-filtering",
-          algorithmId: "GRISLI",
-          title: "GRISLI uses a runtime-focused gene set",
-          message: `GRISLI is currently configured to use ${grisliMaxGenes.toLocaleString()} highest-variance genes after the project-wide gene filter because its velocity inference and repeated stability-selection calculations require substantially more memory as gene count increases. You can change this value in GRISLI's parameter settings.`,
-        });
-      }
-    }
-
-    if (
-      selectedAlgorithmIds.has("SINCERITIES") &&
-      typeof uploadedGeneCount === "number" &&
-      typeof uploadedCellCount === "number" &&
-      uploadedGeneCount > uploadedCellCount
-    ) {
-      warnings.push({
-        code: "sincerities-genes-exceed-cells",
-        algorithmId: "SINCERITIES",
-        title: "SINCERITIES has more genes than cells",
-        message: `This matrix contains ${uploadedGeneCount.toLocaleString()} genes and ${uploadedCellCount.toLocaleString()} cells. SINCERITIES derives edge signs from an all-gene partial-correlation matrix, which can become singular when genes outnumber cells. GRNScope will apply SINCERITIES's separate highest-variance gene filter before analysis to keep this calculation stable. You can change this value in SINCERITIES's parameter settings.`,
-      });
-    }
-
-    return warnings;
-  }, [metadata, project, rawJobTasks]);
-  const warningsByAlgorithm = useMemo(() => {
-    const grouped = new Map<string, AlgorithmWarning[]>();
-    for (const warning of algorithmWarnings) {
-      const key = warning.algorithmId.toUpperCase();
-      const existing = grouped.get(key);
-      if (existing) existing.push(warning);
-      else grouped.set(key, [warning]);
-    }
-    return grouped;
-  }, [algorithmWarnings]);
   const cellOracleTask = useMemo(
     () => allJobTasks.find((task) => task.algorithm_id.toUpperCase() === "CELLORACLE") ?? null,
     [allJobTasks]
@@ -746,6 +583,83 @@ export default function ProjectDetailPage() {
     () => new Map(algorithmCatalog.map((item) => [item.id, item])),
     [algorithmCatalog]
   );
+
+  const methodGeneAdjustments = useMemo<MethodGeneAdjustment[]>(() => {
+    const projectWideGeneCount =
+      metadata?.preprocessing_result?.gene_count ?? metadata?.gene_count;
+    const cellCount =
+      metadata?.preprocessing_result?.cell_count ?? metadata?.cell_count;
+    if (typeof projectWideGeneCount !== "number") return [];
+
+    return allJobTasks.flatMap<MethodGeneAdjustment>((task) => {
+      const algorithmId = task.algorithm_id.toUpperCase();
+      const defaultLimit = ALGORITHM_GENE_LIMIT_DEFAULTS[algorithmId];
+      if (!defaultLimit) return [];
+
+      const recordedSummary =
+        algorithmResults[task.algorithm_id]?.algorithm_preprocessing ??
+        algorithmResults[algorithmId]?.algorithm_preprocessing;
+      if (recordedSummary && recordedSummary.applied === false) return [];
+
+      if (
+        recordedSummary?.applied === true &&
+        typeof recordedSummary.effective_gene_limit === "number"
+      ) {
+        return [
+          {
+            algorithmId,
+            algorithmName: algorithmMetaMap.get(task.algorithm_id)?.name ?? algorithmId,
+            inputGeneCount: recordedSummary.input_gene_count,
+            retainedGeneCount: recordedSummary.retained_gene_count,
+            effectiveGeneLimit: recordedSummary.effective_gene_limit,
+            reason:
+              recordedSummary.reason_code === "numerical_stability"
+                ? "Keeps partial-correlation calculations stable."
+                : ALGORITHM_GENE_ADJUSTMENT_REASONS[algorithmId],
+            recorded: true,
+            geneAuditAvailable:
+              recordedSummary.gene_audit_available === true,
+          },
+        ];
+      }
+
+      const configuredValue =
+        project?.algorithm_parameters?.[algorithmId]?.maxGenes ??
+        project?.resolved_algorithm_parameters?.[algorithmId]?.maxGenes ??
+        metadata?.algorithm_parameters?.[algorithmId]?.maxGenes ??
+        metadata?.resolved_algorithm_parameters?.[algorithmId]?.maxGenes ??
+        defaultLimit;
+      const parsedLimit = Number(configuredValue);
+      const configuredLimit =
+        Number.isFinite(parsedLimit) && parsedLimit > 0
+          ? Math.floor(parsedLimit)
+          : defaultLimit;
+      const estimatedEffectiveLimit =
+        algorithmId === "SINCERITIES" && typeof cellCount === "number"
+          ? Math.min(configuredLimit, Math.max(2, Math.round(cellCount * 0.8) - 1))
+          : configuredLimit;
+      if (projectWideGeneCount <= estimatedEffectiveLimit) return [];
+
+      return [
+        {
+          algorithmId,
+          algorithmName: algorithmMetaMap.get(task.algorithm_id)?.name ?? algorithmId,
+          inputGeneCount: projectWideGeneCount,
+          retainedGeneCount: estimatedEffectiveLimit,
+          effectiveGeneLimit: estimatedEffectiveLimit,
+          reason: ALGORITHM_GENE_ADJUSTMENT_REASONS[algorithmId],
+          recorded: false,
+          geneAuditAvailable: false,
+        },
+      ];
+    });
+  }, [
+    algorithmMetaMap,
+    algorithmResults,
+    allJobTasks,
+    metadata,
+    project,
+  ]);
 
   const stableTFGeneIds = useMemo(() => {
     const metadataWithTFs = metadata as
@@ -924,6 +838,7 @@ export default function ProjectDetailPage() {
                 : clamp(1 - (rank - 1) / (regulatorCount - 1), 0, 1);
             const backendMeanPercentile = numericMeanPercentile(entry.edge);
             const backendStability = numericStability(entry.edge);
+            const backendConfidence = numericEdgeConfidence(entry.edge);
             const evidence = numericEvidenceScore(entry.edge, percentile);
             const confidence = numericConfidenceScore(entry.edge, percentile);
             const meanPercentile = backendMeanPercentile ?? percentile;
@@ -932,7 +847,9 @@ export default function ProjectDetailPage() {
             const direction =
               isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
             const supportingAlgorithms =
-              evidence >= 0.5 || rank <= CONFIDENCE_STABILITY_TOP_K
+              (backendStability !== null
+                ? backendStability > 0
+                : evidence >= 0.5 || rank <= CONFIDENCE_STABILITY_TOP_K)
                 ? [algorithmId]
                 : [];
 
@@ -950,6 +867,12 @@ export default function ProjectDetailPage() {
               perAlgorithmScores: {
                 [algorithmId]: evidence,
               },
+              perAlgorithmConfidences:
+                backendConfidence === null
+                  ? {}
+                  : {
+                      [algorithmId]: backendConfidence,
+                    },
               perAlgorithmRawScores: {
                 [algorithmId]: entry.signedScore,
               },
@@ -1141,6 +1064,7 @@ export default function ProjectDetailPage() {
       directionVote: -1 | 0 | 1;
       signVote: -1 | 0 | 1;
       rawScore: number | undefined;
+      bootstrapConfidence: number | null;
       isSupported: boolean;
     };
 
@@ -1155,6 +1079,7 @@ export default function ProjectDetailPage() {
       signDenominator: number;
       supportingAlgorithms: string[];
       perAlgorithmScores: Record<string, number>;
+      perAlgorithmConfidences: Record<string, number>;
       perAlgorithmRawScores: Record<string, number>;
       perAlgorithmSigns: Record<string, -1 | 0 | 1>;
     };
@@ -1184,6 +1109,7 @@ export default function ProjectDetailPage() {
         signDenominator: 0,
         supportingAlgorithms: [],
         perAlgorithmScores: {},
+        perAlgorithmConfidences: {},
         perAlgorithmRawScores: {},
         perAlgorithmSigns: {},
       };
@@ -1214,6 +1140,8 @@ export default function ProjectDetailPage() {
                 ? forward?.perAlgorithmSigns?.[algorithmId] ?? 0
                 : 0,
               rawScore: forward?.perAlgorithmRawScores?.[algorithmId],
+              bootstrapConfidence:
+                forward?.perAlgorithmConfidences?.[algorithmId] ?? null,
               isSupported: forward?.supportingAlgorithms.includes(algorithmId) ?? false,
             };
           } else {
@@ -1224,6 +1152,8 @@ export default function ProjectDetailPage() {
                 ? reverse?.perAlgorithmSigns?.[algorithmId] ?? 0
                 : 0,
               rawScore: reverse?.perAlgorithmRawScores?.[algorithmId],
+              bootstrapConfidence:
+                reverse?.perAlgorithmConfidences?.[algorithmId] ?? null,
               isSupported: reverse?.supportingAlgorithms.includes(algorithmId) ?? false,
             };
           }
@@ -1238,6 +1168,11 @@ export default function ProjectDetailPage() {
         accumulator.totalEvidence += methodEvidence.evidence;
         accumulator.perAlgorithmScores[algorithmId] = methodEvidence.evidence;
         accumulator.perAlgorithmSigns[algorithmId] = methodEvidence.signVote;
+
+        if (methodEvidence.bootstrapConfidence !== null) {
+          accumulator.perAlgorithmConfidences[algorithmId] =
+            methodEvidence.bootstrapConfidence;
+        }
 
         if (methodEvidence.rawScore !== undefined) {
           accumulator.perAlgorithmRawScores[algorithmId] = methodEvidence.rawScore;
@@ -1265,7 +1200,13 @@ export default function ProjectDetailPage() {
     const sortedRows = Array.from(buckets.entries())
       .map(([key, edge]) => {
         const edgeEvidence = clamp(edge.totalEvidence / sumAlpha, 0, 1);
-        const stability = edge.supportingAlgorithms.length / sumAlpha;
+        const bootstrapConfidence =
+          median(
+            edge.supportingAlgorithms.flatMap((algorithmId) => {
+              const value = edge.perAlgorithmConfidences[algorithmId];
+              return Number.isFinite(value) ? [value] : [];
+            })
+          ) ?? 0;
         const direction = signOf(edge.directionVote);
         const directionConfidence =
           edge.directionDenominator > 0
@@ -1294,12 +1235,12 @@ export default function ProjectDetailPage() {
           source: displaySource,
           target: displayTarget,
           score: edgeEvidence,
-          confidence: clamp(stability * edgeEvidence, 0, 1),
-          stability,
+          confidence: clamp(bootstrapConfidence, 0, 1),
           count: edge.supportingAlgorithms.length,
           rank: 0,
           supportingAlgorithms: [...edge.supportingAlgorithms].sort(),
           perAlgorithmScores: edge.perAlgorithmScores,
+          perAlgorithmConfidences: edge.perAlgorithmConfidences,
           perAlgorithmRawScores: edge.perAlgorithmRawScores,
           perAlgorithmSigns: edge.perAlgorithmSigns,
           direction: direction === 0 ? 0 : 1,
@@ -1356,17 +1297,6 @@ export default function ProjectDetailPage() {
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
   const activeEdges = uncappedActiveEdges;
-  const analysisEdges = useMemo(() => {
-    if (activeAlgorithmIds.length >= 2) return consensusCandidateRows;
-    if (activeAlgorithmIds.length === 1) {
-      return standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
-    }
-    return [];
-  }, [
-    activeAlgorithmIds,
-    consensusCandidateRows,
-    standardizedAlgorithmEdgeRows,
-  ]);
 
   // First-open safety net: seed the result filters from each project's own edge
   // distribution so the network and table always reveal a small, legible set of
@@ -1520,57 +1450,6 @@ export default function ProjectDetailPage() {
     [networkNodes, selectedGene]
   );
 
-  const perAlgorithmEdgeCounts = useMemo(() => {
-    return activeAlgorithmIds.map((algorithmId) => ({
-      algorithmId,
-      count: displayAlgorithmEdgeRows[algorithmId]?.length ?? 0,
-    }));
-  }, [activeAlgorithmIds, displayAlgorithmEdgeRows]);
-
-  const maxAlgorithmEdgeCount = useMemo(() => {
-    return Math.max(...perAlgorithmEdgeCounts.map((item) => item.count), 1);
-  }, [perAlgorithmEdgeCounts]);
-
-  const overlapEntries = useMemo<OverlapEntry[]>(() => {
-    if (activeAlgorithmIds.length < 2) return [];
-
-    const edgeMembership = new Map<string, string[]>();
-
-    activeAlgorithmIds.forEach((algorithmId) => {
-      (displayAlgorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
-        const key = `${edge.source}|||${edge.target}`;
-        const current = edgeMembership.get(key) ?? [];
-        if (!current.includes(algorithmId)) current.push(algorithmId);
-        edgeMembership.set(key, current);
-      });
-    });
-
-    const buckets = new Map<string, OverlapEntry>();
-
-    edgeMembership.forEach((methods) => {
-      const sortedMethods = [...methods].sort();
-      const key = sortedMethods.join(" + ");
-      const current = buckets.get(key);
-
-      if (current) {
-        current.count += 1;
-      } else {
-        buckets.set(key, {
-          key,
-          methods: sortedMethods,
-          count: 1,
-        });
-      }
-    });
-
-    return Array.from(buckets.values()).sort((a, b) => b.count - a.count);
-  }, [activeAlgorithmIds, displayAlgorithmEdgeRows]);
-
-  const maxOverlapCount = useMemo(() => {
-    return Math.max(...overlapEntries.map((entry) => entry.count), 1);
-  }, [overlapEntries]);
-
-
   const resultsAvailabilityNotice = useMemo(() => {
     if (isPreparingFinishedResults) {
       return null;
@@ -1580,7 +1459,7 @@ export default function ProjectDetailPage() {
       return {
         title: "No completed algorithm results yet",
         description:
-          "The network visualization, overlap summary, and edge analysis table will appear after the first algorithm finishes successfully.",
+          "The network and comparison tools will appear after the first algorithm finishes successfully.",
       };
     }
 
@@ -1588,7 +1467,7 @@ export default function ProjectDetailPage() {
       return {
         title: "No algorithms selected",
         description:
-          "Select at least one completed algorithm to view the network, edge table, and overlap summary.",
+          "Select at least one completed algorithm to explore its network and ranked edges.",
       };
     }
 
@@ -1598,50 +1477,6 @@ export default function ProjectDetailPage() {
     completedAlgorithmIds.length,
     isPreparingFinishedResults,
   ]);
-
-  const safeEdgeDisplayLimit = useMemo(() => {
-    if (filteredNetworkEdges.length === 0) return 0;
-
-    const requestedLimit =
-      Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit >= 0
-        ? Math.floor(edgeDisplayLimit)
-        : 0;
-
-    return Math.min(filteredNetworkEdges.length, requestedLimit);
-  }, [edgeDisplayLimit, filteredNetworkEdges.length]);
-
-  const visibleTableRows = useMemo(() => {
-    return filteredNetworkEdges.slice(0, safeEdgeDisplayLimit);
-  }, [filteredNetworkEdges, safeEdgeDisplayLimit]);
-
-  const sortedTableRows = useMemo(() => {
-    const rows = [...visibleTableRows];
-
-    rows.sort((a, b) => {
-      let value = 0;
-
-      if (tableSortKey === "rank") value = a.rank - b.rank;
-      if (tableSortKey === "source") value = a.source.localeCompare(b.source);
-      if (tableSortKey === "target") value = a.target.localeCompare(b.target);
-      if (tableSortKey === "score") value = a.score - b.score;
-      if (tableSortKey === "count") value = a.count - b.count;
-
-      return tableSortDirection === "asc" ? value : -value;
-    });
-
-    return rows;
-  }, [visibleTableRows, tableSortDirection, tableSortKey]);
-
-  const TABLE_PAGE_SIZE = 25;
-
-  const totalTablePages = useMemo(() => {
-    return Math.max(1, Math.ceil(sortedTableRows.length / TABLE_PAGE_SIZE));
-  }, [sortedTableRows.length]);
-
-  const displayedTableRows = useMemo(() => {
-    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
-    return sortedTableRows.slice(start, start + TABLE_PAGE_SIZE);
-  }, [sortedTableRows, tablePage]);
 
   const openDownloadModal = (label: string, href: string, filename: string) => {
     setIsDownloadModalClosing(false);
@@ -1936,74 +1771,7 @@ export default function ProjectDetailPage() {
     [activeAlgorithmIds, isolatedGene, networkLayout, projectId]
   );
 
-  const handleExportEdgeList = useCallback(() => {
-    const escapeCsvValue = (value: string | number | null) => {
-      const stringValue = String(value);
-
-      if (/[",\n]/.test(stringValue)) {
-        return `"${stringValue.replace(/"/g, '""')}"`;
-      }
-
-      return stringValue;
-    };
-
-    const selectedView =
-      activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus";
-
-    const headerColumns = [
-      selectedView === "consensus" ? "Consensus Rank" : "Rank",
-      "Source Gene",
-      "Target Gene",
-      selectedView === "consensus" ? "Consensus Evidence" : "Regulation Evidence",
-      "Inferred Confidence",
-      "Direction",
-      "Sign",
-      "Supporting Algorithms",
-      "Supporting Method Count",
-    ];
-
-    const lines = [
-      headerColumns.join(","),
-      ...sortedTableRows.map((edge) => {
-        const row = [
-          edge.rank,
-          edge.source,
-          edge.target,
-          edge.score.toFixed(3),
-          edge.confidence.toFixed(3),
-          edge.direction === 1 ? "source_to_target" : edge.direction === -1 ? "reverse" : "unknown",
-          edge.sign === 1 ? "positive" : edge.sign === -1 ? "negative" : "unknown",
-          edge.supportingAlgorithms.join("; "),
-          edge.count,
-        ];
-
-        return row.map(escapeCsvValue).join(",");
-      }),
-    ];
-
-    const csvContent = lines.join("\n");
-    const searchLabel =
-      tableSearch.trim().length > 0
-        ? `-search-${tableSearch.trim().replace(/\s+/g, "-")}`
-        : "";
-    const filename = `${projectId ?? "project"}-${selectedView}-edge-list${searchLabel}.csv`;
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  }, [activeAlgorithmIds, projectId, sortedTableRows, tableSearch]);
-
 useEffect(() => {
-  setVisibleAlgorithmColumns(activeAlgorithmIds);
-
   const maxConsensusValue = Math.max(activeAlgorithmIds.length, 1);
   const defaultConsensusValue = Math.max(1, Math.floor(maxConsensusValue / 2));
 
@@ -2027,51 +1795,12 @@ useEffect(() => {
 }, [activeAlgorithmIds, hasTouchedConsensusThreshold, isDemoProject]);
 
   useEffect(() => {
-    if (!isColumnMenuOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!columnMenuRef.current) return;
-
-      if (!columnMenuRef.current.contains(event.target as Node)) {
-        setIsColumnMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [isColumnMenuOpen]);
-
-  useEffect(() => {
     if (!selectedGene) return;
 
     if (!networkNodes.some((node) => node.id === selectedGene)) {
       setSelectedGene(null);
     }
   }, [networkNodes, selectedGene]);
-
-  useEffect(() => {
-    setTablePage(1);
-  }, [
-    tableSearch,
-    tableSortDirection,
-    tableSortKey,
-    selectedAlgorithmIds,
-    evidenceThreshold,
-    confidenceThreshold,
-    directionConfidenceThreshold,
-    signConfidenceThreshold,
-    consensusThreshold,
-    isolatedGene,
-    edgeDisplayLimit,
-    selectedResultScopeId,
-  ]);
-
-  useEffect(() => {
-    setTablePage((current) => Math.min(current, totalTablePages));
-  }, [totalTablePages]);
 
   const handleOpenPerturbation = useCallback((gene: string) => {
     setPerturbationEntryGene(gene);
@@ -2235,7 +1964,6 @@ useEffect(() => {
                 <AlgorithmCardsSection
                   tasks={allJobTasks}
                   algorithmMetaMap={algorithmMetaMap}
-                  warningsByAlgorithm={warningsByAlgorithm}
                   onOpenAlgorithmError={(task, anchorElement) => {
                     // Almost every algorithm failure is an internal/backend issue the
                     // user can't act on, so show a general message. The one exception
@@ -2263,19 +1991,20 @@ useEffect(() => {
                       anchorElement,
                     });
                   }}
-                  onOpenAlgorithmWarnings={(warnings, anchorElement) => setActiveAlgorithmWarnings({ warnings, anchorElement })}
                   onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
                   onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
                   compact
                 />
 
                 <DatasetPreprocessingSection
-                  expressionMatrixLabel={expressionMatrixLabel}
-                  topVariableGenesLabel={topVariableGenesLabel}
-                  tfOverrideLabel={tfOverrideLabel}
-                  normalizationLabel={normalizationLabel}
-                  logTransformLabel={logTransformLabel}
-                  onOpenHelp={() => setIsDatasetHelpOpen(true)}
+                  projectId={projectId}
+                  inputGeneCount={metadata?.gene_count}
+                  cellCount={metadata?.cell_count}
+                  finalGeneCount={metadata?.preprocessing_result?.gene_count}
+                  matrixTreatmentLabel={matrixTreatmentLabel}
+                  preprocessing={metadata?.preprocessing}
+                  preprocessingResult={metadata?.preprocessing_result}
+                  methodAdjustments={methodGeneAdjustments}
                   onOpenDownloadMenu={() => {
                     if (!projectId) return;
                     setIsFileDownloadMenuOpen(true);
@@ -2361,17 +2090,22 @@ useEffect(() => {
                   ) : resultsHubView !== "network" && resultsHubView !== "perturbation" ? (
                     <ResultsInsightsSection
                       view={resultsHubView}
-                      networkEdges={activeEdges}
-                      analysisEdges={analysisEdges}
                       algorithmEdgeRows={standardizedAlgorithmEdgeRows}
                       algorithmMetaMap={algorithmMetaMap}
                       algorithmResults={algorithmResults}
                       activeAlgorithmIds={activeAlgorithmIds}
+                      edgeExplorerRows={
+                        activeAlgorithmIds.length >= 2
+                          ? consensusCandidateRows
+                          : activeAlgorithmIds.length === 1
+                            ? standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? []
+                            : []
+                      }
+                      selectedResultScopeId={selectedResultScopeId}
                       tasks={allJobTasks}
-                      networkNodes={networkNodes}
                       visualizationContext={visualizationContext}
                       isContextLoading={isVisualizationContextLoading}
-                      onSelectGene={(gene) => setSelectedGene(gene)}
+                      onTrajectoryGenesChange={setTrajectoryRequestedGenes}
                     />
                   ) : (
                   <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
@@ -2399,39 +2133,6 @@ useEffect(() => {
                       onOpenPerturbation={handleOpenPerturbation}
                       resultsControls={renderResultsControls()}
                       />
-
-                      <EdgeAnalysisTableSection
-                      onExportEdgeList={handleExportEdgeList}
-                      columnMenuRef={columnMenuRef}
-                      isColumnMenuOpen={isColumnMenuOpen}
-                      setIsColumnMenuOpen={setIsColumnMenuOpen}
-                      completedAlgorithmIds={activeAlgorithmIds}
-                      visibleAlgorithmColumns={visibleAlgorithmColumns}
-                      setVisibleAlgorithmColumns={setVisibleAlgorithmColumns}
-                      selectedView={activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "consensus"}
-                      tableSortKey={tableSortKey}
-                      tableSortDirection={tableSortDirection}
-                      setTableSortKey={setTableSortKey}
-                      setTableSortDirection={setTableSortDirection}
-                      setTablePage={setTablePage}
-                      displayedTableRows={displayedTableRows}
-                      selectedEdgeKey={selectedEdgeKey}
-                      setSelectedEdgeKey={setSelectedEdgeKey}
-                      setSelectedGene={setSelectedGene}
-                      totalTablePages={totalTablePages}
-                      sortedTableRows={sortedTableRows}
-                      tablePage={tablePage}
-                      />
-
-                      {activeAlgorithmIds.length >= 2 && (
-                        <ResultsSummarySection
-                          perAlgorithmEdgeCounts={perAlgorithmEdgeCounts}
-                          maxAlgorithmEdgeCount={maxAlgorithmEdgeCount}
-                          completedAlgorithmIds={activeAlgorithmIds}
-                          overlapEntries={overlapEntries}
-                          maxOverlapCount={maxOverlapCount}
-                        />
-                      )}
                     </div>
                   </div>
                 )}
@@ -2443,10 +2144,6 @@ useEffect(() => {
             open={isResultsGuideOpen}
             onClose={() => setIsResultsGuideOpen(false)}
           />
-          <DatasetHelpModal
-            open={isDatasetHelpOpen}
-            onClose={() => setIsDatasetHelpOpen(false)}
-          />
           <ConfirmDownloadModal
             pendingDownload={pendingDownload}
             isClosing={isDownloadModalClosing}
@@ -2457,12 +2154,6 @@ useEffect(() => {
             task={activeAlgorithmError?.task ?? null}
             anchorElement={activeAlgorithmError?.anchorElement ?? null}
             onClose={() => setActiveAlgorithmError(null)}
-          />
-
-          <AlgorithmWarningPopover
-            warnings={activeAlgorithmWarnings?.warnings ?? null}
-            anchorElement={activeAlgorithmWarnings?.anchorElement ?? null}
-            onClose={() => setActiveAlgorithmWarnings(null)}
           />
 
           {pendingAlgorithmAction && (

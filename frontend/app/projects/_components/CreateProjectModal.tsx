@@ -70,6 +70,7 @@ interface CreateProjectModalProps {
   expressionFileName: string;
   expressionMatrixDimensions: string | null;
   pseudotimeFileName: string;
+  groundTruthFileName: string;
   clusterLabelsFileName: string;
   matrixState: string;
   datasetSpecies: string;
@@ -131,6 +132,8 @@ interface CreateProjectModalProps {
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
   setPseudotimeFileName: (value: string) => void;
+  setGroundTruthFile: (file: File | null) => void;
+  setGroundTruthFileName: (value: string) => void;
   setClusterLabelsFile: (file: File | null) => void;
   setClusterLabelsFileName: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
@@ -138,6 +141,7 @@ interface CreateProjectModalProps {
   setCellOracleSpecies: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
+  clearGroundTruthFile: () => void;
   clearClusterLabelsFile: () => void;
 }
 
@@ -148,6 +152,7 @@ export default function CreateProjectModal({
   expressionFileName,
   expressionMatrixDimensions,
   pseudotimeFileName,
+  groundTruthFileName,
   clusterLabelsFileName,
   matrixState,
   datasetSpecies,
@@ -206,6 +211,8 @@ export default function CreateProjectModal({
   setExpressionFileName,
   setPseudotimeFile,
   setPseudotimeFileName,
+  setGroundTruthFile,
+  setGroundTruthFileName,
   setClusterLabelsFile,
   setClusterLabelsFileName,
   setIncludeAllTFs,
@@ -213,6 +220,7 @@ export default function CreateProjectModal({
   setCellOracleSpecies,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
+  clearGroundTruthFile,
   clearClusterLabelsFile,
 }: CreateProjectModalProps) {
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -264,6 +272,11 @@ export default function CreateProjectModal({
   const selectPseudotimeFile = (file: File | null) => {
     setPseudotimeFile(file);
     setPseudotimeFileName(file?.name ?? "");
+  };
+
+  const selectGroundTruthFile = (file: File | null) => {
+    setGroundTruthFile(file);
+    setGroundTruthFileName(file?.name ?? "");
   };
 
   const selectClusterLabelsFile = (file: File | null) => {
@@ -435,13 +448,17 @@ export default function CreateProjectModal({
   ]
     .filter((label): label is string => label !== null)
     .join(" · ") || "No gene filtering";
-  const optionalInputsSummary = `${
+  const optionalInputsSummary = [
     pseudotimeFileName
       ? "Pseudotime uploaded"
       : estimatePseudotime
         ? "Pseudotime will be estimated"
-        : "No pseudotime"
-  } · ${hasCellOracleSettingsConfigured ? "CellOracle configured" : "CellOracle not configured"}`;
+        : "No pseudotime",
+    groundTruthFileName ? "Ground truth uploaded" : "No ground truth",
+    hasCellOracleSettingsConfigured
+      ? "CellOracle configured"
+      : "CellOracle not configured",
+  ].join(" · ");
   const unavailableAlgorithmCount = Math.max(
     0,
     algorithms.length - compatibleAlgorithms.length,
@@ -478,9 +495,9 @@ export default function CreateProjectModal({
         </div>
 
         <div className="mt-5 min-h-0 flex-1 scroll-pb-24 space-y-6 overflow-y-auto pb-24 pr-4 [scrollbar-gutter:stable]">
-          <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:items-start">
             {expressionFileName ? (
-              <div className="flex min-h-40 items-center justify-between gap-4 rounded-[1.25rem] border border-slate-200 bg-slate-50/60 px-6 py-5">
+              <div className="flex min-h-40 min-w-0 items-center justify-between gap-4 rounded-[1.25rem] border border-slate-200 bg-slate-50/60 px-6 py-5">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
                     Expression matrix
@@ -522,7 +539,7 @@ export default function CreateProjectModal({
               </div>
             ) : (
               <label
-                className="relative flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-5 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+                className="relative flex min-h-40 min-w-0 cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-5 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
                 onDragEnter={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -555,8 +572,8 @@ export default function CreateProjectModal({
               </label>
             )}
 
-            <div>
-              <fieldset>
+            <div className="min-w-0">
+              <fieldset className="min-w-0">
                 <legend className="text-sm font-semibold text-slate-800">
                   Matrix values
                   {!matrixState ? (
@@ -820,6 +837,7 @@ export default function CreateProjectModal({
               >
                 <OptionalInputsPanel
                   pseudotimeFileName={pseudotimeFileName}
+                  groundTruthFileName={groundTruthFileName}
                   cellOracleConfigLabel={cellOracleConfigLabel}
                   cellOracleBaseGrnSource={cellOracleBaseGrnSource}
                   cellOracleSpecies={cellOracleSpecies}
@@ -828,6 +846,8 @@ export default function CreateProjectModal({
                   onToggleEstimatePseudotime={onToggleEstimatePseudotime}
                   onSelectPseudotime={selectPseudotimeFile}
                   onClearPseudotime={clearPseudotimeFile}
+                  onSelectGroundTruth={selectGroundTruthFile}
+                  onClearGroundTruth={clearGroundTruthFile}
                   onActivateCellOracle={() => {
                     if (cellOracleBaseGrnSource === "built-in") {
                       setHasCellOracleSettingsConfigured(true);
@@ -1057,6 +1077,7 @@ function AdvancedAccordionSection({
 
 function OptionalInputsPanel({
   pseudotimeFileName,
+  groundTruthFileName,
   cellOracleConfigLabel,
   cellOracleBaseGrnSource,
   cellOracleSpecies,
@@ -1065,6 +1086,8 @@ function OptionalInputsPanel({
   onToggleEstimatePseudotime,
   onSelectPseudotime,
   onClearPseudotime,
+  onSelectGroundTruth,
+  onClearGroundTruth,
   onActivateCellOracle,
   onCellOracleBaseGrnSourceChange,
   onSetCellOracleSpecies,
@@ -1073,6 +1096,7 @@ function OptionalInputsPanel({
   onShowCellOracleHelp,
 }: {
   pseudotimeFileName: string;
+  groundTruthFileName: string;
   cellOracleConfigLabel: string;
   cellOracleBaseGrnSource: CellOracleBaseGrnSource;
   cellOracleSpecies: string;
@@ -1081,6 +1105,8 @@ function OptionalInputsPanel({
   onToggleEstimatePseudotime: (value: boolean) => void;
   onSelectPseudotime: (file: File | null) => void;
   onClearPseudotime: () => void;
+  onSelectGroundTruth: (file: File | null) => void;
+  onClearGroundTruth: () => void;
   onActivateCellOracle: () => void;
   onCellOracleBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
   onSetCellOracleSpecies: (value: string) => void;
@@ -1099,6 +1125,12 @@ function OptionalInputsPanel({
           onToggleEstimate={onToggleEstimatePseudotime}
         />
 
+        <GroundTruthInputRow
+          fileName={groundTruthFileName}
+          onSelect={onSelectGroundTruth}
+          onClear={onClearGroundTruth}
+        />
+
         <CellOracleInputRow
           configLabel={cellOracleConfigLabel}
           baseGrnSource={cellOracleBaseGrnSource}
@@ -1113,6 +1145,102 @@ function OptionalInputsPanel({
         />
       </div>
     </div>
+  );
+}
+
+function GroundTruthInputRow({
+  fileName,
+  onSelect,
+  onClear,
+}: {
+  fileName: string;
+  onSelect: (file: File | null) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const compactFileName = formatFileNameForDisplay(fileName, 28);
+
+  return (
+    <section className="border-t border-slate-200">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="grid w-full cursor-pointer gap-3 px-4 py-4 text-left transition hover:bg-slate-50/70 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        aria-expanded={open}
+      >
+        <span>
+          <span className="block text-sm font-semibold text-slate-900">
+            Ground-truth network
+          </span>
+          <span className="mt-1 block text-sm leading-5 text-slate-500">
+            Enables benchmark evaluation of inferred edges.
+          </span>
+        </span>
+        <span className="flex min-w-0 items-center justify-end gap-2">
+          <span
+            className={`max-w-56 truncate text-xs font-semibold ${
+              fileName ? "text-[#1b75a6]" : "text-slate-400"
+            }`}
+            title={fileName || "Not provided"}
+          >
+            {fileName ? compactFileName : "Not provided"}
+          </span>
+          <span
+            className={`text-slate-400 transition ${
+              open ? "text-[#1b75a6]" : ""
+            }`}
+            aria-hidden="true"
+          >
+            <DisclosureChevron open={open} />
+          </span>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <span>
+              <span className="block text-sm font-semibold text-slate-800">
+                Reference edges
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">
+                CSV with regulator and target columns. Sign or effect is optional.
+              </span>
+            </span>
+            <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
+              {fileName ? "Replace" : "Choose CSV"}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  onSelect(event.target.files?.[0] ?? null);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+          {fileName ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-3">
+              <span
+                className="min-w-0 truncate text-xs font-semibold text-[#178a62]"
+                title={fileName}
+              >
+                {formatFileNameForDisplay(fileName, 46)}
+              </span>
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-xs font-semibold text-slate-500 transition hover:text-rose-600"
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

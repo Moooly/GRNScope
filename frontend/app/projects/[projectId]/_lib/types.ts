@@ -61,6 +61,8 @@ export type ProjectManifest = {
   selected_algorithms?: string[];
   ensemble_enabled?: boolean | string;
   preprocessing?: PreprocessingConfig;
+  preprocessing_status?: string | null;
+  preprocessing_result?: PreprocessingResult | null;
   ranked_edges_per_target_limit?: number | string | null;
   algorithm_parameters?: Record<string, Record<string, unknown>>;
   resolved_algorithm_parameters?: Record<string, Record<string, unknown>>;
@@ -129,6 +131,8 @@ export type MetadataManifest = {
     overall_status?: string;
   };
   preprocessing?: PreprocessingConfig;
+  preprocessing_status?: string | null;
+  preprocessing_result?: PreprocessingResult | null;
 };
 
 export type GeneOrderingValidation = {
@@ -165,6 +169,48 @@ export type PreprocessingConfig = {
   };
 };
 
+export type GeneSelectionStageResult = {
+  stage: "detection" | "trajectory" | "variance" | string;
+  input_gene_count?: number;
+  retained_gene_count?: number;
+  removed_gene_count?: number;
+  cell_count?: number;
+  minimum_cell_percent?: number;
+  minimum_detected_cell_count?: number;
+  p_value_threshold?: number;
+  effective_p_value_threshold?: number;
+  bonferroni_correction?: boolean;
+  retain_significant_tfs?: boolean;
+  retained_significant_tf_count?: number;
+  requested_gene_count?: number;
+  include_known_tfs?: boolean;
+  configured_include_known_tfs?: boolean;
+  retain_significant_trajectory_tfs?: boolean;
+  forced_known_tf_count?: number;
+  gene_audit_available?: boolean;
+};
+
+export type PreprocessingResult = {
+  status?: string;
+  gene_count?: number;
+  cell_count?: number;
+  gene_selection?: GeneSelectionStageResult[];
+};
+
+export type AlgorithmPreprocessingSummary = {
+  algorithm_id?: string;
+  stage?: string;
+  selection_method?: string;
+  reason_code?: "runtime_guard" | "numerical_stability" | string;
+  configured_gene_limit?: number;
+  effective_gene_limit?: number;
+  input_gene_count?: number;
+  retained_gene_count?: number;
+  removed_gene_count?: number;
+  applied?: boolean;
+  gene_audit_available?: boolean;
+};
+
 export type GeneCoordinate = {
   gene_name?: string | null;
   chromosome: string;
@@ -198,6 +244,8 @@ export type AlgorithmStoredResult = {
   source_file?: string;
   gene_coordinates?: Record<string, GeneCoordinate>;
   gene_coordinate_count?: number;
+  confidence_summary?: ConfidenceSummary | null;
+  algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
 };
 
 export type AlgorithmResultScope = {
@@ -211,7 +259,65 @@ export type AlgorithmResultScope = {
     edge_count?: number;
     node_count?: number;
   } | null;
+  confidence_summary?: ConfidenceSummary | null;
+  algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
   top_edges?: AlgorithmResultEdge[];
+};
+
+export type SpearmanStabilityCheck = {
+  method?: string;
+  run_count?: number;
+  stop_rho?: number;
+  compared_edges?: number;
+  rho?: number | null;
+  stop_early?: boolean;
+  status?: string;
+  message?: string;
+};
+
+export type RepeatRunStabilityPair = {
+  first_run?: string;
+  second_run?: string;
+  rho?: number | null;
+};
+
+export type RepeatRunStabilitySummary = {
+  method?: string;
+  edge_universe?: string;
+  run_count?: number;
+  usable_run_count?: number;
+  pair_count?: number;
+  median_rho?: number | null;
+  mad_rho?: number | null;
+  minimum_rho?: number | null;
+  maximum_rho?: number | null;
+  pairs?: RepeatRunStabilityPair[];
+  status?: string;
+};
+
+export type ConfidenceSummary = {
+  bootstrap_runs?: number;
+  planned_bootstrap_runs?: number;
+  min_runs?: number;
+  stop_rho?: number;
+  stop_streak?: number;
+  early_stopping_enabled?: boolean;
+  subsample_fraction?: number;
+  stability_top_k?: number;
+  early_stopping?: {
+    enabled?: boolean;
+    method?: string;
+    stop_rho?: number;
+    stop_streak?: number;
+    min_runs?: number;
+    stopped_early?: boolean;
+    stopped_after_runs?: number;
+    streak?: number;
+    checks?: SpearmanStabilityCheck[];
+    decision?: SpearmanStabilityCheck | null;
+  } | null;
+  repeat_run_stability?: RepeatRunStabilitySummary | null;
+  run_metadata?: Record<string, Record<string, unknown>> | null;
 };
 
 export type AlgorithmResultEdge = {
@@ -234,6 +340,7 @@ export type AlgorithmResultEdge = {
   weight?: number;
   edge_weight?: number;
   algorithm_id?: string;
+  run_ranks?: Record<string, number | null>;
 };
 
 export type AlgorithmCatalogItem = {
@@ -262,6 +369,7 @@ export type AggregatedEdge = {
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
+  perAlgorithmConfidences?: Record<string, number>;
   perAlgorithmRawScores?: Record<string, number>;
   perAlgorithmSigns?: Record<string, -1 | 0 | 1>;
   supportingAlgorithms: string[];

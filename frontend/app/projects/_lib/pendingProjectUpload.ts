@@ -5,6 +5,7 @@ import { apiFetch, getClientId } from "../../_lib/clientIdentity";
 export type PendingProjectUpload = {
   expressionFile: File;
   pseudotimeFile: File | null;
+  groundTruthFile: File | null;
   clusterLabelsFile: File | null;
   geneOrderingFile: File | null;
   customTfListFile: File | null;
@@ -49,6 +50,9 @@ function uploadProjectFilesWithXhr(
     formData.append("expression_matrix", upload.expressionFile);
     if (upload.pseudotimeFile) {
       formData.append("pseudotime", upload.pseudotimeFile);
+    }
+    if (upload.groundTruthFile) {
+      formData.append("ground_truth", upload.groundTruthFile);
     }
     if (upload.clusterLabelsFile) {
       formData.append("cluster_labels", upload.clusterLabelsFile);

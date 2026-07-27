@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
@@ -9,6 +10,7 @@ from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
+from ..services.beeline_service import compute_repeat_run_spearman_from_paths
 from ..services.gene_coordinate_service import get_gene_coordinate
 from ..services.demo_service import (
     get_demo_algorithm_ids,
@@ -41,6 +43,13 @@ CLIENT_RESULT_EDGE_FIELDS = {
     "edge_weight",
     "algorithm_id",
 }
+
+
+@lru_cache(maxsize=128)
+def cached_repeat_run_stability(
+    ranked_edge_paths: tuple[tuple[str, str], ...],
+) -> dict:
+    return compute_repeat_run_spearman_from_paths(dict(ranked_edge_paths))
 
 
 @router.get("/api/projects/{project_id}/visualization-context")
@@ -105,6 +114,103 @@ def compact_result_for_client(result: dict) -> dict:
 
     compact_edges = compact_edges_for_client(edges)
 
+    def compact_confidence_summary(
+        summary: object,
+        run_paths: object = None,
+    ) -> dict | None:
+        if not isinstance(summary, dict):
+            return None
+
+        repeat_run_stability = summary.get("repeat_run_stability")
+        if not isinstance(repeat_run_stability, dict) and isinstance(run_paths, dict):
+            normalized_paths = tuple(
+                sorted(
+                    (str(run_id), str(path))
+                    for run_id, path in run_paths.items()
+                    if path
+                )
+            )
+            if normalized_paths:
+                repeat_run_stability = cached_repeat_run_stability(normalized_paths)
+
+        early_stopping = summary.get("early_stopping")
+        compact_early_stopping = None
+        if isinstance(early_stopping, dict):
+            compact_checks = []
+            for check in early_stopping.get("checks", []):
+                if not isinstance(check, dict):
+                    continue
+                compact_checks.append(
+                    {
+                        key: check.get(key)
+                        for key in (
+                            "method",
+                            "run_count",
+                            "stop_rho",
+                            "compared_edges",
+                            "rho",
+                            "stop_early",
+                            "status",
+                            "message",
+                        )
+                        if check.get(key) is not None
+                    }
+                )
+            compact_early_stopping = {
+                key: early_stopping.get(key)
+                for key in (
+                    "enabled",
+                    "method",
+                    "stop_rho",
+                    "stop_streak",
+                    "min_runs",
+                    "stopped_early",
+                    "stopped_after_runs",
+                    "streak",
+                )
+                if early_stopping.get(key) is not None
+            }
+            compact_early_stopping["checks"] = compact_checks
+
+        compact_repeat_run_stability = None
+        if isinstance(repeat_run_stability, dict):
+            compact_repeat_run_stability = {
+                key: repeat_run_stability.get(key)
+                for key in (
+                    "method",
+                    "edge_universe",
+                    "run_count",
+                    "usable_run_count",
+                    "pair_count",
+                    "median_rho",
+                    "mad_rho",
+                    "minimum_rho",
+                    "maximum_rho",
+                    "status",
+                )
+                if repeat_run_stability.get(key) is not None
+            }
+
+        compact_summary = {
+            key: summary.get(key)
+            for key in (
+                "bootstrap_runs",
+                "planned_bootstrap_runs",
+                "min_runs",
+                "stop_rho",
+                "stop_streak",
+                "early_stopping_enabled",
+                "subsample_fraction",
+                "stability_top_k",
+            )
+            if summary.get(key) is not None
+        }
+        if compact_early_stopping is not None:
+            compact_summary["early_stopping"] = compact_early_stopping
+        if compact_repeat_run_stability is not None:
+            compact_summary["repeat_run_stability"] = compact_repeat_run_stability
+        return compact_summary
+
     compact_scopes = {}
     scopes = result.get("scopes")
     if isinstance(scopes, dict):
@@ -119,7 +225,14 @@ def compact_result_for_client(result: dict) -> dict:
                 "cell_count": scope_payload.get("cell_count"),
                 "status": scope_payload.get("status"),
                 "skip_reason": scope_payload.get("skip_reason"),
+                "algorithm_preprocessing": scope_payload.get(
+                    "algorithm_preprocessing"
+                ),
                 "network_summary": scope_payload.get("network_summary"),
+                "confidence_summary": compact_confidence_summary(
+                    scope_payload.get("confidence_summary"),
+                    scope_payload.get("run_ranked_edges_paths"),
+                ),
                 "top_edges": compact_edges_for_client(scope_edges),
             }
 
@@ -131,8 +244,13 @@ def compact_result_for_client(result: dict) -> dict:
         "completed_at": result.get("completed_at"),
         "completed_at_timestamp": result.get("completed_at_timestamp"),
         "elapsed_seconds": result.get("elapsed_seconds"),
+        "algorithm_preprocessing": result.get("algorithm_preprocessing"),
         "network_summary": result.get("network_summary"),
         "edge_count": result.get("edge_count", len(compact_edges)),
+        "confidence_summary": compact_confidence_summary(
+            result.get("confidence_summary"),
+            result.get("run_ranked_edges_paths"),
+        ),
         "top_edges": compact_edges,
         "scope_order": result.get("scope_order"),
         "scopes": compact_scopes or None,
@@ -425,6 +543,99 @@ async def get_project_results(project_id: str, request: Request, response: Respo
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/gene-selection-audit")
+async def get_gene_selection_audit(
+    project_id: str,
+    request: Request,
+    response: Response,
+    stage: str | None = None,
+    algorithm_id: str | None = None,
+):
+    owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Gene-selection details are unavailable for the demo project.",
+        )
+
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    normalized_algorithm_id = str(algorithm_id or "").strip().upper()
+    normalized_stage = str(stage or "").strip().lower()
+    if bool(normalized_algorithm_id) == bool(normalized_stage):
+        raise HTTPException(
+            status_code=400,
+            detail="Choose either a preprocessing stage or an algorithm.",
+        )
+
+    if normalized_algorithm_id:
+        audit_path = (
+            project_dir
+            / "results"
+            / normalized_algorithm_id
+            / "gene_selection_audit.json"
+        )
+    else:
+        if normalized_stage not in {"detection", "trajectory", "variance"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Unknown preprocessing stage.",
+            )
+        audit_path = (
+            project_dir
+            / "preprocessed"
+            / "gene_selection_audits"
+            / f"{normalized_stage}.json"
+        )
+
+    try:
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Gene-selection details are not available for this result.",
+        ) from exc
+
+    if not isinstance(audit, dict):
+        raise HTTPException(
+            status_code=404,
+            detail="Gene-selection details are not available for this result.",
+        )
+    if normalized_stage:
+        try:
+            preprocessing_manifest = json.loads(
+                (
+                    project_dir / "preprocessed" / "manifest.json"
+                ).read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Gene-selection details are not available for this result.",
+            ) from exc
+        if (
+            audit.get("preprocessing_signature")
+            != preprocessing_manifest.get("signature")
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="Gene-selection details are out of date for this result.",
+            )
+
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "stage": audit.get("stage"),
+        "algorithm_id": audit.get("algorithm_id"),
+        "input_gene_count": audit.get("input_gene_count"),
+        "retained_gene_count": audit.get("retained_gene_count"),
+        "removed_gene_count": audit.get("removed_gene_count"),
+        "retained_gene_names": audit.get("retained_gene_names") or [],
+        "removed_gene_names": audit.get("removed_gene_names") or [],
+    }
 
 
 @router.get("/api/projects/{project_id}/results/{algorithm_id}")

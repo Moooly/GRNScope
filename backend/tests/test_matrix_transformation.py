@@ -257,12 +257,25 @@ class MatrixTransformationTests(unittest.TestCase):
             preprocessing_manifest = json.loads(
                 (destination.parent / "manifest.json").read_text(encoding="utf-8")
             )
+            variance_audit = json.loads(
+                (
+                    destination.parent
+                    / "gene_selection_audits"
+                    / "variance.json"
+                ).read_text(encoding="utf-8")
+            )
 
         self.assertEqual(list(transformed.index), ["TF1", "GENE_HIGH"])
         variance_result = preprocessing_manifest["gene_selection"][-1]
         self.assertFalse(variance_result["configured_include_known_tfs"])
         self.assertTrue(variance_result["retain_significant_trajectory_tfs"])
         self.assertEqual(variance_result["ranked_non_tf_gene_count"], 1)
+        self.assertTrue(variance_result["gene_audit_available"])
+        self.assertEqual(
+            variance_audit["retained_gene_names"],
+            ["TF1", "GENE_HIGH"],
+        )
+        self.assertEqual(variance_audit["removed_gene_names"], ["GENE_LOW"])
 
 
 if __name__ == "__main__":

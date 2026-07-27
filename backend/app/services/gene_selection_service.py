@@ -19,7 +19,7 @@ from .tf_reference_service import (
 
 
 GENE_SELECTION_ENGINE = "grnscope"
-GENE_SELECTION_VERSION = 1
+GENE_SELECTION_VERSION = 2
 
 
 class GeneSelectionError(ValueError):
@@ -209,6 +209,10 @@ def apply_detection_filter(
         "retained_gene_count": int(retained_frame.shape[0]),
         "removed_gene_count": int(expression_frame.shape[0] - retained_frame.shape[0]),
         "cell_count": int(expression_frame.shape[1]),
+        "retained_gene_names": [str(value) for value in retained_frame.index],
+        "removed_gene_names": [
+            str(value) for value in expression_frame.index[~retained_mask]
+        ],
     }
 
 
@@ -340,6 +344,13 @@ def apply_trajectory_filter(
         "retained_significant_tf_count": len(retained_significant_tfs),
         "retain_significant_tfs": bool(retain_significant_tfs),
         "cell_count": int(expression_frame.shape[1]),
+        "retained_gene_names": [str(value) for value in retained_frame.index],
+        "removed_gene_names": [
+            str(value)
+            for value in expression_frame.index[
+                ~expression_frame.index.isin(retained_genes)
+            ]
+        ],
     }
 
 
@@ -423,4 +434,11 @@ def apply_variance_filter(
         "retained_gene_count": int(retained_frame.shape[0]),
         "removed_gene_count": input_gene_count - int(retained_frame.shape[0]),
         "cell_count": int(expression_frame.shape[1]),
+        "retained_gene_names": [str(value) for value in retained_frame.index],
+        "removed_gene_names": [
+            str(value)
+            for value in expression_frame.index[
+                ~expression_frame.index.isin(retained_genes)
+            ]
+        ],
     }

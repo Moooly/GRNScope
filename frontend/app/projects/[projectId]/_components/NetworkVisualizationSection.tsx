@@ -27,6 +27,7 @@ type AggregatedEdge = {
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
+  perAlgorithmConfidences?: Record<string, number>;
   perAlgorithmRawScores?: Record<string, number>;
   perAlgorithmSigns?: Record<string, -1 | 0 | 1>;
   supportingAlgorithms: string[];
@@ -61,11 +62,11 @@ type NetworkVisualizationSectionProps = {
 };
 
 const layoutOptions = [
-  { value: "force", label: "Force" },
-  { value: "hierarchical", label: "Hierarchical" },
-  { value: "concentric", label: "Concentric" },
-  { value: "circular", label: "Circular" },
-  { value: "circos", label: "Circos" },
+  { value: "force", label: "Force", title: "Distribute nodes by connectivity" },
+  { value: "hierarchical", label: "Hierarchical", title: "Arrange regulation in layers" },
+  { value: "concentric", label: "Hubs", title: "Place high-degree regulators near the center" },
+  { value: "circular", label: "Circular", title: "Arrange nodes around a circle" },
+  { value: "circos", label: "Circos", title: "Arrange genes by genomic position" },
 ] as const;
 
 const NETWORK_ZOOM_FACTOR = 1.2;
@@ -306,7 +307,7 @@ export default function NetworkVisualizationSection({
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3 lg:col-span-2">
         <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white p-1" aria-label="Network layout">
-          {layoutOptions.map(({ value, label }) => {
+          {layoutOptions.map(({ value, label, title }) => {
             const isActive = networkLayout === value;
 
             return (
@@ -314,6 +315,7 @@ export default function NetworkVisualizationSection({
                 key={value}
                 type="button"
                 onClick={() => setNetworkLayout(value)}
+                title={title}
                 className={`h-8 rounded-full px-3.5 text-xs font-semibold transition ${
                   isActive
                     ? "bg-[#1b75a6] text-white"
@@ -556,10 +558,16 @@ export default function NetworkVisualizationSection({
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Supporting methods
+                    Bootstrap confidence
                   </p>
-                  <p className="mt-2 text-2xl font-bold text-slate-950">
-                    {selectedEdge.count}
+                  <p
+                    className="mt-2 text-2xl font-bold text-slate-950"
+                    title="Median bootstrap confidence across the supporting methods."
+                  >
+                    {selectedEdge.confidence.toFixed(3)}
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    repeated-run consistency
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
@@ -577,7 +585,8 @@ export default function NetworkVisualizationSection({
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Sign confidence
+                    <span className="block">Sign</span>
+                    <span className="block">confidence</span>
                   </p>
                   <p className="mt-2 text-2xl font-bold text-slate-950">
                     {selectedEdge.signConfidence === null
@@ -595,6 +604,9 @@ export default function NetworkVisualizationSection({
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
                     Method evidence
                   </p>
+                  <span className="shrink-0 text-xs font-bold text-slate-500">
+                    {selectedEdge.count} supporting
+                  </span>
                 </div>
                 <div className="mt-3 space-y-2">
                   {selectedEdge.supportingAlgorithms.length > 0 ? (
@@ -918,6 +930,12 @@ export default function NetworkVisualizationSection({
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <h6 className="text-sm font-bold text-slate-950">Bootstrap confidence</h6>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Median repeated-run confidence across supporting methods. Each method combines how often the edge remains highly ranked with its mean rank percentile.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Direction confidence & coverage</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
                     Agreement among direction-aware methods on arrow direction. Direction coverage shows how much total regulation evidence came from methods that can vote on direction.
@@ -932,7 +950,7 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Method evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Per-method confidence after repeated runs. Methods listed as supporting recovered this edge with nonzero stability.
+                    Normalized rank evidence from each supporting method. Methods listed here recovered the edge with nonzero bootstrap stability.
                   </p>
                 </div>
               </div>

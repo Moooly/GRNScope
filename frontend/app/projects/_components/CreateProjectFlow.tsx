@@ -215,6 +215,7 @@ export default function CreateProjectFlow({
   const [projectName, setProjectName] = useState("");
   const [expressionFile, setExpressionFile] = useState<File | null>(null);
   const [pseudotimeFile, setPseudotimeFile] = useState<File | null>(null);
+  const [groundTruthFile, setGroundTruthFile] = useState<File | null>(null);
   const [estimatePseudotime, setEstimatePseudotime] = useState(false);
   const [clusterLabelsFile, setClusterLabelsFile] = useState<File | null>(null);
   const [expressionFileName, setExpressionFileName] = useState("");
@@ -222,6 +223,7 @@ export default function CreateProjectFlow({
     string | null
   >(null);
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
+  const [groundTruthFileName, setGroundTruthFileName] = useState("");
   const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
 
   // Full validation still happens after project creation. This lightweight,
@@ -300,10 +302,12 @@ export default function CreateProjectFlow({
     setProjectName(initialValues?.projectName ?? "");
     setExpressionFile(null);
     setPseudotimeFile(null);
+    setGroundTruthFile(null);
     setEstimatePseudotime(false);
     setClusterLabelsFile(null);
     setExpressionFileName("");
     setPseudotimeFileName("");
+    setGroundTruthFileName("");
     setClusterLabelsFileName("");
     setIncludeAllTFs(initialValues?.includeAllTFs ?? true);
     setMatrixState(initialValues?.matrixState ?? "");
@@ -461,7 +465,7 @@ export default function CreateProjectFlow({
       hasPseudotime: Boolean(pseudotimeFile) || estimatePseudotime,
       hasClusterLabels: Boolean(clusterLabelsFile),
       hasCellOracleSettingsConfigured,
-      hasGroundTruth: false,
+      hasGroundTruth: Boolean(groundTruthFile),
       preprocessingSummary: [
         `Matrix values: ${matrixState || "not selected"}`,
         `Dataset species: ${datasetSpecies || "not selected"}`,
@@ -474,6 +478,7 @@ export default function CreateProjectFlow({
       pseudotimeFile,
       estimatePseudotime,
       clusterLabelsFile,
+      groundTruthFile,
       matrixState,
       datasetSpecies,
       detectionThreshold,
@@ -585,6 +590,11 @@ export default function CreateProjectFlow({
     setPseudotimeFileName("");
   };
 
+  const clearGroundTruthFile = () => {
+    setGroundTruthFile(null);
+    setGroundTruthFileName("");
+  };
+
   // Uploading a pseudotime file and estimating one are mutually exclusive.
   const handleSetPseudotimeFile = (file: File | null) => {
     setPseudotimeFile(file);
@@ -663,6 +673,7 @@ export default function CreateProjectFlow({
     formData.append("celloracle_base_grn", CELLORACLE_INTERNAL_BASE_GRN);
     formData.append("expression_filename", expressionFileName);
     formData.append("pseudotime_filename", pseudotimeFileName);
+    formData.append("ground_truth_filename", groundTruthFileName);
     formData.append("cluster_labels_filename", clusterLabelsFileName);
     formData.append("custom_tf_list_filename", customTfListFileName);
     formData.append("estimate_pseudotime", JSON.stringify(estimatePseudotime));
@@ -731,6 +742,14 @@ export default function CreateProjectFlow({
       }
       if (pseudotimeFile.size > maxFileSize) {
         validationErrors.push("Pseudotime file size must be 500 MB or smaller.");
+      }
+    }
+    if (groundTruthFile) {
+      if (!groundTruthFile.name.toLowerCase().endsWith(".csv")) {
+        validationErrors.push("Ground-truth network must be a CSV file.");
+      }
+      if (groundTruthFile.size > maxFileSize) {
+        validationErrors.push("Ground-truth network file size must be 500 MB or smaller.");
       }
     }
     if (clusterLabelsFile) {
@@ -804,6 +823,7 @@ export default function CreateProjectFlow({
       registerPendingProjectUpload(data.project_id, {
         expressionFile,
         pseudotimeFile,
+        groundTruthFile,
         clusterLabelsFile,
         geneOrderingFile:
           enabledGeneSelectionStages.includes("trajectory") &&
@@ -875,6 +895,7 @@ export default function CreateProjectFlow({
       expressionFileName={expressionFileName}
       expressionMatrixDimensions={expressionMatrixDimensions}
       pseudotimeFileName={pseudotimeFileName}
+      groundTruthFileName={groundTruthFileName}
       clusterLabelsFileName={clusterLabelsFileName}
       matrixState={matrixState}
       datasetSpecies={datasetSpecies}
@@ -933,6 +954,8 @@ export default function CreateProjectFlow({
       setExpressionFileName={setExpressionFileName}
       setPseudotimeFile={handleSetPseudotimeFile}
       setPseudotimeFileName={setPseudotimeFileName}
+      setGroundTruthFile={setGroundTruthFile}
+      setGroundTruthFileName={setGroundTruthFileName}
       setClusterLabelsFile={setClusterLabelsFile}
       setClusterLabelsFileName={setClusterLabelsFileName}
       setIncludeAllTFs={setIncludeAllTFs}
@@ -940,6 +963,7 @@ export default function CreateProjectFlow({
       setCellOracleSpecies={setCellOracleSpecies}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
+      clearGroundTruthFile={clearGroundTruthFile}
       clearClusterLabelsFile={clearClusterLabelsFile}
     />
   );

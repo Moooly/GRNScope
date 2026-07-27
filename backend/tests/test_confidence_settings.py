@@ -5,6 +5,7 @@ from unittest.mock import patch
 from app.services.beeline_service import (
     estimate_remaining_seconds_range_from_run_timings,
     resolve_confidence_settings,
+    summarize_repeat_run_spearman,
 )
 
 
@@ -85,6 +86,51 @@ class ConfidenceSettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(remaining, (110, 770))
+
+    def test_repeat_run_spearman_summarizes_all_run_pairs(self):
+        run_scores = {
+            "run-1": {
+                ("A", "B"): 0.9,
+                ("A", "C"): 0.6,
+                ("B", "C"): 0.2,
+            },
+            "run-2": {
+                ("A", "B"): 9.0,
+                ("A", "C"): 6.0,
+                ("B", "C"): 2.0,
+            },
+            "run-3": {
+                ("A", "B"): 0.8,
+                ("A", "C"): 0.5,
+                ("B", "C"): 0.1,
+            },
+        }
+
+        summary = summarize_repeat_run_spearman(run_scores)
+
+        self.assertEqual(summary["status"], "available")
+        self.assertEqual(summary["run_count"], 3)
+        self.assertEqual(summary["pair_count"], 3)
+        self.assertAlmostEqual(summary["median_rho"], 1.0)
+        self.assertAlmostEqual(summary["mad_rho"], 0.0)
+
+    def test_repeat_run_spearman_aligns_missing_edges_to_zero(self):
+        summary = summarize_repeat_run_spearman(
+            {
+                "run-1": {
+                    ("A", "B"): 0.9,
+                    ("A", "C"): 0.4,
+                },
+                "run-2": {
+                    ("A", "B"): 0.7,
+                    ("B", "C"): 0.2,
+                },
+            }
+        )
+
+        self.assertEqual(summary["status"], "available")
+        self.assertEqual(summary["pair_count"], 1)
+        self.assertIsNotNone(summary["median_rho"])
 
 
 if __name__ == "__main__":

@@ -69,6 +69,7 @@ from ..services.job_service import (
 from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
 from ..services.pseudotime_service import get_pseudotime_estimation_state
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
+from ..services.visualization_context_service import read_ground_truth_edges
 from ..services.tf_reference_service import (
     load_custom_tf_reference,
     load_species_tf_reference,
@@ -325,6 +326,7 @@ async def create_pending_project(
     algorithm_parameters: str = Form("{}"),
     expression_filename: str = Form(""),
     pseudotime_filename: str = Form(""),
+    ground_truth_filename: str = Form(""),
     cluster_labels_filename: str = Form(""),
     custom_tf_list_filename: str = Form(""),
     estimate_pseudotime: str = Form("false"),
@@ -393,6 +395,8 @@ async def create_pending_project(
         "ensemble_enabled": ensemble_enabled,
         "expression_path": None,
         "pseudotime_path": None,
+        "ground_truth_path": None,
+        "ground_truth_filename": ground_truth_filename or None,
         "cluster_labels_path": None,
         "gene_ordering_path": None,
         "custom_tf_list_path": None,
@@ -427,6 +431,7 @@ async def create_pending_project(
         "project_description": project_description,
         "expression_filename": expression_filename or None,
         "pseudotime_filename": pseudotime_filename or None,
+        "ground_truth_filename": ground_truth_filename or None,
         "cluster_labels_filename": cluster_labels_filename or None,
         "gene_ordering_filename": (
             preprocessing_config["trajectory"]["gene_ordering_filename"]
@@ -443,6 +448,7 @@ async def create_pending_project(
         "custom_tf_list_filename": custom_tf_list_filename or None,
         "has_custom_tf_list": False,
         "has_pseudotime": bool(pseudotime_filename),
+        "has_ground_truth": bool(ground_truth_filename),
         "pseudotime_count": None,
         "has_cluster_labels": bool(cluster_labels_filename),
         "has_gene_ordering": False,
@@ -500,6 +506,7 @@ async def upload_project_dataset_and_start(
     response: Response,
     expression_matrix: UploadFile = File(...),
     pseudotime: UploadFile | None = File(default=None),
+    ground_truth: UploadFile | None = File(default=None),
     cluster_labels: UploadFile | None = File(default=None),
     gene_ordering: UploadFile | None = File(default=None),
     custom_tf_list: UploadFile | None = File(default=None),
@@ -526,6 +533,14 @@ async def upload_project_dataset_and_start(
             pseudo_ext_error = validate_csv_extension(pseudotime.filename or "")
             if pseudo_ext_error:
                 errors.append(f"Pseudotime: {pseudo_ext_error}")
+        if ground_truth:
+            ground_truth_ext_error = validate_csv_extension(
+                ground_truth.filename or ""
+            )
+            if ground_truth_ext_error:
+                errors.append(
+                    f"Ground-truth network: {ground_truth_ext_error}"
+                )
         if cluster_labels:
             cluster_ext_error = validate_csv_extension(cluster_labels.filename or "")
             if cluster_ext_error:
@@ -583,6 +598,27 @@ async def upload_project_dataset_and_start(
             )
             save_upload_file(pseudotime, pseudotime_path)
 
+        ground_truth_path: Path | None = None
+        if ground_truth:
+            ground_truth_path = (
+                project_dir
+                / (
+                    "ground_truth__"
+                    f"{Path(ground_truth.filename or 'ground_truth.csv').name}"
+                )
+            )
+            save_upload_file(ground_truth, ground_truth_path)
+            try:
+                ground_truth_edges = read_ground_truth_edges(ground_truth_path)
+            except Exception as exc:
+                raise ValueError(
+                    f"Ground-truth network could not be read: {exc}"
+                ) from exc
+            if not ground_truth_edges:
+                raise ValueError(
+                    "Ground-truth network does not contain any valid regulator-target edges."
+                )
+
         cluster_labels_path: Path | None = None
         if cluster_labels:
             cluster_labels_path = (
@@ -629,6 +665,12 @@ async def upload_project_dataset_and_start(
         project_manifest["pseudotime_path"] = (
             str(pseudotime_path) if pseudotime_path else None
         )
+        project_manifest["ground_truth_path"] = (
+            str(ground_truth_path) if ground_truth_path else None
+        )
+        project_manifest["ground_truth_filename"] = (
+            ground_truth.filename if ground_truth else None
+        )
         project_manifest["cluster_labels_path"] = (
             str(cluster_labels_path) if cluster_labels_path else None
         )
@@ -658,10 +700,14 @@ async def upload_project_dataset_and_start(
             {
                 "expression_filename": expression_matrix.filename,
                 "pseudotime_filename": pseudotime.filename if pseudotime else None,
+                "ground_truth_filename": (
+                    ground_truth.filename if ground_truth else None
+                ),
                 "cluster_labels_filename": (
                     cluster_labels.filename if cluster_labels else None
                 ),
                 "has_pseudotime": pseudotime is not None,
+                "has_ground_truth": ground_truth is not None,
                 "has_cluster_labels": cluster_labels is not None,
                 "gene_ordering_filename": (
                     gene_ordering.filename if gene_ordering else None

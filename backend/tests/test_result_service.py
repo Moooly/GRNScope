@@ -3,10 +3,44 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from app.api.results import compact_result_for_client
 from app.services.result_service import (
     archive_beeline_failure_diagnostics,
     archive_beeline_result_artifacts,
 )
+
+
+class ResultCompactionTests(unittest.TestCase):
+    def test_preserves_algorithm_gene_adjustment_summaries(self):
+        summary = {
+            "algorithm_id": "SINGE",
+            "effective_gene_limit": 300,
+            "input_gene_count": 640,
+            "retained_gene_count": 300,
+            "applied": True,
+        }
+        compact = compact_result_for_client(
+            {
+                "algorithm_id": "SINGE",
+                "algorithm_preprocessing": summary,
+                "top_edges": [],
+                "scopes": {
+                    "global": {
+                        "scope_id": "global",
+                        "scope_label": "Global",
+                        "scope_type": "global",
+                        "algorithm_preprocessing": summary,
+                        "top_edges": [],
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(compact["algorithm_preprocessing"], summary)
+        self.assertEqual(
+            compact["scopes"]["global"]["algorithm_preprocessing"],
+            summary,
+        )
 
 
 class FailureDiagnosticsArchiveTests(unittest.TestCase):
@@ -95,6 +129,16 @@ class FailureDiagnosticsArchiveTests(unittest.TestCase):
                 "Gene1\tGene2\tEdgeWeight\na\tb\t0.9\n",
                 encoding="utf-8",
             )
+            audit_path = (
+                runtime_root
+                / "algorithm_preprocessed"
+                / "gene_selection_audit.json"
+            )
+            audit_path.parent.mkdir(parents=True)
+            audit_path.write_text(
+                '{"retained_gene_names":["a"],"removed_gene_names":["b"]}',
+                encoding="utf-8",
+            )
             run_paths = {}
             for run_id, weight in (("run-1", "0.8"), ("run-2", "0.7")):
                 run_path = (
@@ -132,6 +176,14 @@ class FailureDiagnosticsArchiveTests(unittest.TestCase):
                 self.assertTrue(path.is_file())
                 self.assertEqual(path.name, "rankedEdges.csv")
                 self.assertIn(f"runs/{run_id}/rankedEdges.csv", str(path))
+            self.assertTrue(
+                (
+                    project_dir
+                    / "results"
+                    / "GENIE3"
+                    / "gene_selection_audit.json"
+                ).is_file()
+            )
 
     def test_success_archive_preserves_empty_run_diagnostics(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -5,13 +5,36 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from app.services.visualization_context_service import (
+    _trim_terminal_hook,
     build_visualization_context,
     read_ground_truth_edges,
 )
 
 
 class VisualizationContextTests(unittest.TestCase):
+    def test_trims_sparse_terminal_hook_without_shortening_regular_path(self) -> None:
+        hooked = np.asarray(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [2.0, 0.0],
+                [3.0, 0.0],
+                [4.0, 0.0],
+                [5.0, 0.0],
+                [6.0, 0.0],
+                [7.0, 0.0],
+                [6.5, 0.2],
+                [6.0, 0.4],
+            ]
+        )
+        regular = np.asarray([[float(index), 0.0] for index in range(10)])
+
+        self.assertEqual(len(_trim_terminal_hook(hooked)), 8)
+        self.assertEqual(len(_trim_terminal_hook(regular)), 10)
+
     def test_reads_named_ground_truth_columns_and_deduplicates_edges(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             ground_truth_path = Path(temp_dir) / "ground_truth.tsv"
@@ -79,11 +102,23 @@ class VisualizationContextTests(unittest.TestCase):
         trajectory = context["trajectory"]
         self.assertTrue(trajectory["available"])
         self.assertEqual(trajectory["genes"], ["G2", "G1"])
+        self.assertEqual(trajectory["available_genes"], ["G1", "G2", "G3"])
         self.assertEqual(trajectory["lineages"][0]["cell_count"], 6)
         self.assertEqual(len(trajectory["lineages"][0]["bins"]), 6)
         self.assertEqual(
             set(trajectory["lineages"][0]["bins"][0]["scaled_expression"]),
             {"G1", "G2"},
+        )
+        self.assertEqual(trajectory["embedding"]["method"], "PCA")
+        self.assertEqual(
+            trajectory["embedding"]["path_source"],
+            "pseudotime_bin_centroids",
+        )
+        self.assertEqual(trajectory["embedding"]["sampled_cell_count"], 6)
+        self.assertEqual(len(trajectory["embedding"]["points"]), 6)
+        self.assertEqual(
+            trajectory["embedding"]["paths"][0]["name"],
+            "PseudoTime1",
         )
 
         ground_truth = context["ground_truth"]

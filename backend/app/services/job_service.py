@@ -751,6 +751,7 @@ def scope_result_payload(scope: AlgorithmScope, beeline_result: dict) -> dict:
         "scope_type": scope.scope_type,
         "cell_count": scope.cell_count,
         "status": "Completed",
+        "algorithm_preprocessing": beeline_result.get("algorithm_preprocessing"),
         "network_summary": beeline_result["network_summary"],
         "top_edges": beeline_result["top_edges"],
         "confidence_summary": beeline_result.get("confidence_summary"),
@@ -1395,6 +1396,9 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "completed_at": completed_at,
             "completed_at_timestamp": completed_at_timestamp,
             "elapsed_seconds": elapsed,
+            "algorithm_preprocessing": primary_scope_result.get(
+                "algorithm_preprocessing"
+            ),
             "network_summary": primary_scope_result["network_summary"],
             "top_edges": primary_scope_result["top_edges"],
             "confidence_summary": primary_scope_result.get("confidence_summary"),

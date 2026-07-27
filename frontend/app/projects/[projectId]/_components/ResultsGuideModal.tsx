@@ -76,7 +76,9 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
 
         <div className="mt-4 rounded-[1.25rem] border border-[#1b75a6]/15 bg-[#f2f9fc] p-4">
           <p className="text-sm leading-5 text-slate-700">
-            These controls update the overlap visualization, network view, and edge analysis table together.
+            These controls update only the Network tab. Comparison tools use
+            their own clearly labeled settings so an invisible graph filter
+            cannot change their conclusions.
           </p>
         </div>
       </div>

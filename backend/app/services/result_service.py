@@ -269,6 +269,12 @@ def archive_beeline_result_artifacts(
             runtime_root / "celloracle-worker.log",
             artifact_dir / "logs" / "celloracle-worker.log",
         )
+        copy_if_present(
+            runtime_root
+            / "algorithm_preprocessed"
+            / "gene_selection_audit.json",
+            artifact_dir / "gene_selection_audit.json",
+        )
 
         if runtime_root.exists():
             remove_runtime_and_empty_parent(runtime_root)

@@ -3,7 +3,6 @@
 import type { MouseEvent } from "react";
 import { runtimeLabel, runtimeTitle } from "../_lib/runtime";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
-import type { AlgorithmWarning } from "./AlgorithmWarningPopover";
 
 type AlgorithmTask = {
   algorithm_id: string;
@@ -30,9 +29,7 @@ type AlgorithmErrorTask = {
 type AlgorithmCardsSectionProps = {
   tasks: AlgorithmTask[];
   algorithmMetaMap: Map<string, AlgorithmMeta>;
-  warningsByAlgorithm?: Map<string, AlgorithmWarning[]>;
   onOpenAlgorithmError: (task: AlgorithmErrorTask, anchorElement: HTMLElement) => void;
-  onOpenAlgorithmWarnings?: (warnings: AlgorithmWarning[], anchorElement: HTMLElement) => void;
   onStopAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   onRerunAlgorithm: (task: { algorithmId: string; algorithmName: string }) => void;
   compact?: boolean;
@@ -47,9 +44,7 @@ type AlgorithmCardsSectionProps = {
 export default function AlgorithmCardsSection({
   tasks,
   algorithmMetaMap,
-  warningsByAlgorithm,
   onOpenAlgorithmError,
-  onOpenAlgorithmWarnings,
   onStopAlgorithm,
   onRerunAlgorithm,
   compact = false,
@@ -58,13 +53,6 @@ export default function AlgorithmCardsSection({
   const hasStartedTask = tasks.some(
     (task) => task.status !== "NotStarted" && task.status !== "Queued",
   );
-  const notedMethodCount = Boolean(onOpenAlgorithmWarnings)
-    ? tasks.filter(
-        (task) =>
-          task.status !== "Failed" &&
-          (warningsByAlgorithm?.get(task.algorithm_id.toUpperCase())?.length ?? 0) > 0,
-      ).length
-    : 0;
 
   return (
     <section className={compact
@@ -74,21 +62,6 @@ export default function AlgorithmCardsSection({
       <h2 className={compact ? "text-lg font-bold tracking-tight text-slate-950" : RESULT_SECTION_HEADING_CLASS}>
         {hasStartedTask ? "Algorithms executed" : "Algorithms selected"}
       </h2>
-
-      {notedMethodCount > 0 ? (
-        <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-slate-500">
-          <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M8 7.25v3.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <circle cx="8" cy="5.4" r="0.85" fill="currentColor" />
-          </svg>
-          <span>
-            {notedMethodCount} {notedMethodCount === 1 ? "method has" : "methods have"} a setup note
-            {" "}— mostly automatic gene filtering to keep large matrices fast. This is normal; open a
-            method (ⓘ) for details.
-          </span>
-        </p>
-      ) : null}
 
       <div className={compact
         ? "mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
@@ -101,10 +74,6 @@ export default function AlgorithmCardsSection({
           const isFailed = task.status === "Failed";
           const isStopped = task.status === "Stopped";
           const canStop = task.status === "Running" || task.status === "Queued";
-          const taskNotes =
-            warningsByAlgorithm?.get(task.algorithm_id.toUpperCase()) ?? [];
-          const showNoteGlyph =
-            !isFailed && taskNotes.length > 0 && Boolean(onOpenAlgorithmWarnings);
           const algorithmRuntimeLabel = runtimeLabel(
             task.status,
             task.elapsed_seconds,
@@ -172,7 +141,7 @@ export default function AlgorithmCardsSection({
                 />
                 <div className="min-w-0 flex-1">
                   <p
-                    className={`truncate text-sm font-semibold text-slate-950 ${showNoteGlyph ? "pr-6" : ""}`}
+                    className="truncate text-sm font-semibold text-slate-950"
                     title={name}
                   >
                     {name}
@@ -185,23 +154,6 @@ export default function AlgorithmCardsSection({
                   </p>
                 </div>
               </div>
-              {showNoteGlyph ? (
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    onOpenAlgorithmWarnings?.(taskNotes, event.currentTarget)
-                  }
-                  aria-label={`${taskNotes.length} ${taskNotes.length === 1 ? "note" : "notes"} for ${name}`}
-                  title={taskNotes.length === 1 ? "View note" : `View ${taskNotes.length} notes`}
-                  className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full text-slate-300 transition hover:bg-[#eef7fb] hover:text-[#1b75a6]"
-                >
-                  <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
-                    <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
-                    <path d="M8 7.25v3.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    <circle cx="8" cy="5.4" r="0.85" fill="currentColor" />
-                  </svg>
-                </button>
-              ) : null}
             </div>
           );
         })}

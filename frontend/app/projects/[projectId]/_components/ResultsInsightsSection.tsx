@@ -1,31 +1,28 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import type {
   AggregatedEdge,
   AlgorithmCatalogItem,
   AlgorithmStoredResult,
-  NodeInfo,
   ProjectTask,
 } from "../_lib/types";
 import type { ResultsHubView } from "./ResultsHubViewSelector";
+import BenchmarkInsights from "./BenchmarkInsights";
+import TrajectoryInsights, {
+  type TrajectoryData,
+} from "./TrajectoryInsights";
 
 export type VisualizationContext = {
-  trajectory?: {
-    available: boolean;
-    reason?: string;
-    genes?: string[];
-    lineages?: Array<{
-      name: string;
-      cell_count: number;
-      bins: Array<{
-        pseudotime: number;
-        cell_count: number;
-        raw_expression: Record<string, number>;
-        scaled_expression: Record<string, number | null>;
-      }>;
-    }>;
-  };
+  trajectory?: TrajectoryData;
   ground_truth?: {
     available: boolean;
     reason?: string;
@@ -39,47 +36,17 @@ type InsightView = Exclude<ResultsHubView, "network" | "perturbation">;
 
 type ResultsInsightsSectionProps = {
   view: InsightView;
-  networkEdges: AggregatedEdge[];
-  analysisEdges: AggregatedEdge[];
   algorithmEdgeRows: Record<string, AggregatedEdge[]>;
   algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
   algorithmResults: Record<string, AlgorithmStoredResult>;
   activeAlgorithmIds: string[];
+  edgeExplorerRows: AggregatedEdge[];
+  selectedResultScopeId: string;
   tasks: ProjectTask[];
-  networkNodes: NodeInfo[];
   visualizationContext: VisualizationContext | null;
   isContextLoading: boolean;
-  onSelectGene?: (gene: string) => void;
+  onTrajectoryGenesChange: (genes: string[]) => void;
 };
-
-const PALETTE = [
-  "#087ead",
-  "#7c3aed",
-  "#db2777",
-  "#ea580c",
-  "#059669",
-  "#475569",
-  "#ca8a04",
-  "#0891b2",
-];
-
-function edgeKey(source: string, target: string) {
-  return `${source}\u0000${target}`;
-}
-
-function formatNumber(value: number, digits = 2) {
-  if (!Number.isFinite(value)) return "—";
-  if (Math.abs(value) >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: digits });
-}
-
-function formatDuration(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
-  if (seconds >= 60) return `${formatNumber(seconds / 60, 1)} min`;
-  return `${formatNumber(seconds, 1)} s`;
-}
 
 function plural(value: number, singular: string, pluralForm = `${singular}s`) {
   return `${value.toLocaleString()} ${value === 1 ? singular : pluralForm}`;
@@ -139,7 +106,7 @@ function Panel({
   return (
     <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 basis-80">
           <h3 className="text-lg font-extrabold text-slate-950">{title}</h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
             {description}
@@ -149,66 +116,6 @@ function Panel({
       </div>
       <div className="mt-5">{children}</div>
     </section>
-  );
-}
-
-function SelectControl({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string | number;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-      <span>{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-[#087ead] focus:ring-2 focus:ring-[#087ead]/10"
-      >
-        {children}
-      </select>
-    </label>
-  );
-}
-
-function SegmentedControl<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: Array<{ value: T; label: string }>;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-semibold text-slate-600">{label}</span>
-      <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={value === option.value}
-            onClick={() => onChange(option.value)}
-            className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${
-              value === option.value
-                ? "bg-white text-[#087ead] shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -223,502 +130,231 @@ function ExportButton({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:border-[#087ead]/40 hover:text-[#087ead]"
+      className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead]"
     >
       {label}
     </button>
   );
 }
 
-function HorizontalBars({
-  rows,
-  valueLabel,
-  color = "#087ead",
+
+type ComparisonMode = "topology" | "direction" | "sign";
+type AgreementMetric = "jaccard" | "rbo" | "spearman";
+type PairDetailGroup = "shared" | "first" | "second";
+type EdgeExplorerSort = "confidence" | "evidence" | "support" | "edge";
+
+const AGREEMENT_METRIC_LABELS: Record<AgreementMetric, string> = {
+  jaccard: "Jaccard overlap",
+  rbo: "Top-rank overlap",
+  spearman: "Spearman correlation",
+};
+
+const AGREEMENT_METRIC_SHORT_LABELS: Record<AgreementMetric, string> = {
+  jaccard: "Jaccard",
+  rbo: "RBO",
+  spearman: "Spearman",
+};
+
+const COMPARISON_MODE_LABELS: Record<ComparisonMode, string> = {
+  topology: "Adjacency",
+  direction: "Direction",
+  sign: "Direction + sign",
+};
+
+function ComparisonSettingsMenu({
+  topK,
+  metric,
+  mode,
+  onTopKChange,
+  onMetricChange,
+  onModeChange,
 }: {
-  rows: Array<{ label: string; value: number; note?: string }>;
-  valueLabel?: (value: number) => string;
-  color?: string;
+  topK: number;
+  metric: AgreementMetric;
+  mode: ComparisonMode;
+  onTopKChange: (value: number) => void;
+  onMetricChange: (value: AgreementMetric) => void;
+  onModeChange: (value: ComparisonMode) => void;
 }) {
-  const maximum = Math.max(0, ...rows.map((row) => row.value));
-  return (
-    <div className="space-y-3">
-      {rows.map((row) => (
-        <div
-          key={row.label}
-          className="grid grid-cols-[minmax(7rem,11rem)_1fr_auto] items-center gap-3"
-        >
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-800">{row.label}</p>
-            {row.note ? (
-              <p className="truncate text-[11px] text-slate-500">{row.note}</p>
-            ) : null}
-          </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-            {row.value > 0 && maximum > 0 ? (
-              <div
-                className="h-full rounded-full"
-                style={{
-                  backgroundColor: color,
-                  width: `${(row.value / maximum) * 100}%`,
-                }}
-              />
-            ) : null}
-          </div>
-          <span className="min-w-14 text-right text-sm font-bold tabular-nums text-slate-700">
-            {valueLabel ? valueLabel(row.value) : formatNumber(row.value)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const isDefault =
+    topK === 100 && metric === "jaccard" && mode === "topology";
+  const settingsSummary = `Top ${topK.toLocaleString()} · ${
+    AGREEMENT_METRIC_LABELS[metric]
+  } · ${COMPARISON_MODE_LABELS[mode]}`;
 
-type RegulatorSort = "targets" | "evidence" | "support";
-type EdgeSource = "all" | "network";
-
-function signLabel(sign: AggregatedEdge["sign"]) {
-  if (sign > 0) return "Activation";
-  if (sign < 0) return "Repression";
-  return "Unknown sign";
-}
-
-function signTone(sign: AggregatedEdge["sign"]) {
-  if (sign > 0) return "border-sky-200 bg-sky-50 text-sky-700";
-  if (sign < 0) return "border-orange-200 bg-orange-50 text-orange-700";
-  return "border-slate-200 bg-slate-50 text-slate-600";
-}
-
-function GeneEdgeCard({
-  edge,
-  gene,
-  direction,
-}: {
-  edge: AggregatedEdge;
-  gene: string;
-  direction: "incoming" | "outgoing";
-}) {
-  const otherGene = direction === "incoming" ? edge.source : edge.target;
-  const scores = Object.entries(edge.perAlgorithmScores)
-    .filter(([, score]) => score > 0)
-    .sort((a, b) => b[1] - a[1]);
-  return (
-    <details className={`rounded-xl border p-3 ${signTone(edge.sign)}`}>
-      <summary className="cursor-pointer list-none">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-extrabold">
-            {direction === "incoming" ? `${otherGene} → ${gene}` : `${gene} → ${otherGene}`}
-          </span>
-          <span className="text-xs font-bold tabular-nums">
-            {edge.confidence.toFixed(3)}
-          </span>
-        </div>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold opacity-80">
-          <span>{signLabel(edge.sign)}</span>
-          <span>{plural(edge.count, "method")}</span>
-          <span>{Math.round(edge.directionCoverage * 100)}% direction coverage</span>
-        </div>
-      </summary>
-      <div className="mt-3 border-t border-current/15 pt-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] opacity-70">
-          Per-method evidence
-        </p>
-        <div className="mt-1.5 space-y-1">
-          {scores.length ? (
-            scores.map(([algorithmId, score]) => (
-              <div
-                key={algorithmId}
-                className="flex items-center justify-between text-xs font-semibold"
-              >
-                <span>{algorithmId}</span>
-                <span className="tabular-nums">{score.toFixed(3)}</span>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs opacity-70">No method-level scores recorded.</p>
-          )}
-        </div>
-      </div>
-    </details>
-  );
-}
-
-function RegulatorView({
-  analysisEdges,
-  networkEdges,
-  networkNodes,
-  onSelectGene,
-}: {
-  analysisEdges: AggregatedEdge[];
-  networkEdges: AggregatedEdge[];
-  networkNodes: NodeInfo[];
-  onSelectGene?: (gene: string) => void;
-}) {
-  const [edgeSource, setEdgeSource] = useState<EdgeSource>("all");
-  const [sortBy, setSortBy] = useState<RegulatorSort>("targets");
-  const [topN, setTopN] = useState(20);
-  const selectedEdges = edgeSource === "all" ? analysisEdges : networkEdges;
-  const networkNodeMap = useMemo(
-    () => new Map(networkNodes.map((node) => [node.id, node])),
-    [networkNodes],
-  );
-  const regulatorRows = useMemo(() => {
-    const stats = new Map<
-      string,
-      {
-        targets: Set<string>;
-        confidences: number[];
-        supports: number[];
-        activation: number;
-        repression: number;
-        unknown: number;
-      }
-    >();
-    selectedEdges.forEach((edge) => {
-      const item = stats.get(edge.source) ?? {
-        targets: new Set<string>(),
-        confidences: [],
-        supports: [],
-        activation: 0,
-        repression: 0,
-        unknown: 0,
-      };
-      item.targets.add(edge.target);
-      item.confidences.push(edge.confidence);
-      item.supports.push(edge.count);
-      if (edge.sign > 0) item.activation += 1;
-      else if (edge.sign < 0) item.repression += 1;
-      else item.unknown += 1;
-      stats.set(edge.source, item);
-    });
-    return [...stats.entries()]
-      .map(([gene, item]) => ({
-        gene,
-        targets: item.targets.size,
-        evidence:
-          item.confidences.reduce((sum, value) => sum + value, 0) /
-          Math.max(1, item.confidences.length),
-        support: median(item.supports),
-        activation: item.activation,
-        repression: item.repression,
-        unknown: item.unknown,
-        isTF: networkNodeMap.get(gene)?.isTF ?? false,
-      }))
-      .sort((a, b) => {
-        if (sortBy === "evidence") {
-          return b.evidence - a.evidence || b.targets - a.targets;
-        }
-        if (sortBy === "support") {
-          return b.support - a.support || b.targets - a.targets;
-        }
-        return b.targets - a.targets || b.evidence - a.evidence;
-      });
-  }, [networkNodeMap, selectedEdges, sortBy]);
-
-  const genes = useMemo(() => {
-    const values = new Set<string>();
-    selectedEdges.forEach((edge) => {
-      values.add(edge.source);
-      values.add(edge.target);
-    });
-    return [...values].sort((a, b) => a.localeCompare(b));
-  }, [selectedEdges]);
-  const [requestedGene, setRequestedGene] = useState("");
-  const selectedGene = genes.includes(requestedGene)
-    ? requestedGene
-    : (regulatorRows[0]?.gene ?? genes[0] ?? "");
-  const visibleRows = regulatorRows.slice(0, topN);
-  const maxTargets = Math.max(1, ...visibleRows.map((row) => row.targets));
-
-  const geneEdges = useMemo(() => {
-    const outgoing = selectedEdges
-      .filter((edge) => edge.source === selectedGene)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 8);
-    const incoming = selectedEdges
-      .filter((edge) => edge.target === selectedGene)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 8);
-    return { outgoing, incoming };
-  }, [selectedEdges, selectedGene]);
-
-  const selectGene = (gene: string) => {
-    setRequestedGene(gene);
-    onSelectGene?.(gene);
-  };
-
-  if (!analysisEdges.length && !networkEdges.length) {
-    return (
-      <EmptyState
-        title="No inferred edges"
-        detail="Select a completed algorithm to rank regulators."
-      />
-    );
-  }
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
 
   return (
-    <div className="space-y-5">
-      <Panel
-        title="Regulator ranking"
-        description="Compare regulatory reach, evidence, support, and predicted sign without inheriting hidden Network display thresholds."
-        aside={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <SegmentedControl
-              label="Edge universe"
-              value={edgeSource}
-              onChange={setEdgeSource}
-              options={[
-                { value: "all", label: "All inferred edges" },
-                { value: "network", label: "Displayed network" },
-              ]}
-            />
-            <SelectControl
-              label="Sort"
-              value={sortBy}
-              onChange={(value) => setSortBy(value as RegulatorSort)}
-            >
-              <option value="targets">Target count</option>
-              <option value="evidence">Mean evidence</option>
-              <option value="support">Median support</option>
-            </SelectControl>
-            <SelectControl
-              label="Show"
-              value={topN}
-              onChange={(value) => setTopN(Number(value))}
-            >
-              {[10, 20, 50, 100].map((value) => (
-                <option key={value} value={value}>
-                  Top {value}
-                </option>
-              ))}
-            </SelectControl>
-            <ExportButton
-              onClick={() =>
-                downloadCsv("regulator-ranking.csv", [
-                  [
-                    "rank",
-                    "gene",
-                    "targets",
-                    "mean_evidence",
-                    "median_support",
-                    "activation",
-                    "repression",
-                    "unknown_sign",
-                  ],
-                  ...visibleRows.map((row, index) => [
-                    index + 1,
-                    row.gene,
-                    row.targets,
-                    row.evidence.toFixed(3),
-                    row.support.toFixed(3),
-                    row.activation,
-                    row.repression,
-                    row.unknown,
-                  ]),
-                ])
-              }
-            />
-          </div>
-        }
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={`Comparison settings: ${settingsSummary}`}
+        title={`Comparison settings: ${settingsSummary}`}
+        className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-4 text-sm font-semibold transition ${
+          isOpen
+            ? "border-[#1b75a6]/40 text-[#1b75a6] ring-4 ring-[#1b75a6]/[0.06]"
+            : "border-slate-200 text-slate-600 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
+        }`}
       >
-        {selectedEdges.length ? (
-          <div>
-            <div className="hidden grid-cols-[3rem_minmax(8rem,12rem)_1fr_7rem_8rem_11rem] gap-3 border-b border-slate-200 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 md:grid">
-              <span>Rank</span>
-              <span>Regulator</span>
-              <span>Targets</span>
-              <span className="text-right">Evidence</span>
-              <span className="text-right">Median support</span>
-              <span className="text-right">Sign profile</span>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {visibleRows.map((row, index) => (
-                <button
-                  key={row.gene}
-                  type="button"
-                  onClick={() => selectGene(row.gene)}
-                  className={`grid w-full items-center gap-3 py-3 text-left transition md:grid-cols-[3rem_minmax(8rem,12rem)_1fr_7rem_8rem_11rem] ${
-                    selectedGene === row.gene
-                      ? "bg-sky-50/70"
-                      : "hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="text-xs font-bold tabular-nums text-slate-400">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-extrabold text-slate-900">
-                      {row.gene}
-                    </span>
-                    {row.isTF ? (
-                      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#087ead]">
-                        Known TF
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                      <span
-                        className="block h-full rounded-full bg-[#087ead]"
-                        style={{ width: `${(row.targets / maxTargets) * 100}%` }}
-                      />
-                    </span>
-                    <span className="min-w-16 text-right text-sm font-bold tabular-nums text-slate-700">
-                      {plural(row.targets, "target")}
-                    </span>
-                  </span>
-                  <span className="text-right text-sm font-bold tabular-nums text-slate-700">
-                    {row.evidence.toFixed(3)}
-                  </span>
-                  <span className="text-right text-sm font-bold tabular-nums text-slate-700">
-                    {row.support.toFixed(1)}
-                  </span>
-                  <span className="flex justify-end gap-1" title="Activation / repression / unknown">
-                    <span className="rounded-md bg-sky-100 px-1.5 py-1 text-[10px] font-bold text-sky-700">
-                      +{row.activation}
-                    </span>
-                    <span className="rounded-md bg-orange-100 px-1.5 py-1 text-[10px] font-bold text-orange-700">
-                      −{row.repression}
-                    </span>
-                    <span className="rounded-md bg-slate-100 px-1.5 py-1 text-[10px] font-bold text-slate-600">
-                      ?{row.unknown}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <EmptyState
-            title="The displayed Network has no edges"
-            detail="Choose “All inferred edges” here or relax the Network tab’s result settings."
-          />
-        )}
-      </Panel>
-
-      {selectedEdges.length ? (
-        <Panel
-          title="Gene-focused regulation"
-          description="Select a gene to inspect incoming and outgoing predictions. Open any edge for per-method evidence."
-          aside={
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-              Gene
-              <input
-                list="regulator-gene-options"
-                value={requestedGene || selectedGene}
-                onChange={(event) => {
-                  const gene = event.target.value;
-                  setRequestedGene(gene);
-                  if (genes.includes(gene)) onSelectGene?.(gene);
-                }}
-                onBlur={() => {
-                  if (!genes.includes(requestedGene)) {
-                    setRequestedGene(selectedGene);
-                  }
-                }}
-                placeholder="Search genes"
-                className="min-w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-[#087ead]"
-              />
-              <datalist id="regulator-gene-options">
-                {genes.map((gene) => (
-                  <option key={gene} value={gene} />
-                ))}
-              </datalist>
-            </label>
-          }
+        <svg
+          viewBox="0 0 20 20"
+          className="h-4 w-4"
+          fill="none"
+          aria-hidden="true"
         >
-          <div className="grid gap-4 lg:grid-cols-[1fr_11rem_1fr] lg:items-start">
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">
-                  Incoming regulation
-                </h4>
-                <span className="text-xs text-slate-400">
-                  {geneEdges.incoming.length} shown
-                </span>
-              </div>
-              <div className="space-y-2">
-                {geneEdges.incoming.length ? (
-                  geneEdges.incoming.map((edge) => (
-                    <GeneEdgeCard
-                      key={edge.key}
-                      edge={edge}
-                      gene={selectedGene}
-                      direction="incoming"
-                    />
-                  ))
-                ) : (
-                  <p className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
-                    No incoming edges.
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex min-h-28 items-center justify-center lg:pt-8">
-              <div className="relative w-full rounded-2xl border-2 border-[#087ead]/25 bg-sky-50 px-4 py-5 text-center">
-                <span className="absolute -left-3 top-1/2 hidden -translate-y-1/2 text-xl text-slate-300 lg:block">
-                  →
-                </span>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#087ead]">
-                  Selected gene
-                </p>
-                <p className="mt-1 truncate text-base font-extrabold text-slate-950">
-                  {selectedGene}
-                </p>
-                <span className="absolute -right-3 top-1/2 hidden -translate-y-1/2 text-xl text-slate-300 lg:block">
-                  →
-                </span>
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">
-                  Outgoing regulation
-                </h4>
-                <span className="text-xs text-slate-400">
-                  {geneEdges.outgoing.length} shown
-                </span>
-              </div>
-              <div className="space-y-2">
-                {geneEdges.outgoing.length ? (
-                  geneEdges.outgoing.map((edge) => (
-                    <GeneEdgeCard
-                      key={edge.key}
-                      edge={edge}
-                      gene={selectedGene}
-                      direction="outgoing"
-                    />
-                  ))
-                ) : (
-                  <p className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
-                    No outgoing edges.
-                  </p>
-                )}
-              </div>
-            </div>
+          <path
+            d="M4 6h5m3 0h4M4 14h3m3 0h6"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <circle cx="10.5" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="8.5" cy="14" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+        <span className="whitespace-nowrap">
+          Top {topK.toLocaleString()} · {AGREEMENT_METRIC_SHORT_LABELS[metric]} ·{" "}
+          {COMPARISON_MODE_LABELS[mode]}
+        </span>
+        <svg
+          viewBox="0 0 16 16"
+          className={`h-3.5 w-3.5 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="m3.5 6 4.5 4 4.5-4"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {isOpen ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-40 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl shadow-slate-900/15"
+        >
+          <div className="space-y-4">
+            <SettingsSegmentGroup
+              label="Top edges"
+              value={String(topK)}
+              options={[50, 100, 250, 500, 1000].map((value) => ({
+                value: String(value),
+                label: value.toLocaleString(),
+              }))}
+              onChange={(value) => onTopKChange(Number(value))}
+            />
+            <SettingsSegmentGroup
+              label="Agreement metric"
+              value={metric}
+              options={[
+                { value: "jaccard", label: "Jaccard" },
+                { value: "rbo", label: "Top-rank" },
+                { value: "spearman", label: "Spearman" },
+              ]}
+              onChange={(value) => onMetricChange(value as AgreementMetric)}
+            />
+            <SettingsSegmentGroup
+              label="Edge identity"
+              value={mode}
+              options={[
+                { value: "topology", label: "Adjacency" },
+                { value: "direction", label: "Direction" },
+                { value: "sign", label: "Direction + sign" },
+              ]}
+              onChange={(value) => onModeChange(value as ComparisonMode)}
+            />
           </div>
-          <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
-              Activation
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+            <span className="text-xs font-medium text-slate-400">
+              Controls this comparison
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
-              Repression
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
-              Unknown sign
-            </span>
+            <button
+              type="button"
+              disabled={isDefault}
+              onClick={() => {
+                onTopKChange(100);
+                onMetricChange("jaccard");
+                onModeChange("topology");
+              }}
+              className="text-xs font-semibold text-slate-500 transition hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:text-slate-300"
+            >
+              Restore defaults
+            </button>
           </div>
-        </Panel>
+        </div>
       ) : null}
     </div>
   );
 }
 
-type ComparisonMode = "topology" | "direction" | "sign";
-type AgreementMetric = "jaccard" | "rbo" | "spearman";
-type SupportMode = "exact" | "at-least";
+function SettingsSegmentGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+        {label}
+      </p>
+      <div
+        className="mt-1.5 flex w-full rounded-lg bg-slate-100 p-0.5"
+        role="radiogroup"
+        aria-label={label}
+      >
+        {options.map((option) => {
+          const isActive = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              onClick={() => onChange(option.value)}
+              className={`min-w-0 flex-1 rounded-md px-1.5 py-1.5 text-[11px] font-semibold leading-4 transition ${
+                isActive
+                  ? "bg-white text-[#1b75a6] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function comparisonKey(edge: AggregatedEdge, mode: ComparisonMode) {
   if (mode === "topology") {
@@ -800,21 +436,1295 @@ function spearmanSimilarity(a: string[], b: string[]) {
   return denominator ? numerator / denominator : 0;
 }
 
+function numericValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function selectedResultForScope(
+  result: AlgorithmStoredResult | undefined,
+  scopeId: string,
+) {
+  if (!result) return null;
+  if (result.scopes?.[scopeId]?.status === "Completed") {
+    return {
+      confidenceSummary: result.scopes[scopeId]?.confidence_summary ?? null,
+      edges: result.scopes[scopeId]?.top_edges ?? [],
+    };
+  }
+  if (scopeId === "global") {
+    return {
+      confidenceSummary: result.confidence_summary ?? null,
+      edges: result.top_edges ?? result.ranked_edges ?? result.edges ?? [],
+    };
+  }
+  return null;
+}
+
+function correlation(first: number[], second: number[]) {
+  if (first.length !== second.length || first.length < 2) return null;
+  const meanFirst =
+    first.reduce((sum, value) => sum + value, 0) / first.length;
+  const meanSecond =
+    second.reduce((sum, value) => sum + value, 0) / second.length;
+  const covariance = first.reduce(
+    (sum, value, index) =>
+      sum + (value - meanFirst) * (second[index] - meanSecond),
+    0,
+  );
+  const varianceFirst = first.reduce(
+    (sum, value) => sum + (value - meanFirst) ** 2,
+    0,
+  );
+  const varianceSecond = second.reduce(
+    (sum, value) => sum + (value - meanSecond) ** 2,
+    0,
+  );
+  const denominator = Math.sqrt(varianceFirst * varianceSecond);
+  return denominator ? covariance / denominator : null;
+}
+
+function legacyRunStability(
+  edges: NonNullable<ReturnType<typeof selectedResultForScope>>["edges"],
+) {
+  const runIds = [
+    ...new Set(edges.flatMap((edge) => Object.keys(edge.run_ranks ?? {}))),
+  ].sort((first, second) => {
+    const firstNumber = Number(first.split("-").at(-1));
+    const secondNumber = Number(second.split("-").at(-1));
+    return firstNumber - secondNumber || first.localeCompare(second);
+  });
+  if (runIds.length < 2) return null;
+
+  const maximumRank =
+    Math.max(
+      1,
+      ...edges.flatMap((edge) =>
+        Object.values(edge.run_ranks ?? {}).map((value) => Number(value) || 0),
+      ),
+    ) + 1;
+  const vectors = new Map(
+    runIds.map((runId) => [
+      runId,
+      edges.map((edge) => numericValue(edge.run_ranks?.[runId]) ?? maximumRank),
+    ]),
+  );
+  const values: number[] = [];
+  for (let firstIndex = 0; firstIndex < runIds.length; firstIndex += 1) {
+    for (
+      let secondIndex = firstIndex + 1;
+      secondIndex < runIds.length;
+      secondIndex += 1
+    ) {
+      const value = correlation(
+        vectors.get(runIds[firstIndex]) ?? [],
+        vectors.get(runIds[secondIndex]) ?? [],
+      );
+      if (value !== null) values.push(value);
+    }
+  }
+  if (!values.length) return null;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return {
+    runCount: runIds.length,
+    pairCount: values.length,
+    medianRho: median(values),
+    madRho:
+      values.reduce((sum, value) => sum + Math.abs(value - mean), 0) /
+      values.length,
+  };
+}
+
+function RepeatRunStabilityPanel({
+  algorithmResults,
+  activeAlgorithmIds,
+  selectedResultScopeId,
+}: {
+  algorithmResults: Record<string, AlgorithmStoredResult>;
+  activeAlgorithmIds: string[];
+  selectedResultScopeId: string;
+}) {
+  const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(
+    null,
+  );
+  const rows = useMemo(
+    () =>
+      activeAlgorithmIds.map((algorithmId) => {
+        const selected = selectedResultForScope(
+          algorithmResults[algorithmId],
+          selectedResultScopeId,
+        );
+        const summary = selected?.confidenceSummary;
+        const repeat = summary?.repeat_run_stability;
+        const earlyStopping = summary?.early_stopping;
+        const checks = (earlyStopping?.checks ?? [])
+          .map((check) => ({
+            runCount: Number(check.run_count) || 0,
+            rho: numericValue(check.rho),
+            status: check.status ?? "",
+          }))
+          .filter((check) => check.runCount > 0);
+        const fallback = repeat ? null : legacyRunStability(selected?.edges ?? []);
+        const runCount =
+          numericValue(summary?.bootstrap_runs) ??
+          numericValue(repeat?.run_count) ??
+          fallback?.runCount ??
+          0;
+        const usableRunCount =
+          numericValue(repeat?.usable_run_count) ??
+          numericValue(repeat?.run_count) ??
+          fallback?.runCount ??
+          runCount;
+        const medianRho =
+          numericValue(repeat?.median_rho) ?? fallback?.medianRho ?? null;
+        const madRho =
+          numericValue(repeat?.mad_rho) ?? fallback?.madRho ?? null;
+        const stopRho =
+          numericValue(earlyStopping?.stop_rho) ??
+          numericValue(summary?.stop_rho) ??
+          0.95;
+        const stopStreak =
+          numericValue(earlyStopping?.stop_streak) ??
+          numericValue(summary?.stop_streak) ??
+          2;
+
+        let status = "Unavailable";
+        let tone = "bg-slate-100 text-slate-600";
+        if (earlyStopping?.stopped_early) {
+          status = "Stop rule met";
+          tone = "bg-emerald-50 text-emerald-700";
+        } else if (checks.length) {
+          status = "Run cap reached";
+          tone = "bg-amber-50 text-amber-700";
+        } else if (medianRho !== null) {
+          status = "Stability only";
+          tone = "bg-sky-50 text-[#087ead]";
+        }
+
+        return {
+          algorithmId,
+          checks,
+          runCount,
+          usableRunCount,
+          pairCount:
+            numericValue(repeat?.pair_count) ?? fallback?.pairCount ?? 0,
+          medianRho,
+          madRho,
+          stopRho,
+          stopStreak,
+          status,
+          tone,
+          hasLegacySummary: Boolean(fallback),
+        };
+      }),
+    [activeAlgorithmIds, algorithmResults, selectedResultScopeId],
+  );
+
+  return (
+    <Panel
+      title="Repeat-run stability"
+      description="Spearman correlation summarizes consistency across repeated runs. Open a method for its stopping checks."
+    >
+      <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="hidden grid-cols-[minmax(8rem,0.8fr)_minmax(12rem,1.4fr)_5rem_4.5rem_8rem] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400 md:grid">
+          <span>Method</span>
+          <span>Run-to-run stability</span>
+          <span
+            className="cursor-help text-right"
+            tabIndex={0}
+            title="Mean absolute deviation of the pairwise Spearman correlations. Lower values indicate more consistent run pairs."
+            aria-label="MAD: mean absolute deviation of pairwise Spearman correlations"
+          >
+            MAD <span aria-hidden="true">ⓘ</span>
+          </span>
+          <span className="text-right">Runs</span>
+          <span className="text-right">Adaptive stop</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {rows.map((row, rowIndex) => {
+            const normalized =
+              row.medianRho === null
+                ? null
+                : Math.max(0, Math.min(100, ((row.medianRho + 1) / 2) * 100));
+            const isExpanded = expandedAlgorithmId === row.algorithmId;
+            const panelId = `stability-checks-${rowIndex}`;
+            const excludedRunCount = Math.max(
+              0,
+              row.runCount - row.usableRunCount,
+            );
+            return (
+              <div key={row.algorithmId}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedAlgorithmId((current) =>
+                      current === row.algorithmId ? null : row.algorithmId,
+                    )
+                  }
+                  aria-expanded={isExpanded}
+                  aria-controls={panelId}
+                  className={`grid w-full cursor-pointer gap-3 px-4 py-3.5 text-left transition md:grid-cols-[minmax(8rem,0.8fr)_minmax(12rem,1.4fr)_5rem_4.5rem_8rem] md:items-center md:gap-4 ${
+                    isExpanded ? "bg-slate-50/70" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-extrabold text-slate-900">
+                      {row.algorithmId}
+                    </span>
+                    <svg
+                      viewBox="0 0 16 16"
+                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform md:hidden ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="m3.5 6 4.5 4 4.5-4"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 md:hidden">
+                      Stability
+                    </span>
+                    <span className="relative h-2.5 min-w-24 flex-1 rounded-full bg-gradient-to-r from-rose-100 via-slate-100 to-sky-200">
+                      {normalized !== null ? (
+                        <span
+                          className="absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#087ead] shadow-[0_0_0_2px_white]"
+                          style={{ left: `${normalized}%` }}
+                        />
+                      ) : null}
+                    </span>
+                    <span className="w-12 text-right text-sm font-extrabold tabular-nums text-slate-800">
+                      {row.medianRho === null ? "—" : row.medianRho.toFixed(3)}
+                    </span>
+                  </span>
+                  <span className="flex items-center justify-between gap-3 text-xs font-bold tabular-nums text-slate-600 md:block md:text-right">
+                    <span className="font-semibold text-slate-400 md:hidden">
+                      MAD
+                    </span>
+                    {row.madRho === null ? "—" : row.madRho.toFixed(3)}
+                  </span>
+                  <span className="flex items-center justify-between gap-3 text-xs font-bold tabular-nums text-slate-600 md:block md:text-right">
+                    <span className="font-semibold text-slate-400 md:hidden">
+                      Runs
+                    </span>
+                    {row.runCount || "—"}
+                  </span>
+                  <span className="flex items-center justify-between gap-2 md:justify-end">
+                    <span className="font-semibold text-slate-400 md:hidden">
+                      Adaptive stop
+                    </span>
+                    <span
+                      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-extrabold ${row.tone}`}
+                    >
+                      {row.status}
+                    </span>
+                    <svg
+                      viewBox="0 0 16 16"
+                      className={`hidden h-4 w-4 shrink-0 text-slate-400 transition-transform md:block ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="m3.5 6 4.5 4 4.5-4"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </button>
+                {isExpanded ? (
+                  <div
+                    id={panelId}
+                    className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-xs"
+                  >
+                    {row.checks.length ? (
+                      <>
+                        <span className="font-bold text-slate-500">
+                          Stopping checks
+                        </span>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {row.checks.map((check) => {
+                            const passes =
+                              check.rho !== null && check.rho >= row.stopRho;
+                            return (
+                              <span
+                                key={`${row.algorithmId}-${check.runCount}`}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-600"
+                                title={
+                                  check.rho === null
+                                    ? check.status || "Unavailable"
+                                    : passes
+                                      ? "Stop condition met"
+                                      : "Below stop threshold"
+                                }
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${
+                                    check.rho === null
+                                      ? "bg-slate-300"
+                                      : passes
+                                        ? "bg-emerald-500"
+                                        : "bg-[#087ead]"
+                                  }`}
+                                />
+                                Run {check.runCount}
+                                <span className="tabular-nums text-slate-800">
+                                  {check.rho === null
+                                    ? "ρ —"
+                                    : `ρ ${check.rho.toFixed(3)}`}
+                                </span>
+                              </span>
+                            );
+                          })}
+                        </span>
+                        <span className="text-slate-300" aria-hidden="true">
+                          ·
+                        </span>
+                        <span className="font-medium text-slate-500">
+                          Rule: {row.stopStreak} consecutive{" "}
+                          {row.stopStreak === 1 ? "check" : "checks"} at ρ ≥{" "}
+                          {row.stopRho.toFixed(2)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="leading-5 text-slate-500">
+                        {row.hasLegacySummary
+                          ? "Stopping checks were not saved; stability was reconstructed from the run rankings."
+                          : "No stopping checks were saved for this result."}
+                      </span>
+                    )}
+                    {row.medianRho !== null ? (
+                      <span className="ml-auto flex items-center gap-2 whitespace-nowrap text-[11px] font-semibold text-slate-400">
+                        <span>{plural(row.pairCount, "run pair")}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {excludedRunCount.toLocaleString()} excluded
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-500">
+        <span
+          className="mt-0.5 inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500"
+          tabIndex={0}
+          title="Pairwise correlations use the saved directed-edge universe. Edges missing from a run are aligned to zero; constant runs that cannot be correlated are excluded."
+          aria-label="Stability calculation details"
+        >
+          i
+        </span>
+        <p>
+          This measures consistency within each method. It is separate from the
+          method-agreement matrix below, which compares different algorithms.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+const EDGE_EXPLORER_PAGE_SIZE = 20;
+
+function EdgeExplorerSettingsMenu({
+  sort,
+  minimumSupport,
+  methodCount,
+  onSortChange,
+  onMinimumSupportChange,
+}: {
+  sort: EdgeExplorerSort;
+  minimumSupport: number;
+  methodCount: number;
+  onSortChange: (value: EdgeExplorerSort) => void;
+  onMinimumSupportChange: (value: number) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const sortLabels: Record<EdgeExplorerSort, string> = {
+    confidence: "Confidence",
+    evidence: "Evidence",
+    support: "Support",
+    edge: "Gene name",
+  };
+  const comparesMethods = methodCount > 1;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={`Edge explorer settings: ${sortLabels[sort]}${
+          comparesMethods
+            ? `, ${minimumSupport} or more supporting methods`
+            : ""
+        }`}
+        className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-4 text-sm font-semibold transition ${
+          isOpen
+            ? "border-[#1b75a6]/40 text-[#1b75a6] ring-4 ring-[#1b75a6]/[0.06]"
+            : "border-slate-200 text-slate-600 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
+        }`}
+      >
+        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+          <path
+            d="M4 6h5m3 0h4M4 14h3m3 0h6"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <circle cx="10.5" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="8.5" cy="14" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+        <span className="whitespace-nowrap">
+          {sortLabels[sort]}
+          {comparesMethods ? ` · ≥${minimumSupport}` : ""}
+        </span>
+        <svg
+          viewBox="0 0 16 16"
+          className={`h-3.5 w-3.5 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="m3.5 6 4.5 4 4.5-4"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {isOpen ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-40 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/15"
+        >
+          <SettingsSegmentGroup
+            label="Rank edges by"
+            value={sort}
+            options={[
+              { value: "confidence", label: "Confidence" },
+              { value: "evidence", label: "Evidence" },
+              { value: "support", label: "Support" },
+              { value: "edge", label: "Gene name" },
+            ]}
+            onChange={(value) => onSortChange(value as EdgeExplorerSort)}
+          />
+          {comparesMethods ? (
+            <div className="mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                Minimum method support
+              </p>
+              <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-lg bg-slate-100 p-1">
+                {Array.from({ length: methodCount }).map((_, index) => {
+                  const value = index + 1;
+                  const isActive = minimumSupport === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onMinimumSupportChange(value)}
+                      aria-pressed={isActive}
+                      className={`rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+                        isActive
+                          ? "bg-white text-[#1b75a6] shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      {value}+
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+            <span className="text-xs font-medium text-slate-400">
+              {comparesMethods
+                ? "Independent of Network filters"
+                : "Uses the complete saved ranking"}
+            </span>
+            <button
+              type="button"
+              disabled={sort === "confidence" && minimumSupport === 1}
+              onClick={() => {
+                onSortChange("confidence");
+                onMinimumSupportChange(1);
+              }}
+              className="text-xs font-semibold text-slate-500 transition hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:text-slate-300"
+            >
+              Restore defaults
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConsensusEdgeExplorer({
+  rows,
+  activeAlgorithmIds,
+}: {
+  rows: AggregatedEdge[];
+  activeAlgorithmIds: string[];
+}) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<EdgeExplorerSort>("confidence");
+  const [minimumSupport, setMinimumSupport] = useState(1);
+  const [page, setPage] = useState(1);
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
+  const [methodEvidencePopover, setMethodEvidencePopover] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const methodEvidenceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const methodEvidencePopoverRef = useRef<HTMLDivElement | null>(null);
+  const methodCount = Math.max(1, activeAlgorithmIds.length);
+  const comparesMethods = activeAlgorithmIds.length >= 2;
+
+  const filteredRows = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return rows
+      .filter((edge) => edge.count >= minimumSupport)
+      .filter(
+        (edge) =>
+          !normalizedQuery ||
+          edge.source.toLowerCase().includes(normalizedQuery) ||
+          edge.target.toLowerCase().includes(normalizedQuery) ||
+          edge.supportingAlgorithms.some((algorithmId) =>
+            algorithmId.toLowerCase().includes(normalizedQuery),
+          ),
+      )
+      .sort((first, second) => {
+        if (sort === "edge") {
+          return (
+            first.source.localeCompare(second.source) ||
+            first.target.localeCompare(second.target)
+          );
+        }
+        if (sort === "support") {
+          return (
+            second.count - first.count ||
+            second.confidence - first.confidence ||
+            first.rank - second.rank
+          );
+        }
+        if (sort === "evidence") {
+          return (
+            second.score - first.score ||
+            second.confidence - first.confidence ||
+            first.rank - second.rank
+          );
+        }
+        return (
+          second.confidence - first.confidence ||
+          second.score - first.score ||
+          first.rank - second.rank
+        );
+      });
+  }, [minimumSupport, query, rows, sort]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / EDGE_EXPLORER_PAGE_SIZE),
+  );
+  const safePage = Math.min(page, totalPages);
+  const visibleRows = filteredRows.slice(
+    (safePage - 1) * EDGE_EXPLORER_PAGE_SIZE,
+    safePage * EDGE_EXPLORER_PAGE_SIZE,
+  );
+  const selectedEdge =
+    filteredRows.find((edge) => edge.key === selectedEdgeKey) ?? null;
+  const methodEvidenceRows = useMemo(
+    () =>
+      selectedEdge
+        ? activeAlgorithmIds
+            .map((algorithmId) => ({
+              algorithmId,
+              evidence: selectedEdge.perAlgorithmScores[algorithmId] ?? 0,
+              supports:
+                selectedEdge.supportingAlgorithms.includes(algorithmId),
+            }))
+            .sort(
+              (first, second) =>
+                Number(second.supports) - Number(first.supports) ||
+                second.evidence - first.evidence ||
+                first.algorithmId.localeCompare(second.algorithmId),
+            )
+        : [],
+    [activeAlgorithmIds, selectedEdge],
+  );
+  const previewMethodEvidenceRows = methodEvidenceRows.slice(0, 3);
+  const remainingMethodCount = Math.max(0, methodEvidenceRows.length - 3);
+  const title =
+    comparesMethods
+      ? "Consensus edge explorer"
+      : "Ranked edge explorer";
+  const exportPrefix = comparesMethods ? "consensus" : "ranked";
+
+  const changeMinimumSupport = (value: number) => {
+    setMinimumSupport(value);
+    setPage(1);
+    setSelectedEdgeKey(null);
+    setMethodEvidencePopover(null);
+  };
+  const changeSort = (value: EdgeExplorerSort) => {
+    setSort(value);
+    setPage(1);
+  };
+
+  useEffect(() => {
+    if (!methodEvidencePopover) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        methodEvidenceButtonRef.current?.contains(target) ||
+        methodEvidencePopoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setMethodEvidencePopover(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMethodEvidencePopover(null);
+    };
+    const handleViewportChange = () => setMethodEvidencePopover(null);
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [methodEvidencePopover]);
+  const handleExport = () =>
+    downloadCsv(`${exportPrefix}-edge-explorer.csv`, [
+      [
+        comparesMethods ? "consensus_rank" : "rank",
+        "source",
+        "target",
+        comparesMethods ? "consensus_evidence" : "evidence",
+        "bootstrap_confidence",
+        "method_support",
+        "supporting_methods",
+        "direction",
+        "direction_confidence",
+        "sign",
+        "sign_confidence",
+      ],
+      ...filteredRows.map((edge) => [
+        edge.rank,
+        edge.source,
+        edge.target,
+        edge.score.toFixed(3),
+        edge.confidence.toFixed(3),
+        edge.count,
+        edge.supportingAlgorithms.join("; "),
+        edge.direction === 0 ? "unknown" : "source_to_target",
+        edge.directionConfidence?.toFixed(3) ?? "",
+        edge.sign > 0
+          ? "activation"
+          : edge.sign < 0
+            ? "repression"
+            : "unsigned",
+        edge.signConfidence?.toFixed(3) ?? "",
+      ]),
+    ]);
+
+  return (
+    <>
+      <Panel
+      title={title}
+      description={
+        comparesMethods
+          ? "Explore combined evidence across methods."
+          : "Explore the complete ranked edge evidence from the selected method."
+      }
+      aside={
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <div className="relative min-w-48 flex-1 sm:flex-none">
+            <svg
+              viewBox="0 0 20 20"
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                d="m13.5 13.5 3 3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+            <input
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+                setSelectedEdgeKey(null);
+                setMethodEvidencePopover(null);
+              }}
+              placeholder="Search edges"
+              aria-label={comparesMethods ? "Search consensus edges" : "Search ranked edges"}
+              className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:w-52"
+            />
+          </div>
+          <EdgeExplorerSettingsMenu
+            sort={sort}
+            minimumSupport={minimumSupport}
+            methodCount={methodCount}
+            onSortChange={changeSort}
+            onMinimumSupportChange={changeMinimumSupport}
+          />
+        </div>
+      }
+    >
+      {visibleRows.length ? (
+        <>
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="max-h-[42rem] overflow-auto">
+              <table
+                className={`w-full table-fixed text-left text-sm ${
+                  comparesMethods ? "min-w-[62rem]" : "min-w-[46rem]"
+                }`}
+              >
+                <colgroup>
+                  <col className="w-[6%]" />
+                  <col className={comparesMethods ? "w-[28%]" : "w-[45%]"} />
+                  {comparesMethods ? <col className="w-[10%]" /> : null}
+                  <col className={comparesMethods ? "w-[10%]" : "w-[13%]"} />
+                  {comparesMethods ? <col className="w-[10%]" /> : null}
+                  <col className="w-[14%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[5%]" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-400 shadow-[0_1px_0_0_#e2e8f0]">
+                  <tr>
+                    <th className="px-4 py-3 text-center">Rank</th>
+                    <th className="px-4 py-3">Regulation</th>
+                    {comparesMethods ? (
+                      <th
+                        className="cursor-help px-4 py-3 text-center"
+                        title="Mean normalized edge evidence across the selected methods."
+                      >
+                        Evidence
+                      </th>
+                    ) : null}
+                    <th
+                      className="cursor-help px-4 py-3 text-center"
+                      title={
+                        comparesMethods
+                          ? "Median bootstrap confidence across supporting methods."
+                          : "Bootstrap confidence from repeated resampled runs."
+                      }
+                    >
+                      Confidence
+                    </th>
+                    {comparesMethods ? (
+                      <th className="px-4 py-3 text-center">Support</th>
+                    ) : null}
+                    <th
+                      className="cursor-help px-4 py-3 text-center"
+                      title="Confidence that the displayed source-to-target orientation is correct."
+                    >
+                      Direction confidence
+                    </th>
+                    <th
+                      className="cursor-help px-4 py-3 text-center"
+                      title="Predicted activation or repression with sign confidence when available."
+                    >
+                      Regulatory sign
+                    </th>
+                    <th className="px-4 py-3 text-center">
+                      <span className="sr-only">Details</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {visibleRows.map((edge) => {
+                    const isSelected = edge.key === selectedEdgeKey;
+                    const detailId = `edge-evidence-${edge.key.replace(
+                      /[^a-zA-Z0-9_-]/g,
+                      "-",
+                    )}`;
+                    const toggleSelected = () => {
+                      setSelectedEdgeKey(isSelected ? null : edge.key);
+                      setMethodEvidencePopover(null);
+                    };
+                    const annotation =
+                      edge.sign > 0
+                        ? "Activation"
+                        : edge.sign < 0
+                          ? "Repression"
+                          : edge.direction === 0
+                            ? "Undirected"
+                            : "Unsigned";
+                    const signConfidencePercent =
+                      edge.sign !== 0 && edge.signConfidence !== null
+                        ? Math.round(edge.signConfidence * 100)
+                        : null;
+                    const directionConfidencePercent =
+                      edge.directionConfidence === null
+                        ? null
+                        : Math.round(edge.directionConfidence * 100);
+                    return (
+                      <Fragment key={edge.key}>
+                        <tr
+                          tabIndex={0}
+                          aria-expanded={isSelected}
+                          aria-controls={detailId}
+                          onClick={toggleSelected}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              toggleSelected();
+                            }
+                          }}
+                          className={`cursor-pointer transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087ead]/35 ${
+                            isSelected
+                              ? "bg-[#f2f9fc]"
+                              : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-400">
+                            {edge.rank.toLocaleString(undefined, {
+                              maximumFractionDigits: 1,
+                            })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-extrabold text-slate-900">
+                              {edge.source}
+                              <span className="px-2 text-[#087ead]">→</span>
+                              {edge.target}
+                            </span>
+                          </td>
+                          {comparesMethods ? (
+                            <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-600">
+                              {edge.score.toFixed(3)}
+                            </td>
+                          ) : null}
+                          <td className="px-4 py-3 text-center text-xs font-extrabold tabular-nums text-[#087ead]">
+                            {edge.confidence.toFixed(3)}
+                          </td>
+                          {comparesMethods ? (
+                            <td className="px-4 py-3 text-center">
+                              <span className="inline-flex min-w-14 items-center justify-center rounded-full bg-sky-50 px-2 py-1 text-[11px] font-extrabold text-[#087ead]">
+                                {edge.count}/{methodCount}
+                              </span>
+                            </td>
+                          ) : null}
+                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-600">
+                            {directionConfidencePercent === null
+                              ? "—"
+                              : `${directionConfidencePercent}%`}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                                edge.sign > 0
+                                  ? "bg-sky-50 text-[#0072B2]"
+                                  : edge.sign < 0
+                                    ? "bg-orange-50 text-[#D55E00]"
+                                    : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {annotation}
+                              {signConfidencePercent !== null
+                                ? ` · ${signConfidencePercent}%`
+                                : ""}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className="inline-flex h-8 w-8 items-center justify-center text-slate-400"
+                              aria-hidden="true"
+                            >
+                              <svg
+                                viewBox="0 0 16 16"
+                                className={`h-4 w-4 transition-transform ${
+                                  isSelected ? "rotate-180" : ""
+                                }`}
+                                fill="none"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  d="m3.5 6 4.5 4 4.5-4"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </span>
+                          </td>
+                        </tr>
+                        {isSelected && selectedEdge ? (
+                          <tr>
+                            <td
+                              id={detailId}
+                              colSpan={comparesMethods ? 8 : 6}
+                              className="bg-slate-50/60 px-4 py-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                                <div className="flex w-full flex-wrap items-center gap-1.5">
+                                  <span className="mr-1 font-semibold text-slate-500">
+                                    Method evidence
+                                  </span>
+                                  {previewMethodEvidenceRows.map(
+                                    (method, methodIndex) => (
+                                      <Fragment key={method.algorithmId}>
+                                        {methodIndex > 0 ? (
+                                          <span
+                                            className="mx-1 h-4 w-px bg-slate-200"
+                                            aria-hidden="true"
+                                          />
+                                        ) : null}
+                                        <span className="inline-flex min-w-0 items-baseline gap-2">
+                                          <strong
+                                            className={`max-w-32 truncate font-bold ${
+                                              method.supports
+                                                ? "text-slate-600"
+                                                : "text-slate-400"
+                                            }`}
+                                            title={method.algorithmId}
+                                          >
+                                            {method.algorithmId}
+                                          </strong>
+                                          <span
+                                            className={`tabular-nums ${
+                                              method.supports
+                                                ? "font-extrabold text-[#087ead]"
+                                                : "font-semibold text-slate-400"
+                                            }`}
+                                          >
+                                            {method.supports
+                                              ? method.evidence.toFixed(3)
+                                              : "No support"}
+                                          </span>
+                                        </span>
+                                      </Fragment>
+                                    ),
+                                  )}
+                                  {remainingMethodCount > 0 ? (
+                                    <>
+                                      <span
+                                        className="mx-1 h-4 w-px bg-slate-200"
+                                        aria-hidden="true"
+                                      />
+                                      <button
+                                        ref={methodEvidenceButtonRef}
+                                        type="button"
+                                        aria-haspopup="dialog"
+                                        aria-controls="method-evidence-popover"
+                                        aria-expanded={Boolean(
+                                          methodEvidencePopover,
+                                        )}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          if (methodEvidencePopover) {
+                                            setMethodEvidencePopover(null);
+                                            return;
+                                          }
+                                          const rect =
+                                            event.currentTarget.getBoundingClientRect();
+                                          const width = Math.min(
+                                            352,
+                                            window.innerWidth - 32,
+                                          );
+                                          const estimatedHeight = Math.min(
+                                            320,
+                                            64 +
+                                              Math.ceil(
+                                                methodEvidenceRows.length / 2,
+                                              ) *
+                                                40,
+                                          );
+                                          const left = Math.min(
+                                            window.innerWidth - width - 16,
+                                            Math.max(16, rect.right - width),
+                                          );
+                                          const top =
+                                            window.innerHeight - rect.bottom >=
+                                            estimatedHeight + 12
+                                              ? rect.bottom + 8
+                                              : Math.max(
+                                                  16,
+                                                  rect.top -
+                                                    estimatedHeight -
+                                                    8,
+                                                );
+                                          setMethodEvidencePopover({
+                                            top,
+                                            left,
+                                            width,
+                                          });
+                                        }}
+                                        className="rounded-full px-2 py-1 font-bold text-[#087ead] transition hover:bg-sky-50"
+                                      >
+                                        +{remainingMethodCount} more
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1 py-1 text-xs">
+            <p className="font-semibold text-slate-500">
+              <span className="font-bold text-slate-700">
+                {plural(filteredRows.length, "matching edge")}
+              </span>
+              <span className="mx-2 text-slate-300" aria-hidden="true">
+                ·
+              </span>
+              Page {safePage} of {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExport}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 font-bold text-slate-600 transition hover:border-[#087ead]/35 hover:bg-[#f2f9fc] hover:text-[#087ead]"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-4 w-4"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M8 2.5v7m0 0 2.5-2.5M8 9.5 5.5 7M3 11.5v1.25c0 .41.34.75.75.75h8.5c.41 0 .75-.34.75-.75V11.5"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                CSV
+              </button>
+              <div
+                className="inline-flex h-9 items-stretch overflow-hidden rounded-full border border-slate-200 bg-white"
+                role="group"
+                aria-label="Edge explorer pagination"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={safePage === 1}
+                  className="inline-flex w-9 items-center justify-center text-slate-500 transition hover:bg-[#f2f9fc] hover:text-[#087ead] disabled:cursor-not-allowed disabled:text-slate-300"
+                  aria-label="Previous page"
+                  title="Previous page"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-4 w-4"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="m9.5 4-4 4 4 4"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <span className="inline-flex min-w-16 items-center justify-center border-x border-slate-200 px-2 font-bold tabular-nums text-slate-600">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPage((current) => Math.min(totalPages, current + 1))
+                  }
+                  disabled={safePage === totalPages}
+                  className="inline-flex w-9 items-center justify-center text-slate-500 transition hover:bg-[#f2f9fc] hover:text-[#087ead] disabled:cursor-not-allowed disabled:text-slate-300"
+                  aria-label="Next page"
+                  title="Next page"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-4 w-4"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="m6.5 4 4 4-4 4"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+          <p className="text-sm font-bold text-slate-800">
+            No edges match these controls
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Clear the search or choose a lower minimum support.
+          </p>
+        </div>
+      )}
+      </Panel>
+      {methodEvidencePopover && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              id="method-evidence-popover"
+              ref={methodEvidencePopoverRef}
+              role="dialog"
+              aria-label="All method evidence"
+              className="fixed z-[100] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/15"
+              style={{
+                top: methodEvidencePopover.top,
+                left: methodEvidencePopover.left,
+                width: methodEvidencePopover.width,
+              }}
+            >
+              <div className="flex items-center justify-between gap-3 px-1 pb-2">
+                <div>
+                  <p className="text-sm font-extrabold text-slate-900">
+                    Method evidence
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                    {plural(methodEvidenceRows.length, "selected method")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMethodEvidencePopover(null)}
+                  aria-label="Close method evidence"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-4 w-4"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="m4 4 8 8m0-8-8 8"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
+                {methodEvidenceRows.map((method) => (
+                  <div
+                    key={method.algorithmId}
+                    className={`flex min-w-0 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs ${
+                      method.supports ? "bg-slate-50" : "bg-slate-50/60"
+                    }`}
+                  >
+                    <span
+                      className={`truncate font-bold ${
+                        method.supports ? "text-slate-700" : "text-slate-400"
+                      }`}
+                      title={method.algorithmId}
+                    >
+                      {method.algorithmId}
+                    </span>
+                    <span
+                      className={`shrink-0 tabular-nums ${
+                        method.supports
+                          ? "font-extrabold text-[#087ead]"
+                          : "font-semibold text-slate-400"
+                      }`}
+                    >
+                      {method.supports
+                        ? method.evidence.toFixed(3)
+                        : "No support"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 function AgreementView({
   algorithmEdgeRows,
   algorithmMetaMap,
+  algorithmResults,
   activeAlgorithmIds,
+  edgeExplorerRows,
+  selectedResultScopeId,
 }: {
   algorithmEdgeRows: Record<string, AggregatedEdge[]>;
   algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
+  algorithmResults: Record<string, AlgorithmStoredResult>;
   activeAlgorithmIds: string[];
+  edgeExplorerRows: AggregatedEdge[];
+  selectedResultScopeId: string;
 }) {
   const [topK, setTopK] = useState(100);
   const [metric, setMetric] = useState<AgreementMetric>("jaccard");
   const [mode, setMode] = useState<ComparisonMode>("topology");
-  const [supportMode, setSupportMode] = useState<SupportMode>("exact");
-  const [selectedSupport, setSelectedSupport] = useState<number | null>(null);
   const [requestedPair, setRequestedPair] = useState<[string, string] | null>(null);
+  const [pairDetailGroup, setPairDetailGroup] =
+    useState<PairDetailGroup>("shared");
 
   const eligibleAlgorithmIds = useMemo(
     () =>
@@ -854,12 +1764,7 @@ function AgreementView({
       eligibleAlgorithmIds.includes(requestedPair[0]) &&
       eligibleAlgorithmIds.includes(requestedPair[1])
         ? requestedPair
-        : eligibleAlgorithmIds.length >= 2
-          ? ([
-              eligibleAlgorithmIds[0],
-              eligibleAlgorithmIds[1],
-            ] as [string, string])
-          : null,
+        : null,
     [eligibleAlgorithmIds, requestedPair],
   );
 
@@ -879,78 +1784,64 @@ function AgreementView({
     };
   }, [rankedKeys, selectedPair]);
 
-  const support = useMemo(() => {
-    const counts = new Map<string, number>();
-    rankedKeys.forEach((keys) =>
-      new Set(keys).forEach((key) => counts.set(key, (counts.get(key) ?? 0) + 1)),
-    );
-    return counts;
-  }, [rankedKeys]);
-  const supportRows = eligibleAlgorithmIds.map((_, index) => {
-    const level = index + 1;
-    const edgeCount = [...support.values()].filter((value) =>
-      supportMode === "exact" ? value === level : value >= level,
-    ).length;
-    return { level, edgeCount };
-  });
-  const supportEdges =
-    selectedSupport === null
-      ? []
-      : [...support.entries()]
-          .filter(([, value]) =>
-            supportMode === "exact"
-              ? value === selectedSupport
-              : value >= selectedSupport,
-          )
-          .sort((a, b) => b[1] - a[1]);
-  const maxSupportCount = Math.max(0, ...supportRows.map((row) => row.edgeCount));
+  const pairDetailGroups = pairDetails
+    ? [
+        {
+          key: "shared" as const,
+          label: "Shared",
+          values: pairDetails.shared,
+          dotClass: "bg-teal-500",
+        },
+        {
+          key: "first" as const,
+          label: `${pairDetails.firstId} only`,
+          values: pairDetails.firstOnly,
+          dotClass: "bg-sky-500",
+        },
+        {
+          key: "second" as const,
+          label: `${pairDetails.secondId} only`,
+          values: pairDetails.secondOnly,
+          dotClass: "bg-violet-500",
+        },
+      ]
+    : [];
+  const activePairDetailGroup =
+    pairDetailGroups.find((group) => group.key === pairDetailGroup) ??
+    pairDetailGroups[0];
+  const selectedPairScore = pairDetails
+    ? similarity(pairDetails.firstId, pairDetails.secondId)
+    : null;
 
-  if (activeAlgorithmIds.length < 2) {
-    return (
-      <EmptyState
-        title="Select at least two algorithms"
-        detail="Agreement compares equally sized ranked edge sets from multiple completed methods."
-      />
-    );
-  }
+  useEffect(() => {
+    if (!selectedPair) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRequestedPair(null);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPair]);
 
   return (
     <div className="space-y-5">
+      <RepeatRunStabilityPanel
+        algorithmResults={algorithmResults}
+        activeAlgorithmIds={activeAlgorithmIds}
+        selectedResultScopeId={selectedResultScopeId}
+      />
+      {activeAlgorithmIds.length >= 2 ? (
       <Panel
-        title="Algorithm agreement"
-        description="Compare equally sized top-ranked results. The metric and biological interpretation are explicit and independent of Network display filters."
+        title="Method agreement"
+        description="Compare top-ranked results across methods. Select a cell to inspect shared and method-specific edges."
         aside={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <SelectControl
-              label="Top edges"
-              value={topK}
-              onChange={(value) => setTopK(Number(value))}
-            >
-              {[50, 100, 250, 500, 1000].map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </SelectControl>
-            <SelectControl
-              label="Metric"
-              value={metric}
-              onChange={(value) => setMetric(value as AgreementMetric)}
-            >
-              <option value="jaccard">Jaccard</option>
-              <option value="rbo">Rank-biased overlap</option>
-              <option value="spearman">Spearman rank</option>
-            </SelectControl>
-            <SelectControl
-              label="Compare"
-              value={mode}
-              onChange={(value) => setMode(value as ComparisonMode)}
-            >
-              <option value="topology">Adjacency</option>
-              <option value="direction">Direction</option>
-              <option value="sign">Direction + sign</option>
-            </SelectControl>
-          </div>
+          <ComparisonSettingsMenu
+            topK={topK}
+            metric={metric}
+            mode={mode}
+            onTopKChange={setTopK}
+            onMetricChange={setMetric}
+            onModeChange={setMode}
+          />
         }
       >
         {eligibleAlgorithmIds.length >= 2 ? (
@@ -993,16 +1884,31 @@ function AgreementView({
                           rowId === columnId ? 1 : similarity(rowId, columnId);
                         const normalized =
                           metric === "spearman" ? (value + 1) / 2 : value;
+                        const isSelected =
+                          selectedPair?.[0] === columnId &&
+                          selectedPair?.[1] === rowId;
                         return (
                           <td key={columnId}>
                             <button
                               type="button"
                               disabled={rowId === columnId}
-                              onClick={() => setRequestedPair([columnId, rowId])}
+                              aria-pressed={
+                                rowId === columnId ? undefined : isSelected
+                              }
+                              onClick={() => {
+                                if (isSelected) {
+                                  setRequestedPair(null);
+                                  return;
+                                }
+                                setPairDetailGroup("shared");
+                                setRequestedPair([columnId, rowId]);
+                              }}
                               className={`h-12 w-full min-w-16 rounded-lg text-center text-xs font-extrabold transition ${
                                 rowId === columnId
                                   ? "cursor-default"
-                                  : "ring-offset-2 hover:ring-2 hover:ring-[#087ead]/40"
+                                  : isSelected
+                                    ? "ring-2 ring-[#087ead] ring-offset-2"
+                                    : "ring-offset-2 hover:ring-2 hover:ring-[#087ead]/40"
                               }`}
                               style={{
                                 backgroundColor: `rgba(8, 126, 173, ${
@@ -1044,6 +1950,159 @@ function AgreementView({
                   : "These methods do not report direction."}
               </p>
             ) : null}
+            {pairDetails && activePairDetailGroup ? (
+              <section
+                className="mt-5 border-t border-slate-200 pt-5"
+                aria-label={`${pairDetails.firstId} and ${pairDetails.secondId} comparison details`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#087ead]">
+                      Pair inspection
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <h4 className="text-base font-extrabold text-slate-950">
+                        {pairDetails.firstId} vs {pairDetails.secondId}
+                      </h4>
+                      <span className="inline-flex items-center rounded-full bg-[#f2f9fc] px-2.5 py-1 text-xs font-bold tabular-nums text-[#087ead]">
+                        {selectedPairScore?.toFixed(3)}{" "}
+                        {AGREEMENT_METRIC_SHORT_LABELS[metric]}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      Top {topK.toLocaleString()} ·{" "}
+                      {COMPARISON_MODE_LABELS[mode]}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ExportButton
+                      onClick={() =>
+                        downloadCsv("algorithm-pair-comparison.csv", [
+                          ["group", "edge"],
+                          ...pairDetails.shared.map((key) => ["shared", key]),
+                          ...pairDetails.firstOnly.map((key) => [
+                            `${pairDetails.firstId}_only`,
+                            key,
+                          ]),
+                          ...pairDetails.secondOnly.map((key) => [
+                            `${pairDetails.secondId}_only`,
+                            key,
+                          ]),
+                        ])
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRequestedPair(null)}
+                      aria-label="Close comparison details"
+                      title="Close comparison details"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead]"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="m4 4 8 8m0-8-8 8"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  className="mt-4 flex w-full rounded-xl bg-slate-100 p-1"
+                  role="tablist"
+                  aria-label="Pair comparison edge groups"
+                >
+                  {pairDetailGroups.map((group) => {
+                    const isActive = group.key === activePairDetailGroup.key;
+                    return (
+                      <button
+                        key={group.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-controls="pair-inspection-edge-list"
+                        onClick={() => setPairDetailGroup(group.key)}
+                        className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition ${
+                          isActive
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-500 hover:text-slate-700"
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${group.dotClass}`}
+                        />
+                        <span className="truncate">{group.label}</span>
+                        <span
+                          className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
+                            isActive
+                              ? "bg-[#f2f9fc] text-[#087ead]"
+                              : "bg-white/80 text-slate-500"
+                          }`}
+                        >
+                          {group.values.length}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div
+                  id="pair-inspection-edge-list"
+                  role="tabpanel"
+                  className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`h-2 w-2 rounded-full ${activePairDetailGroup.dotClass}`}
+                      />
+                      <h5 className="text-sm font-extrabold text-slate-900">
+                        {activePairDetailGroup.label}
+                      </h5>
+                    </div>
+                    <p className="text-xs font-medium text-slate-400">
+                      {activePairDetailGroup.values.length > 50
+                        ? `Showing first 50 of ${activePairDetailGroup.values.length.toLocaleString()}`
+                        : plural(
+                            activePairDetailGroup.values.length,
+                            "edge",
+                          )}
+                    </p>
+                  </div>
+                  {activePairDetailGroup.values.length ? (
+                    <div className="mt-2 grid max-h-52 gap-x-6 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+                      {activePairDetailGroup.values
+                        .slice(0, 50)
+                        .map((key) => (
+                          <div
+                            key={key}
+                            className="flex min-w-0 items-center gap-2 border-b border-slate-100 py-2 text-xs font-semibold text-slate-700"
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${activePairDetailGroup.dotClass}`}
+                            />
+                            <span className="truncate" title={key}>
+                              {key}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="py-6 text-center text-sm text-slate-500">
+                      No edges in this group.
+                    </p>
+                  )}
+                </div>
+              </section>
+            ) : null}
           </>
         ) : (
           <EmptyState
@@ -1052,939 +2111,56 @@ function AgreementView({
           />
         )}
       </Panel>
-
-      {pairDetails ? (
-        <Panel
-          title={`${pairDetails.firstId} vs ${pairDetails.secondId}`}
-          description={`Open comparison for the selected top-${topK} ${mode === "topology" ? "adjacencies" : mode === "direction" ? "directed edges" : "signed directed edges"}.`}
-          aside={
-            <ExportButton
-              onClick={() =>
-                downloadCsv("algorithm-pair-comparison.csv", [
-                  ["group", "edge"],
-                  ...pairDetails.shared.map((key) => ["shared", key]),
-                  ...pairDetails.firstOnly.map((key) => [
-                    `${pairDetails.firstId}_only`,
-                    key,
-                  ]),
-                  ...pairDetails.secondOnly.map((key) => [
-                    `${pairDetails.secondId}_only`,
-                    key,
-                  ]),
-                ])
-              }
-            />
-          }
-        >
-          <div className="grid gap-3 md:grid-cols-3">
-            {[
-              {
-                label: "Shared",
-                values: pairDetails.shared,
-                tone: "border-teal-200 bg-teal-50",
-              },
-              {
-                label: `${pairDetails.firstId} only`,
-                values: pairDetails.firstOnly,
-                tone: "border-sky-200 bg-sky-50",
-              },
-              {
-                label: `${pairDetails.secondId} only`,
-                values: pairDetails.secondOnly,
-                tone: "border-violet-200 bg-violet-50",
-              },
-            ].map((group) => (
-              <div key={group.label} className={`rounded-xl border p-4 ${group.tone}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <h4 className="text-sm font-extrabold text-slate-900">
-                    {group.label}
-                  </h4>
-                  <span className="text-xs font-bold tabular-nums text-slate-600">
-                    {group.values.length}
-                  </span>
-                </div>
-                <div className="mt-3 max-h-44 space-y-1.5 overflow-y-auto">
-                  {group.values.length ? (
-                    group.values.slice(0, 50).map((key) => (
-                      <p
-                        key={key}
-                        className="truncate text-xs font-semibold text-slate-700"
-                        title={key}
-                      >
-                        {key}
-                      </p>
-                    ))
-                  ) : (
-                    <p className="text-xs text-slate-500">No edges.</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
       ) : null}
-
-      <Panel
-        title="Edge support"
-        description={`Support is calculated from the same top-${topK} edge universe and comparison interpretation used above.`}
-        aside={
-          <SegmentedControl
-            label="Count"
-            value={supportMode}
-            onChange={(value) => {
-              setSupportMode(value);
-              setSelectedSupport(null);
-            }}
-            options={[
-              { value: "exact", label: "Exactly N" },
-              { value: "at-least", label: "At least N" },
-            ]}
-          />
-        }
-      >
-        <div className="space-y-2">
-          {supportRows.map((row) => {
-            const percentage = support.size
-              ? (row.edgeCount / support.size) * 100
-              : 0;
-            return (
-              <button
-                key={row.level}
-                type="button"
-                onClick={() =>
-                  setSelectedSupport(
-                    selectedSupport === row.level ? null : row.level,
-                  )
-                }
-                className={`grid w-full grid-cols-[7rem_1fr_7.5rem] items-center gap-3 rounded-lg px-2 py-2 text-left transition ${
-                  selectedSupport === row.level
-                    ? "bg-sky-50 ring-1 ring-sky-200"
-                    : "hover:bg-slate-50"
-                }`}
-              >
-                <span className="text-sm font-bold text-slate-700">
-                  {row.level} {row.level === 1 ? "method" : "methods"}
-                </span>
-                <span className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-                  {row.edgeCount > 0 && maxSupportCount > 0 ? (
-                    <span
-                      className="block h-full rounded-full bg-[#087ead]"
-                      style={{
-                        width: `${(row.edgeCount / maxSupportCount) * 100}%`,
-                      }}
-                    />
-                  ) : null}
-                </span>
-                <span className="text-right text-xs font-bold tabular-nums text-slate-700">
-                  {row.edgeCount.toLocaleString()}{" "}
-                  <span className="font-semibold text-slate-400">
-                    ({percentage.toFixed(1)}%)
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {selectedSupport !== null ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-sm font-extrabold text-slate-900">
-                {supportMode === "exact" ? "Exactly" : "At least"} {selectedSupport}{" "}
-                {selectedSupport === 1 ? "method" : "methods"}
-              </h4>
-              <span className="text-xs font-bold text-slate-500">
-                {plural(supportEdges.length, "edge")}
-              </span>
-            </div>
-            <div className="mt-3 grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-              {supportEdges.length ? (
-                supportEdges.map(([key, count]) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-xs"
-                  >
-                    <span className="truncate font-semibold text-slate-700" title={key}>
-                      {key}
-                    </span>
-                    <span className="font-bold tabular-nums text-[#087ead]">{count}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-500">No edges at this support level.</p>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </Panel>
-    </div>
-  );
-}
-
-function LineChart({
-  series,
-  xLabel,
-  yLabel,
-}: {
-  series: Array<{ name: string; points: Array<{ x: number; y: number }> }>;
-  xLabel: string;
-  yLabel: string;
-}) {
-  const width = 760;
-  const height = 320;
-  const left = 58;
-  const right = 20;
-  const top = 18;
-  const bottom = 46;
-  const points = series.flatMap((item) => item.points);
-  const xValues = points.map((point) => point.x);
-  const yValues = points.map((point) => point.y);
-  const xMin = Math.min(...xValues, 0);
-  const xMax = Math.max(...xValues, 1);
-  const yMin = Math.min(...yValues, 0);
-  const yMax = Math.max(...yValues, 1);
-  const xPosition = (value: number) =>
-    left +
-    ((value - xMin) / Math.max(1e-9, xMax - xMin)) *
-      (width - left - right);
-  const yPosition = (value: number) =>
-    top +
-    (1 - (value - yMin) / Math.max(1e-9, yMax - yMin)) *
-      (height - top - bottom);
-
-  if (!points.length) {
-    return (
-      <EmptyState
-        title="No curve data"
-        detail="The selected algorithms do not contain ranked edges for this scope."
+      <ConsensusEdgeExplorer
+        rows={edgeExplorerRows}
+        activeAlgorithmIds={activeAlgorithmIds}
       />
-    );
-  }
-
-  return (
-    <div>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        role="img"
-        aria-label={`${yLabel} by ${xLabel}`}
-      >
-        {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
-          const y = top + tick * (height - top - bottom);
-          return (
-            <line
-              key={tick}
-              x1={left}
-              x2={width - right}
-              y1={y}
-              y2={y}
-              stroke="#e2e8f0"
-              strokeWidth="1"
-            />
-          );
-        })}
-        <line
-          x1={left}
-          x2={left}
-          y1={top}
-          y2={height - bottom}
-          stroke="#94a3b8"
-        />
-        <line
-          x1={left}
-          x2={width - right}
-          y1={height - bottom}
-          y2={height - bottom}
-          stroke="#94a3b8"
-        />
-        {series.map((item, index) => {
-          const color = PALETTE[index % PALETTE.length];
-          const path = item.points
-            .map(
-              (point, pointIndex) =>
-                `${pointIndex ? "L" : "M"} ${xPosition(point.x)} ${yPosition(point.y)}`,
-            )
-            .join(" ");
-          return (
-            <path
-              key={item.name}
-              d={path}
-              fill="none"
-              stroke={color}
-              strokeWidth="3"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          );
-        })}
-        <text
-          x={(left + width - right) / 2}
-          y={height - 8}
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="12"
-          fontWeight="600"
-        >
-          {xLabel}
-        </text>
-        <text
-          x="14"
-          y={(top + height - bottom) / 2}
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="12"
-          fontWeight="600"
-          transform={`rotate(-90 14 ${(top + height - bottom) / 2})`}
-        >
-          {yLabel}
-        </text>
-      </svg>
-      <div className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-2">
-        {series.map((item, index) => (
-          <span
-            key={item.name}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600"
-          >
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
-            />
-            {item.name}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TrajectoryView({
-  context,
-  loading,
-}: {
-  context: VisualizationContext | null;
-  loading: boolean;
-}) {
-  const lineages = useMemo(
-    () => context?.trajectory?.lineages ?? [],
-    [context?.trajectory?.lineages],
-  );
-  const [requestedLineageName, setRequestedLineageName] = useState("");
-  const lineage =
-    lineages.find((item) => item.name === requestedLineageName) ?? lineages[0];
-  const genes = (context?.trajectory?.genes ?? []).slice(0, 8);
-
-  if (loading) {
-    return (
-      <EmptyState
-        title="Preparing trajectory"
-        detail="Reading the project pseudotime and expression matrix."
-      />
-    );
-  }
-  if (!context?.trajectory?.available || !lineage) {
-    return (
-      <EmptyState
-        title="Trajectory is unavailable"
-        detail={
-          context?.trajectory?.reason ??
-          "This project does not include usable pseudotime."
-        }
-      />
-    );
-  }
-
-  const series = genes.map((gene) => ({
-    name: gene,
-    points: lineage.bins.map((bin) => ({
-      x: bin.pseudotime,
-      y: Number(bin.scaled_expression[gene] ?? 0),
-    })),
-  }));
-
-  return (
-    <Panel
-      title="Expression over pseudotime"
-      description="Binned mean expression, scaled independently for each displayed gene."
-      aside={
-        lineages.length > 1 ? (
-          <select
-            value={lineage.name}
-            onChange={(event) => setRequestedLineageName(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800"
-          >
-            {lineages.map((item) => (
-              <option key={item.name}>{item.name}</option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-xs font-semibold text-slate-500">
-            {lineage.cell_count.toLocaleString()} cells
-          </span>
-        )
-      }
-    >
-      <LineChart series={series} xLabel="Pseudotime" yLabel="Scaled expression" />
-    </Panel>
-  );
-}
-
-type CurvePoint = { x: number; y: number };
-type BenchmarkRow = {
-  algorithmId: string;
-  evaluatedEdges: number;
-  auprc: number;
-  auroc: number;
-  precisionAtK: number;
-  earlyPrecisionRatio: number;
-  pr: CurvePoint[];
-  roc: CurvePoint[];
-};
-
-function benchmarkAlgorithm(
-  algorithmId: string,
-  edges: AggregatedEdge[],
-  truth: Set<string>,
-  possibleEdges: number,
-  evaluationDepth: number,
-): BenchmarkRow {
-  const ranked = [...edges]
-    .sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)
-    .slice(0, evaluationDepth > 0 ? evaluationDepth : undefined);
-  const positiveCount = Math.max(1, truth.size);
-  const negativeCount = Math.max(1, possibleEdges - truth.size);
-  let truePositive = 0;
-  let falsePositive = 0;
-  let auprc = 0;
-  let auroc = 0;
-  let previousRecall = 0;
-  let previousFpr = 0;
-  let previousTpr = 0;
-  const pr: CurvePoint[] = [{ x: 0, y: 1 }];
-  const roc: CurvePoint[] = [{ x: 0, y: 0 }];
-  let trueAtK = 0;
-  const k = Math.min(truth.size, ranked.length);
-
-  ranked.forEach((edge, index) => {
-    if (truth.has(edgeKey(edge.source, edge.target))) {
-      truePositive += 1;
-      if (index < k) trueAtK += 1;
-    } else {
-      falsePositive += 1;
-    }
-    const recall = truePositive / positiveCount;
-    const precision = truePositive / (index + 1);
-    const falsePositiveRate = falsePositive / negativeCount;
-    const truePositiveRate = recall;
-    auprc += (recall - previousRecall) * precision;
-    auroc +=
-      (falsePositiveRate - previousFpr) *
-      ((previousTpr + truePositiveRate) / 2);
-    previousRecall = recall;
-    previousFpr = falsePositiveRate;
-    previousTpr = truePositiveRate;
-    if (
-      index === ranked.length - 1 ||
-      index % Math.max(1, Math.floor(ranked.length / 180)) === 0
-    ) {
-      pr.push({ x: recall, y: precision });
-      roc.push({ x: falsePositiveRate, y: truePositiveRate });
-    }
-  });
-  const precisionAtK = k ? trueAtK / k : 0;
-  const baseRate = truth.size / Math.max(1, possibleEdges);
-  return {
-    algorithmId,
-    evaluatedEdges: ranked.length,
-    auprc,
-    auroc,
-    precisionAtK,
-    earlyPrecisionRatio: baseRate ? precisionAtK / baseRate : 0,
-    pr,
-    roc,
-  };
-}
-
-function BenchmarkView({
-  context,
-  loading,
-  algorithmEdgeRows,
-  activeAlgorithmIds,
-}: {
-  context: VisualizationContext | null;
-  loading: boolean;
-  algorithmEdgeRows: Record<string, AggregatedEdge[]>;
-  activeAlgorithmIds: string[];
-}) {
-  const [evaluationDepth, setEvaluationDepth] = useState(0);
-  const rows = useMemo(() => {
-    const truthEdges = context?.ground_truth?.edges ?? [];
-    if (!truthEdges.length) return [];
-    const truth = new Set(
-      truthEdges.map((edge) => edgeKey(edge.source, edge.target)),
-    );
-    const genes = new Set<string>();
-    truthEdges.forEach((edge) => {
-      genes.add(edge.source);
-      genes.add(edge.target);
-    });
-    activeAlgorithmIds.forEach((algorithmId) => {
-      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
-        genes.add(edge.source);
-        genes.add(edge.target);
-      });
-    });
-    const possibleEdges = Math.max(1, genes.size * Math.max(1, genes.size - 1));
-    return activeAlgorithmIds.map((algorithmId) =>
-      benchmarkAlgorithm(
-        algorithmId,
-        algorithmEdgeRows[algorithmId] ?? [],
-        truth,
-        possibleEdges,
-        evaluationDepth,
-      ),
-    );
-  }, [activeAlgorithmIds, algorithmEdgeRows, context, evaluationDepth]);
-
-  if (loading) {
-    return (
-      <EmptyState
-        title="Preparing benchmark"
-        detail="Reading the project reference network."
-      />
-    );
-  }
-  if (!context?.ground_truth?.available) {
-    return (
-      <EmptyState
-        title="Reference network required"
-        detail={
-          context?.ground_truth?.reason ??
-          "Add a ground-truth network to evaluate predictions."
-        }
-      />
-    );
-  }
-
-  const controls = (
-    <div className="flex flex-wrap items-center gap-2">
-      <SelectControl
-        label="Evaluation depth"
-        value={evaluationDepth}
-        onChange={(value) => setEvaluationDepth(Number(value))}
-      >
-        <option value={0}>All ranked edges</option>
-        {[100, 250, 500, 1000, 2500].map((value) => (
-          <option key={value} value={value}>
-            Top {value}
-          </option>
-        ))}
-      </SelectControl>
-      <span className="text-xs font-semibold text-slate-500">
-        {context.ground_truth.edge_count?.toLocaleString()} reference edges
-      </span>
-    </div>
-  );
-
-  return (
-    <div className="space-y-5">
-      <Panel
-        title="Precision–recall benchmark"
-        description="Precision–recall is the primary view for sparse regulatory networks. Evaluation depth is controlled here, independently of Network display settings."
-        aside={controls}
-      >
-        <LineChart
-          series={rows.map((row) => ({
-            name: row.algorithmId,
-            points: row.pr,
-          }))}
-          xLabel="Recall"
-          yLabel="Precision"
-        />
-      </Panel>
-      <Panel
-        title="Benchmark metrics"
-        description="Early precision complements the full ranking; ROC is included as a secondary metric."
-        aside={
-          <ExportButton
-            onClick={() =>
-              downloadCsv("benchmark-metrics.csv", [
-                [
-                  "algorithm",
-                  "evaluated_edges",
-                  "auprc",
-                  "precision_at_k",
-                  "early_precision_ratio",
-                  "auroc",
-                ],
-                ...rows.map((row) => [
-                  row.algorithmId,
-                  row.evaluatedEdges,
-                  row.auprc.toFixed(3),
-                  row.precisionAtK.toFixed(3),
-                  row.earlyPrecisionRatio.toFixed(3),
-                  row.auroc.toFixed(3),
-                ]),
-              ])
-            }
-          />
-        }
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-left">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.12em] text-slate-500">
-                <th className="pb-3">Algorithm</th>
-                <th className="pb-3 text-right">Edges evaluated</th>
-                <th className="pb-3 text-right">AUPRC</th>
-                <th className="pb-3 text-right">Precision@K</th>
-                <th className="pb-3 text-right">Early precision ratio</th>
-                <th className="pb-3 text-right">AUROC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...rows]
-                .sort((a, b) => b.auprc - a.auprc)
-                .map((row) => (
-                  <tr
-                    key={row.algorithmId}
-                    className="border-b border-slate-100 text-sm"
-                  >
-                    <td className="py-3 font-extrabold text-slate-900">
-                      {row.algorithmId}
-                    </td>
-                    <td className="py-3 text-right tabular-nums text-slate-700">
-                      {row.evaluatedEdges.toLocaleString()}
-                    </td>
-                    <td className="py-3 text-right font-bold tabular-nums text-[#087ead]">
-                      {row.auprc.toFixed(3)}
-                    </td>
-                    <td className="py-3 text-right tabular-nums text-slate-700">
-                      {row.precisionAtK.toFixed(3)}
-                    </td>
-                    <td className="py-3 text-right tabular-nums text-slate-700">
-                      {row.earlyPrecisionRatio.toFixed(3)}×
-                    </td>
-                    <td className="py-3 text-right tabular-nums text-slate-700">
-                      {row.auroc.toFixed(3)}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-      <Panel
-        title="ROC curves"
-        description="A secondary view; sparse networks can make ROC performance look optimistic."
-      >
-        <LineChart
-          series={rows.map((row) => ({
-            name: row.algorithmId,
-            points: row.roc,
-          }))}
-          xLabel="False-positive rate"
-          yLabel="True-positive rate"
-        />
-      </Panel>
-    </div>
-  );
-}
-
-function DiagnosticsView({
-  analysisEdges,
-  algorithmResults,
-  algorithmEdgeRows,
-  activeAlgorithmIds,
-  tasks,
-}: {
-  analysisEdges: AggregatedEdge[];
-  algorithmResults: Record<string, AlgorithmStoredResult>;
-  algorithmEdgeRows: Record<string, AggregatedEdge[]>;
-  activeAlgorithmIds: string[];
-  tasks: ProjectTask[];
-}) {
-  const [structureDepth, setStructureDepth] = useState(500);
-  const structureEdges = useMemo(
-    () =>
-      [...analysisEdges]
-        .sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)
-        .slice(0, structureDepth > 0 ? structureDepth : undefined),
-    [analysisEdges, structureDepth],
-  );
-  const motifRows = useMemo(() => {
-    const adjacency = new Map<string, Set<string>>();
-    const reverse = new Map<string, Set<string>>();
-    structureEdges.forEach((edge) => {
-      const outgoing = adjacency.get(edge.source) ?? new Set<string>();
-      outgoing.add(edge.target);
-      adjacency.set(edge.source, outgoing);
-      const incoming = reverse.get(edge.target) ?? new Set<string>();
-      incoming.add(edge.source);
-      reverse.set(edge.target, incoming);
-    });
-    let reciprocal = 0;
-    let feedForward = 0;
-    structureEdges.forEach((edge) => {
-      if (adjacency.get(edge.target)?.has(edge.source)) reciprocal += 1;
-      adjacency.get(edge.source)?.forEach((third) => {
-        if (
-          third !== edge.target &&
-          adjacency.get(edge.target)?.has(third)
-        ) {
-          feedForward += 1;
-        }
-      });
-    });
-    return [
-      {
-        label: "Feed-forward loops",
-        value: feedForward,
-        note: "A→B, A→C, B→C",
-      },
-      {
-        label: "Reciprocal pairs",
-        value: Math.floor(reciprocal / 2),
-        note: "A↔B",
-      },
-      {
-        label: "Fan-out hubs",
-        value: [...adjacency.values()].filter((targets) => targets.size >= 3)
-          .length,
-        note: "At least 3 targets",
-      },
-      {
-        label: "Fan-in hubs",
-        value: [...reverse.values()].filter((sources) => sources.size >= 3)
-          .length,
-        note: "At least 3 regulators",
-      },
-    ];
-  }, [structureEdges]);
-  const maxMotif = Math.max(0, ...motifRows.map((row) => row.value));
-
-  const runtimeRows = useMemo(
-    () =>
-      activeAlgorithmIds
-        .map((algorithmId) => {
-          const task = tasks.find(
-            (item) =>
-              item.algorithm_id.toUpperCase() === algorithmId.toUpperCase(),
-          );
-          const seconds = Number(
-            algorithmResults[algorithmId]?.elapsed_seconds ??
-              task?.elapsed_seconds ??
-              0,
-          );
-          return {
-            label: algorithmId,
-            value: Number.isFinite(seconds) ? seconds : 0,
-            note: `${(
-              algorithmEdgeRows[algorithmId] ?? []
-            ).length.toLocaleString()} ranked edges in this scope`,
-          };
-        })
-        .sort((a, b) => b.value - a.value),
-    [
-      activeAlgorithmIds,
-      algorithmEdgeRows,
-      algorithmResults,
-      tasks,
-    ],
-  );
-  const positiveRuntimes = runtimeRows
-    .map((row) => row.value)
-    .filter((value) => value > 0);
-  const totalRuntime = positiveRuntimes.reduce((sum, value) => sum + value, 0);
-  const medianRuntime = median(positiveRuntimes);
-  const fastestRuntime = positiveRuntimes.length
-    ? Math.min(...positiveRuntimes)
-    : 0;
-
-  return (
-    <div className="space-y-5">
-      <Panel
-        title="Network structure"
-        description="Structural patterns are calculated from a view-local top-edge universe, not from the Network tab’s display filters. Counts are descriptive, not enrichment p-values."
-        aside={
-          <div className="flex flex-wrap items-center gap-2">
-            <SelectControl
-              label="Profile"
-              value={structureDepth}
-              onChange={(value) => setStructureDepth(Number(value))}
-            >
-              {[100, 250, 500, 1000, 2000].map((value) => (
-                <option key={value} value={value}>
-                  Top {value} edges
-                </option>
-              ))}
-              <option value={0}>All inferred edges</option>
-            </SelectControl>
-            <ExportButton
-              onClick={() =>
-                downloadCsv("network-structure.csv", [
-                  ["pattern", "count", "per_1000_edges"],
-                  ...motifRows.map((row) => [
-                    row.label,
-                    row.value,
-                    structureEdges.length
-                      ? ((row.value / structureEdges.length) * 1000).toFixed(3)
-                      : 0,
-                  ]),
-                ])
-              }
-            />
-          </div>
-        }
-      >
-        {structureEdges.length ? (
-          <div className="space-y-3">
-            {motifRows.map((row) => {
-              const normalized = (row.value / structureEdges.length) * 1000;
-              return (
-                <div
-                  key={row.label}
-                  className="grid grid-cols-[minmax(9rem,13rem)_1fr_5rem_7rem] items-center gap-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-800">
-                      {row.label}
-                    </p>
-                    <p className="truncate text-[11px] text-slate-500">
-                      {row.note}
-                    </p>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-                    {row.value > 0 && maxMotif > 0 ? (
-                      <div
-                        className="h-full rounded-full bg-[#087ead]"
-                        style={{ width: `${(row.value / maxMotif) * 100}%` }}
-                      />
-                    ) : null}
-                  </div>
-                  <span className="text-right text-sm font-bold tabular-nums text-slate-700">
-                    {row.value.toLocaleString()}
-                  </span>
-                  <span className="text-right text-xs tabular-nums text-slate-400">
-                    {normalized.toFixed(1)}/1k
-                  </span>
-                </div>
-              );
-            })}
-            <p className="border-t border-slate-100 pt-3 text-xs text-slate-500">
-              Based on {plural(structureEdges.length, "edge")}. Zero counts are
-              shown without a misleading minimum bar.
-            </p>
-          </div>
-        ) : (
-          <EmptyState
-            title="No edges to profile"
-            detail="Select a completed algorithm or another result scope."
-          />
-        )}
-      </Panel>
-
-      <Panel
-        title="Run performance"
-        description="Recorded wall-clock time for selected completed algorithms. Runtime is independent of every result threshold."
-        aside={
-          <ExportButton
-            onClick={() =>
-              downloadCsv("algorithm-runtimes.csv", [
-                ["algorithm", "elapsed_seconds", "ranked_edges"],
-                ...runtimeRows.map((row) => [
-                  row.label,
-                  row.value.toFixed(3),
-                  (algorithmEdgeRows[row.label] ?? []).length,
-                ]),
-              ])
-            }
-          />
-        }
-      >
-        <div className="mb-5 grid gap-3 sm:grid-cols-3">
-          {[
-            { label: "Total selected runtime", value: formatDuration(totalRuntime) },
-            { label: "Median method runtime", value: formatDuration(medianRuntime) },
-            { label: "Fastest method", value: formatDuration(fastestRuntime) },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3"
-            >
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-violet-500">
-                {item.label}
-              </p>
-              <p className="mt-1 text-xl font-extrabold tabular-nums text-slate-950">
-                {item.value}
-              </p>
-            </div>
-          ))}
-        </div>
-        <HorizontalBars
-          rows={runtimeRows}
-          valueLabel={formatDuration}
-          color="#7c3aed"
-        />
-      </Panel>
     </div>
   );
 }
 
 export default function ResultsInsightsSection({
   view,
-  networkEdges,
-  analysisEdges,
   algorithmEdgeRows,
   algorithmMetaMap,
   algorithmResults,
   activeAlgorithmIds,
+  edgeExplorerRows,
+  selectedResultScopeId,
   tasks,
-  networkNodes,
   visualizationContext,
   isContextLoading,
-  onSelectGene,
+  onTrajectoryGenesChange,
 }: ResultsInsightsSectionProps) {
-  if (view === "regulators") {
-    return (
-      <RegulatorView
-        analysisEdges={analysisEdges}
-        networkEdges={networkEdges}
-        networkNodes={networkNodes}
-        onSelectGene={onSelectGene}
-      />
-    );
-  }
   if (view === "agreement") {
     return (
       <AgreementView
         algorithmEdgeRows={algorithmEdgeRows}
         algorithmMetaMap={algorithmMetaMap}
+        algorithmResults={algorithmResults}
         activeAlgorithmIds={activeAlgorithmIds}
+        edgeExplorerRows={edgeExplorerRows}
+        selectedResultScopeId={selectedResultScopeId}
       />
     );
   }
   if (view === "trajectory") {
     return (
-      <TrajectoryView
-        context={visualizationContext}
+      <TrajectoryInsights
+        trajectory={visualizationContext?.trajectory}
         loading={isContextLoading}
-      />
-    );
-  }
-  if (view === "benchmark") {
-    return (
-      <BenchmarkView
-        context={visualizationContext}
-        loading={isContextLoading}
-        algorithmEdgeRows={algorithmEdgeRows}
-        activeAlgorithmIds={activeAlgorithmIds}
+        onGenesChange={onTrajectoryGenesChange}
       />
     );
   }
   return (
-    <DiagnosticsView
-      analysisEdges={analysisEdges}
-      algorithmResults={algorithmResults}
+    <BenchmarkInsights
+      groundTruth={visualizationContext?.ground_truth}
+      loading={isContextLoading}
       algorithmEdgeRows={algorithmEdgeRows}
+      algorithmMetaMap={algorithmMetaMap}
+      algorithmResults={algorithmResults}
       activeAlgorithmIds={activeAlgorithmIds}
       tasks={tasks}
     />

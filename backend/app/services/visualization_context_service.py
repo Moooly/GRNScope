@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.manifold import TSNE
 
 from .gene_ordering_service import (
     GeneOrderingGenerationError,
@@ -19,7 +20,13 @@ from .matrix_transformation_service import (
 
 MAX_TRAJECTORY_GENES = 8
 TRAJECTORY_BIN_COUNT = 30
+MAX_TRAJECTORY_EMBEDDING_CELLS = 700
+MAX_TRAJECTORY_EMBEDDING_GENES = 500
+TRAJECTORY_PATH_BIN_COUNT = 24
 MAX_GROUND_TRUTH_EDGES = 250_000
+TRAJECTORY_EMBEDDING_CACHE_LIMIT = 8
+
+_trajectory_embedding_cache: dict[tuple, dict | None] = {}
 
 
 def _existing_path(
@@ -122,6 +129,260 @@ def _scale_series(values: np.ndarray) -> np.ndarray:
     return scaled
 
 
+def _principal_component_embedding(values: np.ndarray) -> np.ndarray:
+    centered = values - np.mean(values, axis=0, keepdims=True)
+    left_vectors, singular_values, _ = np.linalg.svd(centered, full_matrices=False)
+    component_count = min(2, len(singular_values))
+    coordinates = left_vectors[:, :component_count] * singular_values[:component_count]
+    if component_count < 2:
+        coordinates = np.pad(
+            coordinates,
+            ((0, 0), (0, 2 - component_count)),
+            mode="constant",
+        )
+    return coordinates
+
+
+def _sample_embedding_cell_indices(pseudotime: pd.DataFrame) -> np.ndarray:
+    values = pseudotime.to_numpy(dtype=float)
+    valid_indices = np.flatnonzero(np.isfinite(values).any(axis=1))
+    if len(valid_indices) <= MAX_TRAJECTORY_EMBEDDING_CELLS:
+        return valid_indices
+
+    selected: set[int] = set()
+    lineage_count = max(1, pseudotime.shape[1])
+    lineage_quota = max(2, MAX_TRAJECTORY_EMBEDDING_CELLS // lineage_count)
+    for column_index in range(pseudotime.shape[1]):
+        lineage_values = values[:, column_index]
+        lineage_indices = np.flatnonzero(np.isfinite(lineage_values))
+        if not len(lineage_indices):
+            continue
+        ordered = lineage_indices[np.argsort(lineage_values[lineage_indices])]
+        positions = np.linspace(
+            0,
+            len(ordered) - 1,
+            min(lineage_quota, len(ordered)),
+            dtype=int,
+        )
+        selected.update(int(ordered[position]) for position in positions)
+
+    generator = np.random.default_rng(42)
+    remaining = np.asarray(
+        [index for index in valid_indices if int(index) not in selected],
+        dtype=int,
+    )
+    if len(selected) < MAX_TRAJECTORY_EMBEDDING_CELLS and len(remaining):
+        fill_count = min(
+            MAX_TRAJECTORY_EMBEDDING_CELLS - len(selected),
+            len(remaining),
+        )
+        selected.update(
+            int(index)
+            for index in generator.choice(remaining, size=fill_count, replace=False)
+        )
+
+    selected_indices = np.asarray(sorted(selected), dtype=int)
+    if len(selected_indices) > MAX_TRAJECTORY_EMBEDDING_CELLS:
+        selected_indices = np.sort(
+            generator.choice(
+                selected_indices,
+                size=MAX_TRAJECTORY_EMBEDDING_CELLS,
+                replace=False,
+            )
+        )
+    return selected_indices
+
+
+def _smooth_path(coordinates: np.ndarray) -> np.ndarray:
+    if len(coordinates) < 3:
+        return coordinates
+    smoothed = coordinates.copy()
+    smoothed[1:-1] = (
+        coordinates[:-2] + (2 * coordinates[1:-1]) + coordinates[2:]
+    ) / 4
+    return smoothed
+
+
+def _trim_terminal_hook(coordinates: np.ndarray) -> np.ndarray:
+    """Remove a short endpoint reversal caused by sparse terminal bins."""
+    if len(coordinates) < 8:
+        return coordinates
+
+    segment_lengths = np.linalg.norm(np.diff(coordinates, axis=0), axis=1)
+    typical_length = float(np.median(segment_lengths))
+    if typical_length <= 1e-9:
+        return coordinates
+
+    first_candidate = max(4, len(coordinates) - 6)
+    for index in range(first_candidate, len(coordinates) - 2):
+        reference = coordinates[index] - coordinates[max(0, index - 4)]
+        current = coordinates[index + 1] - coordinates[index]
+        following = coordinates[index + 2] - coordinates[index + 1]
+        reference_length = float(np.linalg.norm(reference))
+        current_length = float(np.linalg.norm(current))
+        following_length = float(np.linalg.norm(following))
+        if min(reference_length, current_length, following_length) <= 1e-9:
+            continue
+        current_alignment = float(np.dot(reference, current)) / (
+            reference_length * current_length
+        )
+        following_alignment = float(np.dot(reference, following)) / (
+            reference_length * following_length
+        )
+        if (
+            current_alignment < -0.15
+            and following_alignment < 0
+            and current_length >= typical_length * 0.25
+            and following_length >= typical_length * 0.25
+        ):
+            return coordinates[: index + 1]
+    return coordinates
+
+
+def _build_trajectory_embedding(
+    expression: pd.DataFrame,
+    pseudotime: pd.DataFrame,
+) -> dict | None:
+    cell_indices = _sample_embedding_cell_indices(pseudotime)
+    if len(cell_indices) < 3:
+        return None
+
+    variances = expression.var(axis=1).sort_values(ascending=False)
+    embedding_genes = list(variances.head(MAX_TRAJECTORY_EMBEDDING_GENES).index)
+    matrix = expression.loc[embedding_genes].iloc[:, cell_indices].T.to_numpy(dtype=float)
+    if not matrix.size:
+        return None
+
+    finite = np.isfinite(matrix)
+    column_means = np.divide(
+        np.where(finite, matrix, 0).sum(axis=0),
+        np.maximum(finite.sum(axis=0), 1),
+    )
+    matrix = np.where(finite, matrix, column_means)
+    column_standard_deviations = np.std(matrix, axis=0)
+    informative = column_standard_deviations > 1e-9
+    matrix = matrix[:, informative]
+    if not matrix.shape[1]:
+        return None
+    matrix = (matrix - np.mean(matrix, axis=0)) / np.std(matrix, axis=0)
+    matrix = np.clip(matrix, -8, 8)
+
+    method = "PCA"
+    coordinates = _principal_component_embedding(matrix)
+    if len(cell_indices) >= 25:
+        perplexity = min(30.0, max(2.0, (len(cell_indices) - 1) / 3))
+        try:
+            coordinates = TSNE(
+                n_components=2,
+                perplexity=perplexity,
+                init="pca",
+                learning_rate="auto",
+                random_state=42,
+            ).fit_transform(matrix)
+            method = "t-SNE"
+        except (ValueError, FloatingPointError):
+            pass
+
+    pseudotime_values = pseudotime.to_numpy(dtype=float)
+    lineage_names = [str(value) for value in pseudotime.columns]
+    points = []
+    for coordinate, cell_index in zip(coordinates, cell_indices, strict=True):
+        points.append(
+            {
+                "cell": str(expression.columns[cell_index]),
+                "x": float(coordinate[0]),
+                "y": float(coordinate[1]),
+                "pseudotime": {
+                    lineage_name: (
+                        float(pseudotime_values[cell_index, lineage_index])
+                        if np.isfinite(pseudotime_values[cell_index, lineage_index])
+                        else None
+                    )
+                    for lineage_index, lineage_name in enumerate(lineage_names)
+                },
+            }
+        )
+
+    paths = []
+    for lineage_index, lineage_name in enumerate(lineage_names):
+        sampled_values = pseudotime_values[cell_indices, lineage_index]
+        valid = np.isfinite(sampled_values)
+        valid_count = int(valid.sum())
+        if valid_count < 3:
+            continue
+        ranks = pd.Series(sampled_values[valid]).rank(method="first")
+        bin_count = min(TRAJECTORY_PATH_BIN_COUNT, valid_count)
+        bin_ids = pd.qcut(ranks, q=bin_count, labels=False, duplicates="drop")
+        valid_coordinates = coordinates[valid]
+        valid_pseudotime = sampled_values[valid]
+        path_points = []
+        for bin_id in sorted(int(value) for value in pd.unique(bin_ids)):
+            selected = np.asarray(bin_ids == bin_id)
+            path_points.append(
+                {
+                    "x": float(np.mean(valid_coordinates[selected, 0])),
+                    "y": float(np.mean(valid_coordinates[selected, 1])),
+                    "pseudotime": float(np.mean(valid_pseudotime[selected])),
+                    "cell_count": int(selected.sum()),
+                }
+            )
+        smoothed_coordinates = _smooth_path(
+            np.asarray(
+                [[point["x"], point["y"]] for point in path_points],
+                dtype=float,
+            )
+        )
+        smoothed_coordinates = _trim_terminal_hook(smoothed_coordinates)
+        path_points = path_points[: len(smoothed_coordinates)]
+        for point, smoothed_coordinate in zip(
+            path_points,
+            smoothed_coordinates,
+            strict=True,
+        ):
+            point["x"] = float(smoothed_coordinate[0])
+            point["y"] = float(smoothed_coordinate[1])
+        paths.append({"name": lineage_name, "points": path_points})
+
+    return {
+        "method": method,
+        "path_source": "pseudotime_bin_centroids",
+        "sampled_cell_count": int(len(cell_indices)),
+        "total_cell_count": int(len(expression.columns)),
+        "points": points,
+        "paths": paths,
+    }
+
+
+def _cached_trajectory_embedding(
+    *,
+    expression_path: Path,
+    pseudotime_path: Path,
+    expression: pd.DataFrame,
+    pseudotime: pd.DataFrame,
+) -> dict | None:
+    expression_stat = expression_path.stat()
+    pseudotime_stat = pseudotime_path.stat()
+    cache_key = (
+        str(expression_path.resolve()),
+        expression_stat.st_size,
+        expression_stat.st_mtime_ns,
+        str(pseudotime_path.resolve()),
+        pseudotime_stat.st_size,
+        pseudotime_stat.st_mtime_ns,
+        MAX_TRAJECTORY_EMBEDDING_CELLS,
+        MAX_TRAJECTORY_EMBEDDING_GENES,
+    )
+    if cache_key in _trajectory_embedding_cache:
+        return _trajectory_embedding_cache[cache_key]
+
+    embedding = _build_trajectory_embedding(expression, pseudotime)
+    if len(_trajectory_embedding_cache) >= TRAJECTORY_EMBEDDING_CACHE_LIMIT:
+        oldest_key = next(iter(_trajectory_embedding_cache))
+        _trajectory_embedding_cache.pop(oldest_key, None)
+    _trajectory_embedding_cache[cache_key] = embedding
+    return embedding
+
+
 def build_trajectory_context(
     *,
     project_dir: Path,
@@ -199,10 +460,19 @@ def build_trajectory_context(
     if not lineages:
         return {"available": False, "reason": "No usable pseudotime trajectory was found."}
 
+    embedding = _cached_trajectory_embedding(
+        expression_path=expression_path,
+        pseudotime_path=pseudotime_path,
+        expression=expression,
+        pseudotime=pseudotime,
+    )
+
     return {
         "available": True,
         "genes": genes,
+        "available_genes": [str(value) for value in expression.index],
         "lineages": lineages,
+        "embedding": embedding,
         "expression_file": expression_path.name,
         "pseudotime_file": pseudotime_path.name,
     }
