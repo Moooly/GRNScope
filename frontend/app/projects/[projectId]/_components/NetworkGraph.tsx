@@ -1049,7 +1049,7 @@ export default function NetworkGraph({
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Sign conf</p>
+                <p className="text-slate-500">Sign stability</p>
                 <p className="mt-1 font-semibold text-slate-900">
                   {edgeTooltip.signConfidence === null
                     ? "-"

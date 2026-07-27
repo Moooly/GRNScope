@@ -117,7 +117,10 @@ async def download_pseudotime_file(
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         project_manifest = json.loads(project_manifest_path.read_text(encoding="utf-8"))
 
-        pseudotime_path = project_manifest.get("pseudotime_path")
+        pseudotime_path = (
+            project_manifest.get("pseudotime_source_path")
+            or project_manifest.get("pseudotime_path")
+        )
         pseudotime_filename = metadata.get("pseudotime_filename") or "pseudotime.csv"
 
         if not pseudotime_path:
@@ -149,7 +152,7 @@ async def download_algorithm_result_file(
     if is_demo_project(project_id):
         try:
             file_path = get_demo_ranked_edges_path(algorithm_id)
-            download_filename = f"{algorithm_id}-raw-ranked-edges.csv"
+            download_filename = f"{algorithm_id}-ranked-edge-evidence.csv"
 
             csv_text = file_path.read_text(encoding="utf-8")
             input_buffer = StringIO(csv_text)
@@ -277,7 +280,7 @@ async def download_algorithm_result_file(
         if not file_path.exists() or not file_path.is_file():
             raise HTTPException(status_code=404, detail="Ranked edges file not found.")
 
-        download_filename = f"{algorithm_id}-raw-ranked-edges.csv"
+        download_filename = f"{algorithm_id}-ranked-edge-evidence.csv"
 
         csv_text = file_path.read_text(encoding="utf-8")
         input_buffer = StringIO(csv_text)
@@ -336,7 +339,13 @@ async def download_analysis_metadata_file(
     request: Request,
     cookie_response: FastAPIResponse,
     selected_view: str = Query("consensus"),
+    selected_result_scope: str = Query("global"),
     top_n: int = Query(0),
+    edge_display_limit: int = Query(0),
+    evidence_threshold: float = Query(0.0),
+    confidence_threshold: float = Query(0.0),
+    direction_confidence_threshold: float = Query(0.0),
+    sign_confidence_threshold: float = Query(0.0),
     consensus_threshold: int = Query(0),
     selected_algorithms: str = Query(""),
 ):
@@ -398,8 +407,15 @@ async def download_analysis_metadata_file(
                 },
                 "algorithms": algorithms_summary,
                 "current_export_settings": {
-                    "top_n": top_n,
-                    "consensus_threshold": consensus_threshold,
+                    "selected_view": selected_view,
+                    "selected_result_scope": selected_result_scope,
+                    "selected_algorithms": algorithm_ids,
+                    "evidence_threshold": evidence_threshold,
+                    "bootstrap_confidence_threshold": confidence_threshold,
+                    "direction_confidence_threshold": direction_confidence_threshold,
+                    "sign_stability_threshold": sign_confidence_threshold,
+                    "minimum_supporting_methods": consensus_threshold,
+                    "edge_display_limit": edge_display_limit or top_n,
                 },
                 "is_demo": True,
                 "read_only": True,
@@ -503,6 +519,15 @@ async def download_analysis_metadata_file(
                 computed_job_status = "Failed"
             elif any(status in {"Running", "Queued"} for status in task_statuses):
                 computed_job_status = "Running"
+            elif (
+                task_statuses
+                and all(
+                    status in {"Completed", "Stopped"}
+                    for status in task_statuses
+                )
+                and any(status == "Completed" for status in task_statuses)
+            ):
+                computed_job_status = "PartiallyCompleted"
             else:
                 computed_job_status = latest_job.get("status") or "Unknown"
         else:
@@ -595,8 +620,15 @@ async def download_analysis_metadata_file(
             "preprocessing": preprocessing_config,
             "algorithms": algorithms_summary,
             "current_export_settings": {
-                "top_n": top_n,
-                "consensus_threshold": consensus_threshold,
+                "selected_view": selected_view,
+                "selected_result_scope": selected_result_scope,
+                "selected_algorithms": selected_algorithm_ids,
+                "evidence_threshold": evidence_threshold,
+                "bootstrap_confidence_threshold": confidence_threshold,
+                "direction_confidence_threshold": direction_confidence_threshold,
+                "sign_stability_threshold": sign_confidence_threshold,
+                "minimum_supporting_methods": consensus_threshold,
+                "edge_display_limit": edge_display_limit or top_n,
             },
         }
 

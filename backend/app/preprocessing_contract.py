@@ -141,8 +141,13 @@ def build_preprocessing_config(
     bonferroni_correction = parse_strict_bool(
         trajectory_bonferroni, "Trajectory Bonferroni correction"
     )
-    retain_significant_tfs = parse_strict_bool(
+    requested_retain_significant_tfs = parse_strict_bool(
         include_significant_tfs, "Retain significant TFs"
+    )
+    retain_significant_tfs = bool(
+        requested_retain_significant_tfs
+        and "trajectory" in enabled_stages
+        and "variance" in enabled_stages
     )
 
     return {
@@ -161,6 +166,7 @@ def build_preprocessing_config(
             "p_value_threshold": trajectory_threshold,
             "bonferroni_correction": bonferroni_correction,
             "retain_significant_tfs": retain_significant_tfs,
+            "retain_significant_tfs_requested": requested_retain_significant_tfs,
         },
         "variance": {
             "enabled": "variance" in enabled_stages,

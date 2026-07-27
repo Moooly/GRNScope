@@ -19,7 +19,7 @@ from .tf_reference_service import (
 
 
 GENE_SELECTION_ENGINE = "grnscope"
-GENE_SELECTION_VERSION = 2
+GENE_SELECTION_VERSION = 3
 
 
 class GeneSelectionError(ValueError):
@@ -302,7 +302,7 @@ def apply_trajectory_filter(
         threshold / tested_gene_count if bonferroni_correction else threshold
     )
     p_values = ordering_frame.iloc[:, 0].astype(float)
-    significant_genes = set(ordering_frame.index[p_values < effective_threshold])
+    significant_genes = set(ordering_frame.index[p_values <= effective_threshold])
     expression_genes = set(expression_frame.index)
     retained_genes = significant_genes & expression_genes
 
@@ -383,22 +383,33 @@ def apply_variance_filter(
         expression_frame.index,
         known_tf_gene_names or set(),
     )
-    ranking_frame = expression_frame
+    retained_limit = min(requested_gene_count, input_gene_count)
+    all_values = expression_frame.to_numpy(dtype=np.float64, copy=False)
+    all_variances = np.var(all_values, axis=1)
+    ranked_positions = np.argsort(-all_variances, kind="stable")
+    globally_ranked_genes = [
+        str(expression_frame.index[position]) for position in ranked_positions
+    ]
+
     if include_known_tfs:
-        ranking_frame = expression_frame.loc[
-            ~expression_frame.index.isin(available_known_tfs)
+        # The displayed gene count is a hard total cap. Known TFs are
+        # prioritized within that budget instead of being appended afterward.
+        ranked_known_tfs = [
+            gene for gene in globally_ranked_genes if gene in available_known_tfs
         ]
+        prioritized_tfs = ranked_known_tfs[:retained_limit]
+        remaining_slots = retained_limit - len(prioritized_tfs)
+        ranked_non_tfs = [
+            gene for gene in globally_ranked_genes if gene not in available_known_tfs
+        ]
+        retained_genes = set(
+            [*prioritized_tfs, *ranked_non_tfs[:remaining_slots]]
+        )
+    else:
+        prioritized_tfs = []
+        retained_genes = set(globally_ranked_genes[:retained_limit])
 
-    ranked_gene_count = min(requested_gene_count, int(ranking_frame.shape[0]))
-    values = ranking_frame.to_numpy(dtype=np.float64, copy=False)
-    variances = np.var(values, axis=1)
-
-    # Stable sorting keeps source order deterministic when variances tie.
-    ranked_positions = np.argsort(-variances, kind="stable")[:ranked_gene_count]
-    ranked_genes = set(ranking_frame.index[ranked_positions])
-    retained_genes = set(ranked_genes)
-    if include_known_tfs:
-        retained_genes.update(available_known_tfs)
+    ranked_gene_count = len(retained_genes)
 
     retained_frame = expression_frame.loc[
         expression_frame.index.isin(retained_genes)
@@ -417,16 +428,30 @@ def apply_variance_filter(
         lineterminator="\n",
     )
 
-    forced_tf_genes = available_known_tfs - ranked_genes
+    unconstrained_top_genes = set(globally_ranked_genes[:retained_limit])
+    forced_tf_genes = set(prioritized_tfs) - unconstrained_top_genes
     return {
         "stage": "variance",
         "requested_gene_count": requested_gene_count,
         "ranked_gene_count": ranked_gene_count,
+        "selection_policy": (
+            "known_tfs_prioritized_within_total_limit"
+            if include_known_tfs
+            else "highest_variance_within_total_limit"
+        ),
+        "hard_total_gene_limit": retained_limit,
         "ranked_non_tf_gene_count": (
-            ranked_gene_count if include_known_tfs else None
+            len(retained_genes - available_known_tfs)
+            if include_known_tfs
+            else None
         ),
         "include_known_tfs": bool(include_known_tfs),
         "available_known_tf_count": len(available_known_tfs),
+        "retained_known_tf_count": len(retained_genes & available_known_tfs),
+        "known_tfs_excluded_by_total_limit": max(
+            0,
+            len(available_known_tfs) - len(retained_genes & available_known_tfs),
+        ),
         "forced_known_tf_count": (
             len(forced_tf_genes) if include_known_tfs else 0
         ),

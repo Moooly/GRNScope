@@ -7,6 +7,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from ..schemas import TempUploadResponse
 from ..species_inference import infer_species_from_gene_names
 from ..storage import (
+    cleanup_expired_temp_uploads,
+    cleanup_temp_upload,
     create_temp_upload_id,
     save_json,
     save_upload_file,
@@ -38,6 +40,7 @@ async def temp_dataset_upload(
     cluster_labels: UploadFile | None = File(default=None),
     defer_validation: bool = Form(False),
 ):
+    cleanup_expired_temp_uploads()
     errors: list[str] = []
 
     expression_ext_error = validate_csv_extension(expression_matrix.filename or "")
@@ -135,7 +138,9 @@ async def temp_dataset_upload(
         if pseudotime and pseudotime_path is not None:
             save_upload_file(pseudotime, pseudotime_path)
             pseudotime_info = parse_pseudotime(
-                pseudotime_path, expression_info["cell_count"]
+                pseudotime_path,
+                expression_info["cell_count"],
+                expected_cell_names=expression_cell_names,
             )
 
         cluster_labels_info = None
@@ -174,6 +179,16 @@ async def temp_dataset_upload(
             "has_pseudotime": pseudotime is not None,
             "pseudotime_count": (
                 pseudotime_info["pseudotime_count"] if pseudotime_info else None
+            ),
+            "pseudotime_trajectory_count": (
+                pseudotime_info["pseudotime_trajectory_count"]
+                if pseudotime_info
+                else None
+            ),
+            "pseudotime_format": (
+                pseudotime_info["pseudotime_format"]
+                if pseudotime_info
+                else None
             ),
             "has_cluster_labels": cluster_labels is not None,
             "cluster_label_count": (
@@ -225,3 +240,12 @@ async def temp_dataset_upload(
             meta_path.unlink()
 
         return TempUploadResponse(ok=False, errors=[str(e)])
+
+
+@router.delete("/api/uploads/temp-dataset/{temp_upload_id}")
+async def delete_temp_dataset_upload(temp_upload_id: str):
+    try:
+        cleanup_result = cleanup_temp_upload(temp_upload_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **cleanup_result}

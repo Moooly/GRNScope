@@ -85,6 +85,7 @@ interface CreateProjectModalProps {
   includeSignificantTFs: boolean;
   includeAllTFs: boolean;
   maxEdgesPerTarget: string;
+  bootstrapReplicates: string;
   maxEdgesLimit: number;
   pidcDefaultMaxGenes: number;
   sinceritiesDefaultMaxGenes: number;
@@ -138,6 +139,7 @@ interface CreateProjectModalProps {
   setClusterLabelsFileName: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
   setMaxEdgesPerTarget: (value: string) => void;
+  setBootstrapReplicates: (value: string) => void;
   setCellOracleSpecies: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
@@ -167,6 +169,7 @@ export default function CreateProjectModal({
   includeSignificantTFs,
   includeAllTFs,
   maxEdgesPerTarget,
+  bootstrapReplicates,
   maxEdgesLimit,
   pidcDefaultMaxGenes,
   sinceritiesDefaultMaxGenes,
@@ -217,6 +220,7 @@ export default function CreateProjectModal({
   setClusterLabelsFileName,
   setIncludeAllTFs,
   setMaxEdgesPerTarget,
+  setBootstrapReplicates,
   setCellOracleSpecies,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
@@ -464,7 +468,7 @@ export default function CreateProjectModal({
     algorithms.length - compatibleAlgorithms.length,
   );
   const algorithmSectionSummary = `${selectedAlgorithms.length} selected · ${unavailableAlgorithmCount} unavailable`;
-  const resultSettingsSummary = `${maxEdgesPerTarget || "—"} edges per target`;
+  const resultSettingsSummary = `${maxEdgesPerTarget || "—"} edges per target · ${bootstrapReplicates} bootstrap samples`;
 
   return (
     <div
@@ -909,44 +913,87 @@ export default function CreateProjectModal({
                 }
               >
                 <div className="-mx-1">
-                  <div className="grid gap-4 rounded-xl border border-slate-200 bg-white px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        Maximum edges per target
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
-                        Keep only the strongest regulators for each target gene.
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center gap-2">
-                      <CompactNumberField
-                      value={maxEdgesPerTarget}
-                      onChange={(nextValue) => {
-                        if (nextValue === "") {
-                          setMaxEdgesPerTarget("");
-                          return;
-                        }
-                        const parsedValue = Number(nextValue);
-                        if (!Number.isInteger(parsedValue) || parsedValue < 1) return;
-                        setMaxEdgesPerTarget(
-                          String(Math.min(parsedValue, maxEdgesLimit)),
-                        );
-                      }}
-                      onBlur={() => {
-                        const parsed = Number(maxEdgesPerTarget.trim());
-                        if (!Number.isInteger(parsed) || parsed < 1) {
-                          setMaxEdgesPerTarget(String(Math.min(20, maxEdgesLimit)));
-                        }
-                      }}
-                      min={1}
-                      max={maxEdgesLimit}
-                      step={1}
-                      ariaLabel="Max edges per target"
-                      />
-                      <span className="text-xs font-medium text-slate-500">
-                        edges
+                  <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Maximum edges per target
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          Keep only the strongest regulators for each target gene.
+                        </p>
+                      </div>
+                      <span className="inline-flex items-center gap-2">
+                        <CompactNumberField
+                          value={maxEdgesPerTarget}
+                          onChange={(nextValue) => {
+                            if (nextValue === "") {
+                              setMaxEdgesPerTarget("");
+                              return;
+                            }
+                            const parsedValue = Number(nextValue);
+                            if (!Number.isInteger(parsedValue) || parsedValue < 1) return;
+                            setMaxEdgesPerTarget(
+                              String(Math.min(parsedValue, maxEdgesLimit)),
+                            );
+                          }}
+                          onBlur={() => {
+                            const parsed = Number(maxEdgesPerTarget.trim());
+                            if (!Number.isInteger(parsed) || parsed < 1) {
+                              setMaxEdgesPerTarget(String(Math.min(20, maxEdgesLimit)));
+                            }
+                          }}
+                          min={1}
+                          max={maxEdgesLimit}
+                          step={1}
+                          ariaLabel="Max edges per target"
+                        />
+                        <span className="text-xs font-medium text-slate-500">
+                          edges
+                        </span>
                       </span>
-                    </span>
+                    </div>
+                    <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Bootstrap precision
+                        </p>
+                        <p className="mt-1 max-w-lg text-xs leading-5 text-slate-500">
+                          Resample all cells with replacement. More samples give
+                          steadier confidence estimates but take longer.
+                        </p>
+                      </div>
+                      <div
+                        className="inline-flex rounded-lg bg-slate-100 p-1"
+                        role="radiogroup"
+                        aria-label="Bootstrap precision"
+                      >
+                        {[
+                          { value: "30", label: "Quick" },
+                          { value: "100", label: "Standard" },
+                          { value: "300", label: "Thorough" },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={bootstrapReplicates === option.value}
+                            onClick={() => setBootstrapReplicates(option.value)}
+                            className={`cursor-pointer rounded-md px-3 py-2 text-xs font-semibold transition ${
+                              bootstrapReplicates === option.value
+                                ? "bg-white text-[#1b75a6] shadow-sm"
+                                : "text-slate-500 hover:text-slate-700"
+                            }`}
+                            title={`${option.value} bootstrap samples`}
+                          >
+                            {option.label}
+                            <span className="ml-1 text-[10px] opacity-70">
+                              {option.value}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </AdvancedAccordionSection>
@@ -1354,16 +1401,15 @@ function CellOracleInputRow({
                   CellOracle species
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  Independent from the dataset species selected above.
+                  Inherited from the dataset species selected above.
                 </span>
               </span>
               <span className="flex items-center border-b border-slate-200 py-2 transition focus-within:border-[#1b75a6]">
                 <select
                   value={cellOracleSpecies}
-                  onChange={(event) =>
-                    onSetCellOracleSpecies(event.target.value)
-                  }
-                  className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none"
+                  disabled
+                  aria-label="CellOracle species inherited from dataset"
+                  className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-500 outline-none disabled:cursor-not-allowed"
                 >
                   {CELLORACLE_SPECIES_OPTIONS.map((species) => (
                     <option key={species.value} value={species.value}>
@@ -1676,7 +1722,9 @@ function GeneSelectionPanel({
                 <span className="truncate text-xs font-semibold text-slate-500">
                   p ≤ {trajectoryPValue || "—"}
                   {trajectoryBonferroni ? " · Bonferroni" : ""}
-                  {includeSignificantTFs ? " · TFs retained" : ""}
+                  {enabledStages.includes("variance") && includeSignificantTFs
+                    ? " · significant TFs prioritized"
+                    : ""}
                 </span>
                 <span
                   className="shrink-0 text-slate-400"
@@ -1719,19 +1767,21 @@ function GeneSelectionPanel({
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
-                  <span className="text-xs font-semibold text-slate-600">
-                    TF retention
-                  </span>
-                  <PreprocessingToggle
-                    label="Retain significant TFs"
-                    enabled={includeSignificantTFs}
-                    compact
-                    onToggle={() =>
-                      onIncludeSignificantTFsChange(!includeSignificantTFs)
-                    }
-                  />
-                </div>
+                {enabledStages.includes("variance") ? (
+                  <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
+                    <span className="text-xs font-semibold text-slate-600">
+                      TF priority
+                    </span>
+                    <PreprocessingToggle
+                      label="Prioritize significant TFs within the variable-gene limit"
+                      enabled={includeSignificantTFs}
+                      compact
+                      onToggle={() =>
+                        onIncludeSignificantTFsChange(!includeSignificantTFs)
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1741,7 +1791,9 @@ function GeneSelectionPanel({
           number={3}
           title="Variable-gene selection"
           description="Rank the remaining genes by variance and keep the top set."
-          summary={`Top ${hvgGeneCount || "—"}${includeAllTFs ? " · TFs included" : ""}`}
+          summary={`Top ${hvgGeneCount || "—"} total${
+            includeAllTFs ? " · known TFs prioritized" : ""
+          }`}
           enabled={enabledStages.includes("variance")}
           expanded={expandedStage === "variance"}
           last
@@ -1776,7 +1828,7 @@ function GeneSelectionPanel({
                 TF retention
               </span>
               <PreprocessingToggle
-                label="Retain known TFs"
+                label="Prioritize known TFs within this total"
                 enabled={includeAllTFs}
                 onToggle={() => onIncludeAllTFsChange(!includeAllTFs)}
               />
@@ -2084,10 +2136,9 @@ function CellOracleSettingsModal({
                     <span className="flex items-center border-b border-slate-200 py-2 transition focus-within:border-[#1b75a6]">
                       <select
                         value={cellOracleSpecies}
-                        onChange={(event) =>
-                          onSetCellOracleSpecies(event.target.value)
-                        }
-                        className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none"
+                        disabled
+                        aria-label="CellOracle species inherited from dataset"
+                        className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-500 outline-none disabled:cursor-not-allowed"
                       >
                         {CELLORACLE_SPECIES_OPTIONS.map((species) => (
                           <option key={species.value} value={species.value}>

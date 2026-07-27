@@ -15,6 +15,10 @@ export type ProjectTask = {
   completed_at?: string | null;
   completed_at_timestamp?: number | null;
   run_metadata?: Record<string, Record<string, unknown>> | null;
+  latest_attempt_status?: string | null;
+  latest_attempt_error_message?: string | null;
+  latest_attempt_elapsed_seconds?: number | null;
+  latest_attempt_completed_at?: string | null;
 };
 
 export type MatrixValidationLocation = {
@@ -298,6 +302,17 @@ export type RepeatRunStabilitySummary = {
 export type ConfidenceSummary = {
   bootstrap_runs?: number;
   planned_bootstrap_runs?: number;
+  total_algorithm_runs?: number;
+  full_data_run_id?: string;
+  resampling_scheme?: string;
+  sampling_unit?: string;
+  sampling_with_replacement?: boolean;
+  sample_size_fraction?: number;
+  confidence_definition?: string;
+  evidence_definition?: string;
+  interval_definition?: string;
+  sign_confidence_definition?: string;
+  sign_coverage_definition?: string;
   min_runs?: number;
   stop_rho?: number;
   stop_streak?: number;
@@ -329,11 +344,27 @@ export type AlgorithmResultEdge = {
   stability?: number;
   mean_percentile?: number;
   meanPercentile?: number;
+  bootstrap_mean_evidence?: number;
+  evidence_ci_lower?: number | null;
+  evidence_ci_upper?: number | null;
+  full_data_evidence?: number | null;
+  full_data_raw_score?: number | null;
+  full_data_rank?: number | null;
+  full_data_present?: boolean;
   mean_raw_score?: number;
   mean_z?: number;
   z_ci_lower?: number | null;
   z_ci_upper?: number | null;
   selected_runs?: number;
+  positive_selected_runs?: number;
+  negative_selected_runs?: number;
+  signed_selected_runs?: number;
+  sign_agreeing_runs?: number | null;
+  bootstrap_sign_confidence?: number | null;
+  bootstrap_sign_coverage?: number | null;
+  bootstrap_positive_probability?: number | null;
+  bootstrap_negative_probability?: number | null;
+  bootstrap_sign_reference?: "full_data" | "bootstrap_mean" | null;
   observed_runs?: number;
   run_count?: number;
   normalized_score?: number;
@@ -364,6 +395,18 @@ export type AggregatedEdge = {
   target: string;
   score: number;
   confidence: number;
+  bootstrapVerified?: boolean;
+  bootstrapSelectedRuns?: number;
+  bootstrapRunCount?: number;
+  evidenceCiLower?: number | null;
+  evidenceCiUpper?: number | null;
+  bootstrapSignConfidence?: number | null;
+  bootstrapSignCoverage?: number | null;
+  bootstrapPositiveProbability?: number | null;
+  bootstrapNegativeProbability?: number | null;
+  bootstrapSignedSelectedRuns?: number;
+  bootstrapSignAgreeingRuns?: number;
+  bootstrapSignReference?: "full_data" | "bootstrap_mean" | null;
   stability?: number;
   meanPercentile?: number;
   count: number;

@@ -15,6 +15,8 @@ export type ProjectTask = {
   completed_at?: string | null;
   completed_at_timestamp?: number | null;
   run_metadata?: Record<string, Record<string, unknown>> | null;
+  latest_attempt_status?: string | null;
+  latest_attempt_error_message?: string | null;
 };
 
 export type MatrixValidationIssue = {

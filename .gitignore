@@ -41,6 +41,8 @@ backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
 backend/projects/
+backend/temp_uploads/
+backend/app/temp_uploads/
 backend/uploads/
 backend/outputs/
 

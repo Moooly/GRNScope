@@ -653,11 +653,11 @@ export default function ResultsControlsSection({
               )
             )}
             {inlineRow(
-              "Sign confidence",
+              "Sign stability",
               inlinePercentControl(
                 safeSignThreshold,
                 onChangeSignConfidenceThreshold,
-                "Sign confidence"
+                "Sign stability"
               )
             )}
             {inlineRow("Minimum supporting methods", inlineMethodsControl())}

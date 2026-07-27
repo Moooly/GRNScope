@@ -42,6 +42,45 @@ class ResultCompactionTests(unittest.TestCase):
             summary,
         )
 
+    def test_preserves_verified_bootstrap_contract_and_edge_interval(self):
+        compact = compact_result_for_client(
+            {
+                "algorithm_id": "GENIE3",
+                "top_edges": [
+                    {
+                        "source": "A",
+                        "target": "B",
+                        "score": 0.9,
+                        "confidence": 0.82,
+                        "selected_runs": 82,
+                        "run_count": 100,
+                        "evidence_ci_lower": 0.3,
+                        "evidence_ci_upper": 0.95,
+                        "full_data_present": True,
+                    }
+                ],
+                "confidence_summary": {
+                    "bootstrap_runs": 100,
+                    "total_algorithm_runs": 101,
+                    "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+                    "sampling_with_replacement": True,
+                    "sample_size_fraction": 1.0,
+                    "confidence_definition": "top_k_recovery_frequency",
+                },
+            }
+        )
+
+        self.assertEqual(compact["top_edges"][0]["selected_runs"], 82)
+        self.assertEqual(compact["top_edges"][0]["evidence_ci_lower"], 0.3)
+        self.assertTrue(compact["top_edges"][0]["full_data_present"])
+        self.assertEqual(
+            compact["confidence_summary"]["resampling_scheme"],
+            "cell_bootstrap_with_replacement_v1",
+        )
+        self.assertTrue(
+            compact["confidence_summary"]["sampling_with_replacement"]
+        )
+
 
 class FailureDiagnosticsArchiveTests(unittest.TestCase):
     def test_archives_lightweight_failure_bundle_and_removes_runtime(self):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import math
 from pathlib import Path
 
@@ -11,6 +10,10 @@ from scipy.stats import f as f_distribution
 from .matrix_transformation_service import (
     MatrixTransformationError,
     read_expression_frame,
+)
+from .pseudotime_format_service import (
+    PseudotimeFormatError,
+    read_canonical_pseudotime_frame,
 )
 
 
@@ -23,82 +26,18 @@ class GeneOrderingGenerationError(ValueError):
     pass
 
 
-def _detect_delimiter(path: Path) -> str:
-    with path.open("r", encoding="utf-8", newline="") as source_file:
-        sample = source_file.read(65_536)
-    try:
-        return csv.Sniffer().sniff(sample, delimiters=",\t;").delimiter
-    except csv.Error:
-        return "\t" if "\t" in sample.partition("\n")[0] else ","
-
-
 def _read_pseudotime_frame(
     pseudotime_path: Path,
     expression_cells: pd.Index,
 ) -> pd.DataFrame:
-    delimiter = _detect_delimiter(pseudotime_path)
     try:
-        raw = pd.read_csv(
+        trajectory_frame, _source_format = read_canonical_pseudotime_frame(
             pseudotime_path,
-            sep=delimiter,
-            header=None,
-            dtype=str,
-            keep_default_na=False,
+            expression_cells,
+            allow_empty_trajectories=True,
         )
-    except (OSError, UnicodeError, ValueError, pd.errors.ParserError) as exc:
-        raise GeneOrderingGenerationError(
-            f"Pseudotime CSV could not be loaded: {exc}"
-        ) from exc
-
-    if raw.empty:
-        raise GeneOrderingGenerationError("Pseudotime CSV is empty.")
-
-    expected_cells = pd.Index(str(value).strip() for value in expression_cells)
-
-    if raw.shape[1] == 1:
-        values = pd.to_numeric(raw.iloc[:, 0], errors="coerce")
-        if values.isna().iloc[0] and values.iloc[1:].notna().all():
-            values = values.iloc[1:]
-        if len(values) != len(expected_cells) or values.isna().any():
-            raise GeneOrderingGenerationError(
-                "Single-column pseudotime must contain one numeric value for "
-                "every expression-matrix cell."
-            )
-        return pd.DataFrame(
-            {"PseudoTime1": values.to_numpy(dtype=float)},
-            index=expected_cells,
-        )
-
-    # BEELINE/Slingshot format: the first column contains cell identifiers and
-    # the remaining columns contain one or more lineage-specific trajectories.
-    first_data_values = pd.to_numeric(raw.iloc[0, 1:], errors="coerce")
-    has_header = bool(first_data_values.isna().all())
-    if has_header:
-        column_names = [
-            str(value).strip() or f"PseudoTime{index}"
-            for index, value in enumerate(raw.iloc[0, 1:], start=1)
-        ]
-        raw = raw.iloc[1:].reset_index(drop=True)
-    else:
-        column_names = [
-            f"PseudoTime{index}" for index in range(1, raw.shape[1])
-        ]
-
-    cell_ids = pd.Index(str(value).strip() for value in raw.iloc[:, 0])
-    if cell_ids.has_duplicates:
-        raise GeneOrderingGenerationError(
-            "Pseudotime CSV contains duplicate cell identifiers."
-        )
-    if set(cell_ids) != set(expected_cells):
-        raise GeneOrderingGenerationError(
-            "Pseudotime cell identifiers must match the expression-matrix cells."
-        )
-
-    trajectory_frame = raw.iloc[:, 1:].copy()
-    trajectory_frame.columns = column_names
-    trajectory_frame.index = cell_ids
-    trajectory_frame = trajectory_frame.apply(pd.to_numeric, errors="coerce")
-    trajectory_frame = trajectory_frame.reindex(expected_cells)
+    except PseudotimeFormatError as exc:
+        raise GeneOrderingGenerationError(str(exc)) from exc
     if not any(trajectory_frame[column].notna().sum() >= 3 for column in trajectory_frame):
         raise GeneOrderingGenerationError(
             "Pseudotime CSV does not contain enough numeric values to calculate "

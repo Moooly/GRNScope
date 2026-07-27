@@ -72,6 +72,10 @@ class PreprocessingContractTests(unittest.TestCase):
         self.assertFalse(config["variance"]["enabled"])
         self.assertEqual(config["trajectory"]["p_value_threshold"], 0.01)
         self.assertEqual(config["variance"]["gene_count"], 500)
+        self.assertFalse(config["trajectory"]["retain_significant_tfs"])
+        self.assertTrue(
+            config["trajectory"]["retain_significant_tfs_requested"]
+        )
 
     def test_rejects_unknown_or_duplicate_stages(self) -> None:
         for raw_stages in ('["detection", "unknown"]', '["detection", "detection"]'):

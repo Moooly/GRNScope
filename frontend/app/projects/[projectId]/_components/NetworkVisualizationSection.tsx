@@ -24,6 +24,16 @@ type AggregatedEdge = {
   target: string;
   score: number;
   confidence: number;
+  bootstrapVerified?: boolean;
+  bootstrapSelectedRuns?: number;
+  bootstrapRunCount?: number;
+  evidenceCiLower?: number | null;
+  evidenceCiUpper?: number | null;
+  bootstrapSignConfidence?: number | null;
+  bootstrapSignCoverage?: number | null;
+  bootstrapSignedSelectedRuns?: number;
+  bootstrapSignAgreeingRuns?: number;
+  bootstrapSignReference?: "full_data" | "bootstrap_mean" | null;
   count: number;
   rank: number;
   perAlgorithmScores: Record<string, number>;
@@ -553,21 +563,41 @@ export default function NetworkVisualizationSection({
                     {selectedEdge.score.toFixed(3)}
                   </p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">
-                    rank #{selectedEdge.rank}
+                    {selectedEdge.bootstrapVerified &&
+                    selectedEdge.evidenceCiLower !== null &&
+                    selectedEdge.evidenceCiLower !== undefined &&
+                    selectedEdge.evidenceCiUpper !== null &&
+                    selectedEdge.evidenceCiUpper !== undefined
+                      ? `95% bootstrap interval ${selectedEdge.evidenceCiLower.toFixed(2)}–${selectedEdge.evidenceCiUpper.toFixed(2)}`
+                      : `rank #${selectedEdge.rank}`}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Bootstrap confidence
+                    {selectedEdge.bootstrapVerified
+                      ? "Bootstrap confidence"
+                      : "Legacy resampling score"}
                   </p>
                   <p
                     className="mt-2 text-2xl font-bold text-slate-950"
-                    title="Median bootstrap confidence across the supporting methods."
+                    title={
+                      selectedEdge.bootstrapVerified
+                        ? "How often the edge was recovered in genuine cell-bootstrap samples."
+                        : "This saved result predates with-replacement cell bootstrapping."
+                    }
                   >
-                    {selectedEdge.confidence.toFixed(3)}
+                    {selectedEdge.bootstrapVerified
+                      ? `${Math.round(selectedEdge.confidence * 100)}%`
+                      : selectedEdge.confidence.toFixed(3)}
                   </p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">
-                    repeated-run consistency
+                    {selectedEdge.bootstrapVerified &&
+                    selectedEdge.bootstrapSelectedRuns !== undefined &&
+                    selectedEdge.bootstrapRunCount !== undefined
+                      ? `recovered in ${selectedEdge.bootstrapSelectedRuns} of ${selectedEdge.bootstrapRunCount} samples`
+                      : selectedEdge.bootstrapVerified
+                        ? "median cell-bootstrap recovery"
+                        : "rerun to calculate bootstrap confidence"}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
@@ -586,7 +616,7 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     <span className="block">Sign</span>
-                    <span className="block">confidence</span>
+                    <span className="block">stability</span>
                   </p>
                   <p className="mt-2 text-2xl font-bold text-slate-950">
                     {selectedEdge.signConfidence === null
@@ -594,7 +624,14 @@ export default function NetworkVisualizationSection({
                       : `${Math.round(selectedEdge.signConfidence * 100)}%`}
                   </p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">
-                    coverage {Math.round(selectedEdge.signCoverage * 100)}%
+                    {selectedEdge.signConfidence !== null &&
+                    selectedEdge.bootstrapSignAgreeingRuns !== undefined &&
+                    selectedEdge.bootstrapSignedSelectedRuns !== undefined &&
+                    selectedEdge.bootstrapSelectedRuns !== undefined
+                      ? `${selectedEdge.bootstrapSignAgreeingRuns}/${selectedEdge.bootstrapSignedSelectedRuns} signed recoveries matched; sign present in ${selectedEdge.bootstrapSignedSelectedRuns}/${selectedEdge.bootstrapSelectedRuns} edge recoveries`
+                      : selectedEdge.signConfidence !== null
+                        ? `signed bootstrap coverage ${Math.round(selectedEdge.signCoverage * 100)}%`
+                        : "rerun to measure sign across bootstrap samples"}
                   </p>
                 </div>
               </div>
@@ -642,7 +679,7 @@ export default function NetworkVisualizationSection({
                     })
                   ) : (
                     <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">
-                      No selected method recovered this edge in its repeated confidence runs.
+                      No selected method recovered this edge in its bootstrap samples.
                     </p>
                   )}
                 </div>
@@ -926,13 +963,18 @@ export default function NetworkVisualizationSection({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Regulation evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Mean per-target percentile rank from the repeated runs. Higher values mean the regulator is ranked closer to the top for this target gene.
+                    Per-target percentile rank from the original full-data fit.
+                    The interval shows its variation across bootstrap samples.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Bootstrap confidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Median repeated-run confidence across supporting methods. Each method combines how often the edge remains highly ranked with its mean rank percentile.
+                    Percentage of with-replacement cell-bootstrap samples that
+                    recover the edge among the strongest regulators for its
+                    target. Older results are marked as legacy and require a
+                    rerun. This measures sensitivity to sampled cells, not
+                    uncertainty between biological donors or proof of causality.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -942,15 +984,22 @@ export default function NetworkVisualizationSection({
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <h6 className="text-sm font-bold text-slate-950">Sign confidence & coverage</h6>
+                  <h6 className="text-sm font-bold text-slate-950">Sign stability & coverage</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Agreement among signed methods on activation versus repression. Sign coverage shows how much total regulation evidence came from methods that can vote on sign.
+                    Among bootstrap samples that recovered the edge with a
+                    nonzero sign, sign stability is the percentage that agreed
+                    with the displayed full-data activation or repression
+                    (or the bootstrap-mean sign when the edge was absent from
+                    the full-data fit).
+                    Coverage shows how often recovered samples supplied a sign.
+                    Unsigned methods abstain.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h6 className="text-sm font-bold text-slate-950">Method evidence</h6>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Normalized rank evidence from each supporting method. Methods listed here recovered the edge with nonzero bootstrap stability.
+                    Full-data rank evidence from each supporting method. New
+                    results include genuine with-replacement bootstrap recovery.
                   </p>
                 </div>
               </div>

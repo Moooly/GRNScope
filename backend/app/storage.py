@@ -1,18 +1,38 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
+import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 from .atomic_io import atomic_write_json
+from .validators import MAX_FILE_SIZE_BYTES
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMP_UPLOAD_DIR = BASE_DIR / "temp_uploads"
 TEMP_UPLOAD_ROOT = TEMP_UPLOAD_DIR
 PROJECTS_DIR = BASE_DIR / "projects"
 UPLOAD_COPY_BUFFER_SIZE = 16 * 1024 * 1024
+
+
+def _temp_upload_ttl_seconds() -> int:
+    try:
+        return max(
+            0,
+            int(os.getenv("GRNSCOPE_TEMP_UPLOAD_TTL_SECONDS", str(24 * 60 * 60))),
+        )
+    except ValueError:
+        return 24 * 60 * 60
+
+
+TEMP_UPLOAD_TTL_SECONDS = _temp_upload_ttl_seconds()
+TEMP_UPLOAD_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+_TEMP_CLEANUP_LOCK = threading.Lock()
 
 TEMP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -41,10 +61,30 @@ def temp_metadata_path(temp_upload_id: str) -> Path:
     return TEMP_UPLOAD_DIR / f"{temp_upload_id}__metadata.json"
 
 
-def save_upload_file(upload_file, destination: Path) -> None:
+def validate_temp_upload_id(temp_upload_id: str) -> str:
+    normalized = str(temp_upload_id).strip().lower()
+    if not TEMP_UPLOAD_ID_PATTERN.fullmatch(normalized):
+        raise ValueError("Invalid temporary upload identifier.")
+    return normalized
+
+
+def save_upload_file(upload_file, destination: Path) -> int:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with destination.open("wb") as output:
-        shutil.copyfileobj(upload_file.file, output, UPLOAD_COPY_BUFFER_SIZE)
+    total_bytes = 0
+    try:
+        with destination.open("wb") as output:
+            while True:
+                chunk = upload_file.file.read(UPLOAD_COPY_BUFFER_SIZE)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_FILE_SIZE_BYTES:
+                    raise ValueError("File size must be 500 MB or smaller.")
+                output.write(chunk)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    return total_bytes
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:
@@ -56,6 +96,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def move_temp_upload_to_project(temp_upload_id: str, project_id: str) -> dict[str, Any]:
+    temp_upload_id = validate_temp_upload_id(temp_upload_id)
     metadata = load_json(temp_metadata_path(temp_upload_id))
 
     project_dir = PROJECTS_DIR / project_id
@@ -92,19 +133,57 @@ def move_temp_upload_to_project(temp_upload_id: str, project_id: str) -> dict[st
     return result
 
 
-def cleanup_temp_upload(temp_upload_id: str) -> None:
-    meta_path = temp_metadata_path(temp_upload_id)
-    if not meta_path.exists():
-        return
+def cleanup_temp_upload(temp_upload_id: str) -> dict[str, int]:
+    """Remove every file belonging to one temporary upload, including orphans."""
 
-    metadata = load_json(meta_path)
+    normalized_id = validate_temp_upload_id(temp_upload_id)
+    removed_count = 0
+    removed_bytes = 0
+    with _TEMP_CLEANUP_LOCK:
+        for path in TEMP_UPLOAD_DIR.glob(f"{normalized_id}__*"):
+            if not path.is_file():
+                continue
+            try:
+                removed_bytes += path.stat().st_size
+                path.unlink()
+                removed_count += 1
+            except FileNotFoundError:
+                continue
+    return {"removed_count": removed_count, "removed_bytes": removed_bytes}
 
-    for key in ("expression_path", "pseudotime_path", "cluster_labels_path"):
-        file_path = metadata.get(key)
-        if file_path:
-            p = Path(file_path)
-            if p.exists():
-                p.unlink()
 
-    if meta_path.exists():
-        meta_path.unlink()
+def cleanup_expired_temp_uploads(
+    *,
+    now: float | None = None,
+    max_age_seconds: int | None = None,
+) -> dict[str, int]:
+    """Delete stale temporary-upload files by modification time.
+
+    This also catches interrupted uploads whose metadata file was never written.
+    """
+
+    current_time = time.time() if now is None else float(now)
+    maximum_age = (
+        TEMP_UPLOAD_TTL_SECONDS
+        if max_age_seconds is None
+        else max(0, int(max_age_seconds))
+    )
+    cutoff = current_time - maximum_age
+    removed_count = 0
+    removed_bytes = 0
+
+    with _TEMP_CLEANUP_LOCK:
+        for path in TEMP_UPLOAD_DIR.iterdir():
+            if not path.is_file():
+                continue
+            try:
+                stat = path.stat()
+                if stat.st_mtime > cutoff:
+                    continue
+                path.unlink()
+                removed_count += 1
+                removed_bytes += stat.st_size
+            except FileNotFoundError:
+                continue
+
+    return {"removed_count": removed_count, "removed_bytes": removed_bytes}

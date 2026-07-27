@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
+from contextlib import suppress
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -15,8 +19,32 @@ from .api import (
     results,
     uploads,
 )
+from .storage import TEMP_UPLOAD_TTL_SECONDS, cleanup_expired_temp_uploads
 
-app = FastAPI()
+
+async def periodically_cleanup_temp_uploads() -> None:
+    interval_seconds = min(
+        60 * 60,
+        max(60, TEMP_UPLOAD_TTL_SECONDS // 4),
+    )
+    while True:
+        await asyncio.sleep(interval_seconds)
+        await asyncio.to_thread(cleanup_expired_temp_uploads)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await asyncio.to_thread(cleanup_expired_temp_uploads)
+    cleanup_task = asyncio.create_task(periodically_cleanup_temp_uploads())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 

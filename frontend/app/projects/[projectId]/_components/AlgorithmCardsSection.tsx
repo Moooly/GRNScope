@@ -14,6 +14,8 @@ type AlgorithmTask = {
   progress_label?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  latest_attempt_status?: string | null;
+  latest_attempt_error_message?: string | null;
 };
 
 type AlgorithmMeta = {
@@ -73,6 +75,8 @@ export default function AlgorithmCardsSection({
           const isCompleted = task.status === "Completed";
           const isFailed = task.status === "Failed";
           const isStopped = task.status === "Stopped";
+          const retainedAfterFailedRerun =
+            isCompleted && task.latest_attempt_status === "Failed";
           const canStop = task.status === "Running" || task.status === "Queued";
           const algorithmRuntimeLabel = runtimeLabel(
             task.status,
@@ -94,6 +98,8 @@ export default function AlgorithmCardsSection({
                 ? `group relative flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
+                      : retainedAfterFailedRerun
+                        ? "border-amber-200 bg-amber-50/50"
                       : isCompleted
                         ? "border-[#1b75a6]/25 bg-[#f7fbff]"
                         : "border-slate-200 bg-white"
@@ -101,6 +107,8 @@ export default function AlgorithmCardsSection({
                 : `group relative flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
                     isFailed
                       ? "border-rose-200 bg-rose-50/50"
+                      : retainedAfterFailedRerun
+                        ? "border-amber-200 bg-amber-50/50"
                       : isCompleted
                         ? "border-[#1b75a6]/25 bg-[#f7fbff]"
                         : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
@@ -110,14 +118,21 @@ export default function AlgorithmCardsSection({
                 <StatusGlyph
                   status={task.status}
                   onClick={
-                    isFailed
+                    isFailed || retainedAfterFailedRerun
                       ? (event) =>
                           onOpenAlgorithmError(
                             {
                               algorithmId: task.algorithm_id,
-                              errorType: task.error_type,
+                              errorType:
+                                retainedAfterFailedRerun
+                                  ? "rerun"
+                                  : task.error_type,
                               errorMessage:
-                                task.error_message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
+                                (
+                                  retainedAfterFailedRerun
+                                    ? task.latest_attempt_error_message
+                                    : task.error_message
+                                )?.replace(/\/Users\/[^ ]+/g, "server log file") ||
                                 (task.error_type === "matrix_validation"
                                   ? "GRNScope found a problem in the uploaded matrix while preparing the project."
                                   : "This algorithm failed. The server did not return a detailed message."),

@@ -17,8 +17,11 @@ from ..config import PROJECTS_ROOT
 from ..repositories.job_repository import read_jobs_manifest
 from ..repositories.project_repository import read_project_manifest
 from .beeline_service import (
+    CELLORACLE_INPUT_CONTRACT_VERSION,
+    ensure_celloracle_expression_source,
     ensure_project_preprocessed_expression,
     parse_ranked_edges_csv,
+    resolve_celloracle_expression_mode,
     resolve_algorithm_image,
     resolve_beeline_root,
 )
@@ -85,6 +88,14 @@ def latest_celloracle_task(project_dir: Path) -> dict | None:
     )
 
 
+def celloracle_expression_contract_version(result: dict) -> int:
+    expression_contract = result.get("expression_contract") or {}
+    try:
+        return int(expression_contract.get("version") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def celloracle_availability(project_dir: Path) -> tuple[bool, str | None]:
     task = latest_celloracle_task(project_dir)
     if task is None:
@@ -101,11 +112,27 @@ def celloracle_availability(project_dir: Path) -> tuple[bool, str | None]:
     ranked_path = result.get("ranked_edges_path")
     if not ranked_path or not Path(str(ranked_path)).exists():
         return False, "The completed CellOracle edge list could not be found."
+    if (
+        celloracle_expression_contract_version(result)
+        < CELLORACLE_INPUT_CONTRACT_VERSION
+    ):
+        return (
+            False,
+            "CellOracle must be rerun once before perturbation because its "
+            "expression preprocessing has been corrected.",
+        )
     return True, None
 
 
 def celloracle_result_and_edges(project_dir: Path) -> tuple[dict, Path]:
     result = read_algorithm_result(project_dir, "CELLORACLE")
+    if (
+        celloracle_expression_contract_version(result)
+        < CELLORACLE_INPUT_CONTRACT_VERSION
+    ):
+        raise RuntimeError(
+            "CellOracle must be rerun with the corrected expression preprocessing."
+        )
     path_value = result.get("ranked_edges_path")
     if not path_value:
         raise FileNotFoundError("CellOracle ranked edge list is missing.")
@@ -641,6 +668,12 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
             source_expression,
             project_manifest,
         )
+        expression_mode = resolve_celloracle_expression_mode(project_manifest)
+        expression_path = ensure_celloracle_expression_source(
+            source_expression=source_expression,
+            preprocessed_expression=expression_path,
+            project_manifest=project_manifest,
+        )
         cluster_path_value = project_manifest.get("cluster_labels_path")
         cluster_path = Path(str(cluster_path_value)) if cluster_path_value else None
         if cluster_path is not None and not cluster_path.exists():
@@ -702,6 +735,8 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
             "max_cells": max_cells,
             "grn_unit": "cluster" if has_cluster_labels else "whole",
             "cluster_topology_count": len(cluster_edge_paths),
+            "expression_mode": expression_mode,
+            "input_contract_version": CELLORACLE_INPUT_CONTRACT_VERSION,
         }
         model_inputs = [expression_path, edges_path]
         if cluster_path is not None:
@@ -753,6 +788,8 @@ def run_perturbation_task(project_id: str, run_id: str) -> None:
             str(parameters["alpha"]),
             "--max-cells",
             str(max_cells),
+            "--expression-mode",
+            expression_mode,
         ]
         if clusters_copy.exists():
             command.extend(

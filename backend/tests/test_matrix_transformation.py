@@ -164,7 +164,7 @@ class MatrixTransformationTests(unittest.TestCase):
             second_signature["variance_filter"],
             {
                 "engine": "grnscope",
-                "version": 1,
+                "version": 3,
                 "enabled": True,
                 "gene_count": 1,
                 "include_known_tfs": False,
@@ -203,7 +203,7 @@ class MatrixTransformationTests(unittest.TestCase):
 
         self.assertEqual(list(transformed.index), ["GENE3"])
 
-    def test_combined_trajectory_and_variance_retains_tfs_outside_non_tf_quota(
+    def test_combined_trajectory_and_variance_prioritizes_tfs_within_total_limit(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -265,17 +265,21 @@ class MatrixTransformationTests(unittest.TestCase):
                 ).read_text(encoding="utf-8")
             )
 
-        self.assertEqual(list(transformed.index), ["TF1", "GENE_HIGH"])
+        self.assertEqual(list(transformed.index), ["TF1"])
         variance_result = preprocessing_manifest["gene_selection"][-1]
         self.assertFalse(variance_result["configured_include_known_tfs"])
         self.assertTrue(variance_result["retain_significant_trajectory_tfs"])
-        self.assertEqual(variance_result["ranked_non_tf_gene_count"], 1)
+        self.assertEqual(variance_result["ranked_non_tf_gene_count"], 0)
+        self.assertEqual(variance_result["hard_total_gene_limit"], 1)
         self.assertTrue(variance_result["gene_audit_available"])
         self.assertEqual(
             variance_audit["retained_gene_names"],
-            ["TF1", "GENE_HIGH"],
+            ["TF1"],
         )
-        self.assertEqual(variance_audit["removed_gene_names"], ["GENE_LOW"])
+        self.assertEqual(
+            variance_audit["removed_gene_names"],
+            ["GENE_HIGH", "GENE_LOW"],
+        )
 
 
 if __name__ == "__main__":

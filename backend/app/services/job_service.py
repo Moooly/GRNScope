@@ -29,6 +29,7 @@ from ..species_inference import infer_species_from_gene_names
 from ..validators import read_expression_gene_names, validate_gene_ordering_csv
 from ..services.beeline_service import (
     AlgorithmStoppedError,
+    CELLORACLE_INPUT_CONTRACT_VERSION,
     MatrixValidationRuntimeError,
     PreprocessingRuntimeError,
     collect_expression_matrix_issues,
@@ -38,6 +39,7 @@ from ..services.beeline_service import (
     find_algorithm_runtime_roots,
     parse_bool,
     read_delimited_header,
+    resolve_celloracle_expression_mode,
     run_beeline_with_progress,
     summarize_expression_matrix_issues,
     terminate_algorithm_docker_containers,
@@ -51,7 +53,9 @@ from ..services.email_service import (
 from ..services.result_service import (
     archive_beeline_failure_diagnostics,
     archive_beeline_result_artifacts,
-    clear_algorithm_result_artifacts,
+    diagnostic_attempt_name,
+    discard_algorithm_attempt_artifacts,
+    prune_algorithm_result_artifacts,
     write_algorithm_result,
 )
 
@@ -119,7 +123,12 @@ MAX_CONCURRENT_ALGORITHM_TASKS = read_positive_int_env(
 ALGORITHM_TASK_SEMAPHORE = threading.BoundedSemaphore(
     MAX_CONCURRENT_ALGORITHM_TASKS
 )
-TERMINAL_JOB_STATUSES = {"Completed", "Failed", "Stopped"}
+TERMINAL_JOB_STATUSES = {
+    "Completed",
+    "PartiallyCompleted",
+    "Failed",
+    "Stopped",
+}
 MIN_CLUSTER_SCOPE_CELLS = 50
 
 
@@ -401,7 +410,10 @@ def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool
         # pseudotime path is present.
         should_estimate_pseudotime = (
             parse_bool(project_manifest.get("estimate_pseudotime"))
-            and not project_manifest.get("pseudotime_path")
+            and (
+                not project_manifest.get("pseudotime_path")
+                or bool(project_manifest.get("pseudotime_estimated"))
+            )
         )
         if should_estimate_pseudotime:
             from .pseudotime_service import (
@@ -438,6 +450,46 @@ def prepare_project_dataset_for_algorithms(project_id: str, job_id: str) -> bool
                     error_type="pseudotime_estimation",
                 )
                 return False
+
+        if project_manifest.get("pseudotime_path"):
+            from .pseudotime_format_service import (
+                PseudotimeFormatError,
+                ensure_canonical_project_pseudotime,
+            )
+
+            source_pseudotime_value = (
+                project_manifest.get("pseudotime_source_path")
+                or project_manifest.get("pseudotime_path")
+            )
+            try:
+                canonical_pseudotime, canonicalization = (
+                    ensure_canonical_project_pseudotime(
+                        project_dir=project_dir,
+                        expression_path=source_expression,
+                        source_pseudotime=Path(str(source_pseudotime_value)),
+                    )
+                )
+            except (OSError, PseudotimeFormatError, ValueError) as exc:
+                message = str(exc)
+                sync_project_preprocessing_state(
+                    project_dir,
+                    "failed",
+                    error=message,
+                )
+                mark_project_setup_failure(
+                    project_dir,
+                    job_id,
+                    message,
+                    error_type="pseudotime_validation",
+                )
+                return False
+
+            project_manifest["pseudotime_source_path"] = str(
+                source_pseudotime_value
+            )
+            project_manifest["pseudotime_path"] = str(canonical_pseudotime)
+            project_manifest["pseudotime_canonicalization"] = canonicalization
+            write_project_manifest(project_dir, project_manifest)
 
         if (
             trajectory_enabled
@@ -1061,7 +1113,19 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task["elapsed_seconds"] = 0
                 task["error_message"] = None
                 task["error_type"] = None
-                task["result_path"] = None
+                existing_result_path = task.get("result_path")
+                resolved_result_path = (
+                    Path(str(existing_result_path))
+                    if existing_result_path
+                    else None
+                )
+                if resolved_result_path and not resolved_result_path.is_absolute():
+                    resolved_result_path = project_dir / resolved_result_path
+                if resolved_result_path and resolved_result_path.is_file():
+                    task["preserved_result_path"] = existing_result_path
+                else:
+                    task.pop("preserved_result_path", None)
+                    task["result_path"] = None
                 task["diagnostics_path"] = None
                 task["started_at"] = None
                 task["started_at_timestamp"] = None
@@ -1073,7 +1137,8 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
                 task.pop("estimated_remaining_min_seconds", None)
                 task.pop("estimated_remaining_max_seconds", None)
                 task.pop("process_pid", None)
-                clear_algorithm_result_artifacts(project_dir, algorithm_id)
+                task.pop("latest_attempt_status", None)
+                task.pop("latest_attempt_error_message", None)
                 break
 
             job["overall_status"] = "Running"
@@ -1081,6 +1146,83 @@ def reset_task_for_rerun(project_dir: Path, job_id: str, algorithm_id: str) -> N
             job.pop("notification_started_at", None)
             job.pop("notification_error", None)
             job.pop("notification_attempted_at", None)
+            write_jobs_manifest(project_dir, jobs_manifest)
+            return
+
+
+def restore_preserved_result_after_attempt(
+    project_dir: Path,
+    job_id: str,
+    algorithm_id: str,
+    *,
+    attempt_status: str,
+    error_message: str | None,
+    elapsed_seconds: int,
+    completed_at_timestamp: float,
+) -> bool:
+    """Restore a valid prior result when a rerun fails or is stopped."""
+
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
+        jobs_manifest = read_jobs_manifest(project_dir)
+        for job in jobs_manifest:
+            if job.get("job_id") != job_id:
+                continue
+            for task in job.get("tasks", []):
+                if task.get("algorithm_id") != algorithm_id:
+                    continue
+                preserved_path = task.get("preserved_result_path")
+                resolved_preserved_path = (
+                    Path(str(preserved_path)) if preserved_path else None
+                )
+                if (
+                    resolved_preserved_path
+                    and not resolved_preserved_path.is_absolute()
+                ):
+                    resolved_preserved_path = project_dir / resolved_preserved_path
+                if (
+                    not resolved_preserved_path
+                    or not resolved_preserved_path.is_file()
+                ):
+                    return False
+
+                task["status"] = "Completed"
+                task["result_path"] = preserved_path
+                task["latest_attempt_status"] = attempt_status
+                task["latest_attempt_error_message"] = error_message
+                task["latest_attempt_elapsed_seconds"] = elapsed_seconds
+                task["latest_attempt_completed_at"] = format_runtime_timestamp(
+                    completed_at_timestamp
+                )
+                task["progress_percent"] = 100
+                task["progress_label"] = (
+                    f"Previous result retained; rerun {attempt_status.lower()}"
+                )
+                task["error_message"] = None
+                task["error_type"] = None
+                task.pop("preserved_result_path", None)
+                task.pop("process_pid", None)
+                write_jobs_manifest(project_dir, jobs_manifest)
+                return True
+    return False
+
+
+def mark_task_attempt_succeeded(
+    project_dir: Path,
+    job_id: str,
+    algorithm_id: str,
+) -> None:
+    with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
+        jobs_manifest = read_jobs_manifest(project_dir)
+        for job in jobs_manifest:
+            if job.get("job_id") != job_id:
+                continue
+            for task in job.get("tasks", []):
+                if task.get("algorithm_id") != algorithm_id:
+                    continue
+                task.pop("preserved_result_path", None)
+                task["latest_attempt_status"] = "Completed"
+                task.pop("latest_attempt_error_message", None)
+                break
             write_jobs_manifest(project_dir, jobs_manifest)
             return
 
@@ -1206,7 +1348,7 @@ def recompute_overall_status(project_dir: Path, job_id: str) -> None:
             elif statuses and all(status == "Stopped" for status in statuses):
                 job["overall_status"] = "Stopped"
             elif statuses and all(status in {"Completed", "Stopped"} for status in statuses):
-                job["overall_status"] = "Completed"
+                job["overall_status"] = "PartiallyCompleted"
             else:
                 job["overall_status"] = "Stopped"
 
@@ -1250,6 +1392,12 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
 
     started_at_timestamp = time.time()
     started_at = format_runtime_timestamp(started_at_timestamp)
+    attempt_id = diagnostic_attempt_name(started_at_timestamp)
+    discard_algorithm_attempt_artifacts(
+        project_dir,
+        algorithm_id,
+        attempt_id,
+    )
     update_job_state(
         project_dir,
         job_id,
@@ -1367,6 +1515,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
                 algorithm_id,
                 beeline_result,
                 scope_id=scope.scope_id if has_cluster_scopes else None,
+                attempt_id=attempt_id,
             )
             completed_scope_results[scope.scope_id] = scope_result_payload(
                 scope,
@@ -1410,6 +1559,11 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             "scope_order": [scope.scope_id for scope in scopes],
             "scopes": completed_scope_results,
         }
+        if algorithm_id == "CELLORACLE":
+            actual_result["expression_contract"] = {
+                "version": CELLORACLE_INPUT_CONTRACT_VERSION,
+                "mode": resolve_celloracle_expression_mode(project_manifest),
+            }
 
         saved_result_path = write_algorithm_result(
             project_dir,
@@ -1432,32 +1586,63 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
         )
+        mark_task_attempt_succeeded(project_dir, job_id, algorithm_id)
+        try:
+            prune_algorithm_result_artifacts(
+                project_dir,
+                algorithm_id,
+                keep_attempt_id=attempt_id,
+            )
+        except OSError:
+            # The committed result already points to the new attempt. Failure
+            # to prune an older artifact must not change scientific status.
+            pass
     except AlgorithmStoppedError:
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
         completed_at = format_runtime_timestamp(completed_at_timestamp)
         cleanup_algorithm_runtime(project_id, algorithm_id)
-        update_job_state(
+        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
+        if not restore_preserved_result_after_attempt(
             project_dir,
             job_id,
-            algorithm_id=algorithm_id,
-            task_status="Stopped",
-            elapsed_seconds=elapsed,
+            algorithm_id,
+            attempt_status="Stopped",
             error_message=None,
-            progress_percent=0,
-            progress_label="Stopped",
-            estimated_remaining_seconds=0,
-            completed_at=completed_at,
+            elapsed_seconds=elapsed,
             completed_at_timestamp=completed_at_timestamp,
-            process_pid=0,
-        )
+        ):
+            update_job_state(
+                project_dir,
+                job_id,
+                algorithm_id=algorithm_id,
+                task_status="Stopped",
+                elapsed_seconds=elapsed,
+                error_message=None,
+                progress_percent=0,
+                progress_label="Stopped",
+                estimated_remaining_seconds=0,
+                completed_at=completed_at,
+                completed_at_timestamp=completed_at_timestamp,
+                process_pid=0,
+            )
     except MatrixValidationRuntimeError as exc:
-        mark_project_setup_failure(
+        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
+        if not restore_preserved_result_after_attempt(
             project_dir,
             job_id,
-            str(exc),
-            error_type="matrix_validation",
-        )
+            algorithm_id,
+            attempt_status="Failed",
+            error_message=str(exc),
+            elapsed_seconds=int(time.time() - started_at_timestamp),
+            completed_at_timestamp=time.time(),
+        ):
+            mark_project_setup_failure(
+                project_dir,
+                job_id,
+                str(exc),
+                error_type="matrix_validation",
+            )
     except Exception as exc:
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
@@ -1477,22 +1662,32 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             error_message,
             diagnostics_path,
         )
-        update_job_state(
+        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
+        if not restore_preserved_result_after_attempt(
             project_dir,
             job_id,
-            algorithm_id=algorithm_id,
-            task_status="Failed",
-            elapsed_seconds=elapsed,
-            progress_percent=0,
-            progress_label="Failed",
+            algorithm_id,
+            attempt_status="Failed",
             error_message=error_message,
-            error_type="algorithm",
-            diagnostics_path=diagnostics_path,
-            estimated_remaining_seconds=0,
-            completed_at=format_runtime_timestamp(completed_at_timestamp),
+            elapsed_seconds=elapsed,
             completed_at_timestamp=completed_at_timestamp,
-            process_pid=0,
-        )
+        ):
+            update_job_state(
+                project_dir,
+                job_id,
+                algorithm_id=algorithm_id,
+                task_status="Failed",
+                elapsed_seconds=elapsed,
+                progress_percent=0,
+                progress_label="Failed",
+                error_message=error_message,
+                error_type="algorithm",
+                diagnostics_path=diagnostics_path,
+                estimated_remaining_seconds=0,
+                completed_at=format_runtime_timestamp(completed_at_timestamp),
+                completed_at_timestamp=completed_at_timestamp,
+                process_pid=0,
+            )
     finally:
         clear_task_control(project_id, job_id, algorithm_id)
         recompute_overall_status(project_dir, job_id)

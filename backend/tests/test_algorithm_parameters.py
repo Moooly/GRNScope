@@ -19,7 +19,7 @@ NON_DEFAULT_PARAMETERS = {
     "GENIE3": {"nEstimators": 7, "maxFeatures": "log2"},
     "GRNBOOST2": {"learningRate": 0.1, "nEstimators": 20, "maxFeatures": 0.5},
     "CELLORACLE": {"maxCells": 50, "pValueCutoff": 0.1},
-    "PPCOR": {"pVal": 0.2},
+    "PPCOR": {"maxGenes": 300, "pVal": 0.2},
     "SCODE": {"z": 2, "nIter": 5, "nRep": 2},
     "SINCERITIES": {"maxGenes": 300, "nBins": 4},
     "SCRIBE": {
@@ -78,6 +78,8 @@ class AlgorithmParameterValidationTests(unittest.TestCase):
         for algorithm_id, submitted in NON_DEFAULT_PARAMETERS.items():
             with self.subTest(algorithm_id=algorithm_id):
                 manifest = {"algorithm_parameters": {algorithm_id: submitted}}
+                if algorithm_id == "CELLORACLE":
+                    manifest["preprocessing"] = {"matrix_state": "raw"}
                 runtime_params = build_algorithm_runtime_params(
                     algorithm_id, manifest
                 )
@@ -131,6 +133,12 @@ class AlgorithmParameterValidationTests(unittest.TestCase):
         self.assertEqual(
             resolve_algorithm_parameters("PIDC"),
             {"maxGenes": 500},
+        )
+
+    def test_ppcor_defaults_to_five_hundred_genes(self):
+        self.assertEqual(
+            resolve_algorithm_parameters("PPCOR"),
+            {"maxGenes": 500, "pVal": 0.01},
         )
 
     def test_sincerities_defaults_to_five_hundred_genes(self):

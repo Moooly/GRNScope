@@ -6,6 +6,8 @@ import json
 import shutil
 from pathlib import Path
 
+from ..atomic_io import atomic_write_json
+
 
 def ensure_results_dir(project_dir: Path) -> Path:
     results_dir = project_dir / "results"
@@ -32,6 +34,19 @@ def algorithm_artifact_dir(
     scope_id: str | None = None,
 ) -> Path:
     base_dir = algorithm_result_dir(project_dir, algorithm_id)
+    if scope_id and scope_id != "global":
+        return base_dir / "scopes" / scope_id
+    return base_dir
+
+
+def algorithm_attempt_artifact_dir(
+    project_dir: Path,
+    algorithm_id: str,
+    attempt_id: str,
+    *,
+    scope_id: str | None = None,
+) -> Path:
+    base_dir = algorithm_result_dir(project_dir, algorithm_id) / "attempts" / attempt_id
     if scope_id and scope_id != "global":
         return base_dir / "scopes" / scope_id
     return base_dir
@@ -201,14 +216,24 @@ def archive_beeline_result_artifacts(
     beeline_result: dict,
     *,
     scope_id: str | None = None,
+    attempt_id: str | None = None,
 ) -> dict:
     archived_result = copy.deepcopy(beeline_result)
-    artifact_dir = algorithm_artifact_dir(
-        project_dir,
-        algorithm_id,
-        scope_id=scope_id,
+    artifact_dir = (
+        algorithm_attempt_artifact_dir(
+            project_dir,
+            algorithm_id,
+            attempt_id,
+            scope_id=scope_id,
+        )
+        if attempt_id
+        else algorithm_artifact_dir(
+            project_dir,
+            algorithm_id,
+            scope_id=scope_id,
+        )
     )
-    if artifact_dir.exists():
+    if artifact_dir.exists() and (not attempt_id or (scope_id and scope_id != "global")):
         shutil.rmtree(artifact_dir, ignore_errors=True)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -294,6 +319,42 @@ def clear_algorithm_result_artifacts(project_dir: Path, algorithm_id: str) -> No
         legacy_result_path.unlink()
 
 
+def discard_algorithm_attempt_artifacts(
+    project_dir: Path,
+    algorithm_id: str,
+    attempt_id: str,
+) -> None:
+    attempt_root = (
+        algorithm_result_dir(project_dir, algorithm_id) / "attempts" / attempt_id
+    )
+    if attempt_root.exists():
+        shutil.rmtree(attempt_root, ignore_errors=True)
+
+
+def prune_algorithm_result_artifacts(
+    project_dir: Path,
+    algorithm_id: str,
+    *,
+    keep_attempt_id: str,
+) -> None:
+    result_dir = algorithm_result_dir(project_dir, algorithm_id)
+    attempts_dir = result_dir / "attempts"
+    if attempts_dir.exists():
+        for attempt_dir in attempts_dir.iterdir():
+            if attempt_dir.name != keep_attempt_id:
+                shutil.rmtree(attempt_dir, ignore_errors=True)
+
+    # Remove artifacts written by the legacy fixed-directory layout only after
+    # the replacement result manifest has been committed successfully.
+    for child in result_dir.iterdir():
+        if child.name in {"result.json", "attempts"}:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
+
+
 def write_algorithm_result(
     project_dir: Path,
     algorithm_id: str,
@@ -301,7 +362,7 @@ def write_algorithm_result(
 ) -> str:
     result_path = algorithm_result_path(project_dir, algorithm_id)
     result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text(json.dumps(result_payload, indent=2), encoding="utf-8")
+    atomic_write_json(result_path, result_payload)
     return str(result_path)
 
 

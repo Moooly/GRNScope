@@ -7,10 +7,94 @@ from unittest.mock import patch
 from app.services.job_service import (
     prepare_project_dataset_for_algorithms,
     recompute_overall_status,
+    reset_task_for_rerun,
+    restore_preserved_result_after_attempt,
 )
 
 
 class DatasetValidationStateTests(unittest.TestCase):
+    def test_completed_and_stopped_tasks_are_partially_completed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            job_id = "mixed-terminal-job"
+            (project_dir / "jobs.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "job_id": job_id,
+                            "overall_status": "Running",
+                            "tasks": [
+                                {"algorithm_id": "GENIE3", "status": "Completed"},
+                                {"algorithm_id": "PIDC", "status": "Stopped"},
+                            ],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch(
+                "app.services.job_service.send_job_completion_notification_if_needed"
+            ):
+                recompute_overall_status(project_dir, job_id)
+
+            saved_job = json.loads(
+                (project_dir / "jobs.json").read_text(encoding="utf-8")
+            )[0]
+
+        self.assertEqual(saved_job["overall_status"], "PartiallyCompleted")
+
+    def test_failed_rerun_keeps_previous_successful_result(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            result_path = project_dir / "results" / "GENIE3" / "result.json"
+            result_path.parent.mkdir(parents=True)
+            result_path.write_text('{"top_edges":[]}', encoding="utf-8")
+            job_id = "rerun-job"
+            (project_dir / "jobs.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "job_id": job_id,
+                            "overall_status": "Completed",
+                            "tasks": [
+                                {
+                                    "algorithm_id": "GENIE3",
+                                    "status": "Completed",
+                                    "result_path": str(result_path),
+                                }
+                            ],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            reset_task_for_rerun(project_dir, job_id, "GENIE3")
+            retained = restore_preserved_result_after_attempt(
+                project_dir,
+                job_id,
+                "GENIE3",
+                attempt_status="Failed",
+                error_message="replacement failed",
+                elapsed_seconds=4,
+                completed_at_timestamp=1_788_800_005,
+            )
+            saved_task = json.loads(
+                (project_dir / "jobs.json").read_text(encoding="utf-8")
+            )[0]["tasks"][0]
+            result_still_exists = result_path.is_file()
+
+        self.assertTrue(retained)
+        self.assertTrue(result_still_exists)
+        self.assertEqual(saved_task["status"], "Completed")
+        self.assertEqual(saved_task["result_path"], str(result_path))
+        self.assertEqual(saved_task["latest_attempt_status"], "Failed")
+        self.assertEqual(
+            saved_task["latest_attempt_error_message"],
+            "replacement failed",
+        )
+
     def test_invalid_matrix_stops_setup_before_algorithms_start(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             projects_root = Path(temp_dir)

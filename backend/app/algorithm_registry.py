@@ -412,6 +412,23 @@ ALGORITHMS: list[AlgorithmInfo] = [
         ],
         "parameters": [
             {
+                "name": "maxGenes",
+                "label": "Gene filter",
+                "description": (
+                    "PPCOR's mandatory gene cap, applied after the project-wide "
+                    "gene filter. PPCOR inverts a dense all-gene correlation "
+                    "matrix, and valid p-values require fewer genes than cells. "
+                    "When more genes remain, PPCOR keeps the highest-variance "
+                    "genes and may lower this limit further for confidence runs."
+                ),
+                "default": 500,
+                "required": False,
+                "value_type": "integer",
+                "minimum": 3,
+                "maximum": 8000,
+                "step": 100,
+            },
+            {
                 "name": "pVal",
                 "label": "P-value cutoff",
                 "description": "P-value cutoff used by PPCOR.",

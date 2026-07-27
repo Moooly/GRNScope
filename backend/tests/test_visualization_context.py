@@ -56,6 +56,21 @@ class VisualizationContextTests(unittest.TestCase):
             ],
         )
 
+    def test_recognizes_type_as_a_ground_truth_sign_header(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ground_truth_path = Path(temp_dir) / "ground_truth.csv"
+            ground_truth_path.write_text(
+                "Source,Target,Type\n"
+                "TF1,G1,1.0\n"
+                "TF2,G2,-1.0\n",
+                encoding="utf-8",
+            )
+
+            edges = read_ground_truth_edges(ground_truth_path)
+
+        self.assertEqual(edges[0]["sign"], "1.0")
+        self.assertEqual(edges[1]["sign"], "-1.0")
+
     def test_builds_trajectory_and_ground_truth_context(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_dir = Path(temp_dir)

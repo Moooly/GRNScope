@@ -161,9 +161,20 @@ def parse_algorithm_parameters(
 def normalize_celloracle_settings(
     celloracle_species: str,
     celloracle_base_grn: str,
+    *,
+    dataset_species: str | None = None,
 ) -> tuple[str, str]:
     normalized_species = (celloracle_species or "human").strip()
     normalized_base_grn = (celloracle_base_grn or "auto").strip()
+
+    normalized_dataset_species = str(dataset_species or "").strip()
+    if normalized_dataset_species:
+        if normalized_dataset_species not in CELLORACLE_SPECIES_OPTIONS:
+            raise ValueError(
+                "CellOracle requires one of the supported built-in dataset "
+                "species; Other / Not listed cannot use its built-in prior."
+            )
+        normalized_species = normalized_dataset_species
 
     if normalized_species not in CELLORACLE_SPECIES_OPTIONS:
         raise ValueError(f"Unsupported CellOracle species: {normalized_species}.")
@@ -179,6 +190,8 @@ def normalize_celloracle_settings(
 # the frontend cap; the backend still clamps to the actual gene count at run time.
 RANKED_EDGES_PER_TARGET_DEFAULT = 20
 RANKED_EDGES_PER_TARGET_MAX = 100
+BOOTSTRAP_REPLICATE_OPTIONS = {30, 100, 300}
+BOOTSTRAP_REPLICATES_DEFAULT = 100
 def normalize_ranked_edges_per_target(raw: str) -> int:
     """Parse and bound the 'Max edges per target' form value to [1, 100]."""
     try:
@@ -186,6 +199,18 @@ def normalize_ranked_edges_per_target(raw: str) -> int:
     except (TypeError, ValueError):
         return RANKED_EDGES_PER_TARGET_DEFAULT
     return max(1, min(value, RANKED_EDGES_PER_TARGET_MAX))
+
+
+def normalize_bootstrap_replicates(raw: str) -> int:
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return BOOTSTRAP_REPLICATES_DEFAULT
+    return (
+        value
+        if value in BOOTSTRAP_REPLICATE_OPTIONS
+        else BOOTSTRAP_REPLICATES_DEFAULT
+    )
 
 
 def build_queued_task(algorithm_id: str, progress_label: str = "Queued") -> dict:
@@ -319,6 +344,7 @@ async def create_pending_project(
     trajectory_bonferroni: str = Form("true"),
     include_significant_tfs: str = Form("true"),
     ranked_edges_per_target: str = Form("20"),
+    bootstrap_replicates: str = Form("100"),
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
     celloracle_species: str = Form("human"),
@@ -337,9 +363,6 @@ async def create_pending_project(
 
     try:
         selected_algorithms_list = parse_selected_algorithms(selected_algorithms)
-        normalized_celloracle_species, normalized_celloracle_base_grn = (
-            normalize_celloracle_settings(celloracle_species, celloracle_base_grn)
-        )
         validated_algorithm_parameters = parse_algorithm_parameters(
             algorithm_parameters, selected_algorithms_list
         )
@@ -358,6 +381,17 @@ async def create_pending_project(
             trajectory_p_value=trajectory_p_value,
             trajectory_bonferroni=trajectory_bonferroni,
             include_significant_tfs=include_significant_tfs,
+        )
+        normalized_celloracle_species, normalized_celloracle_base_grn = (
+            normalize_celloracle_settings(
+                celloracle_species,
+                celloracle_base_grn,
+                dataset_species=(
+                    preprocessing_config["dataset_species"]
+                    if "CELLORACLE" in selected_algorithms_list
+                    else None
+                ),
+            )
         )
     except Exception as exc:
         return CreateProjectResponse(ok=False, errors=[str(exc)])
@@ -388,6 +422,9 @@ async def create_pending_project(
         "created_at_display": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
         "notification_email": None,
         "preprocessing": preprocessing_config,
+        "confidence_bootstrap_runs": normalize_bootstrap_replicates(
+            bootstrap_replicates
+        ),
         "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
         "selected_algorithms": selected_algorithms_list,
         "algorithm_parameters": validated_algorithm_parameters,
@@ -465,6 +502,9 @@ async def create_pending_project(
         "cluster_names": [],
         "cluster_cell_counts": {},
         "preprocessing": preprocessing_config,
+        "confidence_bootstrap_runs": normalize_bootstrap_replicates(
+            bootstrap_replicates
+        ),
         "preprocessing_status": "waiting_for_upload",
         "celloracle": {
             "species": normalized_celloracle_species,
@@ -665,6 +705,10 @@ async def upload_project_dataset_and_start(
         project_manifest["pseudotime_path"] = (
             str(pseudotime_path) if pseudotime_path else None
         )
+        project_manifest["pseudotime_estimated"] = False
+        project_manifest.pop("pseudotime_source_path", None)
+        project_manifest.pop("pseudotime_canonicalization", None)
+        project_manifest.pop("pseudotime_input_contract", None)
         project_manifest["ground_truth_path"] = (
             str(ground_truth_path) if ground_truth_path else None
         )

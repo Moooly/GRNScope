@@ -52,8 +52,9 @@ type BenchmarkRow = {
   runtimeSeconds: number;
   pr: CurvePoint[];
   roc: CurvePoint[];
-  motifs: MotifCounts;
-  pathCounts: PathCounts;
+  directionAware: boolean;
+  motifs: MotifCounts | null;
+  pathCounts: PathCounts | null;
 };
 type BenchmarkMenuOption<T extends string | number> = {
   value: T;
@@ -76,11 +77,21 @@ function edgeKey(source: string, target: string) {
   return `${source}\u0000${target}`;
 }
 
+function adjacencyKey(first: string, second: string) {
+  return first.localeCompare(second) <= 0
+    ? `${first}\u0000${second}`
+    : `${second}\u0000${first}`;
+}
+
 function normalizeSign(value?: string): SignValue {
   const normalized = String(value ?? "").trim().toLowerCase();
+  const numeric = Number(normalized);
+  if (Number.isFinite(numeric)) {
+    if (numeric > 0) return 1;
+    if (numeric < 0) return -1;
+  }
   if (
     normalized === "+" ||
-    normalized === "1" ||
     normalized === "activation" ||
     normalized === "activating" ||
     normalized === "positive"
@@ -89,7 +100,6 @@ function normalizeSign(value?: string): SignValue {
   }
   if (
     normalized === "-" ||
-    normalized === "-1" ||
     normalized === "inhibition" ||
     normalized === "inhibitory" ||
     normalized === "repression" ||
@@ -423,41 +433,69 @@ function benchmarkAlgorithm({
   truth,
   truthSigns,
   possibleEdges,
+  signedPossibleEdges,
   evaluationDepth,
   runtimeSeconds,
   methodSupportsSign,
+  methodSupportsDirection,
   referenceAdjacency,
-  candidateSources,
-  candidateTargets,
+  candidateGenes,
 }: {
   algorithmId: string;
   edges: AggregatedEdge[];
   truth: Set<string>;
   truthSigns: Map<string, SignValue>;
   possibleEdges: number;
+  signedPossibleEdges: number;
   evaluationDepth: number;
   runtimeSeconds: number;
   methodSupportsSign: boolean;
+  methodSupportsDirection: boolean;
   referenceAdjacency: Map<string, Set<string>>;
-  candidateSources: Set<string>;
-  candidateTargets: Set<string>;
+  candidateGenes: Set<string>;
 }): BenchmarkRow {
-  const seen = new Set<string>();
-  const completeRanking = [...edges]
+  // Core benchmarking is intentionally direction-neutral. Every selected
+  // method is evaluated once per unordered gene pair, so an undirected method
+  // is neither duplicated nor penalized for not predicting an arrow.
+  const bestByAdjacency = new Map<string, AggregatedEdge>();
+  edges.forEach((edge) => {
+    if (
+      edge.source === edge.target ||
+      !candidateGenes.has(edge.source) ||
+      !candidateGenes.has(edge.target)
+    ) {
+      return;
+    }
+    const key = adjacencyKey(edge.source, edge.target);
+    const current = bestByAdjacency.get(key);
+    if (
+      !current ||
+      edge.rank < current.rank ||
+      (edge.rank === current.rank && edge.confidence > current.confidence)
+    ) {
+      bestByAdjacency.set(key, edge);
+    }
+  });
+  const completeRanking = [...bestByAdjacency.values()].sort(
+    (a, b) => a.rank - b.rank || b.confidence - a.confidence,
+  );
+  const seenDirected = new Set<string>();
+  const directedRanking = [...edges]
     .filter((edge) => {
       const key = edgeKey(edge.source, edge.target);
       if (
         edge.source === edge.target ||
-        !candidateSources.has(edge.source) ||
-        !candidateTargets.has(edge.target) ||
-        seen.has(key)
+        !candidateGenes.has(edge.source) ||
+        !candidateGenes.has(edge.target) ||
+        seenDirected.has(key)
       ) {
         return false;
       }
-      seen.add(key);
+      seenDirected.add(key);
       return true;
     })
     .sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)
+    .slice(0, evaluationDepth > 0 ? evaluationDepth : undefined);
   const ranked = completeRanking.slice(
     0,
     evaluationDepth > 0 ? evaluationDepth : undefined,
@@ -475,10 +513,10 @@ function benchmarkAlgorithm({
   const pr: CurvePoint[] = [{ x: 0, y: 1 }];
   const roc: CurvePoint[] = [{ x: 0, y: 0 }];
   let trueAtK = 0;
-  const k = Math.min(truth.size, ranked.length);
+  const k = Math.min(truth.size, possibleEdges);
 
   ranked.forEach((edge, index) => {
-    if (truth.has(edgeKey(edge.source, edge.target))) {
+    if (truth.has(adjacencyKey(edge.source, edge.target))) {
       truePositive += 1;
       if (index < k) trueAtK += 1;
     } else {
@@ -516,9 +554,11 @@ function benchmarkAlgorithm({
     roc.push({ x: 1, y: 1 });
   }
 
-  const precisionAtK = k ? trueAtK / k : 0;
+  // Missing predictions inside top-k count as incorrect. All methods therefore
+  // use the same denominator even when one emits a shorter ranked list.
+  const precisionAtK = k > 0 ? trueAtK / k : 0;
   const randomBaseline = truth.size / Math.max(1, possibleEdges);
-  const topologyEdges = ranked.slice(0, k);
+  const topologyEdges = methodSupportsDirection ? ranked.slice(0, k) : [];
   const pathCounts: PathCounts = {
     truePositive: 0,
     path2: 0,
@@ -528,7 +568,7 @@ function benchmarkAlgorithm({
     noPath: 0,
   };
   topologyEdges.forEach((edge) => {
-    const key = edgeKey(edge.source, edge.target);
+    const key = adjacencyKey(edge.source, edge.target);
     if (truth.has(key)) {
       pathCounts.truePositive += 1;
       return;
@@ -557,24 +597,25 @@ function benchmarkAlgorithm({
     earlyPrecisionRatio:
       randomBaseline > 0 ? precisionAtK / randomBaseline : 0,
     activationEpr: signedEarlyPrecisionRatio({
-      ranked,
+      ranked: directedRanking,
       truthSigns,
       sign: 1,
-      possibleEdges,
+      possibleEdges: signedPossibleEdges,
       methodSupportsSign,
     }),
     repressionEpr: signedEarlyPrecisionRatio({
-      ranked,
+      ranked: directedRanking,
       truthSigns,
       sign: -1,
-      possibleEdges,
+      possibleEdges: signedPossibleEdges,
       methodSupportsSign,
     }),
     runtimeSeconds,
     pr,
     roc,
-    motifs: motifCounts(topologyEdges),
-    pathCounts,
+    directionAware: methodSupportsDirection,
+    motifs: methodSupportsDirection ? motifCounts(topologyEdges) : null,
+    pathCounts: methodSupportsDirection ? pathCounts : null,
   };
 }
 
@@ -961,10 +1002,12 @@ function MotifRecovery({
                 {row.algorithmId}
               </th>
               {motifs.map((motif) => {
-                const predicted = row.motifs[motif.key];
+                const predicted = row.motifs?.[motif.key] ?? null;
                 const referenceCount = reference[motif.key];
                 const ratio =
-                  referenceCount > 0 ? predicted / referenceCount : null;
+                  predicted !== null && referenceCount > 0
+                    ? predicted / referenceCount
+                    : null;
                 return (
                   <td key={motif.key} className="px-1">
                     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
@@ -972,7 +1015,9 @@ function MotifRecovery({
                         {ratio === null ? "—" : `${ratio.toFixed(3)}×`}
                       </p>
                       <p className="mt-0.5 text-[10px] text-slate-500">
-                        {predicted} predicted / {referenceCount} reference
+                        {predicted === null
+                          ? "Direction not inferred"
+                          : `${predicted} predicted / ${referenceCount} reference`}
                       </p>
                     </div>
                   </td>
@@ -1010,7 +1055,23 @@ function PathBreakdown({ rows }: { rows: BenchmarkRow[] }) {
     <div>
       <div className="space-y-4">
         {rows.map((row) => {
-          const total = Object.values(row.pathCounts).reduce(
+          if (!row.pathCounts) {
+            return (
+              <div
+                key={row.algorithmId}
+                className="grid grid-cols-[7rem_1fr] items-center gap-3"
+              >
+                <span className="truncate text-sm font-extrabold text-slate-800">
+                  {row.algorithmId}
+                </span>
+                <span className="text-xs font-semibold text-slate-400">
+                  Direction not inferred
+                </span>
+              </div>
+            );
+          }
+          const pathCounts = row.pathCounts;
+          const total = Object.values(pathCounts).reduce(
             (sum, value) => sum + value,
             0,
           );
@@ -1024,7 +1085,7 @@ function PathBreakdown({ rows }: { rows: BenchmarkRow[] }) {
               </span>
               <span className="flex h-4 overflow-hidden rounded-full bg-slate-100">
                 {labels.map((item) => {
-                  const value = row.pathCounts[item.key];
+                  const value = pathCounts[item.key];
                   return value > 0 ? (
                     <span
                       key={item.key}
@@ -1097,35 +1158,30 @@ export default function BenchmarkInsights({
         },
       };
     }
-    // All methods are evaluated over one shared regulator-target universe.
-    // Regulators are inferred from method outputs; targets are the genes that
-    // those methods could rank. Reference-only genes are intentionally excluded
-    // because no selected method had an opportunity to predict them.
-    const candidateSources = new Set<string>();
-    const candidateTargets = new Set<string>();
+    // Use one shared gene-pair universe. It is not restricted to a TF list,
+    // because that would favor methods whose outputs already use that list.
+    const candidateGenes = new Set<string>();
     activeAlgorithmIds.forEach((algorithmId) => {
       (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
         if (!edge.source || !edge.target || edge.source === edge.target) return;
-        candidateSources.add(edge.source);
-        candidateTargets.add(edge.source);
-        candidateTargets.add(edge.target);
+        candidateGenes.add(edge.source);
+        candidateGenes.add(edge.target);
       });
     });
-    if (!candidateSources.size || !candidateTargets.size) {
+    if (!candidateGenes.size) {
       truthEdges.forEach((edge) => {
-        candidateSources.add(edge.source);
-        candidateTargets.add(edge.source);
-        candidateTargets.add(edge.target);
+        candidateGenes.add(edge.source);
+        candidateGenes.add(edge.target);
       });
     }
     const eligibleTruthEdges = truthEdges.filter(
       (edge) =>
         edge.source !== edge.target &&
-        candidateSources.has(edge.source) &&
-        candidateTargets.has(edge.target),
+        candidateGenes.has(edge.source) &&
+        candidateGenes.has(edge.target),
     );
     const truth = new Set(
-      eligibleTruthEdges.map((edge) => edgeKey(edge.source, edge.target)),
+      eligibleTruthEdges.map((edge) => adjacencyKey(edge.source, edge.target)),
     );
     const truthSigns = new Map(
       eligibleTruthEdges.map((edge) => [
@@ -1139,13 +1195,15 @@ export default function BenchmarkInsights({
       targets.add(edge.target);
       referenceAdjacency.set(edge.source, targets);
     });
-    let possibleEdges = 0;
-    candidateSources.forEach((source) => {
-      candidateTargets.forEach((target) => {
-        if (source !== target) possibleEdges += 1;
-      });
-    });
-    possibleEdges = Math.max(1, possibleEdges);
+    const candidateGeneCount = candidateGenes.size;
+    const possibleEdges = Math.max(
+      1,
+      (candidateGeneCount * (candidateGeneCount - 1)) / 2,
+    );
+    const signedPossibleEdges = Math.max(
+      1,
+      candidateGeneCount * (candidateGeneCount - 1),
+    );
     const rows = activeAlgorithmIds.map((algorithmId) => {
       const task = tasks.find(
         (item) =>
@@ -1162,20 +1220,22 @@ export default function BenchmarkInsights({
         truth,
         truthSigns,
         possibleEdges,
+        signedPossibleEdges,
         evaluationDepth,
         runtimeSeconds: Number.isFinite(seconds) ? seconds : 0,
         methodSupportsSign: algorithmMetaMap.get(algorithmId)?.signed ?? false,
+        methodSupportsDirection:
+          algorithmMetaMap.get(algorithmId)?.directed ?? true,
         referenceAdjacency,
-        candidateSources,
-        candidateTargets,
+        candidateGenes,
       });
     });
     return {
       rows,
-      eligibleReferenceEdges: eligibleTruthEdges.length,
+      eligibleReferenceEdges: truth.size,
       uploadedReferenceEdges: truthEdges.length,
       possibleEdges,
-      randomBaseline: eligibleTruthEdges.length / possibleEdges,
+      randomBaseline: truth.size / possibleEdges,
       referenceMotifs: motifCounts(eligibleTruthEdges),
     };
   }, [
@@ -1219,7 +1279,7 @@ export default function BenchmarkInsights({
     return (
       <EmptyState
         title="No comparable reference edges"
-        detail="The uploaded reference does not contain directed edges inside the candidate universe shared by the selected methods."
+        detail="The uploaded reference does not contain gene pairs inside the candidate-gene universe shared by the selected methods."
       />
     );
   }
@@ -1266,7 +1326,7 @@ export default function BenchmarkInsights({
     <div className="space-y-5">
       <Panel
         title="Benchmark summary"
-        description="Compare predictive accuracy over one shared regulator–target universe."
+        description="Compare every method over the same direction-neutral gene-pair universe. Directional analyses are shown separately where supported."
         aside={
           <ExportButton
             onClick={() =>
@@ -1302,7 +1362,7 @@ export default function BenchmarkInsights({
       >
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
           <span className="rounded-full bg-slate-100 px-3 py-1.5">
-            {benchmark.possibleEdges.toLocaleString()} candidates
+            {benchmark.possibleEdges.toLocaleString()} candidate gene pairs
           </span>
           <span className="rounded-full bg-slate-100 px-3 py-1.5">
             {benchmark.eligibleReferenceEdges.toLocaleString()} reference edges
@@ -1477,8 +1537,9 @@ export default function BenchmarkInsights({
               benchmark.uploadedReferenceEdges -
               benchmark.eligibleReferenceEdges
             ).toLocaleString()}{" "}
-            uploaded reference edges fall outside the selected methods&apos;
-            candidate universe and were excluded.
+            uploaded reference rows were outside the selected methods&apos;
+            candidate universe or duplicated a reciprocal gene pair, so they
+            were excluded from the shared comparison.
           </p>
         ) : null}
       </Panel>

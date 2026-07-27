@@ -69,7 +69,9 @@ UPLOAD_NAME_PREVIEW_LIMIT = get_non_negative_int_env(
 
 
 def upload_validation_mode() -> str:
-    return os.getenv("GRNSCOPE_UPLOAD_VALIDATION_MODE", "fast").strip().lower()
+    return os.getenv(
+        "GRNSCOPE_UPLOAD_VALIDATION_MODE", STRICT_UPLOAD_VALIDATION_MODE
+    ).strip().lower()
 
 
 def validate_csv_extension(filename: str) -> str | None:
@@ -281,7 +283,7 @@ def parse_expression_matrix_strict(csv_path: Path) -> dict[str, Any]:
             if gene_name in seen_gene_names:
                 raise ValueError("Gene names must be unique.")
 
-            for value in expression_numeric_values_to_check(row, row_number - 1):
+            for value in row[1:]:
                 parse_required_finite_float(
                     value,
                     "Expression matrix contains missing or non-numeric interior values.",
@@ -616,7 +618,11 @@ def parse_cluster_labels(csv_path: Path, expected_cell_names: list[str]) -> dict
     }
 
 
-def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]:
+def parse_pseudotime(
+    csv_path: Path,
+    expected_cell_count: int,
+    expected_cell_names: list[str] | None = None,
+) -> dict[str, Any]:
     """Validate a pseudotime CSV.
 
     Supported formats:
@@ -627,6 +633,25 @@ def parse_pseudotime(csv_path: Path, expected_cell_count: int) -> dict[str, Any]
        belong to only one branch. Files with an omitted first-column header are
        also accepted when the first data column clearly contains cell IDs.
     """
+
+    if expected_cell_names is not None:
+        from .services.pseudotime_format_service import (
+            read_canonical_pseudotime_frame,
+        )
+
+        if len(expected_cell_names) != expected_cell_count:
+            raise ValueError(
+                "Expression cell-name count does not match the expected cell count."
+            )
+        frame, source_format = read_canonical_pseudotime_frame(
+            csv_path,
+            expected_cell_names,
+        )
+        return {
+            "pseudotime_count": int(frame.shape[0]),
+            "pseudotime_trajectory_count": int(frame.shape[1]),
+            "pseudotime_format": source_format,
+        }
 
     dialect = detect_csv_dialect_from_file(csv_path)
     rows = iter_non_empty_csv_rows(csv_path, dialect)

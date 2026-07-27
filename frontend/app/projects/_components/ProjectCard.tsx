@@ -228,9 +228,14 @@ export function getProjectStatusKey(project: Project): ProjectStatusKey {
   const hasQueued = tasks.some((task) => task.status === "Queued");
   const hasCompleted = tasks.some((task) => task.status === "Completed");
   const hasFailed = tasks.some((task) => task.status === "Failed");
+  const hasStopped = tasks.some((task) => task.status === "Stopped");
   if (hasRunning || hasQueued || latestJob.overall_status === "Running") return "running";
-  if (hasCompleted && hasFailed) return "partial";
+  if (
+    (hasCompleted && (hasFailed || hasStopped)) ||
+    latestJob.overall_status === "PartiallyCompleted"
+  ) return "partial";
   if (hasFailed || latestJob.overall_status === "Failed") return "failed";
+  if (hasStopped || latestJob.overall_status === "Stopped") return "partial";
   if (hasCompleted || latestJob.overall_status === "Completed") return "completed";
   return "none";
 }
@@ -261,6 +266,7 @@ function getProjectStatus(project: Project) {
   const hasQueued = tasks.some((task) => task.status === "Queued");
   const hasCompleted = tasks.some((task) => task.status === "Completed");
   const hasFailed = tasks.some((task) => task.status === "Failed");
+  const hasStopped = tasks.some((task) => task.status === "Stopped");
 
   if (hasRunning || hasQueued || latestJob.overall_status === "Running") {
     return {
@@ -269,9 +275,12 @@ function getProjectStatus(project: Project) {
       dotClassName: "bg-sky-500",
     };
   }
-  if (hasCompleted && hasFailed) {
+  if (
+    (hasCompleted && (hasFailed || hasStopped)) ||
+    latestJob.overall_status === "PartiallyCompleted"
+  ) {
     return {
-      label: "Partial",
+      label: "Partially completed",
       badgeClassName: "bg-violet-50 text-violet-700 ring-violet-200/80",
       dotClassName: "bg-violet-500",
     };
@@ -281,6 +290,13 @@ function getProjectStatus(project: Project) {
       label: "Failed",
       badgeClassName: "bg-rose-50 text-rose-700 ring-rose-200/80",
       dotClassName: "bg-rose-500",
+    };
+  }
+  if (hasStopped || latestJob.overall_status === "Stopped") {
+    return {
+      label: "Stopped",
+      badgeClassName: "bg-amber-50 text-amber-700 ring-amber-200/80",
+      dotClassName: "bg-amber-500",
     };
   }
   if (hasCompleted || latestJob.overall_status === "Completed") {

@@ -13,7 +13,7 @@ from app.services.gene_selection_service import (
 
 
 class TrajectoryFilteringTests(unittest.TestCase):
-    def test_filters_with_strict_beeline_p_value_cutoff(self) -> None:
+    def test_includes_genes_equal_to_the_displayed_p_value_cutoff(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             expression = root / "expression.csv"
@@ -44,9 +44,9 @@ class TrajectoryFilteringTests(unittest.TestCase):
             )
 
             filtered = pd.read_csv(destination, index_col=0)
-            self.assertEqual(list(filtered.index), ["gene_a"])
+            self.assertEqual(list(filtered.index), ["gene_a", "gene_b"])
             self.assertEqual(result["tested_gene_count"], 3)
-            self.assertEqual(result["retained_gene_count"], 1)
+            self.assertEqual(result["retained_gene_count"], 2)
             self.assertEqual(result["retained_significant_tf_count"], 1)
 
     def test_applies_bonferroni_over_all_tested_ordering_genes(self) -> None:

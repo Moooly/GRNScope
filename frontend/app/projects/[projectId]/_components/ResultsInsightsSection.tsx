@@ -555,6 +555,10 @@ function RepeatRunStabilityPanel({
           selectedResultScopeId,
         );
         const summary = selected?.confidenceSummary;
+        const isGenuineBootstrap =
+          summary?.resampling_scheme ===
+            "cell_bootstrap_with_replacement_v1" &&
+          summary?.sampling_with_replacement === true;
         const repeat = summary?.repeat_run_stability;
         const earlyStopping = summary?.early_stopping;
         const checks = (earlyStopping?.checks ?? [])
@@ -590,7 +594,10 @@ function RepeatRunStabilityPanel({
 
         let status = "Unavailable";
         let tone = "bg-slate-100 text-slate-600";
-        if (earlyStopping?.stopped_early) {
+        if (isGenuineBootstrap) {
+          status = "Fixed bootstrap";
+          tone = "bg-emerald-50 text-emerald-700";
+        } else if (earlyStopping?.stopped_early) {
           status = "Stop rule met";
           tone = "bg-emerald-50 text-emerald-700";
         } else if (checks.length) {
@@ -614,6 +621,7 @@ function RepeatRunStabilityPanel({
           stopStreak,
           status,
           tone,
+          isGenuineBootstrap,
           hasLegacySummary: Boolean(fallback),
         };
       }),
@@ -623,7 +631,7 @@ function RepeatRunStabilityPanel({
   return (
     <Panel
       title="Repeat-run stability"
-      description="Spearman correlation summarizes consistency across repeated runs. Open a method for its stopping checks."
+      description="Spearman correlation summarizes consistency across bootstrap networks. Open a method for its run details."
     >
       <div className="overflow-hidden rounded-xl border border-slate-200">
         <div className="hidden grid-cols-[minmax(8rem,0.8fr)_minmax(12rem,1.4fr)_5rem_4.5rem_8rem] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400 md:grid">
@@ -638,7 +646,7 @@ function RepeatRunStabilityPanel({
             MAD <span aria-hidden="true">ⓘ</span>
           </span>
           <span className="text-right">Runs</span>
-          <span className="text-right">Adaptive stop</span>
+          <span className="text-right">Run plan</span>
         </div>
         <div className="divide-y divide-slate-100">
           {rows.map((row, rowIndex) => {
@@ -718,7 +726,7 @@ function RepeatRunStabilityPanel({
                   </span>
                   <span className="flex items-center justify-between gap-2 md:justify-end">
                     <span className="font-semibold text-slate-400 md:hidden">
-                      Adaptive stop
+                      Run plan
                     </span>
                     <span
                       className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-extrabold ${row.tone}`}
@@ -799,7 +807,9 @@ function RepeatRunStabilityPanel({
                       </>
                     ) : (
                       <span className="leading-5 text-slate-500">
-                        {row.hasLegacySummary
+                        {row.isGenuineBootstrap
+                          ? "All planned with-replacement cell-bootstrap samples were used; data-dependent early stopping is disabled."
+                          : row.hasLegacySummary
                           ? "Stopping checks were not saved; stability was reconstructed from the run rankings."
                           : "No stopping checks were saved for this result."}
                       </span>
@@ -1146,12 +1156,22 @@ function ConsensusEdgeExplorer({
         "target",
         comparesMethods ? "consensus_evidence" : "evidence",
         "bootstrap_confidence",
+        "bootstrap_scheme",
+        "bootstrap_selected_samples",
+        "bootstrap_samples",
+        "evidence_ci_lower",
+        "evidence_ci_upper",
         "method_support",
         "supporting_methods",
         "direction",
         "direction_confidence",
         "sign",
-        "sign_confidence",
+        "sign_stability",
+        "sign_coverage",
+        "signed_bootstrap_recoveries",
+        "sign_agreeing_recoveries",
+        "bootstrap_positive_probability",
+        "bootstrap_negative_probability",
       ],
       ...filteredRows.map((edge) => [
         edge.rank,
@@ -1159,6 +1179,13 @@ function ConsensusEdgeExplorer({
         edge.target,
         edge.score.toFixed(3),
         edge.confidence.toFixed(3),
+        edge.bootstrapVerified
+          ? "cell_bootstrap_with_replacement_v1"
+          : "legacy_subsampling",
+        edge.bootstrapSelectedRuns ?? "",
+        edge.bootstrapRunCount ?? "",
+        edge.evidenceCiLower?.toFixed(3) ?? "",
+        edge.evidenceCiUpper?.toFixed(3) ?? "",
         edge.count,
         edge.supportingAlgorithms.join("; "),
         edge.direction === 0 ? "unknown" : "source_to_target",
@@ -1169,6 +1196,11 @@ function ConsensusEdgeExplorer({
             ? "repression"
             : "unsigned",
         edge.signConfidence?.toFixed(3) ?? "",
+        edge.signCoverage.toFixed(3),
+        edge.bootstrapSignedSelectedRuns ?? "",
+        edge.bootstrapSignAgreeingRuns ?? "",
+        edge.bootstrapPositiveProbability?.toFixed(3) ?? "",
+        edge.bootstrapNegativeProbability?.toFixed(3) ?? "",
       ]),
     ]);
 
@@ -1256,11 +1288,11 @@ function ConsensusEdgeExplorer({
                       className="cursor-help px-4 py-3 text-center"
                       title={
                         comparesMethods
-                          ? "Median bootstrap confidence across supporting methods."
-                          : "Bootstrap confidence from repeated resampled runs."
+                          ? "Median genuine bootstrap recovery across supporting methods. Legacy results are identified in each row."
+                          : "Percentage of with-replacement cell-bootstrap samples that recovered this edge."
                       }
                     >
-                      Confidence
+                      Bootstrap confidence
                     </th>
                     {comparesMethods ? (
                       <th className="px-4 py-3 text-center">Support</th>
@@ -1273,7 +1305,7 @@ function ConsensusEdgeExplorer({
                     </th>
                     <th
                       className="cursor-help px-4 py-3 text-center"
-                      title="Predicted activation or repression with sign confidence when available."
+                      title="Predicted activation or repression, followed by agreement with that sign across signed bootstrap recoveries when available."
                     >
                       Regulatory sign
                     </th>
@@ -1346,7 +1378,20 @@ function ConsensusEdgeExplorer({
                             </td>
                           ) : null}
                           <td className="px-4 py-3 text-center text-xs font-extrabold tabular-nums text-[#087ead]">
-                            {edge.confidence.toFixed(3)}
+                            <span
+                              title={
+                                edge.bootstrapVerified
+                                  ? edge.bootstrapSelectedRuns !== undefined &&
+                                    edge.bootstrapRunCount !== undefined
+                                    ? `Recovered in ${edge.bootstrapSelectedRuns} of ${edge.bootstrapRunCount} bootstrap samples`
+                                    : "Median bootstrap recovery across supporting methods"
+                                  : "Legacy subsampling result; rerun to calculate genuine bootstrap confidence"
+                              }
+                            >
+                              {edge.bootstrapVerified
+                                ? `${Math.round(edge.confidence * 100)}%`
+                                : `${edge.confidence.toFixed(3)} legacy`}
+                            </span>
                           </td>
                           {comparesMethods ? (
                             <td className="px-4 py-3 text-center">
@@ -1373,7 +1418,9 @@ function ConsensusEdgeExplorer({
                               {annotation}
                               {signConfidencePercent !== null
                                 ? ` · ${signConfidencePercent}%`
-                                : ""}
+                                : edge.sign !== 0
+                                  ? " · no stability data"
+                                  : ""}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">

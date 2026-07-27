@@ -1,5 +1,5 @@
 """
-Standalone reference for GRNScope's current 30-run edge metric calculation.
+Standalone reference for GRNScope's genuine cell-bootstrap edge calculation.
 
 This file is intentionally NOT imported by the web app. It exists only as a
 readable reference for explaining how repeated BEELINE outputs are converted
@@ -9,24 +9,22 @@ The production implementation lives in:
     backend/app/services/beeline_service.py
 
 Current idea:
-    1. Run one algorithm 30 times on different 80% cell subsamples.
-    2. For each run, rank regulators separately for each target gene.
-    3. Convert each edge's rank into a 0-1 percentile score.
-    4. Aggregate those percentile scores across all 30 runs.
-    5. Penalize edges that do not repeatedly appear in the top K ranks.
+    1. Fit the algorithm once on all cells for the displayed edge evidence.
+    2. Draw N cells with replacement from the N-cell matrix.
+    3. Repeat the algorithm on 100 bootstrap matrices by default.
+    4. For each replicate, rank regulators separately for each target gene.
+    5. Count how often each edge appears in the top K ranks.
+    6. Use the bootstrap percentile distribution for the evidence interval.
 
 Main formulas:
     Per-run percentile:
         percentile = 1 - (rank - 1) / (number_of_regulators_for_target - 1)
 
-    Evidence:
-        evidence = mean_percentile = sum(percentiles_across_observed_runs) / total_runs
+    Bootstrap mean evidence:
+        mean_percentile = sum(percentiles, with missing edges = 0) / total_runs
 
-    Stability:
-        stability = selected_runs / total_runs
-
-    Confidence:
-        confidence = stability * evidence
+    Bootstrap confidence:
+        confidence = selected_runs / total_runs
 """
 
 from __future__ import annotations
@@ -35,7 +33,7 @@ from dataclasses import dataclass, field
 from math import fsum
 
 
-DEFAULT_TOTAL_RUNS = 30
+DEFAULT_TOTAL_RUNS = 100
 DEFAULT_STABILITY_TOP_K = 10
 
 
@@ -74,8 +72,8 @@ class AggregatedEdgeMetrics:
     confidence: float
     mean_raw_score: float
     mean_z: float
-    z_ci_lower: float
-    z_ci_upper: float
+    evidence_ci_lower: float
+    evidence_ci_upper: float
     selected_runs: int
     observed_runs: int
     run_count: int
@@ -231,8 +229,9 @@ def aggregate_repeated_run_metrics(
         # Stability measures repeated top-K recovery.
         stability = current.selected_runs / total_runs
 
-        # Confidence requires both repeated recovery and high average rank.
-        confidence = clamp_0_1(stability * evidence)
+        # Genuine bootstrap confidence is the empirical edge-recovery
+        # frequency. Evidence remains a separate statistic.
+        confidence = clamp_0_1(stability)
 
         raw_scores = current.raw_scores
         mean_raw_score = fsum(raw_scores) / len(raw_scores) if raw_scores else 0.0
@@ -240,6 +239,10 @@ def aggregate_repeated_run_metrics(
         # Missing runs are padded with z-score 0 for the mean/interval.
         z_values = [*current.z_scores, *([0.0] * max(0, missing_runs))]
         mean_z = fsum(z_values) / total_runs
+        evidence_values = [
+            *current.percentiles,
+            *([0.0] * max(0, missing_runs)),
+        ]
 
         aggregated_edges.append(
             AggregatedEdgeMetrics(
@@ -250,8 +253,8 @@ def aggregate_repeated_run_metrics(
                 confidence=confidence,
                 mean_raw_score=mean_raw_score,
                 mean_z=mean_z,
-                z_ci_lower=quantile(z_values, 0.025),
-                z_ci_upper=quantile(z_values, 0.975),
+                evidence_ci_lower=quantile(evidence_values, 0.025),
+                evidence_ci_upper=quantile(evidence_values, 0.975),
                 selected_runs=current.selected_runs,
                 observed_runs=current.observed_runs,
                 run_count=total_runs,
@@ -292,7 +295,7 @@ def calculate_metrics_from_known_ranks(
     Use None when the edge is missing from a run.
 
     Example:
-        ranks = [1, 3, 12, None, 5, ...]  # length 30
+        ranks = [1, 3, 12, None, 5, ...]  # one entry per bootstrap replicate
     """
 
     total_runs = len(ranks)
@@ -315,7 +318,7 @@ def calculate_metrics_from_known_ranks(
 
     evidence = fsum(percentiles) / total_runs
     stability = selected_runs / total_runs
-    confidence = stability * evidence
+    confidence = stability
 
     return {
         "evidence": evidence,
@@ -328,7 +331,7 @@ def calculate_metrics_from_known_ranks(
 
 
 if __name__ == "__main__":
-    # Example: one edge across 30 repeated runs.
+    # Compact teaching example; production defaults to 100 bootstrap replicates.
     # The edge is missing in a few runs, and in observed runs its rank changes.
     example_ranks = [
         2,
@@ -369,6 +372,6 @@ if __name__ == "__main__":
         stability_top_k=10,
     )
 
-    print("Example edge metrics from 30 runs")
+    print(f"Example edge metrics from {len(example_ranks)} bootstrap replicates")
     for key, value in metrics.items():
         print(f"{key}: {value:.3f}" if isinstance(value, float) else f"{key}: {value}")

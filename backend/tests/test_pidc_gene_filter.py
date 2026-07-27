@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from app.services.beeline_service import (
+    PreprocessingRuntimeError,
     limit_expression_genes_by_variance,
     load_algorithm_preprocessing_summary,
     prepare_algorithm_expression_source,
@@ -65,6 +66,117 @@ class PIDCGeneFilterTests(unittest.TestCase):
             self.assertFalse(destination.exists())
 
 
+class PPCORGeneFilterTests(unittest.TestCase):
+    def test_default_and_override_gene_limits_are_resolved(self):
+        self.assertEqual(
+            resolve_algorithm_gene_limit("PPCOR", {}, "maxGenes"),
+            500,
+        )
+        self.assertEqual(
+            resolve_algorithm_gene_limit(
+                "PPCOR",
+                {"algorithm_parameters": {"PPCOR": {"maxGenes": 300}}},
+                "maxGenes",
+            ),
+            300,
+        )
+
+    def test_gene_limit_stays_below_confidence_run_cell_count(self):
+        with tempfile.TemporaryDirectory(prefix="ppcor-filter-test-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "ExpressionData.csv"
+            source.write_text(
+                ",cell-1,cell-2,cell-3,cell-4,cell-5,cell-6\n"
+                "gene-a,0,0,0,0,0,0\n"
+                "gene-b,0,1,2,3,4,5\n"
+                "gene-c,0,2,4,6,8,10\n"
+                "gene-d,1,1,1,1,1,1\n"
+                "gene-e,0,3,6,9,12,15\n"
+                "gene-f,0,4,8,12,16,20\n",
+                encoding="utf-8",
+            )
+
+            result = prepare_algorithm_expression_source(
+                runtime_root=root / "runtime",
+                algorithm_id="PPCOR",
+                project_manifest={
+                    "algorithm_parameters": {
+                        "PPCOR": {"maxGenes": 500},
+                    },
+                    "confidence_bootstrap_runs": 1,
+                },
+                preprocessed_expression=source,
+            )
+
+            # This deterministic six-cell bootstrap contains five unique cells,
+            # so PPCOR retains at most four genes to keep p-values available.
+            with result.open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.reader(handle))
+            self.assertEqual(len(rows) - 1, 4)
+            self.assertEqual(
+                [row[0] for row in rows[1:]],
+                ["gene-b", "gene-c", "gene-e", "gene-f"],
+            )
+            self.assertEqual(
+                load_algorithm_preprocessing_summary(root / "runtime"),
+                {
+                    "algorithm_id": "PPCOR",
+                    "stage": "algorithm_variance_limit",
+                    "selection_method": "highest_variance",
+                    "reason_code": "numerical_stability",
+                    "configured_gene_limit": 500,
+                    "effective_gene_limit": 4,
+                    "input_gene_count": 6,
+                    "retained_gene_count": 4,
+                    "removed_gene_count": 2,
+                    "applied": True,
+                    "gene_audit_available": True,
+                },
+            )
+            audit = json.loads(
+                (
+                    root
+                    / "runtime"
+                    / "algorithm_preprocessed"
+                    / "gene_selection_audit.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                audit["retained_gene_names"],
+                ["gene-b", "gene-c", "gene-e", "gene-f"],
+            )
+            self.assertEqual(audit["removed_gene_names"], ["gene-a", "gene-d"])
+
+    def test_too_few_confidence_cells_fail_before_ppcor_runs(self):
+        with tempfile.TemporaryDirectory(prefix="ppcor-filter-test-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "ExpressionData.csv"
+            source.write_text(
+                ",cell-1,cell-2,cell-3\n"
+                "gene-a,0,1,2\n"
+                "gene-b,0,2,4\n"
+                "gene-c,0,3,6\n"
+                "gene-d,0,4,8\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                PreprocessingRuntimeError,
+                "requires at least 4 unique cells",
+            ):
+                prepare_algorithm_expression_source(
+                    runtime_root=root / "runtime",
+                    algorithm_id="PPCOR",
+                    project_manifest={
+                        "algorithm_parameters": {
+                            "PPCOR": {"maxGenes": 500},
+                        },
+                        "confidence_bootstrap_runs": 1,
+                    },
+                    preprocessed_expression=source,
+                )
+
+
 class SINCERITIESGeneFilterTests(unittest.TestCase):
     def test_default_and_override_gene_limits_are_resolved(self):
         self.assertEqual(
@@ -102,7 +214,7 @@ class SINCERITIESGeneFilterTests(unittest.TestCase):
                     "algorithm_parameters": {
                         "SINCERITIES": {"maxGenes": 500},
                     },
-                    "confidence_subsample_fraction": 0.8,
+                    "confidence_bootstrap_runs": 1,
                 },
                 preprocessed_expression=source,
             )

@@ -225,6 +225,9 @@ function ProjectsPageContent() {
                 true,
               ),
               maxEdgesPerTarget: String(source.ranked_edges_per_target_limit ?? "20"),
+              bootstrapReplicates: String(
+                source.confidence_bootstrap_runs ?? "100",
+              ),
               selectedIds: Array.isArray(source.selected_algorithms)
                 ? source.selected_algorithms.map(String)
                 : [],

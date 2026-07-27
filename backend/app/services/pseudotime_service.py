@@ -26,11 +26,18 @@ from pathlib import Path
 from ..atomic_io import atomic_write_json
 from ..config import PROJECTS_ROOT
 from ..repositories.project_repository import read_project_manifest, write_project_manifest
+from .matrix_transformation_service import (
+    MatrixTransformationError,
+    matrix_transformation_signature,
+    transform_expression_matrix,
+)
 
 STATUS_FILENAME = "pseudotime_estimation.json"
 RUNTIME_DIRNAME = "_pseudotime_runtime"
 ACTIVE_STATUSES = {"Queued", "Running"}
 DEFAULT_IMAGE = "grnbeeline/slingshot:0.1.0"
+PSEUDOTIME_INPUT_CONTRACT_VERSION = 2
+SLINGSHOT_RUNTIME_MATRIX_STATE = "log_normalized"
 _CONTAINER_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
@@ -73,6 +80,131 @@ def _write_status(project_dir: Path, status: dict) -> None:
     atomic_write_json(_status_path(project_dir), status)
 
 
+def project_matrix_state(manifest: dict) -> str:
+    preprocessing = manifest.get("preprocessing") or {}
+    matrix_state = str(preprocessing.get("matrix_state") or "").strip().lower()
+    try:
+        matrix_transformation_signature(matrix_state)
+    except MatrixTransformationError as exc:
+        raise PseudotimeEstimationError(str(exc)) from exc
+    return matrix_state
+
+
+def _input_path_signature(path: Path) -> dict:
+    stat = path.stat()
+    return {
+        "path": str(path.resolve()),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+
+
+def build_pseudotime_input_signature(
+    manifest: dict,
+    *,
+    start_cluster: str | None,
+) -> dict:
+    expression_value = manifest.get("expression_path")
+    if not expression_value:
+        raise PseudotimeEstimationError(
+            "This project has no expression matrix to estimate pseudotime from."
+        )
+    expression_path = Path(str(expression_value))
+    if not expression_path.exists():
+        raise PseudotimeEstimationError(
+            "This project has no expression matrix to estimate pseudotime from."
+        )
+
+    matrix_state = project_matrix_state(manifest)
+    cluster_signature = None
+    cluster_value = manifest.get("cluster_labels_path")
+    if cluster_value:
+        cluster_path = Path(str(cluster_value))
+        if cluster_path.exists():
+            cluster_signature = _input_path_signature(cluster_path)
+
+    return {
+        "version": PSEUDOTIME_INPUT_CONTRACT_VERSION,
+        "source_expression": _input_path_signature(expression_path),
+        "matrix_transformation": matrix_transformation_signature(matrix_state),
+        "cluster_labels": cluster_signature,
+        "start_cluster": (start_cluster or "").strip() or None,
+        "slingshot_image": slingshot_image(),
+        "slingshot_runtime_matrix_state": SLINGSHOT_RUNTIME_MATRIX_STATE,
+    }
+
+
+def prepare_pseudotime_expression(
+    manifest: dict,
+    destination_expression: Path,
+) -> dict:
+    expression_value = manifest.get("expression_path")
+    if not expression_value:
+        raise PseudotimeEstimationError(
+            "This project has no expression matrix to estimate pseudotime from."
+        )
+    expression_path = Path(str(expression_value))
+    if not expression_path.exists():
+        raise PseudotimeEstimationError(
+            "This project has no expression matrix to estimate pseudotime from."
+        )
+    return transform_expression_matrix(
+        source_expression=expression_path,
+        destination_expression=destination_expression,
+        matrix_state=project_matrix_state(manifest),
+    )
+
+
+def estimated_pseudotime_is_current(
+    project_dir: Path,
+    manifest: dict,
+    status: dict | None = None,
+) -> bool:
+    pseudotime_value = manifest.get("pseudotime_path")
+    if not pseudotime_value or not Path(str(pseudotime_value)).exists():
+        return False
+    if not bool(manifest.get("pseudotime_estimated")):
+        return True
+
+    active_status = status or read_estimation_status(project_dir) or {}
+    start_cluster = (
+        active_status.get("start_cluster")
+        or manifest.get("pseudotime_start_cluster")
+        or None
+    )
+    try:
+        expected = build_pseudotime_input_signature(
+            manifest,
+            start_cluster=start_cluster,
+        )
+    except (OSError, PseudotimeEstimationError):
+        return False
+    return (
+        active_status.get("status") == "Completed"
+        and active_status.get("input_signature") == expected
+    )
+
+
+def _clear_outdated_estimated_pseudotime(
+    project_dir: Path,
+    manifest: dict,
+) -> dict:
+    updated = dict(manifest)
+    updated["pseudotime_path"] = None
+    updated["pseudotime_estimated"] = False
+    updated.pop("pseudotime_input_contract", None)
+    write_project_manifest(project_dir, updated)
+    _update_metadata(
+        project_dir,
+        {
+            "has_pseudotime": False,
+            "pseudotime_estimated": False,
+            "pseudotime_filename": None,
+        },
+    )
+    return updated
+
+
 def get_pseudotime_estimation_state(project_dir: Path) -> dict:
     """Compact status for the API/poll. Reports whether estimation is available
     (Docker present, an expression matrix exists, no user-provided pseudotime)
@@ -92,6 +224,19 @@ def get_pseudotime_estimation_state(project_dir: Path) -> dict:
         "error_message": status.get("error_message"),
         "start_cluster": status.get("start_cluster"),
         "lineage_count": status.get("lineage_count"),
+        "matrix_state": (
+            (status.get("input_signature") or {})
+            .get("matrix_transformation", {})
+            .get("matrix_state")
+        ),
+        "applied_operations": (
+            (status.get("input_signature") or {})
+            .get("matrix_transformation", {})
+            .get("operations")
+        ),
+        "input_contract_version": (
+            (status.get("input_signature") or {}).get("version")
+        ),
         "started_at": status.get("started_at"),
         "completed_at": status.get("completed_at"),
         "has_pseudotime": has_pseudotime,
@@ -128,7 +273,9 @@ def start_pseudotime_estimation(project_id: str, start_cluster: str | None = Non
         )
 
     # Never overwrite a pseudotime the user uploaded themselves.
-    if manifest.get("pseudotime_path") and not (existing and existing.get("estimated")):
+    if manifest.get("pseudotime_path") and not bool(
+        manifest.get("pseudotime_estimated")
+    ):
         raise PseudotimeEstimationError(
             "This project already has a pseudotime file. Remove it before estimating."
         )
@@ -139,6 +286,16 @@ def start_pseudotime_estimation(project_id: str, start_cluster: str | None = Non
         )
 
     normalized_start = (start_cluster or "").strip() or None
+    if (
+        manifest.get("pseudotime_path")
+        and bool(manifest.get("pseudotime_estimated"))
+        and not estimated_pseudotime_is_current(project_dir, manifest, existing)
+    ):
+        manifest = _clear_outdated_estimated_pseudotime(project_dir, manifest)
+    input_signature = build_pseudotime_input_signature(
+        manifest,
+        start_cluster=normalized_start,
+    )
     started_at, started_timestamp = _now()
     status = {
         "status": "Running",
@@ -150,6 +307,7 @@ def start_pseudotime_estimation(project_id: str, start_cluster: str | None = Non
         "error_message": None,
         "lineage_count": None,
         "estimated": True,
+        "input_signature": input_signature,
     }
     _write_status(project_dir, status)
 
@@ -204,8 +362,11 @@ def run_pseudotime_estimation_task(project_id: str) -> None:
             shutil.rmtree(runtime_dir, ignore_errors=True)
         runtime_dir.mkdir(parents=True, exist_ok=True)
 
-        expression_path = Path(str(manifest.get("expression_path")))
-        shutil.copy2(expression_path, runtime_dir / "ExpressionData.csv")
+        runtime_expression = runtime_dir / "ExpressionData.csv"
+        transformation = prepare_pseudotime_expression(
+            manifest,
+            runtime_expression,
+        )
 
         cluster_labels_path = manifest.get("cluster_labels_path")
         has_clusters = bool(cluster_labels_path) and Path(str(cluster_labels_path)).exists()
@@ -214,14 +375,36 @@ def run_pseudotime_estimation_task(project_id: str) -> None:
 
         status = read_estimation_status(project_dir) or {}
         start_cluster = status.get("start_cluster")
+        input_signature = build_pseudotime_input_signature(
+            manifest,
+            start_cluster=start_cluster,
+        )
+        status["input_signature"] = input_signature
+        status["input_transformation"] = transformation
+        _write_status(project_dir, status)
+
+        from .beeline_service import resolve_beeline_root
+
+        slingshot_script = (
+            resolve_beeline_root()
+            / "Algorithms"
+            / "SLINGSHOT"
+            / "estimate_pseudotime.R"
+        )
+        if not slingshot_script.exists():
+            raise FileNotFoundError("The Slingshot pseudotime runner is missing.")
 
         command = [
             "docker", "run", "--rm",
             "--name", _container_name(project_id),
             "-v", f"{runtime_dir.resolve()}:/data",
+            "-v", f"{slingshot_script.resolve()}:/app/grnscope_estimate_pseudotime.R:ro",
+            "--entrypoint", "Rscript",
             slingshot_image(),
+            "/app/grnscope_estimate_pseudotime.R",
             "--expression", "/data/ExpressionData.csv",
             "--output", "/data/PseudoTime.csv",
+            "--matrixState", SLINGSHOT_RUNTIME_MATRIX_STATE,
         ]
         if has_clusters:
             command += ["--clusters", "/data/ClusterLabels.csv"]
@@ -241,7 +424,13 @@ def run_pseudotime_estimation_task(project_id: str) -> None:
         destination = project_dir / "PseudoTime.csv"
         shutil.copy2(output_file, destination)
         lineage_count = _parse_lineage_count(completed.stdout)
-        _finalize_success(project_dir, destination, lineage_count)
+        _finalize_success(
+            project_dir,
+            destination,
+            lineage_count,
+            input_signature=input_signature,
+            transformation=transformation,
+        )
     except Exception as exc:  # pragma: no cover - defensive
         _finalize_failure(project_dir, f"Pseudotime estimation failed: {exc}")
     finally:
@@ -253,7 +442,14 @@ def _parse_lineage_count(stdout: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _finalize_success(project_dir: Path, pseudotime_path: Path, lineage_count: int | None) -> None:
+def _finalize_success(
+    project_dir: Path,
+    pseudotime_path: Path,
+    lineage_count: int | None,
+    *,
+    input_signature: dict,
+    transformation: dict,
+) -> None:
     completed_at, completed_timestamp = _now()
     status = read_estimation_status(project_dir) or {}
     status.update({
@@ -263,6 +459,8 @@ def _finalize_success(project_dir: Path, pseudotime_path: Path, lineage_count: i
         "error_message": None,
         "lineage_count": lineage_count,
         "estimated": True,
+        "input_signature": input_signature,
+        "input_transformation": transformation,
     })
     _write_status(project_dir, status)
 
@@ -271,6 +469,9 @@ def _finalize_success(project_dir: Path, pseudotime_path: Path, lineage_count: i
         manifest = read_project_manifest(project_dir)
         manifest["pseudotime_path"] = str(pseudotime_path)
         manifest["pseudotime_estimated"] = True
+        manifest["pseudotime_input_contract"] = input_signature
+        manifest["pseudotime_source_path"] = str(pseudotime_path)
+        manifest.pop("pseudotime_canonicalization", None)
         write_project_manifest(project_dir, manifest)
     except Exception:
         pass
@@ -281,6 +482,7 @@ def _finalize_success(project_dir: Path, pseudotime_path: Path, lineage_count: i
             "has_pseudotime": True,
             "pseudotime_estimated": True,
             "pseudotime_filename": "PseudoTime.csv",
+            "pseudotime_input_contract": input_signature,
         },
     )
 
@@ -345,11 +547,26 @@ def ensure_estimated_pseudotime(project_id: str) -> bool:
         except Exception:
             return False
 
-        # Already have one (uploaded, or estimated by a worker that got here first).
-        if manifest.get("pseudotime_path"):
+        # Uploaded pseudotime is authoritative. A generated file is reusable
+        # only when its expression-scale contract and all trajectory inputs
+        # still match.
+        if manifest.get("pseudotime_path") and not bool(
+            manifest.get("pseudotime_estimated")
+        ):
             return True
+        if estimated_pseudotime_is_current(project_dir, manifest):
+            return True
+        if manifest.get("pseudotime_path"):
+            manifest = _clear_outdated_estimated_pseudotime(
+                project_dir,
+                manifest,
+            )
 
         start_cluster = manifest.get("pseudotime_start_cluster") or None
+        input_signature = build_pseudotime_input_signature(
+            manifest,
+            start_cluster=start_cluster,
+        )
         started_at, started_timestamp = _now()
         _write_status(project_dir, {
             "status": "Running",
@@ -361,15 +578,17 @@ def ensure_estimated_pseudotime(project_id: str) -> bool:
             "error_message": None,
             "lineage_count": None,
             "estimated": True,
+            "input_signature": input_signature,
         })
 
         run_pseudotime_estimation_task(project_id)
 
         try:
             manifest = read_project_manifest(project_dir)
+            status = read_estimation_status(project_dir) or {}
         except Exception:
             return False
-        return bool(manifest.get("pseudotime_path"))
+        return estimated_pseudotime_is_current(project_dir, manifest, status)
 
 
 def stop_pseudotime_estimation(project_id: str) -> dict:

@@ -54,6 +54,10 @@ class PerturbationServiceTests(unittest.TestCase):
                     "algorithm_id": "CELLORACLE",
                     "status": "Completed",
                     "ranked_edges_path": str(ranked_path),
+                    "expression_contract": {
+                        "version": 2,
+                        "mode": "raw_count",
+                    },
                 }
             ),
             encoding="utf-8",
@@ -85,6 +89,19 @@ class PerturbationServiceTests(unittest.TestCase):
                 eligible_perturbation_genes(project_dir),
                 ["GATA1", "SPI1"],
             )
+
+    def test_legacy_celloracle_result_requires_one_corrected_rerun(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project_dir = self.make_completed_project(Path(temporary_directory))
+            result_path = project_dir / "results" / "CELLORACLE" / "result.json"
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            result.pop("expression_contract")
+            result_path.write_text(json.dumps(result), encoding="utf-8")
+
+            available, reason = celloracle_availability(project_dir)
+
+            self.assertFalse(available)
+            self.assertIn("must be rerun", str(reason))
 
     def test_expression_profile_reports_observed_distribution_for_regulator(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

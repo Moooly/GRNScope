@@ -39,6 +39,7 @@ type BackendAlgorithmEntry = {
 const MAX_PREPROCESSED_GENES = 8000;
 const RANKED_EDGES_HARD_MAX = 100;
 const DEFAULT_MAX_EDGES_PER_TARGET = "20";
+const DEFAULT_BOOTSTRAP_REPLICATES = "100";
 const SINCERITIES_DEFAULT_MAX_GENES = 500;
 const SINCERITIES_SAFE_CELL_FRACTION = 0.75;
 const SCRIBE_DEFAULT_MAX_GENES = 300;
@@ -187,6 +188,7 @@ export type CreateProjectPrefill = {
   trajectoryBonferroni?: boolean;
   includeSignificantTFs?: boolean;
   maxEdgesPerTarget?: string;
+  bootstrapReplicates?: string;
   selectedIds?: string[];
   algorithmParameters?: Record<string, Record<string, unknown>>;
   ensembleEnabled?: boolean;
@@ -272,6 +274,9 @@ export default function CreateProjectFlow({
   const [trajectoryBonferroni, setTrajectoryBonferroni] = useState(true);
   const [includeSignificantTFs, setIncludeSignificantTFs] = useState(true);
   const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
+  const [bootstrapReplicates, setBootstrapReplicates] = useState(
+    DEFAULT_BOOTSTRAP_REPLICATES,
+  );
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
@@ -311,7 +316,8 @@ export default function CreateProjectFlow({
     setClusterLabelsFileName("");
     setIncludeAllTFs(initialValues?.includeAllTFs ?? true);
     setMatrixState(initialValues?.matrixState ?? "");
-    setDatasetSpecies(initialValues?.datasetSpecies ?? "");
+    const initialDatasetSpecies = initialValues?.datasetSpecies ?? "";
+    setDatasetSpecies(initialDatasetSpecies);
     setCustomTfListFile(null);
     setCustomTfListFileName("");
     setDetectionThreshold(initialValues?.detectionThreshold ?? "10");
@@ -326,7 +332,14 @@ export default function CreateProjectFlow({
     setTrajectoryBonferroni(initialValues?.trajectoryBonferroni ?? true);
     setIncludeSignificantTFs(initialValues?.includeSignificantTFs ?? true);
     setMaxEdgesPerTarget(initialValues?.maxEdgesPerTarget ?? DEFAULT_MAX_EDGES_PER_TARGET);
-    setCellOracleSpecies(initialValues?.cellOracleSpecies ?? "human");
+    setBootstrapReplicates(
+      initialValues?.bootstrapReplicates ?? DEFAULT_BOOTSTRAP_REPLICATES,
+    );
+    setCellOracleSpecies(
+      initialDatasetSpecies && initialDatasetSpecies !== "other"
+        ? initialDatasetSpecies
+        : initialValues?.cellOracleSpecies ?? "human",
+    );
     setHasCellOracleSettingsConfigured(
       Boolean(initialValues?.selectedIds?.includes("CELLORACLE")),
     );
@@ -616,6 +629,9 @@ export default function CreateProjectFlow({
 
   const handleSetDatasetSpecies = (nextSpecies: string) => {
     setDatasetSpecies(nextSpecies);
+    if (nextSpecies && nextSpecies !== "other") {
+      setCellOracleSpecies(nextSpecies);
+    }
     if (nextSpecies !== "other") {
       setCustomTfListFile(null);
       setCustomTfListFileName("");
@@ -640,6 +656,7 @@ export default function CreateProjectFlow({
     formData.append("trajectory_bonferroni", JSON.stringify(trajectoryBonferroni));
     formData.append("include_significant_tfs", JSON.stringify(includeSignificantTFs));
     formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
+    formData.append("bootstrap_replicates", bootstrapReplicates);
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
     // Only submit overrides for algorithms that are actually selected.
     const selectedParameterOverrides: Record<string, Record<string, unknown>> = {};
@@ -727,6 +744,11 @@ export default function CreateProjectFlow({
     }
     if (!datasetSpecies) {
       validationErrors.push("Select the species represented by the matrix.");
+    }
+    if (selectedIds.includes("CELLORACLE") && datasetSpecies === "other") {
+      validationErrors.push(
+        "CellOracle requires a supported dataset species for its built-in prior.",
+      );
     }
     if (customTfListFile) {
       if (!customTfListFile.name.toLowerCase().endsWith(".csv")) {
@@ -910,6 +932,7 @@ export default function CreateProjectFlow({
       includeSignificantTFs={includeSignificantTFs}
       includeAllTFs={includeAllTFs}
       maxEdgesPerTarget={maxEdgesPerTarget}
+      bootstrapReplicates={bootstrapReplicates}
       maxEdgesLimit={maxEdgesLimit}
       pidcDefaultMaxGenes={pidcDefaultMaxGenes}
       sinceritiesDefaultMaxGenes={sinceritiesDefaultMaxGenes}
@@ -960,6 +983,7 @@ export default function CreateProjectFlow({
       setClusterLabelsFileName={setClusterLabelsFileName}
       setIncludeAllTFs={setIncludeAllTFs}
       setMaxEdgesPerTarget={setMaxEdgesPerTarget}
+      setBootstrapReplicates={setBootstrapReplicates}
       setCellOracleSpecies={setCellOracleSpecies}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}

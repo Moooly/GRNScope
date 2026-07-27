@@ -39,7 +39,7 @@ class VarianceFilteringTests(unittest.TestCase):
             self.assertEqual(result["retained_gene_count"], 2)
             self.assertEqual(result["removed_gene_count"], 1)
 
-    def test_unions_known_tfs_without_reordering_expression(self) -> None:
+    def test_prioritizes_known_tfs_within_the_total_limit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "expression.csv"
@@ -61,12 +61,13 @@ class VarianceFilteringTests(unittest.TestCase):
             )
 
             filtered = pd.read_csv(destination, index_col=0)
-            self.assertEqual(list(filtered.index), ["known_tf", "highest"])
+            self.assertEqual(list(filtered.index), ["known_tf"])
             self.assertEqual(result["available_known_tf_count"], 1)
             self.assertEqual(result["forced_known_tf_count"], 1)
-            self.assertEqual(result["retained_gene_count"], 2)
+            self.assertEqual(result["retained_gene_count"], 1)
+            self.assertEqual(result["hard_total_gene_limit"], 1)
 
-    def test_known_tf_does_not_consume_non_tf_top_n_quota(self) -> None:
+    def test_known_tf_consumes_one_slot_in_the_total_limit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "expression.csv"
@@ -90,10 +91,10 @@ class VarianceFilteringTests(unittest.TestCase):
             filtered = pd.read_csv(destination, index_col=0)
             self.assertEqual(
                 list(filtered.index),
-                ["high_variance_tf", "best_non_tf"],
+                ["high_variance_tf"],
             )
-            self.assertEqual(result["ranked_non_tf_gene_count"], 1)
-            self.assertEqual(result["retained_gene_count"], 2)
+            self.assertEqual(result["ranked_non_tf_gene_count"], 0)
+            self.assertEqual(result["retained_gene_count"], 1)
 
     def test_matches_versioned_ensembl_tf_and_preserves_matrix_identifier(
         self,
@@ -121,7 +122,7 @@ class VarianceFilteringTests(unittest.TestCase):
             filtered = pd.read_csv(destination, index_col=0)
             self.assertEqual(
                 list(filtered.index),
-                ["ENSG00000123268.4", "highest"],
+                ["ENSG00000123268.4"],
             )
             self.assertEqual(result["available_known_tf_count"], 1)
             self.assertEqual(result["forced_known_tf_count"], 1)

@@ -53,6 +53,7 @@ const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
 const ALGORITHM_GENE_LIMIT_DEFAULTS: Record<string, number> = {
   PIDC: 500,
+  PPCOR: 500,
   SINCERITIES: 500,
   SCRIBE: 300,
   SINGE: 500,
@@ -61,6 +62,7 @@ const ALGORITHM_GENE_LIMIT_DEFAULTS: Record<string, number> = {
 };
 const ALGORITHM_GENE_ADJUSTMENT_REASONS: Record<string, string> = {
   PIDC: "Keeps triplet calculations practical.",
+  PPCOR: "Keeps partial-correlation statistics valid and practical.",
   SINCERITIES: "Keeps partial-correlation calculations stable.",
   SCRIBE: "Keeps pairwise information calculations practical.",
   SINGE: "Keeps lagged calculations practical.",
@@ -158,6 +160,12 @@ function numericMeanPercentile(edge: AlgorithmResultEdge) {
 function numericStability(edge: AlgorithmResultEdge) {
   const stability = Number(edge.stability);
   return Number.isFinite(stability) ? clamp(stability, 0, 1) : null;
+}
+
+function numericOptionalProbability(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const probability = Number(value);
+  return Number.isFinite(probability) ? clamp(probability, 0, 1) : null;
 }
 
 function signOf(value: number): -1 | 0 | 1 {
@@ -612,10 +620,7 @@ export default function ProjectDetailPage() {
             inputGeneCount: recordedSummary.input_gene_count,
             retainedGeneCount: recordedSummary.retained_gene_count,
             effectiveGeneLimit: recordedSummary.effective_gene_limit,
-            reason:
-              recordedSummary.reason_code === "numerical_stability"
-                ? "Keeps partial-correlation calculations stable."
-                : ALGORITHM_GENE_ADJUSTMENT_REASONS[algorithmId],
+            reason: ALGORITHM_GENE_ADJUSTMENT_REASONS[algorithmId],
             recorded: true,
             geneAuditAvailable:
               recordedSummary.gene_audit_available === true,
@@ -635,8 +640,15 @@ export default function ProjectDetailPage() {
           ? Math.floor(parsedLimit)
           : defaultLimit;
       const estimatedEffectiveLimit =
-        algorithmId === "SINCERITIES" && typeof cellCount === "number"
-          ? Math.min(configuredLimit, Math.max(2, Math.round(cellCount * 0.8) - 1))
+        (algorithmId === "PPCOR" || algorithmId === "SINCERITIES") &&
+        typeof cellCount === "number"
+          ? Math.min(
+              configuredLimit,
+              Math.max(
+                algorithmId === "PPCOR" ? 3 : 2,
+                Math.round(cellCount * 0.8) - 1
+              )
+            )
           : configuredLimit;
       if (projectWideGeneCount <= estimatedEffectiveLimit) return [];
 
@@ -743,6 +755,16 @@ export default function ProjectDetailPage() {
       const algorithmMeta = algorithmMetaMap.get(algorithmId);
       const isDirected = algorithmMeta?.directed ?? true;
       const isSigned = algorithmMeta?.signed ?? false;
+      const storedResult = algorithmResults[algorithmId];
+      const confidenceSummary =
+        selectedResultScopeId === "global"
+          ? storedResult?.confidence_summary
+          : storedResult?.scopes?.[selectedResultScopeId]?.confidence_summary;
+      const bootstrapVerified =
+        confidenceSummary?.resampling_scheme ===
+          "cell_bootstrap_with_replacement_v1" &&
+        confidenceSummary?.sampling_with_replacement === true;
+      const bootstrapRunCount = Number(confidenceSummary?.bootstrap_runs);
       const scoreByEdge = new Map<
         string,
         {
@@ -844,6 +866,28 @@ export default function ProjectDetailPage() {
             const meanPercentile = backendMeanPercentile ?? percentile;
             const stability = backendStability ?? (rank <= CONFIDENCE_STABILITY_TOP_K ? 1 : 0);
             const signVote = isSigned ? signOf(entry.signedScore) : 0;
+            const bootstrapSignConfidence = numericOptionalProbability(
+              entry.edge.bootstrap_sign_confidence,
+            );
+            const bootstrapSignCoverage = numericOptionalProbability(
+              entry.edge.bootstrap_sign_coverage,
+            );
+            const bootstrapPositiveProbability = numericOptionalProbability(
+              entry.edge.bootstrap_positive_probability,
+            );
+            const bootstrapNegativeProbability = numericOptionalProbability(
+              entry.edge.bootstrap_negative_probability,
+            );
+            const bootstrapSignReference =
+              entry.edge.bootstrap_sign_reference === "full_data" ||
+              entry.edge.bootstrap_sign_reference === "bootstrap_mean"
+                ? entry.edge.bootstrap_sign_reference
+                : null;
+            const hasVerifiedSignDistribution =
+              bootstrapVerified &&
+              bootstrapSignCoverage !== null &&
+              bootstrapPositiveProbability !== null &&
+              bootstrapNegativeProbability !== null;
             const direction =
               isDirected || !candidateRegulatorSet.has(entry.target) ? 1 : 0;
             const supportingAlgorithms =
@@ -859,6 +903,40 @@ export default function ProjectDetailPage() {
               target: entry.target,
               score: evidence,
               confidence,
+              bootstrapVerified,
+              bootstrapSelectedRuns: Number.isFinite(
+                Number(entry.edge.selected_runs),
+              )
+                ? Number(entry.edge.selected_runs)
+                : undefined,
+              bootstrapRunCount: Number.isFinite(bootstrapRunCount)
+                ? bootstrapRunCount
+                : undefined,
+              evidenceCiLower: Number.isFinite(
+                Number(entry.edge.evidence_ci_lower),
+              )
+                ? Number(entry.edge.evidence_ci_lower)
+                : null,
+              evidenceCiUpper: Number.isFinite(
+                Number(entry.edge.evidence_ci_upper),
+              )
+                ? Number(entry.edge.evidence_ci_upper)
+                : null,
+              bootstrapSignConfidence,
+              bootstrapSignCoverage,
+              bootstrapPositiveProbability,
+              bootstrapNegativeProbability,
+              bootstrapSignedSelectedRuns:
+                entry.edge.signed_selected_runs === null ||
+                entry.edge.signed_selected_runs === undefined
+                  ? undefined
+                  : Number(entry.edge.signed_selected_runs),
+              bootstrapSignAgreeingRuns:
+                entry.edge.sign_agreeing_runs === null ||
+                entry.edge.sign_agreeing_runs === undefined
+                  ? undefined
+                  : Number(entry.edge.sign_agreeing_runs),
+              bootstrapSignReference,
               stability,
               meanPercentile,
               count: supportingAlgorithms.length,
@@ -883,8 +961,17 @@ export default function ProjectDetailPage() {
               directionConfidence: direction === 1 ? 1 : null,
               directionCoverage: isDirected ? 1 : 0,
               sign: signVote,
-              signConfidence: signVote === 0 ? null : 1,
-              signCoverage: isSigned && signVote !== 0 ? 1 : 0,
+              signConfidence:
+                isSigned &&
+                signVote !== 0 &&
+                hasVerifiedSignDistribution &&
+                bootstrapSignReference !== null
+                  ? bootstrapSignConfidence
+                  : null,
+              signCoverage:
+                isSigned && hasVerifiedSignDistribution
+                  ? bootstrapSignCoverage
+                  : 0,
             });
           }
 
@@ -1063,8 +1150,15 @@ export default function ProjectDetailPage() {
       evidence: number;
       directionVote: -1 | 0 | 1;
       signVote: -1 | 0 | 1;
+      bootstrapPositiveProbability: number | null;
+      bootstrapSignCoverage: number | null;
       rawScore: number | undefined;
       bootstrapConfidence: number | null;
+      bootstrapVerified: boolean;
+      bootstrapSelectedRuns?: number;
+      bootstrapRunCount?: number;
+      evidenceCiLower?: number | null;
+      evidenceCiUpper?: number | null;
       isSupported: boolean;
     };
 
@@ -1075,13 +1169,27 @@ export default function ProjectDetailPage() {
       directionVote: number;
       directionDenominator: number;
       directionCoverageEvidence: number;
-      signVote: number;
-      signDenominator: number;
+      fullDataSignVote: number;
+      bootstrapPositiveEvidence: number;
+      bootstrapSignEvidence: number;
       supportingAlgorithms: string[];
       perAlgorithmScores: Record<string, number>;
       perAlgorithmConfidences: Record<string, number>;
       perAlgorithmRawScores: Record<string, number>;
       perAlgorithmSigns: Record<string, -1 | 0 | 1>;
+      perAlgorithmBootstrapVerified: Record<string, boolean>;
+      perAlgorithmBootstrapSelectedRuns: Record<string, number>;
+      perAlgorithmBootstrapRunCounts: Record<string, number>;
+      perAlgorithmEvidenceCiLower: Record<string, number>;
+      perAlgorithmEvidenceCiUpper: Record<string, number>;
+      perAlgorithmBootstrapPositiveProbability: Record<string, number>;
+      perAlgorithmBootstrapSignCoverage: Record<string, number>;
+      perAlgorithmBootstrapSignedSelectedRuns: Record<string, number>;
+      perAlgorithmBootstrapSignAgreeingRuns: Record<string, number>;
+      perAlgorithmBootstrapSignReferences: Record<
+        string,
+        "full_data" | "bootstrap_mean"
+      >;
     };
 
     const buckets = new Map<string, ConsensusAccumulator>();
@@ -1105,13 +1213,24 @@ export default function ProjectDetailPage() {
         directionVote: 0,
         directionDenominator: 0,
         directionCoverageEvidence: 0,
-        signVote: 0,
-        signDenominator: 0,
+        fullDataSignVote: 0,
+        bootstrapPositiveEvidence: 0,
+        bootstrapSignEvidence: 0,
         supportingAlgorithms: [],
         perAlgorithmScores: {},
         perAlgorithmConfidences: {},
         perAlgorithmRawScores: {},
         perAlgorithmSigns: {},
+        perAlgorithmBootstrapVerified: {},
+        perAlgorithmBootstrapSelectedRuns: {},
+        perAlgorithmBootstrapRunCounts: {},
+        perAlgorithmEvidenceCiLower: {},
+        perAlgorithmEvidenceCiUpper: {},
+        perAlgorithmBootstrapPositiveProbability: {},
+        perAlgorithmBootstrapSignCoverage: {},
+        perAlgorithmBootstrapSignedSelectedRuns: {},
+        perAlgorithmBootstrapSignAgreeingRuns: {},
+        perAlgorithmBootstrapSignReferences: {},
       };
 
       activeAlgorithmIds.forEach((algorithmId) => {
@@ -1139,9 +1258,18 @@ export default function ProjectDetailPage() {
               signVote: isSigned
                 ? forward?.perAlgorithmSigns?.[algorithmId] ?? 0
                 : 0,
+              bootstrapPositiveProbability:
+                forward?.bootstrapPositiveProbability ?? null,
+              bootstrapSignCoverage:
+                forward?.bootstrapSignCoverage ?? null,
               rawScore: forward?.perAlgorithmRawScores?.[algorithmId],
               bootstrapConfidence:
                 forward?.perAlgorithmConfidences?.[algorithmId] ?? null,
+              bootstrapVerified: forward?.bootstrapVerified === true,
+              bootstrapSelectedRuns: forward?.bootstrapSelectedRuns,
+              bootstrapRunCount: forward?.bootstrapRunCount,
+              evidenceCiLower: forward?.evidenceCiLower,
+              evidenceCiUpper: forward?.evidenceCiUpper,
               isSupported: forward?.supportingAlgorithms.includes(algorithmId) ?? false,
             };
           } else {
@@ -1151,9 +1279,18 @@ export default function ProjectDetailPage() {
               signVote: isSigned
                 ? reverse?.perAlgorithmSigns?.[algorithmId] ?? 0
                 : 0,
+              bootstrapPositiveProbability:
+                reverse?.bootstrapPositiveProbability ?? null,
+              bootstrapSignCoverage:
+                reverse?.bootstrapSignCoverage ?? null,
               rawScore: reverse?.perAlgorithmRawScores?.[algorithmId],
               bootstrapConfidence:
                 reverse?.perAlgorithmConfidences?.[algorithmId] ?? null,
+              bootstrapVerified: reverse?.bootstrapVerified === true,
+              bootstrapSelectedRuns: reverse?.bootstrapSelectedRuns,
+              bootstrapRunCount: reverse?.bootstrapRunCount,
+              evidenceCiLower: reverse?.evidenceCiLower,
+              evidenceCiUpper: reverse?.evidenceCiUpper,
               isSupported: reverse?.supportingAlgorithms.includes(algorithmId) ?? false,
             };
           }
@@ -1168,6 +1305,48 @@ export default function ProjectDetailPage() {
         accumulator.totalEvidence += methodEvidence.evidence;
         accumulator.perAlgorithmScores[algorithmId] = methodEvidence.evidence;
         accumulator.perAlgorithmSigns[algorithmId] = methodEvidence.signVote;
+        accumulator.perAlgorithmBootstrapVerified[algorithmId] =
+          methodEvidence.bootstrapVerified;
+        if (methodEvidence.bootstrapSelectedRuns !== undefined) {
+          accumulator.perAlgorithmBootstrapSelectedRuns[algorithmId] =
+            methodEvidence.bootstrapSelectedRuns;
+        }
+        if (methodEvidence.bootstrapRunCount !== undefined) {
+          accumulator.perAlgorithmBootstrapRunCounts[algorithmId] =
+            methodEvidence.bootstrapRunCount;
+        }
+        if (methodEvidence.evidenceCiLower !== null &&
+            methodEvidence.evidenceCiLower !== undefined) {
+          accumulator.perAlgorithmEvidenceCiLower[algorithmId] =
+            methodEvidence.evidenceCiLower;
+        }
+        if (methodEvidence.evidenceCiUpper !== null &&
+            methodEvidence.evidenceCiUpper !== undefined) {
+          accumulator.perAlgorithmEvidenceCiUpper[algorithmId] =
+            methodEvidence.evidenceCiUpper;
+        }
+        const chosenEdge =
+          forwardEvidence >= reverseEvidence ? forward : reverse;
+        if (methodEvidence.bootstrapPositiveProbability !== null) {
+          accumulator.perAlgorithmBootstrapPositiveProbability[algorithmId] =
+            methodEvidence.bootstrapPositiveProbability;
+        }
+        if (methodEvidence.bootstrapSignCoverage !== null) {
+          accumulator.perAlgorithmBootstrapSignCoverage[algorithmId] =
+            methodEvidence.bootstrapSignCoverage;
+        }
+        if (chosenEdge?.bootstrapSignedSelectedRuns !== undefined) {
+          accumulator.perAlgorithmBootstrapSignedSelectedRuns[algorithmId] =
+            chosenEdge.bootstrapSignedSelectedRuns;
+        }
+        if (chosenEdge?.bootstrapSignAgreeingRuns !== undefined) {
+          accumulator.perAlgorithmBootstrapSignAgreeingRuns[algorithmId] =
+            chosenEdge.bootstrapSignAgreeingRuns;
+        }
+        if (chosenEdge?.bootstrapSignReference) {
+          accumulator.perAlgorithmBootstrapSignReferences[algorithmId] =
+            chosenEdge.bootstrapSignReference;
+        }
 
         if (methodEvidence.bootstrapConfidence !== null) {
           accumulator.perAlgorithmConfidences[algorithmId] =
@@ -1189,8 +1368,21 @@ export default function ProjectDetailPage() {
         }
 
         if (isSigned && methodEvidence.signVote !== 0) {
-          accumulator.signVote += methodEvidence.evidence * methodEvidence.signVote;
-          accumulator.signDenominator += methodEvidence.evidence;
+          accumulator.fullDataSignVote +=
+            methodEvidence.evidence * methodEvidence.signVote;
+        }
+
+        if (
+          isSigned &&
+          methodEvidence.bootstrapVerified &&
+          methodEvidence.bootstrapPositiveProbability !== null &&
+          methodEvidence.bootstrapSignCoverage !== null
+        ) {
+          const signedEvidence =
+            methodEvidence.evidence * methodEvidence.bootstrapSignCoverage;
+          accumulator.bootstrapPositiveEvidence +=
+            signedEvidence * methodEvidence.bootstrapPositiveProbability;
+          accumulator.bootstrapSignEvidence += signedEvidence;
         }
       });
 
@@ -1207,6 +1399,16 @@ export default function ProjectDetailPage() {
               return Number.isFinite(value) ? [value] : [];
             })
           ) ?? 0;
+        const singleSupportingAlgorithm =
+          edge.supportingAlgorithms.length === 1
+            ? edge.supportingAlgorithms[0]
+            : null;
+        const bootstrapVerified =
+          edge.supportingAlgorithms.length > 0 &&
+          edge.supportingAlgorithms.every(
+            (algorithmId) =>
+              edge.perAlgorithmBootstrapVerified[algorithmId] === true,
+          );
         const direction = signOf(edge.directionVote);
         const directionConfidence =
           edge.directionDenominator > 0
@@ -1214,13 +1416,25 @@ export default function ProjectDetailPage() {
             : null;
         const directionCoverage =
           edge.totalEvidence > 0 ? edge.directionCoverageEvidence / edge.totalEvidence : 0;
-        const sign = signOf(edge.signVote);
+        const sign = signOf(edge.fullDataSignVote);
+        const bootstrapPositiveProbability =
+          edge.bootstrapSignEvidence > 0
+            ? clamp(
+                edge.bootstrapPositiveEvidence / edge.bootstrapSignEvidence,
+                0,
+                1,
+              )
+            : null;
         const signConfidence =
-          edge.signDenominator > 0
-            ? clamp(Math.abs(edge.signVote) / edge.signDenominator, 0, 1)
+          sign !== 0 && bootstrapPositiveProbability !== null
+            ? sign > 0
+              ? bootstrapPositiveProbability
+              : 1 - bootstrapPositiveProbability
             : null;
         const signCoverage =
-          edge.totalEvidence > 0 ? edge.signDenominator / edge.totalEvidence : 0;
+          edge.totalEvidence > 0
+            ? clamp(edge.bootstrapSignEvidence / edge.totalEvidence, 0, 1)
+            : 0;
         const displaySource = direction === -1 ? edge.target : edge.source;
         const displayTarget = direction === -1 ? edge.source : edge.target;
 
@@ -1236,6 +1450,41 @@ export default function ProjectDetailPage() {
           target: displayTarget,
           score: edgeEvidence,
           confidence: clamp(bootstrapConfidence, 0, 1),
+          bootstrapVerified,
+          bootstrapSelectedRuns: singleSupportingAlgorithm
+            ? edge.perAlgorithmBootstrapSelectedRuns[singleSupportingAlgorithm]
+            : undefined,
+          bootstrapRunCount: singleSupportingAlgorithm
+            ? edge.perAlgorithmBootstrapRunCounts[singleSupportingAlgorithm]
+            : undefined,
+          evidenceCiLower: singleSupportingAlgorithm
+            ? edge.perAlgorithmEvidenceCiLower[singleSupportingAlgorithm] ?? null
+            : null,
+          evidenceCiUpper: singleSupportingAlgorithm
+            ? edge.perAlgorithmEvidenceCiUpper[singleSupportingAlgorithm] ?? null
+            : null,
+          bootstrapSignConfidence: signConfidence,
+          bootstrapSignCoverage: signCoverage,
+          bootstrapPositiveProbability,
+          bootstrapNegativeProbability:
+            bootstrapPositiveProbability === null
+              ? null
+              : 1 - bootstrapPositiveProbability,
+          bootstrapSignedSelectedRuns: singleSupportingAlgorithm
+            ? edge.perAlgorithmBootstrapSignedSelectedRuns[
+                singleSupportingAlgorithm
+              ]
+            : undefined,
+          bootstrapSignAgreeingRuns: singleSupportingAlgorithm
+            ? edge.perAlgorithmBootstrapSignAgreeingRuns[
+                singleSupportingAlgorithm
+              ]
+            : undefined,
+          bootstrapSignReference: singleSupportingAlgorithm
+            ? edge.perAlgorithmBootstrapSignReferences[
+                singleSupportingAlgorithm
+              ] ?? null
+            : null,
           count: edge.supportingAlgorithms.length,
           rank: 0,
           supportingAlgorithms: [...edge.supportingAlgorithms].sort(),
@@ -2022,8 +2271,13 @@ useEffect(() => {
                       pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
                       hasPseudotime={metadata?.has_pseudotime}
                       activeAlgorithmIds={activeAlgorithmIds}
-                      confidenceThreshold={evidenceThreshold}
+                      selectedResultScopeId={selectedResultScopeId}
+                      evidenceThreshold={evidenceThreshold}
+                      confidenceThreshold={confidenceThreshold}
+                      directionConfidenceThreshold={directionConfidenceThreshold}
+                      signConfidenceThreshold={signConfidenceThreshold}
                       consensusThreshold={consensusThreshold}
+                      edgeDisplayLimit={edgeDisplayLimit}
                       onClose={() => setIsFileDownloadMenuOpen(false)}
                       onOpenDownload={openDownloadModal}
                     />

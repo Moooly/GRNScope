@@ -23,7 +23,6 @@ TRAJECTORY_BIN_COUNT = 30
 MAX_TRAJECTORY_EMBEDDING_CELLS = 700
 MAX_TRAJECTORY_EMBEDDING_GENES = 500
 TRAJECTORY_PATH_BIN_COUNT = 24
-MAX_GROUND_TRUTH_EDGES = 250_000
 TRAJECTORY_EMBEDDING_CACHE_LIMIT = 8
 
 _trajectory_embedding_cache: dict[tuple, dict | None] = {}
@@ -518,7 +517,7 @@ def read_ground_truth_edges(path: Path) -> list[dict]:
     sign_column = next(
         (
             normalized_columns[name]
-            for name in ("sign", "effect", "interaction", "edge_type")
+            for name in ("sign", "effect", "interaction", "edge_type", "type")
             if name in normalized_columns
         ),
         None,
@@ -539,8 +538,6 @@ def read_ground_truth_edges(path: Path) -> list[dict]:
         if sign_column is not None and pd.notna(row[sign_column]):
             payload["sign"] = str(row[sign_column]).strip()
         edges.append(payload)
-        if len(edges) >= MAX_GROUND_TRUTH_EDGES:
-            break
     return edges
 
 

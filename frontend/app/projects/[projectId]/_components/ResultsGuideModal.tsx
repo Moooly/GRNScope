@@ -41,14 +41,20 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Evidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum integrated regulation evidence required for a regulation to appear. Evidence is computed from repeated runs and normalized per target so different algorithms can be compared.
+              Controls the minimum full-data regulation evidence required for a
+              regulation to appear. Evidence is a per-target percentile, so
+              methods with different native score scales can be compared.
             </p>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Confidence level</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum inferred edge confidence required for an edge to appear. Confidence is computed from repeated runs and normalized per target so different algorithms can be compared.
+              Controls the minimum bootstrap recovery required for an edge to
+              appear. New analyses draw the full number of cells with
+              replacement and report how often the edge remains among the
+              strongest regulators for its target. It measures sensitivity to
+              sampled cells, not uncertainty between donors or causality.
             </p>
           </div>
 
@@ -60,9 +66,14 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Sign confidence</h4>
+            <h4 className="text-base font-bold text-slate-950">Sign stability</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Keeps edges only when signed methods agree strongly enough on activation versus repression. Unsigned methods abstain instead of lowering this confidence.
+              Keeps edges only when enough signed bootstrap recoveries agree
+              with the activation or repression shown by the full-data result
+              (or the bootstrap-mean sign for a bootstrap-only edge).
+              Sign coverage reports how many recovered samples supplied a
+              nonzero sign. Unsigned methods and legacy results without
+              bootstrap sign data abstain.
             </p>
           </div>
 

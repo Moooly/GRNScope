@@ -34,8 +34,24 @@ CLIENT_RESULT_EDGE_FIELDS = {
     "stability",
     "mean_percentile",
     "meanPercentile",
+    "bootstrap_mean_evidence",
+    "evidence_ci_lower",
+    "evidence_ci_upper",
+    "full_data_evidence",
+    "full_data_raw_score",
+    "full_data_rank",
+    "full_data_present",
     "mean_raw_score",
     "selected_runs",
+    "positive_selected_runs",
+    "negative_selected_runs",
+    "signed_selected_runs",
+    "sign_agreeing_runs",
+    "bootstrap_sign_confidence",
+    "bootstrap_sign_coverage",
+    "bootstrap_positive_probability",
+    "bootstrap_negative_probability",
+    "bootstrap_sign_reference",
     "observed_runs",
     "run_count",
     "normalized_score",
@@ -102,15 +118,72 @@ def compact_result_for_client(result: dict) -> dict:
     )
 
     def compact_edges_for_client(edges: list) -> list[dict]:
-        return [
-            {
-                key: value
-                for key, value in edge.items()
-                if key in CLIENT_RESULT_EDGE_FIELDS
-            }
-            for edge in edges
-            if isinstance(edge, dict)
-        ]
+        compact_edges: list[dict] = []
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+
+            normalized_edge = dict(edge)
+            has_bootstrap_sign_counts = (
+                "positive_selected_runs" in edge
+                or "negative_selected_runs" in edge
+            )
+            if has_bootstrap_sign_counts:
+                positive_runs = int(edge.get("positive_selected_runs", 0) or 0)
+                negative_runs = int(edge.get("negative_selected_runs", 0) or 0)
+                signed_runs = positive_runs + negative_runs
+                selected_runs = int(edge.get("selected_runs", 0) or 0)
+                normalized_edge["signed_selected_runs"] = signed_runs
+                normalized_edge["bootstrap_positive_probability"] = (
+                    positive_runs / signed_runs if signed_runs else None
+                )
+                normalized_edge["bootstrap_negative_probability"] = (
+                    negative_runs / signed_runs if signed_runs else None
+                )
+                normalized_edge["bootstrap_sign_coverage"] = (
+                    signed_runs / selected_runs if selected_runs else None
+                )
+
+                full_data_score = edge.get("full_data_raw_score")
+                full_data_present = bool(edge.get("full_data_present"))
+                if full_data_present and full_data_score is not None:
+                    reference_score = float(full_data_score)
+                    reference = "full_data"
+                else:
+                    reference_score = float(
+                        edge.get(
+                            "bootstrap_mean_raw_score",
+                            edge.get("mean_raw_score", 0.0),
+                        )
+                        or 0.0
+                    )
+                    reference = "bootstrap_mean"
+
+                reference_sign = (
+                    1 if reference_score > 0 else -1 if reference_score < 0 else 0
+                )
+                if reference_sign and signed_runs:
+                    agreeing_runs = (
+                        positive_runs if reference_sign > 0 else negative_runs
+                    )
+                    normalized_edge["sign_agreeing_runs"] = agreeing_runs
+                    normalized_edge["bootstrap_sign_confidence"] = (
+                        agreeing_runs / signed_runs
+                    )
+                    normalized_edge["bootstrap_sign_reference"] = reference
+                else:
+                    normalized_edge["sign_agreeing_runs"] = None
+                    normalized_edge["bootstrap_sign_confidence"] = None
+                    normalized_edge["bootstrap_sign_reference"] = None
+
+            compact_edges.append(
+                {
+                    key: value
+                    for key, value in normalized_edge.items()
+                    if key in CLIENT_RESULT_EDGE_FIELDS
+                }
+            )
+        return compact_edges
 
     compact_edges = compact_edges_for_client(edges)
 
@@ -201,6 +274,17 @@ def compact_result_for_client(result: dict) -> dict:
                 "stop_streak",
                 "early_stopping_enabled",
                 "subsample_fraction",
+                "sample_size_fraction",
+                "sampling_unit",
+                "sampling_with_replacement",
+                "resampling_scheme",
+                "confidence_definition",
+                "evidence_definition",
+                "interval_definition",
+                "sign_confidence_definition",
+                "sign_coverage_definition",
+                "full_data_run_id",
+                "total_algorithm_runs",
                 "stability_top_k",
             )
             if summary.get(key) is not None
@@ -532,6 +616,16 @@ async def get_project_results(project_id: str, request: Request, response: Respo
                         "estimated_remaining_max_seconds"
                     ),
                     "run_metadata": task.get("run_metadata"),
+                    "latest_attempt_status": task.get("latest_attempt_status"),
+                    "latest_attempt_error_message": task.get(
+                        "latest_attempt_error_message"
+                    ),
+                    "latest_attempt_elapsed_seconds": task.get(
+                        "latest_attempt_elapsed_seconds"
+                    ),
+                    "latest_attempt_completed_at": task.get(
+                        "latest_attempt_completed_at"
+                    ),
                 }
             )
 

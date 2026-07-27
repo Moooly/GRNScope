@@ -10,8 +10,13 @@ type FileDownloadMenuModalProps = {
   pseudotimeFilename?: string | null;
   hasPseudotime?: boolean | null;
   activeAlgorithmIds: string[];
+  selectedResultScopeId: string;
+  evidenceThreshold: number;
   confidenceThreshold: number;
+  directionConfidenceThreshold: number;
+  signConfidenceThreshold: number;
   consensusThreshold: number;
+  edgeDisplayLimit: number;
   onClose: () => void;
   onOpenDownload: (label: string, href: string, filename: string) => void;
 };
@@ -24,8 +29,13 @@ export default function FileDownloadMenuModal({
   pseudotimeFilename,
   hasPseudotime,
   activeAlgorithmIds,
+  selectedResultScopeId,
+  evidenceThreshold,
   confidenceThreshold,
+  directionConfidenceThreshold,
+  signConfidenceThreshold,
   consensusThreshold,
+  edgeDisplayLimit,
   onClose,
   onOpenDownload,
 }: FileDownloadMenuModalProps) {
@@ -39,8 +49,13 @@ export default function FileDownloadMenuModal({
       : activeAlgorithmIds[0] ?? "consensus";
   const metadataQuery = new URLSearchParams({
     selected_view: selectedView,
+    selected_result_scope: selectedResultScopeId,
+    evidence_threshold: String(evidenceThreshold),
     confidence_threshold: String(confidenceThreshold),
+    direction_confidence_threshold: String(directionConfidenceThreshold),
+    sign_confidence_threshold: String(signConfidenceThreshold),
     consensus_threshold: String(consensusThreshold),
+    edge_display_limit: String(edgeDisplayLimit),
     selected_algorithms: activeAlgorithmIds.join(","),
   });
   const files = [
