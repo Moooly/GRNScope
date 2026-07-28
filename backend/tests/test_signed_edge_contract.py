@@ -13,6 +13,78 @@ from app.api.results import compact_result_for_client
 
 
 class SignedEdgeContractTests(unittest.TestCase):
+    def test_self_edges_are_excluded_before_ranking_and_compaction(self):
+        with tempfile.TemporaryDirectory(prefix="self-edge-contract-") as temp_dir:
+            ranked_edges = Path(temp_dir) / "rankedEdges.csv"
+            ranked_edges.write_text(
+                "Gene1\tGene2\tEdgeWeight\n"
+                "A\tA\t1.0\n"
+                "B\tA\t0.9\n",
+                encoding="utf-8",
+            )
+
+            parsed, summary = parse_ranked_edges_csv(
+                ranked_edges,
+                max_edges_per_target=1,
+            )
+
+        self.assertEqual(
+            parsed,
+            [{"source": "B", "target": "A", "score": 0.9, "normalized_score": 1.0}],
+        )
+        self.assertEqual(summary["edge_count"], 1)
+
+        accumulator = create_confidence_accumulator()
+        update_confidence_accumulator(
+            accumulator,
+            [
+                {"source": "A", "target": "A", "score": 1.0},
+                {"source": "B", "target": "A", "score": 0.9},
+            ],
+            stability_top_k=1,
+        )
+        bootstrap_edges, _summary = finalize_confidence_accumulator(
+            accumulator,
+            run_count=1,
+            stability_top_k=1,
+        )
+        merged = merge_full_data_with_bootstrap_edges(
+            [
+                *bootstrap_edges,
+                {
+                    "source": "A",
+                    "target": "A",
+                    "score": 1.0,
+                    "confidence": 1.0,
+                },
+            ],
+            [
+                {"source": "A", "target": "A", "score": 1.0},
+                {"source": "B", "target": "A", "score": 0.9},
+            ],
+            bootstrap_runs=1,
+            selection_top_k=1,
+        )
+        self.assertEqual(
+            {(edge["source"], edge["target"]) for edge in merged},
+            {("B", "A")},
+        )
+
+        compact = compact_result_for_client(
+            {
+                "algorithm_id": "TEST",
+                "top_edges": [
+                    {"source": "A", "target": "A", "score": 1.0},
+                    {"source": "B", "target": "A", "score": 0.9},
+                ],
+            }
+        )
+        self.assertEqual(
+            [(edge["source"], edge["target"]) for edge in compact["top_edges"]],
+            [("B", "A")],
+        )
+        self.assertEqual(compact["edge_count"], 1)
+
     def test_backend_ranks_by_magnitude_and_preserves_negative_raw_score(self):
         with tempfile.TemporaryDirectory(prefix="signed-edge-contract-") as temp_dir:
             ranked_edges = Path(temp_dir) / "rankedEdges.csv"

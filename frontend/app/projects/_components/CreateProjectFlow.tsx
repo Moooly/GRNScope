@@ -9,6 +9,7 @@ import { getApiBase } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
 import {
   registerPendingProjectUpload,
+  startPendingProjectUpload,
 } from "../_lib/pendingProjectUpload";
 
 type BackendAlgorithmEntry = {
@@ -125,7 +126,11 @@ function detectMatrixDelimiter(header: string): string {
   );
 }
 
-async function readMatrixDimensions(file: File): Promise<string> {
+async function readMatrixDimensions(file: File): Promise<{
+  label: string;
+  geneCount: number;
+  cellCount: number;
+}> {
   const reader = file.stream().getReader();
   const decoder = new TextDecoder();
   let pendingText = "";
@@ -155,7 +160,11 @@ async function readMatrixDimensions(file: File): Promise<string> {
 
   const delimiter = detectMatrixDelimiter(header);
   const cellCount = Math.max(0, countDelimitedFields(header, delimiter) - 1);
-  return `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`;
+  return {
+    label: `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`,
+    geneCount,
+    cellCount,
+  };
 }
 
 interface CreateProjectFlowProps {
@@ -224,30 +233,39 @@ export default function CreateProjectFlow({
   const [expressionMatrixDimensions, setExpressionMatrixDimensions] = useState<
     string | null
   >(null);
+  const [geneCount, setGeneCount] = useState<number | null>(null);
+  const [cellCount, setCellCount] = useState<number | null>(null);
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
   const [groundTruthFileName, setGroundTruthFileName] = useState("");
   const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
-
-  // Full validation still happens after project creation. This lightweight,
-  // streaming pass only counts rows and header columns for the upload summary.
-  const geneCount: number | null = null;
-  const cellCount: number | null = null;
 
   useEffect(() => {
     let cancelled = false;
 
     if (!expressionFile) {
       setExpressionMatrixDimensions(null);
+      setGeneCount(null);
+      setCellCount(null);
       return;
     }
 
     setExpressionMatrixDimensions("Reading dimensions…");
+    setGeneCount(null);
+    setCellCount(null);
     void readMatrixDimensions(expressionFile)
       .then((dimensions) => {
-        if (!cancelled) setExpressionMatrixDimensions(dimensions);
+        if (!cancelled) {
+          setExpressionMatrixDimensions(dimensions.label);
+          setGeneCount(dimensions.geneCount);
+          setCellCount(dimensions.cellCount);
+        }
       })
       .catch(() => {
-        if (!cancelled) setExpressionMatrixDimensions("Dimensions unavailable");
+        if (!cancelled) {
+          setExpressionMatrixDimensions("Dimensions unavailable");
+          setGeneCount(null);
+          setCellCount(null);
+        }
       });
 
     return () => {
@@ -838,10 +856,9 @@ export default function CreateProjectFlow({
         throw new Error("Upload an expression matrix CSV to continue.");
       }
 
-      // Register the dataset files, then navigate immediately. The detail page
-      // starts the upload in the background (the pending-upload store lives on
-      // window, so it survives navigation) and surfaces validation errors once
-      // it finishes — so "Start analysis" no longer blocks on the upload.
+      // Start the upload before navigation so there is no route-transition gap
+      // in which the browser could lose the in-memory File objects. The detail
+      // page adopts this same promise and surfaces any setup failure.
       registerPendingProjectUpload(data.project_id, {
         expressionFile,
         pseudotimeFile,
@@ -855,6 +872,11 @@ export default function CreateProjectFlow({
         customTfListFile:
           datasetSpecies === "other" ? customTfListFile : null,
       });
+      const uploadPromise = startPendingProjectUpload(data.project_id, API_BASE);
+      if (!uploadPromise) {
+        throw new Error("Dataset upload could not be started.");
+      }
+      void uploadPromise.catch(() => undefined);
 
       const now = new Date();
       const createdProject: Project = {
@@ -984,7 +1006,6 @@ export default function CreateProjectFlow({
       setIncludeAllTFs={setIncludeAllTFs}
       setMaxEdgesPerTarget={setMaxEdgesPerTarget}
       setBootstrapReplicates={setBootstrapReplicates}
-      setCellOracleSpecies={setCellOracleSpecies}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
       clearGroundTruthFile={clearGroundTruthFile}

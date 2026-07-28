@@ -40,6 +40,7 @@ import {
   type AlgorithmStoredResult,
   type MetadataManifest,
   type NodeInfo,
+  type ProjectJob,
   type ProjectManifest,
 } from "./_lib/types";
 import { clamp } from "./_lib/utils";
@@ -286,6 +287,7 @@ export default function ProjectDetailPage() {
     algorithmResults,
     algorithmCatalog,
     isLoadingCompletedResults,
+    completedResultsError,
     isLoadingProject,
     error,
     reload,
@@ -327,9 +329,11 @@ export default function ProjectDetailPage() {
   } | null>(null);
   const [isAlgorithmActionSubmitting, setIsAlgorithmActionSubmitting] = useState(false);
   const [isAlgorithmActionModalClosing, setIsAlgorithmActionModalClosing] = useState(false);
+  const [algorithmActionError, setAlgorithmActionError] = useState("");
   const [isStopProjectModalOpen, setIsStopProjectModalOpen] = useState(false);
   const [isStopProjectModalClosing, setIsStopProjectModalClosing] = useState(false);
   const [isStoppingProject, setIsStoppingProject] = useState(false);
+  const [stopProjectError, setStopProjectError] = useState("");
   const [resultsHubView, setResultsHubView] = useState<ResultsHubView>("network");
   const [visualizationContext, setVisualizationContext] =
     useState<VisualizationContext | null>(null);
@@ -400,9 +404,9 @@ export default function ProjectDetailPage() {
   const matrixTreatmentLabel = isDemoProject
     ? "Already log-normalized"
     : metadata?.preprocessing?.matrix_state === "raw"
-      ? "Normalized · log₂(x + 1)"
+      ? "Normalized · ln(x + 1)"
       : metadata?.preprocessing?.matrix_state === "normalized"
-        ? "log₂(x + 1)"
+        ? "ln(x + 1)"
         : metadata?.preprocessing?.matrix_state === "log_normalized"
           ? "Already log-normalized"
           : "Pending";
@@ -420,6 +424,19 @@ export default function ProjectDetailPage() {
       : null) ??
     legacyMatrixValidationTask?.error_message ??
     null;
+  const setupErrorType =
+    latestJob?.setup_error_type ??
+    project?.setup_error_type ??
+    metadata?.setup_error_type ??
+    null;
+  const setupErrorMessage =
+    latestJob?.setup_error_message ??
+    project?.setup_error_message ??
+    metadata?.setup_error_message ??
+    null;
+  const projectSetupError = matrixValidationError ?? setupErrorMessage;
+  const isMatrixSetupError =
+    Boolean(matrixValidationError) || setupErrorType === "matrix_validation";
   const matrixValidationIssues = useMemo(
     () =>
       project?.dataset_validation_issues ??
@@ -430,7 +447,7 @@ export default function ProjectDetailPage() {
   );
   const allJobTasks = useMemo(
     () =>
-      matrixValidationError
+      projectSetupError
         ? rawJobTasks.map((task) => ({
             ...task,
             status: "NotStarted",
@@ -441,7 +458,7 @@ export default function ProjectDetailPage() {
             progress_label: "Not started",
           }))
         : rawJobTasks,
-    [matrixValidationError, rawJobTasks],
+    [projectSetupError, rawJobTasks],
   );
   const cellOracleTask = useMemo(
     () => allJobTasks.find((task) => task.algorithm_id.toUpperCase() === "CELLORACLE") ?? null,
@@ -532,7 +549,7 @@ export default function ProjectDetailPage() {
     });
 
     previousCompletedIdsRef.current = completedAlgorithmIds;
-  }, [completedAlgorithmIds]);
+  }, [completedAlgorithmIds, projectId, routeProjectId]);
 
   const activeAlgorithmIds = useMemo(() => {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
@@ -1704,11 +1721,20 @@ export default function ProjectDetailPage() {
       return null;
     }
 
+    if (completedResultsError && loadedCompletedAlgorithmCount === 0) {
+      return {
+        title: "Saved results couldn't be loaded",
+        description: completedResultsError,
+        canRetry: true,
+      };
+    }
+
     if (completedAlgorithmIds.length === 0) {
       return {
         title: "No completed algorithm results yet",
         description:
           "The network and comparison tools will appear after the first algorithm finishes successfully.",
+        canRetry: false,
       };
     }
 
@@ -1717,6 +1743,7 @@ export default function ProjectDetailPage() {
         title: "No algorithms selected",
         description:
           "Select at least one completed algorithm to explore its network and ranked edges.",
+        canRetry: false,
       };
     }
 
@@ -1724,7 +1751,9 @@ export default function ProjectDetailPage() {
   }, [
     activeAlgorithmIds.length,
     completedAlgorithmIds.length,
+    completedResultsError,
     isPreparingFinishedResults,
+    loadedCompletedAlgorithmCount,
   ]);
 
   const openDownloadModal = (label: string, href: string, filename: string) => {
@@ -1754,6 +1783,7 @@ export default function ProjectDetailPage() {
     }
 
     setIsAlgorithmActionModalClosing(false);
+    setAlgorithmActionError("");
     setPendingAlgorithmAction({
       type,
       algorithmId: task.algorithmId,
@@ -1782,6 +1812,8 @@ export default function ProjectDetailPage() {
     const { algorithmId, type } = pendingAlgorithmAction;
 
     setIsAlgorithmActionSubmitting(true);
+    setAlgorithmActionError("");
+    let succeeded = false;
 
     try {
       const response = await apiFetch(
@@ -1789,22 +1821,36 @@ export default function ProjectDetailPage() {
         { method: "POST" }
       );
 
-      if (response.ok) {
-        const payload = await response.json();
-        // A stop/rerun changes this project's results, so drop any cached edges
-        // for it — the next visit must reload fresh.
-        if (projectId) clearCachedResults(projectId);
-        // Apply the optimistic state the endpoint returns (e.g. "Stopping")
-        // right away, then reconcile with a full refresh in the background so
-        // the modal can close without waiting on the heavier fetch.
-        if (payload.latest_job) {
-          setLatestJob(payload.latest_job);
-        }
-        void refreshProjectData();
+      const payload = await response.json().catch(() => null) as {
+        detail?: string;
+        latest_job?: ProjectJob;
+      } | null;
+      if (!response.ok) {
+        throw new Error(
+          payload?.detail || `The server returned HTTP ${response.status}.`,
+        );
       }
+
+      // A stop/rerun changes this project's results, so drop any cached edges
+      // for it — the next visit must reload fresh.
+      if (projectId) clearCachedResults(projectId);
+      // Apply the optimistic state the endpoint returns (e.g. "Stopping")
+      // right away, then reconcile with a full refresh in the background so
+      // the modal can close without waiting on the heavier fetch.
+      if (payload?.latest_job) {
+        setLatestJob(payload.latest_job);
+      }
+      void refreshProjectData();
+      succeeded = true;
+    } catch (actionError) {
+      setAlgorithmActionError(
+        actionError instanceof Error && actionError.message
+          ? actionError.message
+          : "The algorithm action failed. Please try again.",
+      );
     } finally {
       setIsAlgorithmActionSubmitting(false);
-      finishAlgorithmActionModal();
+      if (succeeded) finishAlgorithmActionModal();
     }
   };
 
@@ -1820,25 +1866,43 @@ export default function ProjectDetailPage() {
   const confirmStopProject = async () => {
     if (!projectId || isDemoProject) return;
     setIsStoppingProject(true);
+    setStopProjectError("");
+    let succeeded = false;
     try {
       const response = await apiFetch(`${API_BASE}/projects/${projectId}/stop`, {
         method: "POST",
       });
-      if (response.ok) {
-        const payload = await response.json();
-        if (projectId) clearCachedResults(projectId);
-        if (payload.latest_job) {
-          setLatestJob(payload.latest_job);
-        }
-        void refreshProjectData();
+      const payload = await response.json().catch(() => null) as {
+        detail?: string;
+        latest_job?: ProjectJob;
+      } | null;
+      if (!response.ok) {
+        throw new Error(
+          payload?.detail || `The server returned HTTP ${response.status}.`,
+        );
       }
+
+      if (projectId) clearCachedResults(projectId);
+      if (payload?.latest_job) {
+        setLatestJob(payload.latest_job);
+      }
+      void refreshProjectData();
+      succeeded = true;
+    } catch (stopError) {
+      setStopProjectError(
+        stopError instanceof Error && stopError.message
+          ? stopError.message
+          : "The project could not be stopped. Please try again.",
+      );
     } finally {
       setIsStoppingProject(false);
-      setIsStopProjectModalClosing(true);
-      window.setTimeout(() => {
-        setIsStopProjectModalOpen(false);
-        setIsStopProjectModalClosing(false);
-      }, 280);
+      if (succeeded) {
+        setIsStopProjectModalClosing(true);
+        window.setTimeout(() => {
+          setIsStopProjectModalOpen(false);
+          setIsStopProjectModalClosing(false);
+        }, 280);
+      }
     }
   };
 
@@ -2177,10 +2241,15 @@ useEffect(() => {
             projectContext={(
               <AnalysisSetupSection
                 status={(
-                  matrixValidationError ? (
+                  projectSetupError ? (
                     <DatasetValidationStatus
-                      message={matrixValidationError}
-                      issues={matrixValidationIssues}
+                      message={projectSetupError}
+                      issues={isMatrixSetupError ? matrixValidationIssues : []}
+                      title={
+                        isMatrixSetupError
+                          ? "Matrix needs attention"
+                          : "Setup needs attention"
+                      }
                     />
                   ) : (
                     <JobProgressBanner
@@ -2194,6 +2263,7 @@ useEffect(() => {
                         isDemoProject
                           ? undefined
                           : () => {
+                              setStopProjectError("");
                               setIsStopProjectModalClosing(false);
                               setIsStopProjectModalOpen(true);
                             }
@@ -2203,10 +2273,24 @@ useEffect(() => {
                   )
                 )}
               >
-                {matrixValidationError ? (
+                {projectSetupError ? (
                   <DatasetValidationIssuesSection
-                    issues={matrixValidationIssues}
-                    fallbackMessage={matrixValidationError}
+                    issues={isMatrixSetupError ? matrixValidationIssues : []}
+                    fallbackMessage={projectSetupError}
+                    heading={
+                      isMatrixSetupError ? "Validation issues" : "Setup issue"
+                    }
+                    description={
+                      isMatrixSetupError
+                        ? "Fix these before this project can start an analysis."
+                        : "GRNScope could not finish preparing this project."
+                    }
+                    fallbackTitle={
+                      isMatrixSetupError
+                        ? "Matrix validation issue"
+                        : "Project setup failed"
+                    }
+                    fallbackCode={setupErrorType ?? "project_setup"}
                   />
                 ) : null}
 
@@ -2252,6 +2336,10 @@ useEffect(() => {
                   finalGeneCount={metadata?.preprocessing_result?.gene_count}
                   matrixTreatmentLabel={matrixTreatmentLabel}
                   preprocessing={metadata?.preprocessing}
+                  preprocessingStatus={
+                    metadata?.preprocessing_status ??
+                    project?.preprocessing_status
+                  }
                   preprocessingResult={metadata?.preprocessing_result}
                   methodAdjustments={methodGeneAdjustments}
                   onOpenDownloadMenu={() => {
@@ -2334,12 +2422,48 @@ useEffect(() => {
                   </div>
                 )}
 
+                {completedResultsError &&
+                loadedCompletedAlgorithmCount > 0 &&
+                !isPreparingFinishedResults ? (
+                  <div
+                    className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-5"
+                    role="alert"
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-amber-900">
+                          Some saved results could not be loaded
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-amber-800">
+                          {completedResultsError}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={reload}
+                        className="inline-flex h-9 items-center rounded-full border border-amber-300 bg-white px-4 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
                 {isPreparingFinishedResults ? null : resultsAvailabilityNotice ? (
                   <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50/80 p-8 text-center">
                     <p className="text-lg font-bold text-slate-950">{resultsAvailabilityNotice.title}</p>
                     <p className="mt-3 text-sm leading-6 text-slate-600">
                       {resultsAvailabilityNotice.description}
                     </p>
+                    {resultsAvailabilityNotice.canRetry ? (
+                      <button
+                        type="button"
+                        onClick={reload}
+                        className="mt-5 inline-flex h-10 items-center rounded-full bg-[#1b75a6] px-5 text-sm font-bold text-white transition hover:bg-[#155f87]"
+                      >
+                        Try again
+                      </button>
+                    ) : null}
                   </div>
                   ) : resultsHubView !== "network" && resultsHubView !== "perturbation" ? (
                     <ResultsInsightsSection
@@ -2437,6 +2561,15 @@ useEffect(() => {
                     : "This will start a fresh run using the same project input files."}
                 </p>
 
+                {algorithmActionError ? (
+                  <p
+                    className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
+                    role="alert"
+                  >
+                    {algorithmActionError}
+                  </p>
+                ) : null}
+
                 <div className="mt-6 flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
@@ -2476,6 +2609,7 @@ useEffect(() => {
               queuedCount={stopQueuedCount}
               isStopping={isStoppingProject}
               isClosing={isStopProjectModalClosing}
+              error={stopProjectError}
               onCancel={closeStopProjectModal}
               onConfirm={confirmStopProject}
             />

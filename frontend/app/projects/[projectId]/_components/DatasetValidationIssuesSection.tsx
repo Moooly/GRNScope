@@ -6,18 +6,26 @@ import type { MatrixValidationIssue } from "../_lib/types";
 type DatasetValidationIssuesSectionProps = {
   issues: MatrixValidationIssue[];
   fallbackMessage: string;
+  heading?: string;
+  description?: string;
+  fallbackTitle?: string;
+  fallbackCode?: string;
 };
 
 export default function DatasetValidationIssuesSection({
   issues,
   fallbackMessage,
+  heading = "Validation issues",
+  description = "Fix these before this project can start an analysis.",
+  fallbackTitle = "Matrix validation issue",
+  fallbackCode = "matrix_validation",
 }: DatasetValidationIssuesSectionProps) {
   const displayedIssues = issues.length > 0
     ? issues
     : [{
-        code: "matrix_validation",
+        code: fallbackCode,
         severity: "error",
-        title: "Matrix validation issue",
+        title: fallbackTitle,
         message: fallbackMessage,
         count: 1,
         locations: [],
@@ -37,10 +45,10 @@ export default function DatasetValidationIssuesSection({
     <section className="py-6">
       <div className="min-w-0">
         <h2 className="text-lg font-bold tracking-tight text-slate-950">
-          Validation issues
+          {heading}
         </h2>
         <p className="mt-1 text-xs leading-5 text-slate-500">
-          Fix these before this project can start an analysis.
+          {description}
         </p>
       </div>
 

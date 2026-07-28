@@ -735,7 +735,10 @@ def load_cluster_scope_definitions(project_manifest: dict) -> list[AlgorithmScop
     return scopes
 
 
-def build_algorithm_scopes(project_manifest: dict) -> list[AlgorithmScope]:
+def build_algorithm_scopes(
+    project_manifest: dict,
+    algorithm_id: str,
+) -> list[AlgorithmScope]:
     expression_path = project_manifest.get("expression_path")
     cell_count = 0
     if expression_path:
@@ -753,7 +756,8 @@ def build_algorithm_scopes(project_manifest: dict) -> list[AlgorithmScope]:
             cell_count=cell_count,
         )
     ]
-    scopes.extend(load_cluster_scope_definitions(project_manifest))
+    if str(algorithm_id).strip().upper() == "CELLORACLE":
+        scopes.extend(load_cluster_scope_definitions(project_manifest))
     return scopes
 
 
@@ -1446,7 +1450,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             estimated_remaining_seconds=None,
         )
 
-        scopes = build_algorithm_scopes(project_manifest)
+        scopes = build_algorithm_scopes(project_manifest, algorithm_id)
         has_cluster_scopes = any(scope.scope_type == "cluster" for scope in scopes)
         runnable_scopes = [scope for scope in scopes if not scope.skipped]
         skipped_scopes = [scope for scope in scopes if scope.skipped]

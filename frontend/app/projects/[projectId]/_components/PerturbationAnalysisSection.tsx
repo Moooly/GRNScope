@@ -2388,6 +2388,8 @@ function DevelopmentImpactPanel({
   );
 }
 
+// Retained for the alternate cluster-focused perturbation presentation.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ClusterResponseView({
   result,
   clusters,

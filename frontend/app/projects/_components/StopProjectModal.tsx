@@ -4,6 +4,7 @@ interface StopProjectModalProps {
   queuedCount: number;
   isStopping: boolean;
   isClosing: boolean;
+  error?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -14,6 +15,7 @@ export default function StopProjectModal({
   queuedCount,
   isStopping,
   isClosing,
+  error = "",
   onCancel,
   onConfirm,
 }: StopProjectModalProps) {
@@ -53,6 +55,15 @@ export default function StopProjectModal({
             {projectName}
           </p>
         </div>
+
+        {error ? (
+          <p
+            className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
 
         <div className="mt-6 flex justify-end gap-3 border-t border-[#213f54]/15 pt-5">
           <button

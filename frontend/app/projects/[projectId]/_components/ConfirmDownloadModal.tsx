@@ -2,6 +2,7 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
 import { apiFetch } from "../../../_lib/clientIdentity";
 
 type PendingDownload = {
@@ -21,12 +22,24 @@ export default function ConfirmDownloadModal({
   isClosing,
   onClose,
 }: ConfirmDownloadModalProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+
+  useEffect(() => {
+    setIsDownloading(false);
+    setDownloadError("");
+  }, [pendingDownload?.href]);
+
   if (!pendingDownload) return null;
 
   const downloadFile = async () => {
+    setIsDownloading(true);
+    setDownloadError("");
     try {
       const response = await apiFetch(pendingDownload.href);
-      if (!response.ok) return;
+      if (!response.ok) {
+        throw new Error(`The server returned HTTP ${response.status}.`);
+      }
 
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -39,8 +52,14 @@ export default function ConfirmDownloadModal({
       document.body.removeChild(link);
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
       onClose();
-    } catch {
-      return;
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error && error.message
+          ? `Download failed: ${error.message}`
+          : "Download failed. Please try again.",
+      );
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -78,10 +97,20 @@ export default function ConfirmDownloadModal({
           </p>
         </div>
 
+        {downloadError ? (
+          <p
+            className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
+            role="alert"
+          >
+            {downloadError}
+          </p>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
+            disabled={isDownloading}
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
           >
             Cancel
@@ -89,9 +118,10 @@ export default function ConfirmDownloadModal({
           <button
             type="button"
             onClick={downloadFile}
+            disabled={isDownloading}
             className="rounded-full bg-[#1b75a6] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#155f87]"
           >
-            Download
+            {isDownloading ? "Downloading..." : "Download"}
           </button>
         </div>
       </div>

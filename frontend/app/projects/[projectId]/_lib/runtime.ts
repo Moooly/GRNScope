@@ -33,6 +33,13 @@ export function runtimeLabel(
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `${status} ${runtime}`;
+  if (status === "Stopped") {
+    return Number(elapsedSeconds ?? 0) > 0 ? `Stopped after ${runtime}` : "Stopped";
+  }
+  if (status === "Failed") {
+    return Number(elapsedSeconds ?? 0) > 0 ? `Failed after ${runtime}` : "Failed";
+  }
+  if (status === "Skipped") return "Skipped";
   return `Runtime ${runtime}`;
 }
 
@@ -45,6 +52,13 @@ function runtimeTitleLabel(
 
   const runtime = formatAlgorithmRuntime(elapsedSeconds);
   if (status === "Running" || status === "Stopping") return `Running time ${runtime}`;
+  if (status === "Stopped") {
+    return Number(elapsedSeconds ?? 0) > 0 ? `Stopped after ${runtime}` : "Stopped";
+  }
+  if (status === "Failed") {
+    return Number(elapsedSeconds ?? 0) > 0 ? `Failed after ${runtime}` : "Failed";
+  }
+  if (status === "Skipped") return "Skipped";
   return `Runtime ${runtime}`;
 }
 

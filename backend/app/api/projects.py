@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse
 from ..algorithm_registry import (
     CELLORACLE_BASE_GRN_OPTIONS,
     CELLORACLE_SPECIES_OPTIONS,
+    get_algorithm_by_id,
     resolve_selected_algorithm_parameters,
     sort_algorithm_ids_by_difficulty,
     validate_selected_algorithm_parameters,
@@ -130,9 +131,29 @@ def parse_selected_algorithms(selected_algorithms: str) -> list[str]:
     parsed = json.loads(selected_algorithms)
     if not isinstance(parsed, list):
         raise ValueError("Selected algorithms must be a list.")
-    return sort_algorithm_ids_by_difficulty(
-        [str(algorithm_id) for algorithm_id in parsed]
-    )
+    if not parsed:
+        raise ValueError("Select at least one algorithm.")
+
+    normalized_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for raw_algorithm_id in parsed:
+        algorithm_id = str(raw_algorithm_id).strip().upper()
+        if not algorithm_id:
+            raise ValueError("Selected algorithm IDs cannot be blank.")
+        if algorithm_id in seen_ids:
+            raise ValueError(f"Algorithm selected more than once: {algorithm_id}.")
+
+        try:
+            algorithm = get_algorithm_by_id(algorithm_id)
+        except KeyError as exc:
+            raise ValueError(f"Unsupported algorithm: {algorithm_id}.") from exc
+        if not algorithm.get("active", False):
+            raise ValueError(f"Algorithm is not currently available: {algorithm_id}.")
+
+        seen_ids.add(algorithm_id)
+        normalized_ids.append(algorithm_id)
+
+    return sort_algorithm_ids_by_difficulty(normalized_ids)
 
 
 def parse_algorithm_parameters(

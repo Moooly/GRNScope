@@ -82,6 +82,8 @@ export type ProjectManifest = {
   dataset_validation_status?: string | null;
   dataset_validation_error?: string | null;
   dataset_validation_issues?: MatrixValidationIssue[];
+  setup_error_type?: string | null;
+  setup_error_message?: string | null;
   is_demo?: boolean;
   read_only?: boolean;
 };
@@ -125,6 +127,8 @@ export type MetadataManifest = {
   dataset_validation_status?: string | null;
   dataset_validation_error?: string | null;
   dataset_validation_issues?: MatrixValidationIssue[];
+  setup_error_type?: string | null;
+  setup_error_message?: string | null;
   input_files?: Array<{
     name: string;
     path: string;

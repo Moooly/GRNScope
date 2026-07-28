@@ -3007,7 +3007,7 @@ def parse_ranked_edges_csv(
             target = str(row.get(target_key, "")).strip()
             score_raw = str(row.get(score_key, "")).strip()
 
-            if not source or not target:
+            if not source or not target or source == target:
                 continue
 
             try:
@@ -3147,7 +3147,7 @@ def update_confidence_accumulator(
     for edge in run_edges:
         source = str(edge.get("source", "")).strip()
         target = str(edge.get("target", "")).strip()
-        if not source or not target:
+        if not source or not target or source == target:
             continue
         entries_by_target.setdefault(target, []).append(edge)
         all_node_names.add(source)
@@ -3487,6 +3487,7 @@ def merge_full_data_with_bootstrap_edges(
         edge_confidence_key(edge): dict(edge)
         for edge in bootstrap_edges
         if all(edge_confidence_key(edge))
+        and edge_confidence_key(edge)[0] != edge_confidence_key(edge)[1]
     }
     full_estimates = full_data_edge_estimates(
         full_data_edges,

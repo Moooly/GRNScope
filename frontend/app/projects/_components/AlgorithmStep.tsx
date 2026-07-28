@@ -46,10 +46,10 @@ export default function AlgorithmStep({
   const [showUnavailable, setShowUnavailable] = useState(false);
   const getUnavailableReason = (algorithm: ProjectAlgorithm) => {
     if (algorithm.id === "SCSGL" && !datasetSummary.hasGroundTruth) {
-      return "Requires a ground-truth network file named GroundTruthNetwork.csv.";
+      return "Requires a ground-truth network CSV.";
     }
     if (algorithm.requiresPseudotime && !datasetSummary.hasPseudotime) {
-      return "Requires a pseudotime file named PseudoTime.csv.";
+      return "Requires a pseudotime CSV.";
     }
     if (algorithm.id === "CELLORACLE" && !datasetSummary.hasCellOracleSettingsConfigured) {
       return "Requires CellOracle species selection.";
@@ -193,7 +193,8 @@ export default function AlgorithmStep({
                         methods unavailable
                       </span>
                       <span className="mt-1 block text-xs text-slate-500">
-                        Add pseudotime or CellOracle inputs to unlock more methods.
+                        Add the required pseudotime, CellOracle, or ground-truth
+                        inputs to unlock more methods.
                       </span>
                     </span>
                     <span

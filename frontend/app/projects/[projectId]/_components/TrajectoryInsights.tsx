@@ -7,15 +7,24 @@ export type TrajectoryData = {
   reason?: string;
   genes?: string[];
   available_genes?: string[];
+  expression_label?: string;
+  trend_method?: string;
   lineages?: Array<{
     name: string;
     cell_count: number;
-    bins: Array<{
+    displayed_cell_count: number;
+    expression_points: Array<{
+      cell: string;
       pseudotime: number;
-      cell_count: number;
-      raw_expression: Record<string, number>;
-      scaled_expression: Record<string, number | null>;
+      expression: Record<string, number>;
     }>;
+    trends: Record<
+      string,
+      Array<{
+        pseudotime: number;
+        expression: number;
+      }>
+    >;
   }>;
   embedding?: {
     method: string;
@@ -45,8 +54,11 @@ type ChartPoint = {
   y: number;
 };
 
-type GenePoint = ChartPoint & {
-  cellCount: number;
+type ExpressionSeries = {
+  name: string;
+  color: string;
+  observations: ChartPoint[];
+  trend: ChartPoint[];
 };
 
 const GENE_COLORS = [
@@ -82,61 +94,6 @@ function linearSvgPath(points: ChartPoint[]) {
   return points
     .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
     .join(" ");
-}
-
-function monotoneSvgPath(points: ChartPoint[]) {
-  if (points.length < 3) return linearSvgPath(points);
-
-  const intervals = points.slice(0, -1).map((point, index) => {
-    const width = points[index + 1].x - point.x;
-    return {
-      width,
-      slope: width > 0 ? (points[index + 1].y - point.y) / width : 0,
-    };
-  });
-  if (intervals.some((interval) => interval.width <= 0)) {
-    return linearSvgPath(points);
-  }
-
-  const tangents = points.map((_, index) => {
-    if (index === 0) return intervals[0].slope;
-    if (index === points.length - 1) return intervals.at(-1)?.slope ?? 0;
-    const previous = intervals[index - 1];
-    const next = intervals[index];
-    if (!previous.slope || !next.slope || previous.slope * next.slope <= 0) {
-      return 0;
-    }
-    const previousWeight = 2 * next.width + previous.width;
-    const nextWeight = next.width + 2 * previous.width;
-    return (
-      (previousWeight + nextWeight) /
-      (previousWeight / previous.slope + nextWeight / next.slope)
-    );
-  });
-
-  let path = `M ${points[0].x} ${points[0].y}`;
-  intervals.forEach((interval, index) => {
-    let startTangent = tangents[index];
-    let endTangent = tangents[index + 1];
-    if (interval.slope === 0) {
-      startTangent = 0;
-      endTangent = 0;
-    } else {
-      const startRatio = startTangent / interval.slope;
-      const endRatio = endTangent / interval.slope;
-      const magnitude = Math.hypot(startRatio, endRatio);
-      if (magnitude > 3) {
-        const scale = 3 / magnitude;
-        startTangent = scale * startRatio * interval.slope;
-        endTangent = scale * endRatio * interval.slope;
-      }
-    }
-    const current = points[index];
-    const next = points[index + 1];
-    const third = interval.width / 3;
-    path += ` C ${current.x + third} ${current.y + startTangent * third}, ${next.x - third} ${next.y - endTangent * third}, ${next.x} ${next.y}`;
-  });
-  return path;
 }
 
 function EmptyTrajectory({
@@ -346,38 +303,177 @@ function CellTrajectoryChart({
   );
 }
 
-function smoothGenePoints(points: GenePoint[]) {
-  if (points.length < 3) return points;
-  return points.map((point, index) => {
-    let weightedValue = 2 * point.y;
-    let weight = 2;
-    if (points[index - 1]) {
-      weightedValue += points[index - 1].y;
-      weight += 1;
-    }
-    if (points[index + 1]) {
-      weightedValue += points[index + 1].y;
-      weight += 1;
-    }
-    return {
-      ...point,
-      y: weightedValue / weight,
-    };
-  });
+function GeneExpressionPanels({
+  series,
+  expressionLabel,
+}: {
+  series: ExpressionSeries[];
+  expressionLabel: string;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      {series.map((item) => {
+        const width = 420;
+        const height = 230;
+        const left = 52;
+        const right = 18;
+        const top = 15;
+        const bottom = 42;
+        const allPoints = [...item.observations, ...item.trend];
+        const xValues = allPoints.map((point) => point.x);
+        const yValues = allPoints.map((point) => point.y);
+        const xMin = Math.min(...xValues);
+        const xMax = Math.max(...xValues);
+        const rawYMin = Math.min(...yValues);
+        const rawYMax = Math.max(...yValues);
+        const yPadding = Math.max((rawYMax - rawYMin) * 0.08, 0.05);
+        const yMin =
+          rawYMin >= 0 ? Math.max(0, rawYMin - yPadding) : rawYMin - yPadding;
+        const yMax = rawYMax + yPadding;
+        const xPosition = (value: number) =>
+          left +
+          ((value - xMin) / Math.max(1e-9, xMax - xMin)) *
+            (width - left - right);
+        const yPosition = (value: number) =>
+          top +
+          (1 - (value - yMin) / Math.max(1e-9, yMax - yMin)) *
+            (height - top - bottom);
+        const xTicks = Array.from(
+          { length: 3 },
+          (_, index) => xMin + ((xMax - xMin) * index) / 2,
+        );
+        const yTicks = [yMin, (yMin + yMax) / 2, yMax];
+        const trendPath = item.trend.map((point) => ({
+          x: xPosition(point.x),
+          y: yPosition(point.y),
+        }));
+
+        return (
+          <div
+            key={item.name}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                  aria-hidden="true"
+                />
+                {item.name}
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500">
+                Own expression scale
+              </span>
+            </div>
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              className="block w-full"
+              role="img"
+              aria-label={`${item.name} ${expressionLabel.toLowerCase()} over pseudotime`}
+            >
+              <rect width={width} height={height} fill="#ffffff" />
+              {yTicks.map((tick, index) => (
+                <g key={`${tick}-${index}`}>
+                  <line
+                    x1={left}
+                    x2={width - right}
+                    y1={yPosition(tick)}
+                    y2={yPosition(tick)}
+                    stroke="#e2e8f0"
+                  />
+                  <text
+                    x={left - 8}
+                    y={yPosition(tick) + 4}
+                    textAnchor="end"
+                    fill="#64748b"
+                    fontSize="10"
+                    fontWeight="600"
+                  >
+                    {formatAxisValue(tick)}
+                  </text>
+                </g>
+              ))}
+              {xTicks.map((tick, index) => (
+                <g key={`${tick}-${index}`}>
+                  <line
+                    x1={xPosition(tick)}
+                    x2={xPosition(tick)}
+                    y1={height - bottom}
+                    y2={height - bottom + 4}
+                    stroke="#94a3b8"
+                  />
+                  <text
+                    x={xPosition(tick)}
+                    y={height - bottom + 18}
+                    textAnchor="middle"
+                    fill="#64748b"
+                    fontSize="10"
+                    fontWeight="600"
+                  >
+                    {formatAxisValue(tick)}
+                  </text>
+                </g>
+              ))}
+              <line
+                x1={left}
+                x2={left}
+                y1={top}
+                y2={height - bottom}
+                stroke="#94a3b8"
+              />
+              <line
+                x1={left}
+                x2={width - right}
+                y1={height - bottom}
+                y2={height - bottom}
+                stroke="#94a3b8"
+              />
+              {item.observations.map((point, index) => (
+                <circle
+                  key={`${item.name}-cell-${index}`}
+                  cx={xPosition(point.x)}
+                  cy={yPosition(point.y)}
+                  r="1.7"
+                  fill={item.color}
+                  opacity="0.2"
+                  aria-hidden="true"
+                />
+              ))}
+              <path
+                d={linearSvgPath(trendPath)}
+                fill="none"
+                stroke={item.color}
+                strokeWidth="3.2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              <text
+                x={(left + width - right) / 2}
+                y={height - 8}
+                textAnchor="middle"
+                fill="#64748b"
+                fontSize="11"
+                fontWeight="600"
+              >
+                Pseudotime
+              </text>
+            </svg>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function GeneDynamicsChart({
-  series,
-}: {
-  series: Array<{ name: string; color: string; points: GenePoint[] }>;
-}) {
+function GeneTrendComparisonChart({ series }: { series: ExpressionSeries[] }) {
   const width = 820;
   const height = 380;
   const left = 62;
   const right = 24;
   const top = 22;
   const bottom = 50;
-  const allPoints = series.flatMap((item) => item.points);
+  const allPoints = series.flatMap((item) => item.trend);
   const xValues = allPoints.map((point) => point.x);
   const xMin = Math.min(...xValues);
   const xMax = Math.max(...xValues);
@@ -397,7 +493,7 @@ function GeneDynamicsChart({
         viewBox={`0 0 ${width} ${height}`}
         className="block w-full"
         role="img"
-        aria-label="Scaled gene expression over pseudotime"
+        aria-label="Independently scaled gene expression trends over pseudotime"
       >
         {yTicks.map((tick) => (
           <g key={tick}>
@@ -456,38 +552,25 @@ function GeneDynamicsChart({
           stroke="#94a3b8"
         />
         {series.map((item) => {
-          const smoothed = smoothGenePoints(item.points).map((point) => ({
+          const expressionValues = item.trend.map((point) => point.y);
+          const minimum = Math.min(...expressionValues);
+          const maximum = Math.max(...expressionValues);
+          const scaledPoints = item.trend.map((point) => ({
             x: xPosition(point.x),
-            y: yPosition(point.y),
+            y: yPosition(
+              maximum > minimum ? (point.y - minimum) / (maximum - minimum) : 0,
+            ),
           }));
           return (
-            <g key={item.name}>
-              <path
-                d={monotoneSvgPath(smoothed)}
-                fill="none"
-                stroke={item.color}
-                strokeWidth="3"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-              {item.points.map((point, index) => (
-                <circle
-                  key={`${item.name}-${index}`}
-                  cx={xPosition(point.x)}
-                  cy={yPosition(point.y)}
-                  r="2.2"
-                  fill="white"
-                  stroke={item.color}
-                  strokeWidth="1.4"
-                  opacity="0.72"
-                >
-                  <title>
-                    {item.name} · pseudotime {formatAxisValue(point.x)} · scaled{" "}
-                    {point.y.toFixed(3)} · {point.cellCount} cells
-                  </title>
-                </circle>
-              ))}
-            </g>
+            <path
+              key={item.name}
+              d={linearSvgPath(scaledPoints)}
+              fill="none"
+              stroke={item.color}
+              strokeWidth="3"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
           );
         })}
         <text
@@ -509,7 +592,7 @@ function GeneDynamicsChart({
           fontWeight="600"
           transform={`rotate(-90 16 ${(top + height - bottom) / 2})`}
         >
-          Relative expression
+          Relative trend
         </text>
       </svg>
     </div>
@@ -654,6 +737,9 @@ export default function TrajectoryInsights({
   onGenesChange: (genes: string[]) => void;
 }) {
   const [mode, setMode] = useState<"cells" | "genes">("cells");
+  const [expressionView, setExpressionView] = useState<"actual" | "relative">(
+    "actual",
+  );
   const [requestedLineageName, setRequestedLineageName] = useState("");
   const [geneQuery, setGeneQuery] = useState("");
   const [isGeneSearchOpen, setIsGeneSearchOpen] = useState(false);
@@ -707,13 +793,17 @@ export default function TrajectoryInsights({
     return {
       name: gene,
       color: GENE_COLORS[colorIndex % GENE_COLORS.length],
-      points: lineage.bins.map((bin) => ({
-        x: bin.pseudotime,
-        y: Number(bin.scaled_expression[gene] ?? 0),
-        cellCount: bin.cell_count,
+      observations: lineage.expression_points.map((point) => ({
+        x: point.pseudotime,
+        y: Number(point.expression[gene] ?? 0),
+      })),
+      trend: (lineage.trends[gene] ?? []).map((point) => ({
+        x: point.pseudotime,
+        y: point.expression,
       })),
     };
   });
+  const expressionLabel = trajectory.expression_label ?? "Expression";
   const hasEmbedding = Boolean(
     trajectory.embedding?.points.length && trajectory.embedding.paths.length,
   );
@@ -723,12 +813,16 @@ export default function TrajectoryInsights({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-lg font-extrabold text-slate-950">
-            {mode === "cells" ? "Cell trajectory" : "Gene dynamics"}
+            {mode === "cells"
+              ? "Cell trajectory"
+              : "Expression over pseudotime"}
           </h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
             {mode === "cells"
               ? `${trajectory.embedding?.method ?? "2D"} embedding colored from dark early to light late pseudotime, with an ordered lineage guide.`
-              : "Equal-cell bin means with a three-bin smoothing curve; every gene is scaled independently from 0 to 1."}
+              : expressionView === "actual"
+                ? `${expressionLabel} for individual cells with a cubic smoothing spline fitted across pseudotime.`
+                : "Spline trends independently scaled from 0 to 1 so their timing and shape can be compared."}
           </p>
         </div>
         <LineageMenu
@@ -742,7 +836,7 @@ export default function TrajectoryInsights({
         <div className="flex items-center gap-6" role="tablist" aria-label="Trajectory visualization">
           {[
             { value: "cells" as const, label: "Cell trajectory" },
-            { value: "genes" as const, label: "Gene dynamics" },
+            { value: "genes" as const, label: "Expression over pseudotime" },
           ].map((option) => (
             <button
               key={option.value}
@@ -770,7 +864,7 @@ export default function TrajectoryInsights({
             </span>
           ) : (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-              {lineage.bins.length} bins
+              {lineage.displayed_cell_count.toLocaleString()} displayed
             </span>
           )}
         </div>
@@ -794,7 +888,7 @@ export default function TrajectoryInsights({
           ) : (
             <EmptyTrajectory
               title="Cell embedding unavailable"
-              detail="The pseudotime trends are available, but there are not enough usable cells to build the two-dimensional cell view. Gene dynamics can still be explored."
+              detail="The pseudotime trends are available, but there are not enough usable cells to build the two-dimensional cell view. Expression over pseudotime can still be explored."
             />
           )
         ) : (
@@ -885,11 +979,39 @@ export default function TrajectoryInsights({
                 ) : null}
               </div>
             </div>
-            <GeneDynamicsChart series={series} />
-            <p className="mt-4 rounded-xl bg-amber-50/70 px-4 py-3 text-xs leading-5 text-amber-900">
-              Compare when genes change, not their absolute heights. Each gene uses
-              its own 0–1 scale; outlined points are observed bin means and solid
-              curves are lightly smoothed.
+            <div className="mb-4 inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
+              {[
+                { value: "actual" as const, label: "Actual values" },
+                { value: "relative" as const, label: "Compare trends" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setExpressionView(option.value)}
+                  aria-pressed={expressionView === option.value}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                    expressionView === option.value
+                      ? "bg-white text-[#087ead] shadow-sm ring-1 ring-slate-200"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {expressionView === "actual" ? (
+              <GeneExpressionPanels
+                series={series}
+                expressionLabel={expressionLabel}
+              />
+            ) : (
+              <GeneTrendComparisonChart series={series} />
+            )}
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+              {expressionView === "actual"
+                ? `Dots are individual cells using ${expressionLabel.toLowerCase()}; solid lines are descriptive cubic smoothing splines selected by generalized cross-validation. Each panel keeps the gene's own expression scale.`
+                : "Compare when genes change, not their absolute heights. Every spline is independently scaled from 0 to 1, so heights cannot be compared between genes."}{" "}
+              Pseudotime orders different cells and is not elapsed time.
             </p>
           </>
         )}

@@ -39,12 +39,6 @@ const MATRIX_STATE_OPTIONS = [
   },
 ];
 
-const SELECT_CONTROL_CLASS =
-  "mt-2 flex items-center rounded-[1rem] border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition focus-within:border-[#1b75a6]/40 focus-within:ring-4 focus-within:ring-[#1b75a6]/10";
-
-const SELECT_INPUT_CLASS =
-  "w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-800 outline-none";
-
 const CUSTOM_TF_LIST_SAMPLE = `gene_symbol,reference_gene_id
 TP53,ENSG00000141510
 MYC,ENSG00000136997
@@ -140,7 +134,6 @@ interface CreateProjectModalProps {
   setIncludeAllTFs: (value: boolean) => void;
   setMaxEdgesPerTarget: (value: string) => void;
   setBootstrapReplicates: (value: string) => void;
-  setCellOracleSpecies: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
   clearGroundTruthFile: () => void;
@@ -221,7 +214,6 @@ export default function CreateProjectModal({
   setIncludeAllTFs,
   setMaxEdgesPerTarget,
   setBootstrapReplicates,
-  setCellOracleSpecies,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
   clearGroundTruthFile,
@@ -303,7 +295,7 @@ export default function CreateProjectModal({
       /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
     }
-  }, [isCreateVisible]);
+  }, [isCreateVisible, setEnabledGeneSelectionStages]);
 
   useEffect(() => {
     return () => {
@@ -861,10 +853,6 @@ export default function CreateProjectModal({
                     setCellOracleBaseGrnSource(value);
                     setHasCellOracleSettingsConfigured(value === "built-in");
                   }}
-                  onSetCellOracleSpecies={(value) => {
-                    setHasCellOracleSettingsConfigured(true);
-                    setCellOracleSpecies(value);
-                  }}
                   onSelectClusterLabels={(file) => {
                     if (file && cellOracleBaseGrnSource === "built-in") {
                       setHasCellOracleSettingsConfigured(true);
@@ -1137,7 +1125,6 @@ function OptionalInputsPanel({
   onClearGroundTruth,
   onActivateCellOracle,
   onCellOracleBaseGrnSourceChange,
-  onSetCellOracleSpecies,
   onSelectClusterLabels,
   onClearClusterLabels,
   onShowCellOracleHelp,
@@ -1156,7 +1143,6 @@ function OptionalInputsPanel({
   onClearGroundTruth: () => void;
   onActivateCellOracle: () => void;
   onCellOracleBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
-  onSetCellOracleSpecies: (value: string) => void;
   onSelectClusterLabels: (file: File | null) => void;
   onClearClusterLabels: () => void;
   onShowCellOracleHelp: (topic: CellOracleHelpTopic) => void;
@@ -1185,7 +1171,6 @@ function OptionalInputsPanel({
           clusterLabelsFileName={clusterLabelsFileName}
           onActivate={onActivateCellOracle}
           onBaseGrnSourceChange={onCellOracleBaseGrnSourceChange}
-          onSetCellOracleSpecies={onSetCellOracleSpecies}
           onSelectClusterLabels={onSelectClusterLabels}
           onClearClusterLabels={onClearClusterLabels}
           onShowHelp={onShowCellOracleHelp}
@@ -1298,7 +1283,6 @@ function CellOracleInputRow({
   clusterLabelsFileName,
   onActivate,
   onBaseGrnSourceChange,
-  onSetCellOracleSpecies,
   onSelectClusterLabels,
   onClearClusterLabels,
   onShowHelp,
@@ -1309,7 +1293,6 @@ function CellOracleInputRow({
   clusterLabelsFileName: string;
   onActivate: () => void;
   onBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
-  onSetCellOracleSpecies: (value: string) => void;
   onSelectClusterLabels: (file: File | null) => void;
   onClearClusterLabels: () => void;
   onShowHelp: (topic: CellOracleHelpTopic) => void;
@@ -1997,6 +1980,8 @@ function CompactNumberField({
   );
 }
 
+// Kept as a ready replacement for the compact inline CellOracle editor.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CellOracleSettingsModal({
   open,
   isClosing,
@@ -2004,7 +1989,6 @@ function CellOracleSettingsModal({
   cellOracleSpecies,
   clusterLabelsFileName,
   onBaseGrnSourceChange,
-  onSetCellOracleSpecies,
   onSelectClusterLabels,
   onClearClusterLabels,
   onShowHelp,
@@ -2016,7 +2000,6 @@ function CellOracleSettingsModal({
   cellOracleSpecies: string;
   clusterLabelsFileName: string;
   onBaseGrnSourceChange: (value: CellOracleBaseGrnSource) => void;
-  onSetCellOracleSpecies: (value: string) => void;
   onSelectClusterLabels: (file: File | null) => void;
   onClearClusterLabels: () => void;
   onShowHelp: (topic: CellOracleHelpTopic) => void;

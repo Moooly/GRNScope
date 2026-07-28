@@ -1,7 +1,7 @@
 // REPLACED BY REQUEST
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, {
   type Core,
   type LayoutOptions,
@@ -24,15 +24,61 @@ import type {
   PositionMap,
 } from "./networkGraphTypes";
 
-coseBilkent(cytoscape);
+const cytoscapePluginRegistry = globalThis as typeof globalThis & {
+  __grnScopeCoseBilkentRegistered?: boolean;
+  __grnScopeSvgRegistered?: boolean;
+};
 
-let hasRegisteredCytoscapeSvg = false;
+if (!cytoscapePluginRegistry.__grnScopeCoseBilkentRegistered) {
+  coseBilkent(cytoscape);
+  cytoscapePluginRegistry.__grnScopeCoseBilkentRegistered = true;
+}
 export const MIN_NETWORK_ZOOM = 0.3;
 export const MAX_NETWORK_ZOOM = 2.4;
 
 function getNodeDisplayLabel(node: NetworkNode) {
   if (node.showLabel === false) return "";
   return node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
+}
+
+function getConnectedNodeGroups(cy: Core) {
+  const adjacency = new Map<string, Set<string>>();
+
+  cy.nodes().forEach((node) => {
+    adjacency.set(node.id(), new Set());
+  });
+
+  cy.edges().forEach((edge) => {
+    const source = String(edge.data("source") ?? "");
+    const target = String(edge.data("target") ?? "");
+
+    if (!adjacency.has(source) || !adjacency.has(target)) return;
+    adjacency.get(source)!.add(target);
+    adjacency.get(target)!.add(source);
+  });
+
+  const visited = new Set<string>();
+  const groups: string[][] = [];
+  adjacency.forEach((_, startId) => {
+    if (visited.has(startId)) return;
+
+    const group: string[] = [];
+    const stack = [startId];
+    visited.add(startId);
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      group.push(currentId);
+      adjacency.get(currentId)?.forEach((nextId) => {
+        if (!visited.has(nextId)) {
+          visited.add(nextId);
+          stack.push(nextId);
+        }
+      });
+    }
+    groups.push(group);
+  });
+
+  return groups.sort((a, b) => b.length - a.length);
 }
 
 export default function NetworkGraph({
@@ -100,56 +146,7 @@ export default function NetworkGraph({
     cy.center(visibleElements);
   };
 
-  const getConnectedNodeGroups = (cy: Core) => {
-    const adjacency = new Map<string, Set<string>>();
-
-    cy.nodes().forEach((node) => {
-      adjacency.set(node.id(), new Set());
-    });
-
-    cy.edges().forEach((edge) => {
-      const source = String(edge.data("source") ?? "");
-      const target = String(edge.data("target") ?? "");
-
-      if (!adjacency.has(source) || !adjacency.has(target)) {
-        return;
-      }
-
-      adjacency.get(source)!.add(target);
-      adjacency.get(target)!.add(source);
-    });
-
-    const visited = new Set<string>();
-    const groups: string[][] = [];
-
-    adjacency.forEach((_, startId) => {
-      if (visited.has(startId)) {
-        return;
-      }
-
-      const group: string[] = [];
-      const stack = [startId];
-      visited.add(startId);
-
-      while (stack.length > 0) {
-        const currentId = stack.pop()!;
-        group.push(currentId);
-
-        adjacency.get(currentId)?.forEach((nextId) => {
-          if (!visited.has(nextId)) {
-            visited.add(nextId);
-            stack.push(nextId);
-          }
-        });
-      }
-
-      groups.push(group);
-    });
-
-    return groups.sort((a, b) => b.length - a.length);
-  };
-
-  const packDisconnectedComponents = (cy: Core) => {
+  const packDisconnectedComponents = useCallback((cy: Core) => {
     const groups = getConnectedNodeGroups(cy);
 
     if (groups.length <= 1) {
@@ -218,7 +215,7 @@ export default function NetworkGraph({
         });
       });
     });
-  };
+  }, []);
 
   const relaxNodeSpacing = (cy: Core) => {
     const graphNodes = cy.nodes().toArray();
@@ -352,7 +349,7 @@ export default function NetworkGraph({
   const getLayoutCacheKey = (layoutMode: NetworkLayoutMode, signature: string) =>
     `${layoutMode}::${signature}`;
 
-  const getLayoutOptions = (
+  const getLayoutOptions = useCallback((
     layoutMode: NetworkLayoutMode,
     signature: string,
     allowRandomizeOnFirstForceRun = false,
@@ -382,7 +379,14 @@ export default function NetworkGraph({
         forceFreshLayout ||
         (allowRandomizeOnFirstForceRun && !hasCachedForcePositions),
     };
-  };
+  }, [
+    circularPositions,
+    concentricPositions,
+    edges,
+    graphCounts,
+    hierarchicalPositions,
+    nodes,
+  ]);
 
   useEffect(() => {
     onSelectGeneRef.current = onSelectGene;
@@ -450,14 +454,22 @@ export default function NetworkGraph({
     let cy: Core | null = null;
 
     const initializeGraph = async () => {
-      if (!hasRegisteredCytoscapeSvg) {
+      if (!cytoscapePluginRegistry.__grnScopeSvgRegistered) {
         // @ts-expect-error local declaration is provided in frontend/types/cytoscape-svg.d.ts
         const cytoscapeSvgModule = (await import("cytoscape-svg")) as {
           default: (cytoscapeInstance: typeof cytoscape) => void;
         };
         const cytoscapeSvg = cytoscapeSvgModule.default;
-        cytoscapeSvg(cytoscape);
-        hasRegisteredCytoscapeSvg = true;
+        const existingSvgExtension = (
+          cytoscape as unknown as (
+            extensionType: string,
+            extensionName: string,
+          ) => unknown
+        )("core", "svg");
+        if (typeof existingSvgExtension !== "function") {
+          cytoscapeSvg(cytoscape);
+        }
+        cytoscapePluginRegistry.__grnScopeSvgRegistered = true;
       }
 
       if (isCancelled || !containerRef.current || cyRef.current) {
@@ -468,7 +480,6 @@ export default function NetworkGraph({
         container: containerRef.current,
         elements,
         style: getNetworkGraphStylesheet() as StylesheetJson,
-        wheelSensitivity: 0.14,
         minZoom: MIN_NETWORK_ZOOM,
         maxZoom: MAX_NETWORK_ZOOM,
         boxSelectionEnabled: false,
@@ -647,6 +658,9 @@ export default function NetworkGraph({
       cy?.destroy();
       cyRef.current = null;
     };
+    // This effect owns the Cytoscape instance for the component lifetime.
+    // Data and layout changes are applied incrementally by the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -908,6 +922,8 @@ export default function NetworkGraph({
     layout,
     layoutCacheSignature,
     nodes,
+    getLayoutOptions,
+    packDisconnectedComponents,
   ]);
 
   useEffect(() => {

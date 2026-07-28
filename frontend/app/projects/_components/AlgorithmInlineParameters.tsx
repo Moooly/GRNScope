@@ -198,6 +198,17 @@ export default function AlgorithmInlineParameters({
     for (const parameter of parameters) {
       if (validateDraftValue(parameter, nextDraft[parameter.name])) return;
     }
+    if (algorithm.id === "SINGE") {
+      const timeResolution = Number(nextDraft.dT);
+      const lagCount = Number(nextDraft.num_lags);
+      if (
+        Number.isFinite(timeResolution) &&
+        Number.isFinite(lagCount) &&
+        timeResolution * lagCount >= 100
+      ) {
+        return;
+      }
+    }
     onApply(algorithm.id, buildOverrides(parameters, nextDraft, contextualDefaults));
   };
 

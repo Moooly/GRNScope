@@ -24,10 +24,7 @@ export default function AlgorithmErrorPopover({
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
   useLayoutEffect(() => {
-    if (!task || !anchorElement) {
-      setPosition(null);
-      return;
-    }
+    if (!task || !anchorElement) return;
     const updatePosition = () => {
       const panel = panelRef.current;
       if (!panel) return;

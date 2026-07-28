@@ -3,11 +3,13 @@ import type { MatrixValidationIssue } from "../_lib/types";
 type DatasetValidationStatusProps = {
   message: string;
   issues?: MatrixValidationIssue[];
+  title?: string;
 };
 
 export default function DatasetValidationStatus({
   message,
   issues = [],
+  title = "Matrix needs attention",
 }: DatasetValidationStatusProps) {
   const issueCount = issues.reduce(
     (total, issue) => total + Math.max(1, Number(issue.count) || 1),
@@ -30,7 +32,7 @@ export default function DatasetValidationStatus({
         </svg>
       </span>
       <p className="min-w-0 truncate text-sm font-semibold text-slate-600" title={summary}>
-        <span className="font-bold text-slate-900">Matrix needs attention</span>
+        <span className="font-bold text-slate-900">{title}</span>
         <span className="text-slate-300"> · </span>
         {summary}
       </p>

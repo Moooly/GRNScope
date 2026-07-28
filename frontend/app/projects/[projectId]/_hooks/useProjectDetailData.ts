@@ -19,6 +19,8 @@ const POLL_INTERVAL_MS = 5000;
 // Phase-1 (fast first paint) loads only the strongest edges per algorithm; the
 // full untrimmed set is fetched in the background right after.
 const FIRST_PAINT_EDGE_LIMIT = 800;
+const COMPLETED_RESULTS_ERROR_MESSAGE =
+  "We couldn't load the saved algorithm results. Please try again.";
 
 type BackendAlgorithmEntry = {
   id: string;
@@ -95,7 +97,9 @@ async function loadCompletedAlgorithmResults(
     signal: options.signal,
   });
 
-  if (!resultsResponse.ok) return currentResults;
+  if (!resultsResponse.ok) {
+    throw new Error(COMPLETED_RESULTS_ERROR_MESSAGE);
+  }
 
   const resultsData = await resultsResponse.json();
   const resultRows = Array.isArray(resultsData.results)
@@ -119,30 +123,30 @@ async function loadCompletedAlgorithmResults(
   const missingRows = completedRows.filter((item) => !next[item.algorithm_id]);
   const payloads = await Promise.all(
     missingRows.map(async (item) => {
-      try {
-        const response = await apiFetch(
-          `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}${limitQuery}`,
-          { signal: options.signal },
-        );
+      const response = await apiFetch(
+        `${API_BASE}/projects/${projectId}/results/${item.algorithm_id}${limitQuery}`,
+        { signal: options.signal },
+      );
 
-        if (!response.ok) return null;
-
-        const data = await response.json();
-        const result = data.result as AlgorithmStoredResult;
-        const algorithmId = result?.algorithm_id || item.algorithm_id;
-
-        if (result && algorithmId) {
-          next[algorithmId] = {
-            ...result,
-            algorithm_id: algorithmId,
-          };
-          options.onProgress?.({ ...next });
-        }
-
-        return result;
-      } catch {
-        return null;
+      if (!response.ok) {
+        throw new Error(COMPLETED_RESULTS_ERROR_MESSAGE);
       }
+
+      const data = await response.json();
+      const result = data.result as AlgorithmStoredResult;
+      const algorithmId = result?.algorithm_id || item.algorithm_id;
+
+      if (!result || !algorithmId) {
+        throw new Error(COMPLETED_RESULTS_ERROR_MESSAGE);
+      }
+
+      next[algorithmId] = {
+        ...result,
+        algorithm_id: algorithmId,
+      };
+      options.onProgress?.({ ...next });
+
+      return result;
     })
   );
 
@@ -183,6 +187,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
   const [algorithmResults, setAlgorithmResults] = useState<Record<string, AlgorithmStoredResult>>({});
   const [algorithmCatalog, setAlgorithmCatalog] = useState<AlgorithmCatalogItem[]>([]);
   const [isLoadingCompletedResults, setIsLoadingCompletedResults] = useState(false);
+  const [completedResultsError, setCompletedResultsError] = useState("");
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [error, setError] = useState("");
@@ -232,6 +237,13 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           { onProgress: setAlgorithmResults }
         );
         setAlgorithmResults(nextResults);
+        setCompletedResultsError("");
+      } catch (loadError) {
+        setCompletedResultsError(
+          loadError instanceof Error
+            ? loadError.message
+            : COMPLETED_RESULTS_ERROR_MESSAGE,
+        );
       } finally {
         setIsLoadingCompletedResults(false);
       }
@@ -299,6 +311,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
 
     const load = async () => {
       setError("");
+      setCompletedResultsError("");
       setIsLoadingProject(true);
       setIsLoadingCompletedResults(true);
 
@@ -388,7 +401,12 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
         });
         if (!cancelled) setAlgorithmResults(lightResults);
       } catch {
-        if (!cancelled) setAlgorithmResults({});
+        if (!cancelled) {
+          setAlgorithmResults({});
+          if (!controller.signal.aborted) {
+            setCompletedResultsError(COMPLETED_RESULTS_ERROR_MESSAGE);
+          }
+        }
       } finally {
         if (!cancelled) setIsLoadingCompletedResults(false);
       }
@@ -401,11 +419,18 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
           .then((fullResults) => {
             if (cancelled) return;
             setAlgorithmResults(fullResults);
+            setCompletedResultsError("");
             if (!projectHasActiveTasks) {
               setCachedResults(projectId, jobId, fullResults);
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            if (!cancelled && !controller.signal.aborted) {
+              setCompletedResultsError(
+                "The initial results loaded, but the complete saved edge files could not be loaded. Please try again.",
+              );
+            }
+          });
       }
 
       await metadataPromise;
@@ -466,7 +491,14 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
               },
             }
           );
-          if (!cancelled) setAlgorithmResults(nextResults);
+          if (!cancelled) {
+            setAlgorithmResults(nextResults);
+            setCompletedResultsError("");
+          }
+        } catch {
+          if (!cancelled && !controller.signal.aborted) {
+            setCompletedResultsError(COMPLETED_RESULTS_ERROR_MESSAGE);
+          }
         } finally {
           if (!cancelled) setIsLoadingCompletedResults(false);
         }
@@ -496,6 +528,7 @@ export default function useProjectDetailData({ projectId, isDemoRoute }: UseProj
     algorithmResults,
     algorithmCatalog,
     isLoadingCompletedResults,
+    completedResultsError,
     isLoadingProject,
     error,
     reload,

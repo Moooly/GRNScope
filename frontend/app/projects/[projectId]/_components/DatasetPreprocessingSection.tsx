@@ -36,6 +36,7 @@ type DatasetPreprocessingSectionProps = {
   finalGeneCount?: number | null;
   matrixTreatmentLabel: string;
   preprocessing?: PreprocessingConfig;
+  preprocessingStatus?: string | null;
   preprocessingResult?: PreprocessingResult | null;
   methodAdjustments: MethodGeneAdjustment[];
   onOpenDownloadMenu: () => void;
@@ -546,10 +547,11 @@ function MethodLimitsModal({
           </div>
 
           <p className="mt-4 text-xs leading-5 text-slate-500">
-            To change the genes used, adjust the{" "}
+            To change the gene set used, adjust the{" "}
             <strong className="font-bold text-slate-700">Gene filter</strong>{" "}
-            when adding or rerunning that algorithm. Algorithms not shown here
-            use all {formatCount(sourceGeneCount)} shared genes.
+            in that algorithm&apos;s settings when creating an analysis.
+            Algorithms not shown here use all {formatCount(sourceGeneCount)} shared
+            genes.
           </p>
         </div>
       </section>
@@ -564,6 +566,7 @@ export default function DatasetPreprocessingSection({
   finalGeneCount,
   matrixTreatmentLabel,
   preprocessing,
+  preprocessingStatus,
   preprocessingResult,
   methodAdjustments,
   onOpenDownloadMenu,
@@ -596,8 +599,19 @@ export default function DatasetPreprocessingSection({
           Math.max(...methodLimits),
         )} genes`
       : null;
+  const normalizedPreprocessingStatus = String(
+    preprocessingStatus ?? preprocessingResult?.status ?? "",
+  ).toLowerCase();
+  const preprocessingIsComplete =
+    normalizedPreprocessingStatus === "completed" ||
+    typeof preprocessingResult?.gene_count === "number";
+  const canUseUploadedCountAsFinal =
+    enabledStages.length === 0 &&
+    (preprocessingIsComplete || normalizedPreprocessingStatus === "");
   const methodSourceGeneCount =
-    preprocessingResult?.gene_count ?? finalGeneCount ?? inputGeneCount;
+    preprocessingResult?.gene_count ??
+    finalGeneCount ??
+    (canUseUploadedCountAsFinal ? inputGeneCount : null);
   const hasGeneCounts =
     typeof inputGeneCount === "number" &&
     typeof methodSourceGeneCount === "number";
@@ -700,7 +714,9 @@ export default function DatasetPreprocessingSection({
                       of {formatCount(inputGeneCount)} genes retained
                     </>
                   ) : (
-                    "Preparing gene selection"
+                    normalizedPreprocessingStatus === "failed"
+                      ? "Gene selection unavailable"
+                      : "Preparing gene selection"
                   )}
                 </p>
               </div>

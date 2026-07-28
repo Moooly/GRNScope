@@ -122,6 +122,10 @@ def compact_result_for_client(result: dict) -> dict:
         for edge in edges:
             if not isinstance(edge, dict):
                 continue
+            source = str(edge.get("source", "")).strip()
+            target = str(edge.get("target", "")).strip()
+            if source and target and source == target:
+                continue
 
             normalized_edge = dict(edge)
             has_bootstrap_sign_counts = (
@@ -330,7 +334,10 @@ def compact_result_for_client(result: dict) -> dict:
         "elapsed_seconds": result.get("elapsed_seconds"),
         "algorithm_preprocessing": result.get("algorithm_preprocessing"),
         "network_summary": result.get("network_summary"),
-        "edge_count": result.get("edge_count", len(compact_edges)),
+        # Saved manifests from older releases may still contain self-edges.
+        # Report the count of edges we actually return so the summary and
+        # table cannot disagree after compatibility filtering.
+        "edge_count": len(compact_edges),
         "confidence_summary": compact_confidence_summary(
             result.get("confidence_summary"),
             result.get("run_ranked_edges_paths"),

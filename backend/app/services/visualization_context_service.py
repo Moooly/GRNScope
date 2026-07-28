@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.interpolate import make_smoothing_spline
 from sklearn.manifold import TSNE
 
 from .gene_ordering_service import (
@@ -19,7 +20,8 @@ from .matrix_transformation_service import (
 
 
 MAX_TRAJECTORY_GENES = 8
-TRAJECTORY_BIN_COUNT = 30
+MAX_TRAJECTORY_EXPRESSION_POINTS = 2_000
+TRAJECTORY_SPLINE_POINT_COUNT = 100
 MAX_TRAJECTORY_EMBEDDING_CELLS = 700
 MAX_TRAJECTORY_EMBEDDING_GENES = 500
 TRAJECTORY_PATH_BIN_COUNT = 24
@@ -75,6 +77,22 @@ def _expression_path(project_dir: Path, manifest: dict) -> Path | None:
     )
 
 
+def _analysis_expression_path(
+    project_dir: Path,
+    manifest: dict,
+) -> tuple[Path | None, bool]:
+    preprocessed_path = _existing_path(
+        project_dir,
+        manifest,
+        path_keys=("preprocessed_expression_path",),
+        filename_keys=(),
+        fallback_patterns=(),
+    )
+    if preprocessed_path:
+        return preprocessed_path, True
+    return _expression_path(project_dir, manifest), False
+
+
 def _pseudotime_path(project_dir: Path, manifest: dict) -> Path | None:
     return _existing_path(
         project_dir,
@@ -115,17 +133,77 @@ def _ground_truth_path(project_dir: Path, manifest: dict) -> Path | None:
     return None
 
 
-def _scale_series(values: np.ndarray) -> np.ndarray:
-    finite = np.isfinite(values)
-    if not finite.any():
-        return np.zeros_like(values, dtype=float)
-    minimum = float(np.nanmin(values[finite]))
-    maximum = float(np.nanmax(values[finite]))
-    if maximum <= minimum:
-        return np.zeros_like(values, dtype=float)
-    scaled = (values - minimum) / (maximum - minimum)
-    scaled[~finite] = np.nan
-    return scaled
+def _fit_expression_spline(
+    pseudotime: np.ndarray,
+    expression: np.ndarray,
+) -> list[dict]:
+    """Fit a descriptive cubic smoothing spline to cell-level expression."""
+    finite = np.isfinite(pseudotime) & np.isfinite(expression)
+    x_values = np.asarray(pseudotime[finite], dtype=float)
+    y_values = np.asarray(expression[finite], dtype=float)
+    if not len(x_values):
+        return []
+
+    order = np.argsort(x_values, kind="stable")
+    x_values = x_values[order]
+    y_values = y_values[order]
+    unique_x, inverse, counts = np.unique(
+        x_values,
+        return_inverse=True,
+        return_counts=True,
+    )
+    y_sums = np.bincount(inverse, weights=y_values)
+    unique_y = y_sums / counts
+
+    if len(unique_x) == 1:
+        return [
+            {
+                "pseudotime": float(unique_x[0]),
+                "expression": float(unique_y[0]),
+            }
+        ]
+
+    grid = np.linspace(
+        float(unique_x[0]),
+        float(unique_x[-1]),
+        TRAJECTORY_SPLINE_POINT_COUNT,
+    )
+    if len(unique_x) >= 5 and float(np.ptp(unique_y)) > 0:
+        try:
+            spline = make_smoothing_spline(
+                unique_x,
+                unique_y,
+                w=counts.astype(float),
+            )
+            fitted = np.asarray(spline(grid), dtype=float)
+        except (ValueError, np.linalg.LinAlgError):
+            fitted = np.interp(grid, unique_x, unique_y)
+    else:
+        fitted = np.interp(grid, unique_x, unique_y)
+
+    observed_min = float(np.min(y_values))
+    observed_max = float(np.max(y_values))
+    fitted = np.clip(fitted, observed_min, observed_max)
+    return [
+        {
+            "pseudotime": float(x_value),
+            "expression": float(y_value),
+        }
+        for x_value, y_value in zip(grid, fitted, strict=True)
+    ]
+
+
+def _expression_label(manifest: dict, *, preprocessed: bool) -> str:
+    if preprocessed:
+        return "Log-normalized expression"
+    matrix_state = str(
+        (manifest.get("preprocessing") or {}).get("matrix_state") or ""
+    ).strip().lower()
+    return {
+        "raw": "Raw expression",
+        "normalized": "Normalized expression",
+        "log_normalized": "Log-normalized expression",
+    }.get(matrix_state, "Expression")
 
 
 def _principal_component_embedding(values: np.ndarray) -> np.ndarray:
@@ -388,7 +466,10 @@ def build_trajectory_context(
     manifest: dict,
     requested_genes: list[str],
 ) -> dict:
-    expression_path = _expression_path(project_dir, manifest)
+    expression_path, uses_preprocessed_expression = _analysis_expression_path(
+        project_dir,
+        manifest,
+    )
     pseudotime_path = _pseudotime_path(project_dir, manifest)
     if not expression_path or not pseudotime_path:
         return {"available": False, "reason": "Pseudotime is not available."}
@@ -407,6 +488,10 @@ def build_trajectory_context(
     if not genes:
         variances = expression.var(axis=1).sort_values(ascending=False)
         genes = [str(value) for value in variances.head(6).index]
+    gene_positions = {
+        gene: int(expression.index.get_loc(gene))
+        for gene in genes
+    }
 
     lineages: list[dict] = []
     for lineage_name in pseudotime.columns:
@@ -416,43 +501,47 @@ def build_trajectory_context(
         if valid_count < 3:
             continue
 
-        ranks = pd.Series(lineage_values[valid]).rank(method="first")
-        bin_count = min(TRAJECTORY_BIN_COUNT, valid_count)
-        bin_ids = pd.qcut(ranks, q=bin_count, labels=False, duplicates="drop")
-        valid_cells = expression.columns[valid]
-        lineage_bins: list[dict] = []
-
-        for bin_id in sorted(int(value) for value in pd.unique(bin_ids)):
-            selected = np.asarray(bin_ids == bin_id)
-            selected_cells = valid_cells[selected]
-            pseudotime_values = lineage_values[valid][selected]
-            expression_means = expression.loc[genes, selected_cells].mean(axis=1)
-            lineage_bins.append(
-                {
-                    "pseudotime": float(np.mean(pseudotime_values)),
-                    "cell_count": int(len(selected_cells)),
-                    "raw_expression": {
-                        gene: float(expression_means.loc[gene]) for gene in genes
-                    },
-                }
+        valid_indices = np.flatnonzero(valid)
+        ordered_indices = valid_indices[
+            np.argsort(lineage_values[valid_indices], kind="stable")
+        ]
+        if len(ordered_indices) > MAX_TRAJECTORY_EXPRESSION_POINTS:
+            sample_positions = np.linspace(
+                0,
+                len(ordered_indices) - 1,
+                MAX_TRAJECTORY_EXPRESSION_POINTS,
+                dtype=int,
             )
+            displayed_indices = ordered_indices[np.unique(sample_positions)]
+        else:
+            displayed_indices = ordered_indices
 
-        for gene in genes:
-            raw_values = np.asarray(
-                [bin_payload["raw_expression"][gene] for bin_payload in lineage_bins],
-                dtype=float,
+        expression_points = [
+            {
+                "cell": str(expression.columns[cell_index]),
+                "pseudotime": float(lineage_values[cell_index]),
+                "expression": {
+                    gene: float(expression.iloc[gene_positions[gene], cell_index])
+                    for gene in genes
+                },
+            }
+            for cell_index in displayed_indices
+        ]
+        trends = {
+            gene: _fit_expression_spline(
+                lineage_values[valid_indices],
+                expression.loc[gene].to_numpy(dtype=float)[valid_indices],
             )
-            scaled_values = _scale_series(raw_values)
-            for bin_payload, scaled_value in zip(lineage_bins, scaled_values, strict=True):
-                bin_payload.setdefault("scaled_expression", {})[gene] = (
-                    None if not np.isfinite(scaled_value) else float(scaled_value)
-                )
+            for gene in genes
+        }
 
         lineages.append(
             {
                 "name": str(lineage_name),
                 "cell_count": valid_count,
-                "bins": lineage_bins,
+                "displayed_cell_count": int(len(displayed_indices)),
+                "expression_points": expression_points,
+                "trends": trends,
             }
         )
 
@@ -473,6 +562,11 @@ def build_trajectory_context(
         "lineages": lineages,
         "embedding": embedding,
         "expression_file": expression_path.name,
+        "expression_label": _expression_label(
+            manifest,
+            preprocessed=uses_preprocessed_expression,
+        ),
+        "trend_method": "cubic_smoothing_spline_gcv",
         "pseudotime_file": pseudotime_path.name,
     }
 

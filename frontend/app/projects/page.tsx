@@ -548,7 +548,7 @@ function ProjectsPageContent() {
         {isLoading ? (
           <ProjectsLoadingSkeleton />
         ) : showEmptyLibrary ? (
-          <EmptyProjectsLibrary onCreate={openBlankCreateFlow} />
+          <EmptyProjectsLibrary />
         ) : (
           <>
             <ProjectsToolbar
@@ -675,7 +675,7 @@ function NoMatchingProjects({ onClear }: { onClear: () => void }) {
   );
 }
 
-function EmptyProjectsLibrary({ onCreate }: { onCreate: () => void }) {
+function EmptyProjectsLibrary() {
   return (
     <div className="mt-8 rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
       <h2 className="text-lg font-bold text-slate-950">No projects yet</h2>
