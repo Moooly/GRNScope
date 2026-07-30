@@ -28,6 +28,15 @@ export type VisualizationContext = {
     reason?: string;
     filename?: string;
     edge_count?: number;
+    eligible_edge_count?: number;
+    excluded_edge_count?: number;
+    analysis_gene_count?: number | null;
+    motif_reference?: {
+      edge_count: number;
+      feedback_loops: number;
+      feed_forward_loops: number;
+      mutual_interactions: number;
+    };
     edges?: Array<{ source: string; target: string; sign?: string }>;
   };
 };
@@ -591,18 +600,21 @@ function RepeatRunStabilityPanel({
           numericValue(earlyStopping?.stop_streak) ??
           numericValue(summary?.stop_streak) ??
           2;
+        const earlyStoppingEnabled =
+          earlyStopping?.enabled === true ||
+          summary?.early_stopping_enabled === true;
 
         let status = "Unavailable";
         let tone = "bg-slate-100 text-slate-600";
-        if (isGenuineBootstrap) {
-          status = "Fixed bootstrap";
-          tone = "bg-emerald-50 text-emerald-700";
-        } else if (earlyStopping?.stopped_early) {
+        if (earlyStopping?.stopped_early) {
           status = "Stop rule met";
           tone = "bg-emerald-50 text-emerald-700";
-        } else if (checks.length) {
+        } else if (earlyStoppingEnabled) {
           status = "Run cap reached";
           tone = "bg-amber-50 text-amber-700";
+        } else if (isGenuineBootstrap) {
+          status = "Fixed bootstrap";
+          tone = "bg-emerald-50 text-emerald-700";
         } else if (medianRho !== null) {
           status = "Stability only";
           tone = "bg-sky-50 text-[#087ead]";
@@ -622,6 +634,7 @@ function RepeatRunStabilityPanel({
           status,
           tone,
           isGenuineBootstrap,
+          earlyStoppingEnabled,
           hasLegacySummary: Boolean(fallback),
         };
       }),
@@ -807,7 +820,9 @@ function RepeatRunStabilityPanel({
                       </>
                     ) : (
                       <span className="leading-5 text-slate-500">
-                        {row.isGenuineBootstrap
+                        {row.earlyStoppingEnabled
+                          ? "No usable Spearman stopping checks were available; all planned bootstrap samples were used."
+                          : row.isGenuineBootstrap
                           ? "All planned with-replacement cell-bootstrap samples were used; data-dependent early stopping is disabled."
                           : row.hasLegacySummary
                           ? "Stopping checks were not saved; stability was reconstructed from the run rankings."
@@ -2205,10 +2220,10 @@ export default function ResultsInsightsSection({
     <BenchmarkInsights
       groundTruth={visualizationContext?.ground_truth}
       loading={isContextLoading}
-      algorithmEdgeRows={algorithmEdgeRows}
       algorithmMetaMap={algorithmMetaMap}
       algorithmResults={algorithmResults}
       activeAlgorithmIds={activeAlgorithmIds}
+      selectedResultScopeId={selectedResultScopeId}
       tasks={tasks}
     />
   );

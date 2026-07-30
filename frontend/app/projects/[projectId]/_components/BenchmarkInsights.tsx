@@ -1,29 +1,43 @@
 "use client";
 
 import {
-  useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 import type {
-  AggregatedEdge,
   AlgorithmCatalogItem,
+  AlgorithmResultEdge,
   AlgorithmStoredResult,
+  BeelinePathStats,
   ProjectTask,
 } from "../_lib/types";
+import {
+  benchmarkEdgeKey,
+  computeBeelineBenchmarkMetrics,
+  normalizeReferenceSign,
+  type BenchmarkCurvePoint,
+  type ReferenceSign,
+} from "../_lib/benchmark";
 
 type GroundTruthContext = {
   available: boolean;
   reason?: string;
   filename?: string;
   edge_count?: number;
+  eligible_edge_count?: number;
+  excluded_edge_count?: number;
+  analysis_gene_count?: number | null;
+  motif_reference?: {
+    edge_count: number;
+    feedback_loops: number;
+    feed_forward_loops: number;
+    mutual_interactions: number;
+  };
   edges?: Array<{ source: string; target: string; sign?: string }>;
 };
 
-type CurvePoint = { x: number; y: number };
-type SignValue = -1 | 0 | 1;
+type CurvePoint = BenchmarkCurvePoint;
 type MotifCounts = {
   feedbackLoops: number;
   feedForwardLoops: number;
@@ -35,20 +49,25 @@ type PathCounts = {
   path3: number;
   path4: number;
   path5: number;
+  pathMoreThan5: number;
   noPath: number;
 };
 type BenchmarkRow = {
   algorithmId: string;
   evaluatedEdges: number;
   possibleEdges: number;
-  isPartial: boolean;
   auprc: number;
   auprcRatio: number;
   auroc: number;
   precisionAtK: number;
+  earlyPrecisionSelectedCount: number;
   earlyPrecisionRatio: number;
+  activationPrecision: number | null;
   activationEpr: number | null;
-  repressionEpr: number | null;
+  activationSelectedCount: number | null;
+  inhibitionPrecision: number | null;
+  inhibitionEpr: number | null;
+  inhibitionSelectedCount: number | null;
   runtimeSeconds: number;
   pr: CurvePoint[];
   roc: CurvePoint[];
@@ -56,12 +75,6 @@ type BenchmarkRow = {
   motifs: MotifCounts | null;
   pathCounts: PathCounts | null;
 };
-type BenchmarkMenuOption<T extends string | number> = {
-  value: T;
-  label: string;
-  detail?: string;
-};
-
 const PALETTE = [
   "#087ead",
   "#7c3aed",
@@ -74,40 +87,7 @@ const PALETTE = [
 ];
 
 function edgeKey(source: string, target: string) {
-  return `${source}\u0000${target}`;
-}
-
-function adjacencyKey(first: string, second: string) {
-  return first.localeCompare(second) <= 0
-    ? `${first}\u0000${second}`
-    : `${second}\u0000${first}`;
-}
-
-function normalizeSign(value?: string): SignValue {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  const numeric = Number(normalized);
-  if (Number.isFinite(numeric)) {
-    if (numeric > 0) return 1;
-    if (numeric < 0) return -1;
-  }
-  if (
-    normalized === "+" ||
-    normalized === "activation" ||
-    normalized === "activating" ||
-    normalized === "positive"
-  ) {
-    return 1;
-  }
-  if (
-    normalized === "-" ||
-    normalized === "inhibition" ||
-    normalized === "inhibitory" ||
-    normalized === "repression" ||
-    normalized === "negative"
-  ) {
-    return -1;
-  }
-  return 0;
+  return benchmarkEdgeKey(source, target);
 }
 
 function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
@@ -165,131 +145,6 @@ function Panel({
       </div>
       <div className="mt-5">{children}</div>
     </section>
-  );
-}
-
-function BenchmarkMenu<T extends string | number>({
-  prefix,
-  value,
-  options,
-  onChange,
-}: {
-  prefix: string;
-  value: T;
-  options: Array<BenchmarkMenuOption<T>>;
-  onChange: (value: T) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const selected =
-    options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setIsOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  return (
-    <div ref={menuRef} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setIsOpen((current) => !current)}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-4 text-sm font-semibold transition ${
-          isOpen
-            ? "border-[#1b75a6]/40 text-[#1b75a6] ring-4 ring-[#1b75a6]/[0.06]"
-            : "border-slate-200 text-slate-600 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
-        }`}
-      >
-        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
-          <path
-            d="M4 6h5m3 0h4M4 14h3m3 0h6"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <circle cx="10.5" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="8.5" cy="14" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-        <span className="whitespace-nowrap">
-          {prefix} <span className="text-slate-300">·</span>{" "}
-          <strong className="text-slate-900">{selected?.label}</strong>
-        </span>
-        <svg
-          viewBox="0 0 16 16"
-          className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="m3.5 6 4.5 4 4.5-4"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-      {isOpen ? (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-40 mt-1.5 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/15"
-        >
-          {options.map((option) => {
-            const isActive = option.value === value;
-            return (
-              <button
-                key={String(option.value)}
-                type="button"
-                role="menuitemradio"
-                aria-checked={isActive}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                  isActive
-                    ? "bg-[#f2f9fc] text-[#1b75a6]"
-                    : "text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold">{option.label}</span>
-                  {option.detail ? (
-                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                      {option.detail}
-                    </span>
-                  ) : null}
-                </span>
-                {isActive ? (
-                  <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0" fill="none">
-                    <path
-                      d="m3 8.5 3 3 7-7"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -377,54 +232,70 @@ function motifCounts(edges: Array<{ source: string; target: string }>): MotifCou
   };
 }
 
-function shortestPathLength(
-  adjacency: Map<string, Set<string>>,
-  source: string,
-  target: string,
-  maximum = 5,
+function resultEdgesForScope(
+  result: AlgorithmStoredResult | undefined,
+  scopeId: string,
 ) {
-  if (source === target) return 0;
-  const visited = new Set([source]);
-  let frontier = [source];
-  for (let depth = 1; depth <= maximum; depth += 1) {
-    const next: string[] = [];
-    frontier.forEach((node) => {
-      adjacency.get(node)?.forEach((neighbor) => {
-        if (visited.has(neighbor)) return;
-        visited.add(neighbor);
-        next.push(neighbor);
-      });
-    });
-    if (next.includes(target)) return depth;
-    frontier = next;
-    if (!frontier.length) break;
+  if (!result) return [];
+  if (scopeId !== "global") {
+    return result.scopes?.[scopeId]?.top_edges ?? [];
   }
-  return null;
+  return result.top_edges ?? result.edges ?? result.ranked_edges ?? [];
 }
 
-function signedEarlyPrecisionRatio({
-  ranked,
-  truthSigns,
-  sign,
-  possibleEdges,
-  methodSupportsSign,
-}: {
-  ranked: AggregatedEdge[];
-  truthSigns: Map<string, SignValue>;
-  sign: -1 | 1;
-  possibleEdges: number;
-  methodSupportsSign: boolean;
-}) {
-  if (!methodSupportsSign) return null;
-  const truthCount = [...truthSigns.values()].filter((value) => value === sign).length;
-  if (!truthCount || possibleEdges <= 0) return null;
-  const predictions = ranked.filter((edge) => edge.sign === sign).slice(0, truthCount);
-  const correct = predictions.filter(
-    (edge) => truthSigns.get(edgeKey(edge.source, edge.target)) === sign,
-  ).length;
-  const precision = correct / truthCount;
-  const randomBaseline = truthCount / possibleEdges;
-  return randomBaseline > 0 ? precision / randomBaseline : null;
+function pathStatsForScope(
+  result: AlgorithmStoredResult | undefined,
+  scopeId: string,
+) {
+  if (!result) return null;
+  if (scopeId !== "global") {
+    return result.scopes?.[scopeId]?.beeline_path_stats ?? null;
+  }
+  return (
+    result.beeline_path_stats ??
+    result.scopes?.global?.beeline_path_stats ??
+    null
+  );
+}
+
+function beelineMotifNetwork(
+  edges: AlgorithmResultEdge[],
+  referenceEdgeCount: number,
+) {
+  // Confidence-enabled results combine bootstrap evidence with the unmodified
+  // full-data run. BEELINE's motif evaluator receives that full-data ranked
+  // network, so reconstruct it before applying BEELINE's absolute-score top-k.
+  const hasFullDataMarkers = edges.some(
+    (edge) => edge.full_data_present !== undefined,
+  );
+  return edges
+    .filter((edge) => {
+      const source = String(edge.source ?? "").trim();
+      const target = String(edge.target ?? "").trim();
+      return (
+        source &&
+        target &&
+        source !== target &&
+        (!hasFullDataMarkers || edge.full_data_present === true)
+      );
+    })
+    .map((edge) => ({
+      source: String(edge.source).trim(),
+      target: String(edge.target).trim(),
+      weight: Math.abs(
+        Number(
+          edge.full_data_raw_score ??
+            edge.mean_raw_score ??
+            edge.weight ??
+            edge.edge_weight ??
+            edge.score ??
+            0,
+        ),
+      ),
+    }))
+    .sort((first, second) => second.weight - first.weight)
+    .slice(0, referenceEdgeCount)
+    .map(({ source, target }) => ({ source, target }));
 }
 
 function benchmarkAlgorithm({
@@ -433,189 +304,71 @@ function benchmarkAlgorithm({
   truth,
   truthSigns,
   possibleEdges,
-  signedPossibleEdges,
-  evaluationDepth,
   runtimeSeconds,
-  methodSupportsSign,
   methodSupportsDirection,
-  referenceAdjacency,
   candidateGenes,
+  motifEdges,
+  motifReferenceEdgeCount,
+  pathStats,
 }: {
   algorithmId: string;
-  edges: AggregatedEdge[];
+  edges: AlgorithmResultEdge[];
   truth: Set<string>;
-  truthSigns: Map<string, SignValue>;
+  truthSigns: Map<string, ReferenceSign>;
   possibleEdges: number;
-  signedPossibleEdges: number;
-  evaluationDepth: number;
   runtimeSeconds: number;
-  methodSupportsSign: boolean;
   methodSupportsDirection: boolean;
-  referenceAdjacency: Map<string, Set<string>>;
   candidateGenes: Set<string>;
+  motifEdges: AlgorithmResultEdge[];
+  motifReferenceEdgeCount: number;
+  pathStats: BeelinePathStats | null;
 }): BenchmarkRow {
-  // Core benchmarking is intentionally direction-neutral. Every selected
-  // method is evaluated once per unordered gene pair, so an undirected method
-  // is neither duplicated nor penalized for not predicting an arrow.
-  const bestByAdjacency = new Map<string, AggregatedEdge>();
-  edges.forEach((edge) => {
-    if (
-      edge.source === edge.target ||
-      !candidateGenes.has(edge.source) ||
-      !candidateGenes.has(edge.target)
-    ) {
-      return;
-    }
-    const key = adjacencyKey(edge.source, edge.target);
-    const current = bestByAdjacency.get(key);
-    if (
-      !current ||
-      edge.rank < current.rank ||
-      (edge.rank === current.rank && edge.confidence > current.confidence)
-    ) {
-      bestByAdjacency.set(key, edge);
-    }
+  const metrics = computeBeelineBenchmarkMetrics({
+    algorithmId,
+    edges,
+    candidateGenes,
+    truth,
+    truthSigns,
+    possibleEdges,
   });
-  const completeRanking = [...bestByAdjacency.values()].sort(
-    (a, b) => a.rank - b.rank || b.confidence - a.confidence,
+  const motifNetwork = beelineMotifNetwork(
+    motifEdges,
+    motifReferenceEdgeCount,
   );
-  const seenDirected = new Set<string>();
-  const directedRanking = [...edges]
-    .filter((edge) => {
-      const key = edgeKey(edge.source, edge.target);
-      if (
-        edge.source === edge.target ||
-        !candidateGenes.has(edge.source) ||
-        !candidateGenes.has(edge.target) ||
-        seenDirected.has(key)
-      ) {
-        return false;
+  const pathCounts: PathCounts | null = pathStats
+    ? {
+        truePositive: pathStats.num_true_positive,
+        path2: pathStats.path_2,
+        path3: pathStats.path_3,
+        path4: pathStats.path_4,
+        path5: pathStats.path_5,
+        pathMoreThan5: pathStats.path_more_than_5,
+        noPath: pathStats.num_false_positive_no_path,
       }
-      seenDirected.add(key);
-      return true;
-    })
-    .sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)
-    .slice(0, evaluationDepth > 0 ? evaluationDepth : undefined);
-  const ranked = completeRanking.slice(
-    0,
-    evaluationDepth > 0 ? evaluationDepth : undefined,
-  );
-  const isPartial = evaluationDepth > 0 && ranked.length < possibleEdges;
-  const positiveCount = Math.max(1, truth.size);
-  const negativeCount = Math.max(1, possibleEdges - truth.size);
-  let truePositive = 0;
-  let falsePositive = 0;
-  let auprc = 0;
-  let auroc = 0;
-  let previousRecall = 0;
-  let previousFpr = 0;
-  let previousTpr = 0;
-  const pr: CurvePoint[] = [{ x: 0, y: 1 }];
-  const roc: CurvePoint[] = [{ x: 0, y: 0 }];
-  let trueAtK = 0;
-  const k = Math.min(truth.size, possibleEdges);
-
-  ranked.forEach((edge, index) => {
-    if (truth.has(adjacencyKey(edge.source, edge.target))) {
-      truePositive += 1;
-      if (index < k) trueAtK += 1;
-    } else {
-      falsePositive += 1;
-    }
-    const recall = truePositive / positiveCount;
-    const precision = truePositive / (index + 1);
-    const falsePositiveRate = falsePositive / negativeCount;
-    const truePositiveRate = recall;
-    auprc += (recall - previousRecall) * precision;
-    auroc +=
-      (falsePositiveRate - previousFpr) *
-      ((previousTpr + truePositiveRate) / 2);
-    previousRecall = recall;
-    previousFpr = falsePositiveRate;
-    previousTpr = truePositiveRate;
-    if (
-      index === ranked.length - 1 ||
-      index % Math.max(1, Math.floor(ranked.length / 180)) === 0
-    ) {
-      pr.push({ x: recall, y: precision });
-      roc.push({ x: falsePositiveRate, y: truePositiveRate });
-    }
-  });
-
-  // Missing predictions share the lowest possible score. When the complete
-  // ranking is requested, evaluate that tied group as one threshold so every
-  // method reaches the same candidate-universe endpoint without inventing an
-  // arbitrary ordering among absent edges.
-  if (!isPartial && ranked.length < possibleEdges) {
-    const finalPrecision = truth.size / Math.max(1, possibleEdges);
-    auprc += Math.max(0, 1 - previousRecall) * finalPrecision;
-    auroc += Math.max(0, 1 - previousFpr) * ((previousTpr + 1) / 2);
-    pr.push({ x: 1, y: finalPrecision });
-    roc.push({ x: 1, y: 1 });
-  }
-
-  // Missing predictions inside top-k count as incorrect. All methods therefore
-  // use the same denominator even when one emits a shorter ranked list.
-  const precisionAtK = k > 0 ? trueAtK / k : 0;
-  const randomBaseline = truth.size / Math.max(1, possibleEdges);
-  const topologyEdges = methodSupportsDirection ? ranked.slice(0, k) : [];
-  const pathCounts: PathCounts = {
-    truePositive: 0,
-    path2: 0,
-    path3: 0,
-    path4: 0,
-    path5: 0,
-    noPath: 0,
-  };
-  topologyEdges.forEach((edge) => {
-    const key = adjacencyKey(edge.source, edge.target);
-    if (truth.has(key)) {
-      pathCounts.truePositive += 1;
-      return;
-    }
-    const length = shortestPathLength(
-      referenceAdjacency,
-      edge.source,
-      edge.target,
-    );
-    if (length === 2) pathCounts.path2 += 1;
-    else if (length === 3) pathCounts.path3 += 1;
-    else if (length === 4) pathCounts.path4 += 1;
-    else if (length === 5) pathCounts.path5 += 1;
-    else pathCounts.noPath += 1;
-  });
+    : null;
 
   return {
     algorithmId,
-    evaluatedEdges: ranked.length,
+    evaluatedEdges: metrics.nonzeroPredictionCount,
     possibleEdges,
-    isPartial,
-    auprc,
-    auprcRatio: randomBaseline > 0 ? auprc / randomBaseline : 0,
-    auroc,
-    precisionAtK,
-    earlyPrecisionRatio:
-      randomBaseline > 0 ? precisionAtK / randomBaseline : 0,
-    activationEpr: signedEarlyPrecisionRatio({
-      ranked: directedRanking,
-      truthSigns,
-      sign: 1,
-      possibleEdges: signedPossibleEdges,
-      methodSupportsSign,
-    }),
-    repressionEpr: signedEarlyPrecisionRatio({
-      ranked: directedRanking,
-      truthSigns,
-      sign: -1,
-      possibleEdges: signedPossibleEdges,
-      methodSupportsSign,
-    }),
+    auprc: metrics.auprc,
+    auprcRatio: metrics.auprcRatio,
+    auroc: metrics.auroc,
+    precisionAtK: metrics.earlyPrecision.precision,
+    earlyPrecisionSelectedCount: metrics.earlyPrecision.selectedCount,
+    earlyPrecisionRatio: metrics.earlyPrecision.ratio,
+    activationPrecision: metrics.activation?.precision ?? null,
+    activationEpr: metrics.activation?.ratio ?? null,
+    activationSelectedCount: metrics.activation?.selectedCount ?? null,
+    inhibitionPrecision: metrics.inhibition?.precision ?? null,
+    inhibitionEpr: metrics.inhibition?.ratio ?? null,
+    inhibitionSelectedCount: metrics.inhibition?.selectedCount ?? null,
     runtimeSeconds,
-    pr,
-    roc,
+    pr: metrics.pr,
+    roc: metrics.roc,
     directionAware: methodSupportsDirection,
-    motifs: methodSupportsDirection ? motifCounts(topologyEdges) : null,
-    pathCounts: methodSupportsDirection ? pathCounts : null,
+    motifs: motifCounts(motifNetwork),
+    pathCounts,
   };
 }
 
@@ -913,47 +666,36 @@ function LineChart({
   );
 }
 
-function HeatmapCell({
-  value,
-  display,
-  intensity,
-  title,
-  subdued = false,
+function RatioMetric({
+  ratio,
+  metric,
+  rawValue,
 }: {
-  value: number | null;
-  display: string;
-  intensity: number;
-  title: string;
-  subdued?: boolean;
+  ratio: number | null;
+  metric: string;
+  rawValue: number | null;
 }) {
-  if (value === null || !Number.isFinite(value)) {
+  if (ratio === null || !Number.isFinite(ratio)) {
     return (
-      <div
-        title={`${title}: not available`}
-        className="flex h-10 items-center justify-center rounded-lg border border-slate-100 bg-slate-50/70 px-2 text-sm font-semibold text-slate-300"
-      >
+      <div className="py-1 text-sm font-semibold text-slate-300">
         —
       </div>
     );
   }
 
-  const strength = Math.max(0, Math.min(1, intensity));
-  const alpha = 0.07 + strength * 0.2;
   return (
     <div
-      title={`${title}: ${display}`}
-      className={`flex h-10 items-center justify-center rounded-lg border px-2 text-sm font-extrabold tabular-nums ${
-        subdued
-          ? "border-slate-200/70 text-slate-600"
-          : "border-[#087ead]/10 text-[#076f99]"
+      title={`${metric} ratio: ${ratio.toFixed(3)}×; ${metric}: ${
+        rawValue === null ? "not available" : rawValue.toFixed(3)
       }`}
-      style={{
-        backgroundColor: subdued
-          ? `rgba(148, 163, 184, ${alpha})`
-          : `rgba(8, 126, 173, ${alpha})`,
-      }}
+      className="py-1 tabular-nums"
     >
-      {display}
+      <p className="text-base font-extrabold text-slate-800">
+        {ratio.toFixed(3)}×
+      </p>
+      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+        {metric} {rawValue === null ? "—" : rawValue.toFixed(3)}
+      </p>
     </div>
   );
 }
@@ -961,9 +703,11 @@ function HeatmapCell({
 function MotifRecovery({
   rows,
   reference,
+  referenceEdgeCount,
 }: {
   rows: BenchmarkRow[];
   reference: MotifCounts;
+  referenceEdgeCount: number;
 }) {
   const motifs = [
     {
@@ -983,129 +727,285 @@ function MotifRecovery({
     },
   ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[42rem] border-separate border-spacing-y-2">
-        <thead>
-          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            <th className="pb-1">Method</th>
+    <div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <table className="w-full min-w-[46rem] table-fixed border-collapse">
+          <thead className="bg-slate-50/80">
+            <tr className="text-left">
+              <th className="w-[22%] border-b border-slate-200 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                Algorithm
+              </th>
             {motifs.map((motif) => (
-              <th key={motif.key} className="pb-1 text-center">
-                {motif.label}
-              </th>
+                <th
+                  key={motif.key}
+                  className="border-b border-l border-slate-200 px-4 py-3"
+                >
+                  <span className="block text-xs font-bold text-slate-700">
+                    {motif.label}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] font-medium text-slate-400">
+                    {motif.note}
+                  </span>
+                </th>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.algorithmId}>
-              <th className="pr-4 text-sm font-extrabold text-slate-800">
-                {row.algorithmId}
-              </th>
-              {motifs.map((motif) => {
-                const predicted = row.motifs?.[motif.key] ?? null;
-                const referenceCount = reference[motif.key];
-                const ratio =
-                  predicted !== null && referenceCount > 0
-                    ? predicted / referenceCount
-                    : null;
-                return (
-                  <td key={motif.key} className="px-1">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                      <p className="text-sm font-extrabold tabular-nums text-slate-800">
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.algorithmId} className="last:[&>*]:border-b-0">
+                <th className="border-b border-slate-100 px-4 py-4 text-left text-sm font-extrabold text-slate-800">
+                  {row.algorithmId}
+                </th>
+                {motifs.map((motif) => {
+                  const predicted = row.motifs?.[motif.key] ?? null;
+                  const referenceCount = reference[motif.key];
+                  const ratio =
+                    predicted !== null && referenceCount > 0
+                      ? predicted / referenceCount
+                      : null;
+                  return (
+                    <td
+                      key={motif.key}
+                      className="border-b border-l border-slate-100 px-4 py-4"
+                    >
+                      <p className="text-base font-extrabold tabular-nums text-slate-800">
                         {ratio === null ? "—" : `${ratio.toFixed(3)}×`}
                       </p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">
-                        {predicted === null
-                          ? "Direction not inferred"
-                          : `${predicted} predicted / ${referenceCount} reference`}
-                      </p>
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="mt-2 text-xs text-slate-500">
-        Ratios compare top-k predicted networks with the reference network.
+        Ratio = motif count in a method&apos;s top {referenceEdgeCount} non-self
+        edges ÷ motif count in the reference network. It compares counts, not
+        exact motif overlap.
       </p>
     </div>
   );
 }
 
-function PathBreakdown({ rows }: { rows: BenchmarkRow[] }) {
+function PathBreakdown({
+  rows,
+  referenceEdgeCount,
+}: {
+  rows: BenchmarkRow[];
+  referenceEdgeCount: number;
+}) {
   const colors = {
     truePositive: "#087ead",
-    path2: "#5fc8bd",
-    path3: "#8b5cf6",
-    path4: "#f59e0b",
-    path5: "#f97316",
+    path2: "#72c9be",
+    path3: "#eab35e",
+    path4Plus: "#dc6b5d",
     noPath: "#cbd5e1",
   };
-  const labels: Array<{ key: keyof PathCounts; label: string }> = [
-    { key: "truePositive", label: "True positive" },
-    { key: "path2", label: "2-step path" },
-    { key: "path3", label: "3-step path" },
-    { key: "path4", label: "4-step path" },
-    { key: "path5", label: "5-step path" },
-    { key: "noPath", label: "No short path" },
+  const [hoveredSegment, setHoveredSegment] = useState<{
+    algorithmId: string;
+    key: keyof typeof colors;
+    label: string;
+    value: number;
+    percentage: number;
+    start: number;
+    position: number;
+  } | null>(null);
+  const labels: Array<{
+    key: "path2" | "path3" | "path4Plus" | "noPath";
+    label: string;
+    value: (counts: PathCounts) => number;
+  }> = [
+    {
+      key: "path2",
+      label: "Incorrect · 2 steps",
+      value: (counts) => counts.path2,
+    },
+    {
+      key: "path3",
+      label: "Incorrect · 3 steps",
+      value: (counts) => counts.path3,
+    },
+    {
+      key: "path4Plus",
+      label: "Incorrect · 4+ steps",
+      value: (counts) =>
+        counts.path4 + counts.path5 + counts.pathMoreThan5,
+    },
+    {
+      key: "noPath",
+      label: "Incorrect · no path",
+      value: (counts) => counts.noPath,
+    },
   ];
   return (
     <div>
-      <div className="space-y-4">
-        {rows.map((row) => {
-          if (!row.pathCounts) {
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <div className="min-w-[40rem]">
+          <div className="grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+            <span>Algorithm</span>
+            <span>Top predictions</span>
+          </div>
+          {rows.map((row, rowIndex) => {
+            const pathCounts = row.pathCounts;
+            if (!pathCounts) {
+              return (
+                <div
+                  key={row.algorithmId}
+                  className="grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-100 px-4 py-3 text-center last:border-b-0"
+                >
+                  <span className="truncate text-sm font-extrabold text-slate-800">
+                    {row.algorithmId}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    Path statistics unavailable
+                  </span>
+                </div>
+              );
+            }
+            const falsePositiveTotal = labels.reduce(
+              (sum, item) => sum + item.value(pathCounts),
+              0,
+            );
+            const selectedTotal =
+              pathCounts.truePositive + falsePositiveTotal;
+            const segments: Array<{
+              key: keyof typeof colors;
+              label: string;
+              value: number;
+            }> = [
+              {
+                key: "truePositive",
+                label: "Correct reference edge",
+                value: pathCounts.truePositive,
+              },
+              ...labels.map((item) => ({
+                key: item.key,
+                label: item.label,
+                value: item.value(pathCounts),
+              })),
+            ];
+            let accumulatedPercentage = 0;
+            const positionedSegments = segments.map((item) => {
+              const percentage =
+                selectedTotal > 0
+                  ? (item.value / selectedTotal) * 100
+                  : 0;
+              const start = accumulatedPercentage;
+              const position =
+                accumulatedPercentage + percentage / 2;
+              accumulatedPercentage += percentage;
+              return {
+                ...item,
+                percentage,
+                start,
+                position: Math.max(7, Math.min(93, position)),
+              };
+            });
+            const activeSegment =
+              hoveredSegment?.algorithmId === row.algorithmId
+                ? hoveredSegment
+                : null;
             return (
               <div
                 key={row.algorithmId}
-                className="grid grid-cols-[7rem_1fr] items-center gap-3"
+                className={`relative grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-100 px-4 py-3 text-center last:border-b-0 ${
+                  activeSegment ? "z-20" : "z-0"
+                }`}
               >
                 <span className="truncate text-sm font-extrabold text-slate-800">
                   {row.algorithmId}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">
-                  Direction not inferred
-                </span>
+                <div className="relative mx-auto h-4 w-full max-w-[64rem]">
+                  <div
+                    className="flex h-4 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70"
+                    aria-label={`${row.algorithmId}: ${pathCounts.truePositive} of ${selectedTotal} predictions exactly match the reference; ${falsePositiveTotal} are incorrect`}
+                  >
+                    {positionedSegments.map((item) =>
+                      item.value > 0 ? (
+                        <button
+                          type="button"
+                          key={item.key}
+                          style={{
+                            width: `${item.percentage}%`,
+                            backgroundColor: colors[item.key],
+                          }}
+                          aria-label={`${item.label}: ${item.value} predicted edges, ${item.percentage.toFixed(1)}% of selected predictions`}
+                          className={`h-full cursor-help transition-opacity duration-75 focus-visible:z-10 focus-visible:outline-none ${
+                            activeSegment ? "opacity-60" : ""
+                          }`}
+                          onPointerEnter={() =>
+                            setHoveredSegment({
+                              algorithmId: row.algorithmId,
+                              key: item.key,
+                              label: item.label,
+                              value: item.value,
+                              percentage: item.percentage,
+                              start: item.start,
+                              position: item.position,
+                            })
+                          }
+                          onPointerLeave={() => setHoveredSegment(null)}
+                          onFocus={() =>
+                            setHoveredSegment({
+                              algorithmId: row.algorithmId,
+                              key: item.key,
+                              label: item.label,
+                              value: item.value,
+                              percentage: item.percentage,
+                              start: item.start,
+                              position: item.position,
+                            })
+                          }
+                          onBlur={() => setHoveredSegment(null)}
+                        />
+                      ) : null,
+                    )}
+                  </div>
+                  {activeSegment ? (
+                    <div
+                      className="pointer-events-none absolute -top-0.5 z-10 h-5 rounded-[0.3rem] ring-2 ring-white shadow-[0_2px_8px_rgba(15,23,42,0.18)]"
+                      style={{
+                        left: `${activeSegment.start}%`,
+                        width: `${activeSegment.percentage}%`,
+                        backgroundColor: colors[activeSegment.key],
+                      }}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  {activeSegment ? (
+                    <div
+                      className={`pointer-events-none absolute z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-left shadow-lg shadow-slate-900/10 ${
+                        rowIndex === rows.length - 1
+                          ? "bottom-6"
+                          : "top-6"
+                      }`}
+                      style={{ left: `${activeSegment.position}%` }}
+                      role="tooltip"
+                    >
+                      <p className="text-[11px] font-extrabold text-slate-800">
+                        {activeSegment.label}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold tabular-nums text-slate-500">
+                        {activeSegment.value} predicted edges ·{" "}
+                        {activeSegment.percentage.toFixed(1)}%
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             );
-          }
-          const pathCounts = row.pathCounts;
-          const total = Object.values(pathCounts).reduce(
-            (sum, value) => sum + value,
-            0,
-          );
-          return (
-            <div
-              key={row.algorithmId}
-              className="grid grid-cols-[7rem_1fr_4rem] items-center gap-3"
-            >
-              <span className="truncate text-sm font-extrabold text-slate-800">
-                {row.algorithmId}
-              </span>
-              <span className="flex h-4 overflow-hidden rounded-full bg-slate-100">
-                {labels.map((item) => {
-                  const value = pathCounts[item.key];
-                  return value > 0 ? (
-                    <span
-                      key={item.key}
-                      style={{
-                        width: `${(value / Math.max(1, total)) * 100}%`,
-                        backgroundColor: colors[item.key],
-                      }}
-                      title={`${item.label}: ${value}`}
-                    />
-                  ) : null;
-                })}
-              </span>
-              <span className="text-right text-xs font-bold tabular-nums text-slate-500">
-                {total}
-              </span>
-            </div>
-          );
-        })}
+          })}
+        </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+          <span
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: colors.truePositive }}
+          />
+          Exact reference edge
+        </span>
         {labels.map((item) => (
           <span
             key={item.key}
@@ -1119,6 +1019,14 @@ function PathBreakdown({ rows }: { rows: BenchmarkRow[] }) {
           </span>
         ))}
       </div>
+      <p className="mt-3 max-w-5xl text-xs leading-5 text-slate-500">
+        Hover a segment to see its edge count. Each complete bar is a
+        method&apos;s top {referenceEdgeCount} non-self predictions by absolute
+        weight; ties at the cutoff are included. Blue is an exact reference
+        match. For an incorrect edge, “2 steps” means its two genes are
+        connected indirectly by a two-edge directed path in the reference;
+        gray means no directed path connects them.
+      </p>
     </div>
   );
 }
@@ -1126,22 +1034,20 @@ function PathBreakdown({ rows }: { rows: BenchmarkRow[] }) {
 export default function BenchmarkInsights({
   groundTruth,
   loading,
-  algorithmEdgeRows,
   algorithmMetaMap,
   algorithmResults,
   activeAlgorithmIds,
+  selectedResultScopeId,
   tasks,
 }: {
   groundTruth: GroundTruthContext | undefined;
   loading: boolean;
-  algorithmEdgeRows: Record<string, AggregatedEdge[]>;
   algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
   algorithmResults: Record<string, AlgorithmStoredResult>;
   activeAlgorithmIds: string[];
+  selectedResultScopeId: string;
   tasks: ProjectTask[];
 }) {
-  const [evaluationDepth, setEvaluationDepth] = useState(0);
-
   const benchmark = useMemo(() => {
     const truthEdges = groundTruth?.edges ?? [];
     if (!truthEdges.length) {
@@ -1149,8 +1055,11 @@ export default function BenchmarkInsights({
         rows: [] as BenchmarkRow[],
         eligibleReferenceEdges: 0,
         uploadedReferenceEdges: 0,
+        excludedReferenceEdges: 0,
+        candidateGeneCount: 0,
         possibleEdges: 0,
         randomBaseline: 0,
+        motifReferenceEdgeCount: 0,
         referenceMotifs: {
           feedbackLoops: 0,
           feedForwardLoops: 0,
@@ -1158,52 +1067,38 @@ export default function BenchmarkInsights({
         },
       };
     }
-    // Use one shared gene-pair universe. It is not restricted to a TF list,
-    // because that would favor methods whose outputs already use that list.
+
+    // BEELINE derives one fixed directed universe from the genes present in
+    // the reference network after it has been intersected with analyzed genes.
     const candidateGenes = new Set<string>();
-    activeAlgorithmIds.forEach((algorithmId) => {
-      (algorithmEdgeRows[algorithmId] ?? []).forEach((edge) => {
-        if (!edge.source || !edge.target || edge.source === edge.target) return;
-        candidateGenes.add(edge.source);
-        candidateGenes.add(edge.target);
-      });
-    });
-    if (!candidateGenes.size) {
-      truthEdges.forEach((edge) => {
-        candidateGenes.add(edge.source);
-        candidateGenes.add(edge.target);
-      });
-    }
     const eligibleTruthEdges = truthEdges.filter(
-      (edge) =>
-        edge.source !== edge.target &&
-        candidateGenes.has(edge.source) &&
-        candidateGenes.has(edge.target),
+      (edge) => edge.source !== edge.target,
     );
+    eligibleTruthEdges.forEach((edge) => {
+      candidateGenes.add(edge.source);
+      candidateGenes.add(edge.target);
+    });
     const truth = new Set(
-      eligibleTruthEdges.map((edge) => adjacencyKey(edge.source, edge.target)),
+      eligibleTruthEdges.map((edge) => edgeKey(edge.source, edge.target)),
     );
     const truthSigns = new Map(
       eligibleTruthEdges.map((edge) => [
         edgeKey(edge.source, edge.target),
-        normalizeSign(edge.sign),
+        normalizeReferenceSign(edge.sign),
       ]),
     );
-    const referenceAdjacency = new Map<string, Set<string>>();
-    eligibleTruthEdges.forEach((edge) => {
-      const targets = referenceAdjacency.get(edge.source) ?? new Set<string>();
-      targets.add(edge.target);
-      referenceAdjacency.set(edge.source, targets);
-    });
     const candidateGeneCount = candidateGenes.size;
-    const possibleEdges = Math.max(
-      1,
-      (candidateGeneCount * (candidateGeneCount - 1)) / 2,
-    );
-    const signedPossibleEdges = Math.max(
-      1,
-      candidateGeneCount * (candidateGeneCount - 1),
-    );
+    const possibleEdges = candidateGeneCount * (candidateGeneCount - 1);
+    const motifReference = groundTruth?.motif_reference;
+    const motifReferenceEdgeCount =
+      motifReference?.edge_count ?? truth.size;
+    const referenceMotifs: MotifCounts = motifReference
+      ? {
+          feedbackLoops: motifReference.feedback_loops,
+          feedForwardLoops: motifReference.feed_forward_loops,
+          mutualInteractions: motifReference.mutual_interactions,
+        }
+      : motifCounts(eligibleTruthEdges);
     const rows = activeAlgorithmIds.map((algorithmId) => {
       const task = tasks.find(
         (item) =>
@@ -1216,35 +1111,48 @@ export default function BenchmarkInsights({
       );
       return benchmarkAlgorithm({
         algorithmId,
-        edges: algorithmEdgeRows[algorithmId] ?? [],
+        edges: resultEdgesForScope(
+          algorithmResults[algorithmId],
+          selectedResultScopeId,
+        ),
         truth,
         truthSigns,
         possibleEdges,
-        signedPossibleEdges,
-        evaluationDepth,
         runtimeSeconds: Number.isFinite(seconds) ? seconds : 0,
-        methodSupportsSign: algorithmMetaMap.get(algorithmId)?.signed ?? false,
         methodSupportsDirection:
           algorithmMetaMap.get(algorithmId)?.directed ?? true,
-        referenceAdjacency,
         candidateGenes,
+        motifEdges: resultEdgesForScope(
+          algorithmResults[algorithmId],
+          selectedResultScopeId,
+        ),
+        motifReferenceEdgeCount,
+        pathStats: pathStatsForScope(
+          algorithmResults[algorithmId],
+          selectedResultScopeId,
+        ),
       });
     });
     return {
       rows,
       eligibleReferenceEdges: truth.size,
-      uploadedReferenceEdges: truthEdges.length,
+      uploadedReferenceEdges:
+        groundTruth?.edge_count ?? truthEdges.length,
+      excludedReferenceEdges:
+        groundTruth?.excluded_edge_count ??
+        Math.max(0, (groundTruth?.edge_count ?? truthEdges.length) - truth.size),
+      candidateGeneCount,
       possibleEdges,
       randomBaseline: truth.size / possibleEdges,
-      referenceMotifs: motifCounts(eligibleTruthEdges),
+      motifReferenceEdgeCount,
+      referenceMotifs,
     };
   }, [
     activeAlgorithmIds,
-    algorithmEdgeRows,
     algorithmMetaMap,
     algorithmResults,
-    evaluationDepth,
     groundTruth,
+    selectedResultScopeId,
     tasks,
   ]);
 
@@ -1267,19 +1175,19 @@ export default function BenchmarkInsights({
       />
     );
   }
+  if (!benchmark.eligibleReferenceEdges) {
+    return (
+      <EmptyState
+        title="No comparable reference edges"
+        detail="The uploaded reference does not contain non-self interactions between genes retained for this analysis."
+      />
+    );
+  }
   if (!benchmark.rows.length) {
     return (
       <EmptyState
         title="No methods to benchmark"
         detail="Select at least one completed method with ranked edges."
-      />
-    );
-  }
-  if (!benchmark.eligibleReferenceEdges) {
-    return (
-      <EmptyState
-        title="No comparable reference edges"
-        detail="The uploaded reference does not contain gene pairs inside the candidate-gene universe shared by the selected methods."
       />
     );
   }
@@ -1289,69 +1197,60 @@ export default function BenchmarkInsights({
     (first, second) => second.auprcRatio - first.auprcRatio,
   );
   const signedMetricsAvailable = rows.some(
-    (row) => row.activationEpr !== null || row.repressionEpr !== null,
+    (row) => row.activationEpr !== null || row.inhibitionEpr !== null,
   );
-  const normalizeColumn = (
-    value: number | null,
-    values: Array<number | null>,
-  ) => {
-    if (value === null || !Number.isFinite(value)) return 0;
-    const available = values.filter(
-      (item): item is number => item !== null && Number.isFinite(item),
-    );
-    if (!available.length) return 0;
-    const minimum = Math.min(...available);
-    const maximum = Math.max(...available);
-    if (maximum === minimum) return 0.65;
-    const normalized = (value - minimum) / (maximum - minimum);
-    return 0.18 + normalized * 0.82;
-  };
-  const auprcRatios = rows.map((row) => row.auprcRatio);
-  const earlyPrecisionRatios = rows.map((row) => row.earlyPrecisionRatio);
-  const activationRatios = rows.map((row) => row.activationEpr);
-  const repressionRatios = rows.map((row) => row.repressionEpr);
-  const evaluationOptions: Array<BenchmarkMenuOption<number>> = [
-    {
-      value: 0,
-      label: "Complete ranking",
-      detail: "Evaluate the shared candidate universe and tie missing edges at the bottom.",
-    },
-    ...[100, 250, 500, 1000, 2500].map((value) => ({
-      value,
-      label: `Top ${value.toLocaleString()}`,
-      detail: "Report partial performance at this fixed evaluation depth.",
-    })),
-  ];
   return (
     <div className="space-y-5">
       <Panel
         title="Benchmark summary"
-        description="Compare every method over the same direction-neutral gene-pair universe. Directional analyses are shown separately where supported."
+        description="How well each method recovers the uploaded reference network."
         aside={
           <ExportButton
             onClick={() =>
               downloadCsv("benchmark-summary.csv", [
                 [
                   "algorithm",
-                  "evaluated_edges",
+                  "directionality",
+                  "nonzero_predictions",
+                  "evaluated_genes",
+                  "possible_directed_interactions",
+                  "reference_interactions",
+                  "random_precision",
                   "auprc",
                   "auprc_ratio",
-                  "precision_at_k",
+                  "early_precision",
                   "early_precision_ratio",
+                  "early_precision_selected_edges",
+                  "activation_early_precision",
                   "activation_epr",
-                  "repression_epr",
+                  "activation_selected_edges",
+                  "inhibition_early_precision",
+                  "inhibition_epr",
+                  "inhibition_selected_edges",
                   "auroc",
                   "runtime_seconds",
                 ],
                 ...rows.map((row) => [
                   row.algorithmId,
+                  algorithmMetaMap.get(row.algorithmId)?.directed === false
+                    ? "undirected"
+                    : "directed",
                   row.evaluatedEdges,
+                  benchmark.candidateGeneCount,
+                  benchmark.possibleEdges,
+                  benchmark.eligibleReferenceEdges,
+                  benchmark.randomBaseline.toFixed(6),
                   row.auprc.toFixed(3),
                   row.auprcRatio.toFixed(3),
                   row.precisionAtK.toFixed(3),
                   row.earlyPrecisionRatio.toFixed(3),
+                  row.earlyPrecisionSelectedCount,
+                  row.activationPrecision?.toFixed(3) ?? "",
                   row.activationEpr?.toFixed(3) ?? "",
-                  row.repressionEpr?.toFixed(3) ?? "",
+                  row.activationSelectedCount ?? "",
+                  row.inhibitionPrecision?.toFixed(3) ?? "",
+                  row.inhibitionEpr?.toFixed(3) ?? "",
+                  row.inhibitionSelectedCount ?? "",
                   row.auroc.toFixed(3),
                   row.runtimeSeconds.toFixed(3),
                 ]),
@@ -1360,76 +1259,78 @@ export default function BenchmarkInsights({
           />
         }
       >
-        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
-          <span className="rounded-full bg-slate-100 px-3 py-1.5">
-            {benchmark.possibleEdges.toLocaleString()} candidate gene pairs
+        <p className="flex flex-wrap gap-x-2 gap-y-1 border-y border-slate-100 py-3 text-xs leading-5 text-slate-500">
+          <span>
+            <strong className="font-bold text-slate-700">
+              {benchmark.candidateGeneCount.toLocaleString()}
+            </strong>{" "}
+            genes
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5">
-            {benchmark.eligibleReferenceEdges.toLocaleString()} reference edges
+          <span aria-hidden="true">·</span>
+          <span>
+            <strong className="font-bold text-slate-700">
+              {benchmark.possibleEdges.toLocaleString()}
+            </strong>{" "}
+            possible directed interactions
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5">
-            Sorted by {evaluationDepth > 0 ? "partial " : ""}AUPRC ratio
+          <span aria-hidden="true">·</span>
+          <span>
+            <strong className="font-bold text-slate-700">
+              {benchmark.eligibleReferenceEdges.toLocaleString()}
+            </strong>{" "}
+            reference interactions
           </span>
-        </div>
+          <span aria-hidden="true">·</span>
+          <span>
+            random precision{" "}
+            <strong className="font-bold text-slate-700">
+              {benchmark.randomBaseline.toFixed(3)}
+            </strong>
+          </span>
+        </p>
 
-        <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
           <table
             className={`w-full table-fixed border-collapse ${
-              signedMetricsAvailable ? "min-w-[44rem]" : "min-w-[30rem]"
+              signedMetricsAvailable ? "min-w-[52rem]" : "min-w-[34rem]"
             }`}
           >
             <colgroup>
               <col className="w-44" />
-              {Array.from({
-                length: signedMetricsAvailable ? 4 : 2,
-              }).map((_, index) => (
-                <col key={index} />
-              ))}
+              <col className="w-48" />
+              <col className="w-48" />
+              {signedMetricsAvailable ? (
+                <>
+                  <col className="w-44" />
+                  <col className="w-44" />
+                </>
+              ) : null}
             </colgroup>
             <thead className="bg-slate-50/80">
-              <tr className="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                <th
-                  rowSpan={2}
-                  className="sticky left-0 z-20 bg-slate-50 px-4 py-3 text-left align-bottom shadow-[1px_0_0_0_#e2e8f0]"
-                >
-                  Method
+              <tr className="border-b border-slate-200 text-[11px] font-bold text-slate-500">
+                <th className="sticky left-0 z-20 bg-slate-50 px-4 py-3 text-left shadow-[1px_0_0_0_#e2e8f0]">
+                  Algorithm
                 </th>
-                <th
-                  colSpan={2}
-                  className="border-l border-slate-200 px-3 py-2 text-center"
-                >
-                  Accuracy
-                </th>
-                {signedMetricsAvailable ? (
-                  <th
-                    colSpan={2}
-                    className="border-l border-slate-200 px-3 py-2 text-center"
-                  >
-                    Signed recovery
-                  </th>
-                ) : null}
-              </tr>
-              <tr className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                <th className="border-l border-slate-200 px-3 py-3 text-center">
-                  <MetricLabel explanation="Area under the precision–recall curve divided by random-predictor performance. Values above 1× outperform random.">
-                    {evaluationDepth > 0 ? "Partial AUPRC ratio" : "AUPRC ratio"}
+                <th className="border-l border-slate-200 px-4 py-3 text-left">
+                  <MetricLabel explanation="AUPRC across the complete ranked network, divided by random precision. The raw AUPRC appears underneath.">
+                    AUPRC ratio
                   </MetricLabel>
                 </th>
-                <th className="px-3 py-3 text-center">
-                  <MetricLabel explanation="Precision among the highest-ranked edges divided by random-predictor precision. Values above 1× indicate useful early enrichment.">
-                    Early precision
+                <th className="px-4 py-3 text-left">
+                  <MetricLabel explanation="Precision among approximately the top K predictions, divided by random precision. K is the number of reference interactions and ties are included.">
+                    Early precision ratio
                   </MetricLabel>
                 </th>
                 {signedMetricsAvailable ? (
                   <>
-                    <th className="border-l border-slate-200 px-3 py-3 text-center">
-                      <MetricLabel explanation="Early precision ratio calculated only for reference activation edges. Values above 1× outperform random.">
+                    <th className="border-l border-slate-200 px-4 py-3 text-left">
+                      <MetricLabel explanation="Early precision ratio for interactions labelled activating in the reference. It does not mean that the method inferred a positive sign.">
                         Activation EPR
                       </MetricLabel>
                     </th>
-                    <th className="px-3 py-3 text-center">
-                      <MetricLabel explanation="Early precision ratio calculated only for reference repression edges. Values above 1× outperform random.">
-                        Repression EPR
+                    <th className="px-4 py-3 text-left">
+                      <MetricLabel explanation="Early precision ratio for interactions labelled inhibitory in the reference. It does not mean that the method inferred a negative sign.">
+                        Inhibition EPR
                       </MetricLabel>
                     </th>
                   </>
@@ -1442,123 +1343,73 @@ export default function BenchmarkInsights({
                   key={row.algorithmId}
                   className="group border-t border-slate-100 text-sm text-slate-700 transition hover:bg-slate-50/70"
                 >
-                    <th className="sticky left-0 z-10 bg-white px-4 py-2.5 text-left shadow-[1px_0_0_0_#f1f5f9] transition group-hover:bg-slate-50">
-                      <span className="block font-extrabold text-slate-900">
-                        {row.algorithmId}
-                      </span>
-                    </th>
-                    <td className="border-l border-slate-100 px-1.5 py-1.5">
-                      <HeatmapCell
-                        value={row.auprcRatio}
-                        display={`${row.auprcRatio.toFixed(3)}×`}
-                        intensity={normalizeColumn(
-                          row.auprcRatio,
-                          auprcRatios,
-                        )}
-                        title="AUPRC ratio"
-                        subdued={row.auprcRatio < 1}
-                      />
-                    </td>
-                    <td className="px-1.5 py-1.5">
-                      <HeatmapCell
-                        value={row.earlyPrecisionRatio}
-                        display={`${row.earlyPrecisionRatio.toFixed(3)}×`}
-                        intensity={normalizeColumn(
-                          row.earlyPrecisionRatio,
-                          earlyPrecisionRatios,
-                        )}
-                        title="Early precision ratio"
-                        subdued={row.earlyPrecisionRatio < 1}
-                      />
-                    </td>
-                    {signedMetricsAvailable ? (
-                      <>
-                        <td className="border-l border-slate-100 px-1.5 py-1.5">
-                          <HeatmapCell
-                            value={row.activationEpr}
-                            display={
-                              row.activationEpr === null
-                                ? ""
-                                : `${row.activationEpr.toFixed(3)}×`
-                            }
-                            intensity={normalizeColumn(
-                              row.activationEpr,
-                              activationRatios,
-                            )}
-                            title="Activation early precision ratio"
-                            subdued={
-                              row.activationEpr !== null &&
-                              row.activationEpr < 1
-                            }
-                          />
-                        </td>
-                        <td className="px-1.5 py-1.5">
-                          <HeatmapCell
-                            value={row.repressionEpr}
-                            display={
-                              row.repressionEpr === null
-                                ? ""
-                                : `${row.repressionEpr.toFixed(3)}×`
-                            }
-                            intensity={normalizeColumn(
-                              row.repressionEpr,
-                              repressionRatios,
-                            )}
-                            title="Repression early precision ratio"
-                            subdued={
-                              row.repressionEpr !== null &&
-                              row.repressionEpr < 1
-                            }
-                          />
-                        </td>
-                      </>
-                    ) : null}
+                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left shadow-[1px_0_0_0_#f1f5f9] transition group-hover:bg-slate-50">
+                    <span className="font-extrabold text-slate-900">
+                      {row.algorithmId}
+                    </span>
+                  </th>
+                  <td className="border-l border-slate-100 px-4 py-2.5">
+                    <RatioMetric
+                      ratio={row.auprcRatio}
+                      metric="AUPRC"
+                      rawValue={row.auprc}
+                    />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <RatioMetric
+                      ratio={row.earlyPrecisionRatio}
+                      metric="EP"
+                      rawValue={row.precisionAtK}
+                    />
+                  </td>
+                  {signedMetricsAvailable ? (
+                    <>
+                      <td className="border-l border-slate-100 px-4 py-2.5">
+                        <RatioMetric
+                          ratio={row.activationEpr}
+                          metric="EP"
+                          rawValue={row.activationPrecision}
+                        />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <RatioMetric
+                          ratio={row.inhibitionEpr}
+                          metric="EP"
+                          rawValue={row.inhibitionPrecision}
+                        />
+                      </td>
+                    </>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-semibold text-slate-500">
-          <span className="inline-flex items-center gap-2">
-            <span className="h-3 w-8 rounded-full bg-[#087ead]/20" />
-            Shade compares methods within each column; darker is stronger.
-          </span>
-          <span>Ratios above 1× outperform random.</span>
-        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          BEELINE evaluation uses one directed candidate set and absolute edge
+          weights. Undirected outputs contain the same score in both
+          orientations, so they cannot favor the correct direction.
+        </p>
         {!signedMetricsAvailable ? (
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            Signed evaluation is unavailable because the reference or selected
-            method outputs do not contain activation and repression labels.
+            Activating and inhibitory recovery are unavailable because the
+            reference does not label interaction types.
           </p>
         ) : null}
-        {benchmark.eligibleReferenceEdges < benchmark.uploadedReferenceEdges ? (
+        {benchmark.excludedReferenceEdges > 0 ? (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            {(
-              benchmark.uploadedReferenceEdges -
-              benchmark.eligibleReferenceEdges
-            ).toLocaleString()}{" "}
-            uploaded reference rows were outside the selected methods&apos;
-            candidate universe or duplicated a reciprocal gene pair, so they
-            were excluded from the shared comparison.
+            {benchmark.excludedReferenceEdges.toLocaleString()} uploaded
+            reference{" "}
+            {benchmark.excludedReferenceEdges === 1 ? "row was" : "rows were"}{" "}
+            excluded because of a self-interaction or a gene not retained for
+            this analysis.
           </p>
         ) : null}
       </Panel>
 
       <Panel
         title="Precision–recall performance"
-        description={
-          evaluationDepth > 0
-            ? `Partial precision–recall performance across the first ${evaluationDepth.toLocaleString()} ranked edges. Select a method in the legend to focus it.`
-            : "Precision–recall performance across the complete shared candidate universe. Select a method in the legend to focus it."
-        }
-        aside={
-          <BenchmarkMenu
-            prefix="Evaluation"
-            value={evaluationDepth}
-            options={evaluationOptions}
-            onChange={setEvaluationDepth}
-          />
-        }
+        description="Performance across all directed candidate edges; missing predictions score zero."
       >
         <div className="mb-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
           <span className="rounded-full bg-slate-100 px-3 py-1.5">
@@ -1567,17 +1418,12 @@ export default function BenchmarkInsights({
           <span className="rounded-full bg-slate-100 px-3 py-1.5">
             Random precision {benchmark.randomBaseline.toFixed(3)}
           </span>
-          {evaluationDepth > 0 ? (
-            <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">
-              Partial metrics at top {evaluationDepth.toLocaleString()}
-            </span>
-          ) : null}
         </div>
         <LineChart
           series={rows.map((row) => ({
             name: row.algorithmId,
             points: row.pr,
-            summary: `${evaluationDepth > 0 ? "pAUPRC" : "AUPRC"} ${row.auprc.toFixed(3)}`,
+            summary: `AUPRC ${row.auprc.toFixed(3)}`,
           }))}
           xLabel="Recall"
           yLabel="Precision"
@@ -1592,7 +1438,7 @@ export default function BenchmarkInsights({
               Additional benchmark diagnostics
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Motif recovery, false-positive path context, and ROC curves.
+              Motif counts, top-prediction errors, and ROC curves.
             </p>
           </div>
           <span className="text-xl font-light text-slate-400 transition group-open:rotate-45">
@@ -1602,29 +1448,34 @@ export default function BenchmarkInsights({
         <div className="space-y-7 border-t border-slate-100 px-5 py-5 sm:px-6">
           <section>
             <h4 className="text-sm font-extrabold text-slate-900">
-              Motif recovery
+              Motif count ratios
             </h4>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Predicted-to-reference ratios for BEELINE’s feedback,
-              feed-forward, and mutual-interaction motifs.
+              Counts in each top-k predicted network divided by the
+              corresponding reference-network count.
             </p>
             <div className="mt-4">
               <MotifRecovery
                 rows={rows}
                 reference={benchmark.referenceMotifs}
+                referenceEdgeCount={benchmark.motifReferenceEdgeCount}
               />
             </div>
           </section>
           <section className="border-t border-slate-100 pt-6">
             <h4 className="text-sm font-extrabold text-slate-900">
-              False-positive path context
+              How the top predictions compare with the reference
             </h4>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Incorrect top-k edges are grouped by the shortest corresponding
-              path in the reference network.
+              Every bar contains the top {benchmark.eligibleReferenceEdges}{" "}
+              predictions. Blue is correct; the remaining colors explain the
+              incorrect predictions.
             </p>
             <div className="mt-4">
-              <PathBreakdown rows={rows} />
+              <PathBreakdown
+                rows={rows}
+                referenceEdgeCount={benchmark.eligibleReferenceEdges}
+              />
             </div>
           </section>
           <section className="border-t border-slate-100 pt-6">

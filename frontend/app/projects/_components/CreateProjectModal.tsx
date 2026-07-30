@@ -79,7 +79,6 @@ interface CreateProjectModalProps {
   includeSignificantTFs: boolean;
   includeAllTFs: boolean;
   maxEdgesPerTarget: string;
-  bootstrapReplicates: string;
   maxEdgesLimit: number;
   pidcDefaultMaxGenes: number;
   sinceritiesDefaultMaxGenes: number;
@@ -105,6 +104,7 @@ interface CreateProjectModalProps {
   algorithms: ProjectAlgorithm[];
   isLoadingAlgorithms: boolean;
   algorithmLoadError: string | null;
+  onRetryAlgorithms: () => void;
   onClose: () => void;
   onStartAnalysis: () => void;
   onSelectAll: () => void;
@@ -133,7 +133,6 @@ interface CreateProjectModalProps {
   setClusterLabelsFileName: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
   setMaxEdgesPerTarget: (value: string) => void;
-  setBootstrapReplicates: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
   clearGroundTruthFile: () => void;
@@ -162,7 +161,6 @@ export default function CreateProjectModal({
   includeSignificantTFs,
   includeAllTFs,
   maxEdgesPerTarget,
-  bootstrapReplicates,
   maxEdgesLimit,
   pidcDefaultMaxGenes,
   sinceritiesDefaultMaxGenes,
@@ -185,6 +183,7 @@ export default function CreateProjectModal({
   algorithms,
   isLoadingAlgorithms,
   algorithmLoadError,
+  onRetryAlgorithms,
   onClose,
   onStartAnalysis,
   onSelectAll,
@@ -213,7 +212,6 @@ export default function CreateProjectModal({
   setClusterLabelsFileName,
   setIncludeAllTFs,
   setMaxEdgesPerTarget,
-  setBootstrapReplicates,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
   clearGroundTruthFile,
@@ -460,7 +458,7 @@ export default function CreateProjectModal({
     algorithms.length - compatibleAlgorithms.length,
   );
   const algorithmSectionSummary = `${selectedAlgorithms.length} selected · ${unavailableAlgorithmCount} unavailable`;
-  const resultSettingsSummary = `${maxEdgesPerTarget || "—"} edges per target · ${bootstrapReplicates} bootstrap samples`;
+  const resultSettingsSummary = `${maxEdgesPerTarget || "—"} edges per target`;
 
   return (
     <div
@@ -880,6 +878,7 @@ export default function CreateProjectModal({
                   datasetSummary={datasetSummary}
                   isLoadingAlgorithms={isLoadingAlgorithms}
                   algorithmLoadError={algorithmLoadError}
+                  onRetryAlgorithms={onRetryAlgorithms}
                   onToggleAlgorithm={onToggleAlgorithm}
                   expandedAlgorithmId={expandedAlgorithmId}
                   onToggleAlgorithmExpanded={handleToggleAlgorithmExpanded}
@@ -940,47 +939,6 @@ export default function CreateProjectModal({
                           edges
                         </span>
                       </span>
-                    </div>
-                    <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Bootstrap precision
-                        </p>
-                        <p className="mt-1 max-w-lg text-xs leading-5 text-slate-500">
-                          Resample all cells with replacement. More samples give
-                          steadier confidence estimates but take longer.
-                        </p>
-                      </div>
-                      <div
-                        className="inline-flex rounded-lg bg-slate-100 p-1"
-                        role="radiogroup"
-                        aria-label="Bootstrap precision"
-                      >
-                        {[
-                          { value: "30", label: "Quick" },
-                          { value: "100", label: "Standard" },
-                          { value: "300", label: "Thorough" },
-                        ].map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            role="radio"
-                            aria-checked={bootstrapReplicates === option.value}
-                            onClick={() => setBootstrapReplicates(option.value)}
-                            className={`cursor-pointer rounded-md px-3 py-2 text-xs font-semibold transition ${
-                              bootstrapReplicates === option.value
-                                ? "bg-white text-[#1b75a6] shadow-sm"
-                                : "text-slate-500 hover:text-slate-700"
-                            }`}
-                            title={`${option.value} bootstrap samples`}
-                          >
-                            {option.label}
-                            <span className="ml-1 text-[10px] opacity-70">
-                              {option.value}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </div>
                 </div>

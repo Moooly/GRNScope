@@ -147,6 +147,25 @@ class PseudotimeServiceTests(unittest.TestCase):
                     ",PseudoTime1\nCell1,0\nCell2,0.5\nCell3,1\n",
                     encoding="utf-8",
                 )
+                (
+                    project_dir
+                    / pseudotime_service.RUNTIME_DIRNAME
+                    / pseudotime_service.SLINGSHOT_EMBEDDING_FILENAME
+                ).write_text(
+                    "cell,x,y\nCell1,0,0\nCell2,1,0.5\nCell3,2,1\n",
+                    encoding="utf-8",
+                )
+                (
+                    project_dir
+                    / pseudotime_service.RUNTIME_DIRNAME
+                    / pseudotime_service.SLINGSHOT_CURVES_FILENAME
+                ).write_text(
+                    "lineage,point_order,x,y,pseudotime\n"
+                    "PseudoTime1,1,0,0,0\n"
+                    "PseudoTime1,2,1,0.5,0.5\n"
+                    "PseudoTime1,3,2,1,1\n",
+                    encoding="utf-8",
+                )
                 return subprocess.CompletedProcess(
                     command,
                     0,
@@ -173,6 +192,8 @@ class PseudotimeServiceTests(unittest.TestCase):
             self.assertIn("--entrypoint", command)
             self.assertIn("Rscript", command)
             self.assertIn("--matrixState", command)
+            self.assertIn("--embeddingOutput", command)
+            self.assertIn("--curvesOutput", command)
             self.assertEqual(
                 command[command.index("--matrixState") + 1],
                 "log_normalized",
@@ -196,6 +217,18 @@ class PseudotimeServiceTests(unittest.TestCase):
                 (project_dir / "project.json").read_text(encoding="utf-8")
             )
             self.assertTrue(saved_manifest["pseudotime_estimated"])
+            self.assertEqual(
+                Path(saved_manifest["pseudotime_embedding_path"]).name,
+                pseudotime_service.SLINGSHOT_EMBEDDING_FILENAME,
+            )
+            self.assertEqual(
+                Path(saved_manifest["pseudotime_curves_path"]).name,
+                pseudotime_service.SLINGSHOT_CURVES_FILENAME,
+            )
+            self.assertEqual(
+                saved_manifest["pseudotime_trajectory_method"],
+                "Slingshot",
+            )
             self.assertEqual(
                 saved_manifest["pseudotime_input_contract"]["version"],
                 pseudotime_service.PSEUDOTIME_INPUT_CONTRACT_VERSION,

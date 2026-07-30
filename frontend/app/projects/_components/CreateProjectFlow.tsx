@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CreateProjectModal from "./CreateProjectModal";
 import type { GeneSelectionStage } from "./CreateProjectModal";
 import type { AlgorithmParameter, ProjectAlgorithm } from "../page";
@@ -40,7 +40,6 @@ type BackendAlgorithmEntry = {
 const MAX_PREPROCESSED_GENES = 8000;
 const RANKED_EDGES_HARD_MAX = 100;
 const DEFAULT_MAX_EDGES_PER_TARGET = "20";
-const DEFAULT_BOOTSTRAP_REPLICATES = "100";
 const SINCERITIES_DEFAULT_MAX_GENES = 500;
 const SINCERITIES_SAFE_CELL_FRACTION = 0.75;
 const SCRIBE_DEFAULT_MAX_GENES = 300;
@@ -197,7 +196,6 @@ export type CreateProjectPrefill = {
   trajectoryBonferroni?: boolean;
   includeSignificantTFs?: boolean;
   maxEdgesPerTarget?: string;
-  bootstrapReplicates?: string;
   selectedIds?: string[];
   algorithmParameters?: Record<string, Record<string, unknown>>;
   ensembleEnabled?: boolean;
@@ -292,9 +290,6 @@ export default function CreateProjectFlow({
   const [trajectoryBonferroni, setTrajectoryBonferroni] = useState(true);
   const [includeSignificantTFs, setIncludeSignificantTFs] = useState(true);
   const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
-  const [bootstrapReplicates, setBootstrapReplicates] = useState(
-    DEFAULT_BOOTSTRAP_REPLICATES,
-  );
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
@@ -350,9 +345,6 @@ export default function CreateProjectFlow({
     setTrajectoryBonferroni(initialValues?.trajectoryBonferroni ?? true);
     setIncludeSignificantTFs(initialValues?.includeSignificantTFs ?? true);
     setMaxEdgesPerTarget(initialValues?.maxEdgesPerTarget ?? DEFAULT_MAX_EDGES_PER_TARGET);
-    setBootstrapReplicates(
-      initialValues?.bootstrapReplicates ?? DEFAULT_BOOTSTRAP_REPLICATES,
-    );
     setCellOracleSpecies(
       initialDatasetSpecies && initialDatasetSpecies !== "other"
         ? initialDatasetSpecies
@@ -369,45 +361,42 @@ export default function CreateProjectFlow({
     lastAutoProjectNameRef.current = "";
   }, [initialValues, open]);
 
-  // Load the algorithm catalog once when the component mounts.
-  useEffect(() => {
-    let isCancelled = false;
+  const loadAlgorithms = useCallback(async () => {
+    try {
+      setIsLoadingAlgorithms(true);
+      setAlgorithmLoadError(null);
 
-    const loadAlgorithms = async () => {
-      try {
-        setIsLoadingAlgorithms(true);
-        setAlgorithmLoadError(null);
-
-        const response = await fetch(`${API_BASE}/algorithms`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to load algorithms: ${response.status}`);
-        }
-        const data = (await response.json()) as BackendAlgorithmEntry[];
-        if (isCancelled) return;
-        setAlgorithms(
-          data
-            .filter((algorithm) => algorithm.active)
-            .map(mapBackendAlgorithm),
+      const response = await fetch(`${API_BASE}/algorithms`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(
+          response.status >= 500
+            ? "The analysis service is temporarily unavailable."
+            : `Failed to load algorithms (${response.status}).`,
         );
-      } catch (error) {
-        if (!isCancelled) {
-          setAlgorithmLoadError(
-            error instanceof Error ? error.message : "Failed to load algorithms.",
-          );
-          setAlgorithms([]);
-        }
-      } finally {
-        if (!isCancelled) setIsLoadingAlgorithms(false);
       }
-    };
-
-    void loadAlgorithms();
-    return () => {
-      isCancelled = true;
-    };
+      const data = (await response.json()) as BackendAlgorithmEntry[];
+      setAlgorithms(
+        data
+          .filter((algorithm) => algorithm.active)
+          .map(mapBackendAlgorithm),
+      );
+    } catch (error) {
+      setAlgorithmLoadError(
+        error instanceof Error ? error.message : "Failed to load algorithms.",
+      );
+      setAlgorithms([]);
+    } finally {
+      setIsLoadingAlgorithms(false);
+    }
   }, [API_BASE]);
+
+  // Refresh the catalog whenever the creation flow is opened. This lets the
+  // modal recover if the backend was still starting during an earlier attempt.
+  useEffect(() => {
+    if (open) void loadAlgorithms();
+  }, [loadAlgorithms, open]);
 
   // Effective gene count after the gene-filtering setting (used to bound the
   // "Max edges per target" input: max = min(effectiveGenes, 100)).
@@ -674,7 +663,6 @@ export default function CreateProjectFlow({
     formData.append("trajectory_bonferroni", JSON.stringify(trajectoryBonferroni));
     formData.append("include_significant_tfs", JSON.stringify(includeSignificantTFs));
     formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
-    formData.append("bootstrap_replicates", bootstrapReplicates);
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
     // Only submit overrides for algorithms that are actually selected.
     const selectedParameterOverrides: Record<string, Record<string, unknown>> = {};
@@ -954,7 +942,6 @@ export default function CreateProjectFlow({
       includeSignificantTFs={includeSignificantTFs}
       includeAllTFs={includeAllTFs}
       maxEdgesPerTarget={maxEdgesPerTarget}
-      bootstrapReplicates={bootstrapReplicates}
       maxEdgesLimit={maxEdgesLimit}
       pidcDefaultMaxGenes={pidcDefaultMaxGenes}
       sinceritiesDefaultMaxGenes={sinceritiesDefaultMaxGenes}
@@ -975,6 +962,7 @@ export default function CreateProjectFlow({
       algorithms={algorithms}
       isLoadingAlgorithms={isLoadingAlgorithms}
       algorithmLoadError={algorithmLoadError}
+      onRetryAlgorithms={loadAlgorithms}
       onClose={onClose}
       onStartAnalysis={handleStartAnalysis}
       onSelectAll={handleSelectAll}
@@ -1005,7 +993,6 @@ export default function CreateProjectFlow({
       setClusterLabelsFileName={setClusterLabelsFileName}
       setIncludeAllTFs={setIncludeAllTFs}
       setMaxEdgesPerTarget={setMaxEdgesPerTarget}
-      setBootstrapReplicates={setBootstrapReplicates}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
       clearGroundTruthFile={clearGroundTruthFile}

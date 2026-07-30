@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from math import fsum, isfinite
@@ -45,20 +46,18 @@ from .gene_ordering_service import (
 )
 
 
-# A confidence analysis consists of one full-data fit plus a fixed number of
-# genuine non-parametric bootstrap replicates. Each replicate draws N cells
-# with replacement from the N uploaded cells. Fixed denominators are important:
-# data-dependent early stopping would bias the reported recovery frequency.
-DEFAULT_CONFIDENCE_MIN_RUNS = 1
-DEFAULT_CONFIDENCE_MAX_RUNS = 300
-DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 100
+# A confidence analysis consists of one full-data fit plus 3–15 genuine
+# non-parametric bootstrap replicates. Each replicate draws N cells with
+# replacement from the N uploaded cells. Consecutive aggregate networks are
+# compared with Spearman rank correlation, but no stop decision is made before
+# the third replicate.
+DEFAULT_CONFIDENCE_MIN_RUNS = 3
+DEFAULT_CONFIDENCE_MAX_RUNS = 15
+DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = DEFAULT_CONFIDENCE_MAX_RUNS
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 1.0
 DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
 CONFIDENCE_RESAMPLING_SCHEME = "cell_bootstrap_with_replacement_v1"
 FULL_DATA_RUN_ID = "full-data"
-# Legacy Spearman diagnostics remain readable for archived results. Genuine
-# bootstrap jobs never use them to stop early because the recovery denominator
-# is fixed before inference.
 DEFAULT_CONFIDENCE_STOP_RHO = 0.95
 DEFAULT_CONFIDENCE_STOP_STREAK = 2
 DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
@@ -550,13 +549,6 @@ def parse_probability(value: object) -> float | None:
     return parsed
 
 
-def parse_stop_rho(value: object) -> float | None:
-    parsed = parse_positive_float(value)
-    if parsed is None or parsed > 1:
-        return None
-    return parsed
-
-
 def read_configured_positive_int(name: str) -> int | None:
     raw_value = os.environ.get(name)
     if raw_value is None:
@@ -644,8 +636,9 @@ def resolve_confidence_settings(
     *,
     gene_count: int | None = None,
 ) -> dict:
-    # Confidence bootstrapping is part of every inference run. The run count is
-    # fixed before inference so support always has an honest denominator.
+    # Archived projects may contain a former user-selected run count. Treat it
+    # only as a requested ceiling and clamp every project to the automatic
+    # 3–15 policy.
     configured_run_count = parse_positive_int(
         project_manifest.get("confidence_bootstrap_runs")
     )
@@ -660,21 +653,12 @@ def resolve_confidence_settings(
         or DEFAULT_CONFIDENCE_STABILITY_TOP_K
     )
     subsample_fraction = DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
-    early_stopping_enabled = False
-    min_runs = run_count
-    stop_rho = (
-        parse_stop_rho(project_manifest.get("confidence_stop_rho"))
-        or parse_stop_rho(os.environ.get("GRNSCOPE_CONFIDENCE_STOP_RHO"))
-        or DEFAULT_CONFIDENCE_STOP_RHO
+    early_stopping_enabled = True
+    bounded_min_runs = DEFAULT_CONFIDENCE_MIN_RUNS
+    bounded_run_count = max(
+        bounded_min_runs,
+        min(max(1, run_count), DEFAULT_CONFIDENCE_MAX_RUNS),
     )
-    stop_streak = (
-        parse_positive_int(project_manifest.get("confidence_stop_streak"))
-        or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_STOP_STREAK"))
-        or DEFAULT_CONFIDENCE_STOP_STREAK
-    )
-
-    bounded_run_count = min(max(1, run_count), DEFAULT_CONFIDENCE_MAX_RUNS)
-    bounded_min_runs = bounded_run_count
 
     return {
         "confidence_enabled": True,
@@ -698,8 +682,8 @@ def resolve_confidence_settings(
         "stability_top_k": max(1, stability_top_k),
         "early_stopping_enabled": early_stopping_enabled,
         "min_runs": bounded_min_runs,
-        "stop_rho": stop_rho,
-        "stop_streak": max(1, stop_streak),
+        "stop_rho": DEFAULT_CONFIDENCE_STOP_RHO,
+        "stop_streak": DEFAULT_CONFIDENCE_STOP_STREAK,
         "gene_count": gene_count,
         # Project-level cap on edges kept per target (the "Max edges per target"
         # setting). None -> fall back to env / the default of 20.
@@ -3074,6 +3058,164 @@ def parse_ranked_edges_csv(
     }
 
 
+def compute_beeline_path_stats(
+    ranked_edges_path: Path,
+    reference_edges: list[dict],
+) -> dict | None:
+    """Apply BEELINE PathStats to a globally ranked raw edge file."""
+    reference_set = {
+        (
+            str(edge.get("source", "")).strip(),
+            str(edge.get("target", "")).strip(),
+        )
+        for edge in reference_edges
+        if str(edge.get("source", "")).strip()
+        and str(edge.get("target", "")).strip()
+        and str(edge.get("source", "")).strip()
+        != str(edge.get("target", "")).strip()
+    }
+    if not reference_set or not ranked_edges_path.exists():
+        return None
+
+    dialect = detect_csv_dialect_from_file(ranked_edges_path)
+    with ranked_edges_path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.DictReader(csv_file, dialect=dialect)
+        fieldnames = reader.fieldnames or []
+        normalized = {
+            str(field).strip().replace('"', ""): field
+            for field in fieldnames
+            if field is not None
+        }
+        source_key = next(
+            (
+                normalized[key]
+                for key in ("Gene1", "TF", "source", "Source")
+                if key in normalized
+            ),
+            None,
+        )
+        target_key = next(
+            (
+                normalized[key]
+                for key in ("Gene2", "Target", "target", "TargetGene")
+                if key in normalized
+            ),
+            None,
+        )
+        score_key = next(
+            (
+                normalized[key]
+                for key in ("EdgeWeight", "weight", "score", "Score")
+                if key in normalized
+            ),
+            None,
+        )
+        if source_key is None or target_key is None or score_key is None:
+            return None
+
+        # BEELINE PathStats expects rankedEdges.csv to already be globally
+        # ranked. GRNScope also accepts per-target-grouped files, so build the
+        # intended global ranking explicitly. Keep one score per directed edge;
+        # otherwise repeated rows could consume top-k slots without adding a
+        # prediction to the graph.
+        best_prediction_by_edge: dict[tuple[str, str], float] = {}
+        for row in reader:
+            source = str(row.get(source_key, "")).strip()
+            target = str(row.get(target_key, "")).strip()
+            if not source or not target or source == target:
+                continue
+            try:
+                weight = round(abs(float(row.get(score_key, 0.0) or 0.0)), 6)
+            except (TypeError, ValueError):
+                continue
+            if not isfinite(weight) or weight <= 0:
+                continue
+            edge = (source, target)
+            previous_weight = best_prediction_by_edge.get(edge)
+            if previous_weight is None or weight > previous_weight:
+                best_prediction_by_edge[edge] = weight
+
+    predictions = sorted(
+        (
+            (source, target, weight)
+            for (source, target), weight in best_prediction_by_edge.items()
+        ),
+        key=lambda prediction: (
+            -prediction[2],
+            prediction[0],
+            prediction[1],
+        ),
+    )
+
+    if not predictions:
+        return None
+
+    maximum_k = min(len(predictions), len(reference_set))
+    threshold = predictions[maximum_k - 1][2]
+    predicted_set = {
+        (source, target)
+        for source, target, weight in predictions
+        if weight >= threshold
+    }
+    true_positives = predicted_set & reference_set
+    false_positives = predicted_set - reference_set
+
+    adjacency: dict[str, set[str]] = {}
+    reference_nodes: set[str] = set()
+    for source, target in reference_set:
+        adjacency.setdefault(source, set()).add(target)
+        reference_nodes.add(source)
+        reference_nodes.add(target)
+
+    def shortest_path_length(source: str, target: str) -> int | None:
+        if source not in reference_nodes or target not in reference_nodes:
+            return None
+        visited = {source}
+        queue = deque([(source, 0)])
+        while queue:
+            node, depth = queue.popleft()
+            for neighbor in adjacency.get(node, set()):
+                if neighbor == target:
+                    return depth + 1
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                queue.append((neighbor, depth + 1))
+        return None
+
+    path_counts = {2: 0, 3: 0, 4: 0, 5: 0}
+    with_path = 0
+    no_path = 0
+    longer_than_five = 0
+    for source, target in false_positives:
+        path_length = shortest_path_length(source, target)
+        if path_length is None:
+            no_path += 1
+            continue
+        with_path += 1
+        if path_length in path_counts:
+            path_counts[path_length] += 1
+        elif path_length > 5:
+            longer_than_five += 1
+
+    return {
+        "reference_edge_count": len(reference_set),
+        "selection_threshold": threshold,
+        "num_predicted": len(predicted_set),
+        "num_true_positive": len(true_positives),
+        "num_false_positive_with_path": with_path,
+        "num_false_positive_no_path": no_path,
+        "path_2": path_counts[2],
+        "path_3": path_counts[3],
+        "path_4": path_counts[4],
+        "path_5": path_counts[5],
+        # BEELINE exposes this through numFP_withPath but does not give it a
+        # dedicated column. Keeping the derived bin prevents long paths from
+        # being mislabeled as "no path" in the UI.
+        "path_more_than_5": longer_than_five,
+    }
+
+
 def compute_population_sd(values: list[float]) -> float:
     if len(values) <= 1:
         return 0.0
@@ -4952,12 +5094,6 @@ def run_beeline_with_progress(
     final_aggregation_started = time.perf_counter()
     if confidence_settings.get("confidence_enabled"):
         processed_run_count = int(confidence_accumulator.get("processed_runs", 0))
-        planned_bootstrap_runs = int(confidence_settings["bootstrap_runs"])
-        if processed_run_count != planned_bootstrap_runs:
-            raise RuntimeError(
-                f"{algorithm_id} completed {processed_run_count} of "
-                f"{planned_bootstrap_runs} planned bootstrap replicates."
-            )
         top_edges, network_summary = finalize_confidence_accumulator(
             confidence_accumulator,
             run_count=processed_run_count,

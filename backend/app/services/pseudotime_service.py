@@ -34,6 +34,8 @@ from .matrix_transformation_service import (
 
 STATUS_FILENAME = "pseudotime_estimation.json"
 RUNTIME_DIRNAME = "_pseudotime_runtime"
+SLINGSHOT_EMBEDDING_FILENAME = "SlingshotEmbedding.csv"
+SLINGSHOT_CURVES_FILENAME = "SlingshotCurves.csv"
 ACTIVE_STATUSES = {"Queued", "Running"}
 DEFAULT_IMAGE = "grnbeeline/slingshot:0.1.0"
 PSEUDOTIME_INPUT_CONTRACT_VERSION = 2
@@ -193,6 +195,10 @@ def _clear_outdated_estimated_pseudotime(
     updated["pseudotime_path"] = None
     updated["pseudotime_estimated"] = False
     updated.pop("pseudotime_input_contract", None)
+    updated.pop("pseudotime_embedding_path", None)
+    updated.pop("pseudotime_curves_path", None)
+    updated.pop("pseudotime_trajectory_method", None)
+    updated.pop("pseudotime_embedding_method", None)
     write_project_manifest(project_dir, updated)
     _update_metadata(
         project_dir,
@@ -200,6 +206,8 @@ def _clear_outdated_estimated_pseudotime(
             "has_pseudotime": False,
             "pseudotime_estimated": False,
             "pseudotime_filename": None,
+            "pseudotime_trajectory_method": None,
+            "pseudotime_embedding_method": None,
         },
     )
     return updated
@@ -404,6 +412,8 @@ def run_pseudotime_estimation_task(project_id: str) -> None:
             "/app/grnscope_estimate_pseudotime.R",
             "--expression", "/data/ExpressionData.csv",
             "--output", "/data/PseudoTime.csv",
+            "--embeddingOutput", f"/data/{SLINGSHOT_EMBEDDING_FILENAME}",
+            "--curvesOutput", f"/data/{SLINGSHOT_CURVES_FILENAME}",
             "--matrixState", SLINGSHOT_RUNTIME_MATRIX_STATE,
         ]
         if has_clusters:
@@ -423,6 +433,16 @@ def run_pseudotime_estimation_task(project_id: str) -> None:
         # Install the estimated pseudotime as the project's pseudotime.
         destination = project_dir / "PseudoTime.csv"
         shutil.copy2(output_file, destination)
+        runtime_embedding = runtime_dir / SLINGSHOT_EMBEDDING_FILENAME
+        runtime_curves = runtime_dir / SLINGSHOT_CURVES_FILENAME
+        embedding_destination = project_dir / SLINGSHOT_EMBEDDING_FILENAME
+        curves_destination = project_dir / SLINGSHOT_CURVES_FILENAME
+        if runtime_embedding.is_file() and runtime_curves.is_file():
+            shutil.copy2(runtime_embedding, embedding_destination)
+            shutil.copy2(runtime_curves, curves_destination)
+        else:
+            embedding_destination = None
+            curves_destination = None
         lineage_count = _parse_lineage_count(completed.stdout)
         _finalize_success(
             project_dir,
@@ -430,6 +450,8 @@ def run_pseudotime_estimation_task(project_id: str) -> None:
             lineage_count,
             input_signature=input_signature,
             transformation=transformation,
+            embedding_path=embedding_destination,
+            curves_path=curves_destination,
         )
     except Exception as exc:  # pragma: no cover - defensive
         _finalize_failure(project_dir, f"Pseudotime estimation failed: {exc}")
@@ -449,6 +471,8 @@ def _finalize_success(
     *,
     input_signature: dict,
     transformation: dict,
+    embedding_path: Path | None = None,
+    curves_path: Path | None = None,
 ) -> None:
     completed_at, completed_timestamp = _now()
     status = read_estimation_status(project_dir) or {}
@@ -461,6 +485,8 @@ def _finalize_success(
         "estimated": True,
         "input_signature": input_signature,
         "input_transformation": transformation,
+        "embedding_path": str(embedding_path) if embedding_path else None,
+        "curves_path": str(curves_path) if curves_path else None,
     })
     _write_status(project_dir, status)
 
@@ -471,6 +497,16 @@ def _finalize_success(
         manifest["pseudotime_estimated"] = True
         manifest["pseudotime_input_contract"] = input_signature
         manifest["pseudotime_source_path"] = str(pseudotime_path)
+        if embedding_path and curves_path:
+            manifest["pseudotime_embedding_path"] = str(embedding_path)
+            manifest["pseudotime_curves_path"] = str(curves_path)
+            manifest["pseudotime_trajectory_method"] = "Slingshot"
+            manifest["pseudotime_embedding_method"] = "PCA"
+        else:
+            manifest.pop("pseudotime_embedding_path", None)
+            manifest.pop("pseudotime_curves_path", None)
+            manifest.pop("pseudotime_trajectory_method", None)
+            manifest.pop("pseudotime_embedding_method", None)
         manifest.pop("pseudotime_canonicalization", None)
         write_project_manifest(project_dir, manifest)
     except Exception:
@@ -483,6 +519,12 @@ def _finalize_success(
             "pseudotime_estimated": True,
             "pseudotime_filename": "PseudoTime.csv",
             "pseudotime_input_contract": input_signature,
+            "pseudotime_trajectory_method": (
+                "Slingshot" if embedding_path and curves_path else None
+            ),
+            "pseudotime_embedding_method": (
+                "PCA" if embedding_path and curves_path else None
+            ),
         },
     )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
@@ -10,7 +11,11 @@ from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
-from ..services.beeline_service import compute_repeat_run_spearman_from_paths
+from ..services.beeline_service import (
+    FULL_DATA_RUN_ID,
+    compute_beeline_path_stats,
+    compute_repeat_run_spearman_from_paths,
+)
 from ..services.gene_coordinate_service import get_gene_coordinate
 from ..services.demo_service import (
     get_demo_algorithm_ids,
@@ -19,7 +24,11 @@ from ..services.demo_service import (
     get_demo_ranked_edges_path,
     is_demo_project,
 )
-from ..services.visualization_context_service import build_visualization_context
+from ..services.visualization_context_service import (
+    build_ground_truth_context,
+    build_visualization_context,
+    read_manifest_for_visualization,
+)
 
 
 
@@ -66,6 +75,58 @@ def cached_repeat_run_stability(
     ranked_edge_paths: tuple[tuple[str, str], ...],
 ) -> dict:
     return compute_repeat_run_spearman_from_paths(dict(ranked_edge_paths))
+
+
+def attach_beeline_path_stats(result: dict, project_dir: Path) -> dict:
+    """Attach native BEELINE PathStats without making result loading fragile."""
+    try:
+        manifest = read_manifest_for_visualization(project_dir)
+        ground_truth = build_ground_truth_context(
+            project_dir=project_dir,
+            manifest=manifest,
+        )
+        reference_edges = ground_truth.get("edges") or []
+    except (OSError, UnicodeError, ValueError):
+        return result
+    if not reference_edges:
+        return result
+
+    def stats_for_payload(payload: dict) -> dict | None:
+        run_paths = payload.get("run_ranked_edges_paths")
+        path_value = None
+        if isinstance(run_paths, dict):
+            path_value = run_paths.get(FULL_DATA_RUN_ID)
+        path_value = path_value or payload.get("ranked_edges_path")
+        if not path_value:
+            return None
+        try:
+            return compute_beeline_path_stats(
+                Path(str(path_value)),
+                reference_edges,
+            )
+        except (OSError, UnicodeError, ValueError):
+            return None
+
+    enriched = dict(result)
+    global_stats = stats_for_payload(result)
+    if global_stats is not None:
+        enriched["beeline_path_stats"] = global_stats
+
+    scopes = result.get("scopes")
+    if isinstance(scopes, dict):
+        enriched_scopes = {}
+        for scope_id, scope_payload in scopes.items():
+            if not isinstance(scope_payload, dict):
+                enriched_scopes[scope_id] = scope_payload
+                continue
+            enriched_scope = dict(scope_payload)
+            scope_stats = stats_for_payload(scope_payload)
+            if scope_stats is not None:
+                enriched_scope["beeline_path_stats"] = scope_stats
+            enriched_scopes[scope_id] = enriched_scope
+        enriched["scopes"] = enriched_scopes
+
+    return enriched
 
 
 @router.get("/api/projects/{project_id}/visualization-context")
@@ -321,6 +382,7 @@ def compact_result_for_client(result: dict) -> dict:
                     scope_payload.get("confidence_summary"),
                     scope_payload.get("run_ranked_edges_paths"),
                 ),
+                "beeline_path_stats": scope_payload.get("beeline_path_stats"),
                 "top_edges": compact_edges_for_client(scope_edges),
             }
 
@@ -342,6 +404,7 @@ def compact_result_for_client(result: dict) -> dict:
             result.get("confidence_summary"),
             result.get("run_ranked_edges_paths"),
         ),
+        "beeline_path_stats": result.get("beeline_path_stats"),
         "top_edges": compact_edges,
         "scope_order": result.get("scope_order"),
         "scopes": compact_scopes or None,
@@ -774,7 +837,10 @@ async def get_algorithm_result(
     require_project_owner(project_dir, owner_id)
 
     try:
-        compact = compact_result_for_client(read_algorithm_result(project_dir, algorithm_id))
+        stored_result = read_algorithm_result(project_dir, algorithm_id)
+        compact = compact_result_for_client(
+            attach_beeline_path_stats(stored_result, project_dir)
+        )
         if limit and limit > 0:
             compact = limit_result_edges(compact, limit)
         result = attach_gene_coordinates_to_result(compact)

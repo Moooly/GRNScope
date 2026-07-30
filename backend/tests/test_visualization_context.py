@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from app.services.visualization_context_service import (
+    _beeline_motif_summary,
     _fit_expression_spline,
     _trim_terminal_hook,
     build_visualization_context,
@@ -88,6 +89,28 @@ class VisualizationContextTests(unittest.TestCase):
         self.assertEqual(edges[0]["sign"], "1.0")
         self.assertEqual(edges[1]["sign"], "-1.0")
 
+    def test_beeline_motif_summary_matches_directed_motif_definitions(self) -> None:
+        summary = _beeline_motif_summary(
+            [
+                {"source": "A", "target": "B"},
+                {"source": "B", "target": "C"},
+                {"source": "C", "target": "A"},
+                {"source": "A", "target": "C"},
+                {"source": "B", "target": "A"},
+                {"source": "A", "target": "A"},
+            ]
+        )
+
+        self.assertEqual(
+            summary,
+            {
+                "edge_count": 5,
+                "feedback_loops": 1,
+                "feed_forward_loops": 3,
+                "mutual_interactions": 2,
+            },
+        )
+
     def test_builds_trajectory_and_ground_truth_context(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project_dir = Path(temp_dir)
@@ -136,18 +159,17 @@ class VisualizationContextTests(unittest.TestCase):
         self.assertEqual(trajectory["genes"], ["G2", "G1"])
         self.assertEqual(trajectory["available_genes"], ["G1", "G2", "G3"])
         self.assertEqual(trajectory["lineages"][0]["cell_count"], 6)
-        self.assertEqual(trajectory["lineages"][0]["displayed_cell_count"], 6)
-        self.assertEqual(len(trajectory["lineages"][0]["expression_points"]), 6)
-        self.assertEqual(
-            set(trajectory["lineages"][0]["expression_points"][0]["expression"]),
-            {"G1", "G2"},
-        )
         self.assertEqual(
             set(trajectory["lineages"][0]["trends"]),
             {"G1", "G2"},
         )
-        self.assertEqual(trajectory["trend_method"], "cubic_smoothing_spline_gcv")
+        self.assertEqual(
+            trajectory["trend_method"],
+            "restricted_cubic_regression_spline",
+        )
         self.assertEqual(trajectory["expression_label"], "Expression")
+        self.assertEqual(trajectory["pseudotime_source"], "uploaded")
+        self.assertIsNone(trajectory["trajectory_method"])
         self.assertEqual(trajectory["embedding"]["method"], "PCA")
         self.assertEqual(
             trajectory["embedding"]["path_source"],
@@ -163,9 +185,143 @@ class VisualizationContextTests(unittest.TestCase):
         ground_truth = context["ground_truth"]
         self.assertTrue(ground_truth["available"])
         self.assertEqual(ground_truth["edge_count"], 2)
+        self.assertEqual(ground_truth["eligible_edge_count"], 2)
+        self.assertEqual(ground_truth["excluded_edge_count"], 0)
+        self.assertEqual(ground_truth["analysis_gene_count"], 3)
+        self.assertEqual(
+            ground_truth["motif_reference"],
+            {
+                "edge_count": 2,
+                "feedback_loops": 0,
+                "feed_forward_loops": 0,
+                "mutual_interactions": 0,
+            },
+        )
         self.assertEqual(
             ground_truth["edges"][0],
             {"source": "G1", "target": "G2"},
+        )
+
+    def test_trajectory_uses_saved_slingshot_coordinates_and_curves(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            expression_path = project_dir / "ExpressionData.csv"
+            expression_path.write_text(
+                ",c1,c2,c3,c4,c5,c6\n"
+                "G1,0,1,2,3,4,5\n"
+                "G2,5,4,3,2,1,0\n",
+                encoding="utf-8",
+            )
+            pseudotime_path = project_dir / "PseudoTime.csv"
+            pseudotime_path.write_text(
+                ",PseudoTime1\n"
+                "c1,0.0\n"
+                "c2,0.2\n"
+                "c3,0.4\n"
+                "c4,0.6\n"
+                "c5,0.8\n"
+                "c6,1.0\n",
+                encoding="utf-8",
+            )
+            embedding_path = project_dir / "SlingshotEmbedding.csv"
+            embedding_path.write_text(
+                "cell,x,y\n"
+                "c1,10,0\n"
+                "c2,11,1\n"
+                "c3,12,2\n"
+                "c4,13,3\n"
+                "c5,14,4\n"
+                "c6,15,5\n",
+                encoding="utf-8",
+            )
+            curves_path = project_dir / "SlingshotCurves.csv"
+            curves_path.write_text(
+                "lineage,point_order,x,y,pseudotime\n"
+                "PseudoTime1,1,10,0,0\n"
+                "PseudoTime1,2,12.5,2.5,0.5\n"
+                "PseudoTime1,3,15,5,1\n",
+                encoding="utf-8",
+            )
+            (project_dir / "project.json").write_text(
+                json.dumps(
+                    {
+                        "expression_path": str(expression_path),
+                        "pseudotime_path": str(pseudotime_path),
+                        "pseudotime_estimated": True,
+                        "pseudotime_embedding_path": str(embedding_path),
+                        "pseudotime_curves_path": str(curves_path),
+                        "pseudotime_trajectory_method": "Slingshot",
+                        "pseudotime_embedding_method": "PCA",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            context = build_visualization_context(
+                project_dir=project_dir,
+                requested_genes=["G1"],
+            )
+
+        trajectory = context["trajectory"]
+        self.assertTrue(trajectory["available"])
+        self.assertEqual(trajectory["pseudotime_source"], "estimated")
+        self.assertEqual(trajectory["trajectory_method"], "Slingshot")
+        self.assertEqual(trajectory["embedding"]["path_source"], "slingshot_curve")
+        self.assertEqual(trajectory["embedding"]["method"], "PCA")
+        self.assertEqual(
+            trajectory["embedding"]["points"][0]["x"],
+            10.0,
+        )
+        self.assertEqual(
+            [
+                point["x"]
+                for point in trajectory["embedding"]["paths"][0]["points"]
+            ],
+            [10.0, 12.5, 15.0],
+        )
+
+    def test_ground_truth_context_excludes_self_loops_and_unanalyzed_genes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            expression_path = project_dir / "ExpressionData.csv"
+            expression_path.write_text(
+                ",c1,c2\n"
+                "G1,0,1\n"
+                "G2,1,0\n",
+                encoding="utf-8",
+            )
+            ground_truth_path = project_dir / "ground_truth.csv"
+            ground_truth_path.write_text(
+                "source,target,type\n"
+                "G1,G2,+\n"
+                "G1,G1,+\n"
+                "G2,G3,-\n",
+                encoding="utf-8",
+            )
+            (project_dir / "project.json").write_text(
+                json.dumps(
+                    {
+                        "expression_filename": expression_path.name,
+                        "ground_truth_filename": ground_truth_path.name,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            context = build_visualization_context(
+                project_dir=project_dir,
+                requested_genes=[],
+            )
+
+        ground_truth = context["ground_truth"]
+        self.assertTrue(ground_truth["available"])
+        self.assertEqual(ground_truth["edge_count"], 3)
+        self.assertEqual(ground_truth["eligible_edge_count"], 1)
+        self.assertEqual(ground_truth["excluded_edge_count"], 2)
+        self.assertEqual(ground_truth["motif_reference"]["edge_count"], 2)
+        self.assertEqual(
+            ground_truth["edges"],
+            [{"source": "G1", "target": "G2", "sign": "+"}],
         )
 
     def test_trajectory_prefers_the_preprocessed_expression_matrix(self) -> None:
@@ -210,11 +366,12 @@ class VisualizationContextTests(unittest.TestCase):
         self.assertTrue(trajectory["available"])
         self.assertEqual(trajectory["expression_file"], "ExpressionData.csv")
         self.assertEqual(trajectory["expression_label"], "Log-normalized expression")
-        observations = trajectory["lineages"][0]["expression_points"]
-        self.assertEqual(
-            [point["expression"]["G1"] for point in observations],
-            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
-        )
+        fitted_values = [
+            point["expression"]
+            for point in trajectory["lineages"][0]["trends"]["G1"]
+        ]
+        self.assertLessEqual(max(fitted_values), 6.0)
+        self.assertGreater(fitted_values[-1], fitted_values[0])
 
     def test_marks_optional_context_unavailable_when_files_are_absent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

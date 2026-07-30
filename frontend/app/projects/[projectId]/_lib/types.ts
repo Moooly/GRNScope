@@ -254,6 +254,7 @@ export type AlgorithmStoredResult = {
   gene_coordinate_count?: number;
   confidence_summary?: ConfidenceSummary | null;
   algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
+  beeline_path_stats?: BeelinePathStats | null;
 };
 
 export type AlgorithmResultScope = {
@@ -269,7 +270,22 @@ export type AlgorithmResultScope = {
   } | null;
   confidence_summary?: ConfidenceSummary | null;
   algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
+  beeline_path_stats?: BeelinePathStats | null;
   top_edges?: AlgorithmResultEdge[];
+};
+
+export type BeelinePathStats = {
+  reference_edge_count: number;
+  selection_threshold: number;
+  num_predicted: number;
+  num_true_positive: number;
+  num_false_positive_with_path: number;
+  num_false_positive_no_path: number;
+  path_2: number;
+  path_3: number;
+  path_4: number;
+  path_5: number;
+  path_more_than_5: number;
 };
 
 export type SpearmanStabilityCheck = {

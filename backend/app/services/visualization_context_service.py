@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.interpolate import make_smoothing_spline
+from scipy.interpolate import make_lsq_spline, make_smoothing_spline
 from sklearn.manifold import TSNE
 
 from .gene_ordering_service import (
@@ -20,11 +20,12 @@ from .matrix_transformation_service import (
 
 
 MAX_TRAJECTORY_GENES = 8
-MAX_TRAJECTORY_EXPRESSION_POINTS = 2_000
 TRAJECTORY_SPLINE_POINT_COUNT = 100
+TRAJECTORY_SPLINE_INTERNAL_KNOTS = 2
 MAX_TRAJECTORY_EMBEDDING_CELLS = 700
 MAX_TRAJECTORY_EMBEDDING_GENES = 500
 TRAJECTORY_PATH_BIN_COUNT = 24
+MAX_SLINGSHOT_CURVE_POINTS = 300
 TRAJECTORY_EMBEDDING_CACHE_LIMIT = 8
 
 _trajectory_embedding_cache: dict[tuple, dict | None] = {}
@@ -137,7 +138,7 @@ def _fit_expression_spline(
     pseudotime: np.ndarray,
     expression: np.ndarray,
 ) -> list[dict]:
-    """Fit a descriptive cubic smoothing spline to cell-level expression."""
+    """Fit a low-complexity cubic spline to cell-level expression."""
     finite = np.isfinite(pseudotime) & np.isfinite(expression)
     x_values = np.asarray(pseudotime[finite], dtype=float)
     y_values = np.asarray(expression[finite], dtype=float)
@@ -168,7 +169,45 @@ def _fit_expression_spline(
         float(unique_x[-1]),
         TRAJECTORY_SPLINE_POINT_COUNT,
     )
-    if len(unique_x) >= 5 and float(np.ptp(unique_y)) > 0:
+    if (
+        len(unique_x) >= 8
+        and float(np.ptp(unique_y)) > 0
+    ):
+        internal_knots = np.quantile(
+            unique_x,
+            np.linspace(
+                0,
+                1,
+                TRAJECTORY_SPLINE_INTERNAL_KNOTS + 2,
+            )[1:-1],
+        )
+        internal_knots = np.unique(internal_knots)
+        knots = np.concatenate(
+            (
+                np.repeat(unique_x[0], 4),
+                internal_knots,
+                np.repeat(unique_x[-1], 4),
+            )
+        )
+        try:
+            # sqrt(count) preserves the least-squares contribution of cells
+            # collapsed onto an identical pseudotime coordinate.
+            spline = make_lsq_spline(
+                unique_x,
+                unique_y,
+                knots,
+                k=3,
+                w=np.sqrt(counts.astype(float)),
+            )
+            fitted = np.asarray(spline(grid), dtype=float)
+        except (ValueError, np.linalg.LinAlgError):
+            spline = make_smoothing_spline(
+                unique_x,
+                unique_y,
+                w=counts.astype(float),
+            )
+            fitted = np.asarray(spline(grid), dtype=float)
+    elif len(unique_x) >= 5 and float(np.ptp(unique_y)) > 0:
         try:
             spline = make_smoothing_spline(
                 unique_x,
@@ -430,15 +469,143 @@ def _build_trajectory_embedding(
     }
 
 
+def _build_slingshot_trajectory_embedding(
+    expression: pd.DataFrame,
+    pseudotime: pd.DataFrame,
+    *,
+    embedding_path: Path,
+    curves_path: Path,
+    embedding_method: str,
+) -> dict | None:
+    """Load the coordinates and principal curves saved by Slingshot."""
+    try:
+        embedding_frame = pd.read_csv(embedding_path)
+        curves_frame = pd.read_csv(curves_path)
+    except (OSError, pd.errors.ParserError, UnicodeDecodeError):
+        return None
+
+    required_embedding = {"cell", "x", "y"}
+    required_curves = {"lineage", "point_order", "x", "y", "pseudotime"}
+    if not required_embedding.issubset(embedding_frame.columns):
+        return None
+    if not required_curves.issubset(curves_frame.columns):
+        return None
+
+    embedding_frame = embedding_frame.copy()
+    embedding_frame = embedding_frame.dropna(subset=["cell"])
+    embedding_frame["cell"] = embedding_frame["cell"].astype(str).str.strip()
+    embedding_frame["x"] = pd.to_numeric(embedding_frame["x"], errors="coerce")
+    embedding_frame["y"] = pd.to_numeric(embedding_frame["y"], errors="coerce")
+    embedding_frame = embedding_frame.dropna(subset=["cell", "x", "y"])
+    embedding_frame = embedding_frame.drop_duplicates(subset=["cell"], keep="first")
+    coordinate_lookup = embedding_frame.set_index("cell")[["x", "y"]]
+
+    pseudotime_values = pseudotime.to_numpy(dtype=float)
+    lineage_names = [str(value) for value in pseudotime.columns]
+    cell_indices = _sample_embedding_cell_indices(pseudotime)
+    points = []
+    for cell_index in cell_indices:
+        cell_name = str(expression.columns[cell_index])
+        if cell_name not in coordinate_lookup.index:
+            continue
+        coordinate = coordinate_lookup.loc[cell_name]
+        points.append(
+            {
+                "cell": cell_name,
+                "x": float(coordinate["x"]),
+                "y": float(coordinate["y"]),
+                "pseudotime": {
+                    lineage_name: (
+                        float(pseudotime_values[cell_index, lineage_index])
+                        if np.isfinite(pseudotime_values[cell_index, lineage_index])
+                        else None
+                    )
+                    for lineage_index, lineage_name in enumerate(lineage_names)
+                },
+            }
+        )
+    if len(points) < 3:
+        return None
+
+    curves_frame = curves_frame.copy()
+    curves_frame = curves_frame.dropna(subset=["lineage"])
+    curves_frame["lineage"] = curves_frame["lineage"].astype(str).str.strip()
+    for column in ("point_order", "x", "y", "pseudotime"):
+        curves_frame[column] = pd.to_numeric(
+            curves_frame[column],
+            errors="coerce",
+        )
+    curves_frame = curves_frame.dropna(
+        subset=["lineage", "point_order", "x", "y", "pseudotime"],
+    )
+
+    paths = []
+    for lineage_name in lineage_names:
+        lineage_curve = curves_frame[
+            curves_frame["lineage"] == lineage_name
+        ].sort_values("point_order", kind="stable")
+        if len(lineage_curve) < 2:
+            continue
+        if len(lineage_curve) > MAX_SLINGSHOT_CURVE_POINTS:
+            positions = np.linspace(
+                0,
+                len(lineage_curve) - 1,
+                MAX_SLINGSHOT_CURVE_POINTS,
+                dtype=int,
+            )
+            lineage_curve = lineage_curve.iloc[np.unique(positions)]
+        paths.append(
+            {
+                "name": lineage_name,
+                "points": [
+                    {
+                        "x": float(row.x),
+                        "y": float(row.y),
+                        "pseudotime": float(row.pseudotime),
+                        "cell_count": 1,
+                    }
+                    for row in lineage_curve.itertuples(index=False)
+                ],
+            }
+        )
+    if not paths:
+        return None
+
+    return {
+        "method": embedding_method or "PCA",
+        "path_source": "slingshot_curve",
+        "sampled_cell_count": int(len(points)),
+        "total_cell_count": int(len(expression.columns)),
+        "points": points,
+        "paths": paths,
+    }
+
+
 def _cached_trajectory_embedding(
     *,
     expression_path: Path,
     pseudotime_path: Path,
     expression: pd.DataFrame,
     pseudotime: pd.DataFrame,
+    slingshot_embedding_path: Path | None = None,
+    slingshot_curves_path: Path | None = None,
+    slingshot_embedding_method: str = "PCA",
 ) -> dict | None:
     expression_stat = expression_path.stat()
     pseudotime_stat = pseudotime_path.stat()
+    slingshot_signature = None
+    if slingshot_embedding_path and slingshot_curves_path:
+        embedding_artifact_stat = slingshot_embedding_path.stat()
+        curves_artifact_stat = slingshot_curves_path.stat()
+        slingshot_signature = (
+            str(slingshot_embedding_path.resolve()),
+            embedding_artifact_stat.st_size,
+            embedding_artifact_stat.st_mtime_ns,
+            str(slingshot_curves_path.resolve()),
+            curves_artifact_stat.st_size,
+            curves_artifact_stat.st_mtime_ns,
+            slingshot_embedding_method,
+        )
     cache_key = (
         str(expression_path.resolve()),
         expression_stat.st_size,
@@ -448,11 +615,22 @@ def _cached_trajectory_embedding(
         pseudotime_stat.st_mtime_ns,
         MAX_TRAJECTORY_EMBEDDING_CELLS,
         MAX_TRAJECTORY_EMBEDDING_GENES,
+        slingshot_signature,
     )
     if cache_key in _trajectory_embedding_cache:
         return _trajectory_embedding_cache[cache_key]
 
-    embedding = _build_trajectory_embedding(expression, pseudotime)
+    embedding = None
+    if slingshot_embedding_path and slingshot_curves_path:
+        embedding = _build_slingshot_trajectory_embedding(
+            expression,
+            pseudotime,
+            embedding_path=slingshot_embedding_path,
+            curves_path=slingshot_curves_path,
+            embedding_method=slingshot_embedding_method,
+        )
+    if embedding is None:
+        embedding = _build_trajectory_embedding(expression, pseudotime)
     if len(_trajectory_embedding_cache) >= TRAJECTORY_EMBEDDING_CACHE_LIMIT:
         oldest_key = next(iter(_trajectory_embedding_cache))
         _trajectory_embedding_cache.pop(oldest_key, None)
@@ -488,11 +666,6 @@ def build_trajectory_context(
     if not genes:
         variances = expression.var(axis=1).sort_values(ascending=False)
         genes = [str(value) for value in variances.head(6).index]
-    gene_positions = {
-        gene: int(expression.index.get_loc(gene))
-        for gene in genes
-    }
-
     lineages: list[dict] = []
     for lineage_name in pseudotime.columns:
         lineage_values = pseudotime[lineage_name].to_numpy(dtype=float)
@@ -502,31 +675,6 @@ def build_trajectory_context(
             continue
 
         valid_indices = np.flatnonzero(valid)
-        ordered_indices = valid_indices[
-            np.argsort(lineage_values[valid_indices], kind="stable")
-        ]
-        if len(ordered_indices) > MAX_TRAJECTORY_EXPRESSION_POINTS:
-            sample_positions = np.linspace(
-                0,
-                len(ordered_indices) - 1,
-                MAX_TRAJECTORY_EXPRESSION_POINTS,
-                dtype=int,
-            )
-            displayed_indices = ordered_indices[np.unique(sample_positions)]
-        else:
-            displayed_indices = ordered_indices
-
-        expression_points = [
-            {
-                "cell": str(expression.columns[cell_index]),
-                "pseudotime": float(lineage_values[cell_index]),
-                "expression": {
-                    gene: float(expression.iloc[gene_positions[gene], cell_index])
-                    for gene in genes
-                },
-            }
-            for cell_index in displayed_indices
-        ]
         trends = {
             gene: _fit_expression_spline(
                 lineage_values[valid_indices],
@@ -539,8 +687,6 @@ def build_trajectory_context(
             {
                 "name": str(lineage_name),
                 "cell_count": valid_count,
-                "displayed_cell_count": int(len(displayed_indices)),
-                "expression_points": expression_points,
                 "trends": trends,
             }
         )
@@ -553,6 +699,23 @@ def build_trajectory_context(
         pseudotime_path=pseudotime_path,
         expression=expression,
         pseudotime=pseudotime,
+        slingshot_embedding_path=_existing_path(
+            project_dir,
+            manifest,
+            path_keys=("pseudotime_embedding_path",),
+            filename_keys=(),
+            fallback_patterns=(),
+        ),
+        slingshot_curves_path=_existing_path(
+            project_dir,
+            manifest,
+            path_keys=("pseudotime_curves_path",),
+            filename_keys=(),
+            fallback_patterns=(),
+        ),
+        slingshot_embedding_method=str(
+            manifest.get("pseudotime_embedding_method") or "PCA"
+        ),
     )
 
     return {
@@ -566,8 +729,15 @@ def build_trajectory_context(
             manifest,
             preprocessed=uses_preprocessed_expression,
         ),
-        "trend_method": "cubic_smoothing_spline_gcv",
+        "trend_method": "restricted_cubic_regression_spline",
         "pseudotime_file": pseudotime_path.name,
+        "pseudotime_source": (
+            "estimated" if manifest.get("pseudotime_estimated") else "uploaded"
+        ),
+        "trajectory_method": (
+            str(manifest.get("pseudotime_trajectory_method") or "").strip()
+            or None
+        ),
     }
 
 
@@ -635,20 +805,104 @@ def read_ground_truth_edges(path: Path) -> list[dict]:
     return edges
 
 
+def _beeline_motif_summary(edges: list[dict]) -> dict:
+    """Count BEELINE FBL, FFL, and MI motifs in a directed edge set."""
+    adjacency: dict[str, set[str]] = {}
+    non_self_edges: set[tuple[str, str]] = set()
+    for edge in edges:
+        source = str(edge.get("source", "")).strip()
+        target = str(edge.get("target", "")).strip()
+        if not source or not target or source == target:
+            continue
+        non_self_edges.add((source, target))
+        adjacency.setdefault(source, set()).add(target)
+
+    mutual_interactions = sum(
+        1
+        for source, target in non_self_edges
+        if source < target and source in adjacency.get(target, set())
+    )
+    feedback_traversals = 0
+    feed_forward_loops = 0
+    for source, targets in adjacency.items():
+        for target in targets:
+            for third in adjacency.get(target, set()):
+                if third == source or third == target:
+                    continue
+                if source in adjacency.get(third, set()):
+                    feedback_traversals += 1
+                if third in targets:
+                    feed_forward_loops += 1
+
+    return {
+        "edge_count": len(non_self_edges),
+        "feedback_loops": feedback_traversals // 3,
+        "feed_forward_loops": feed_forward_loops,
+        "mutual_interactions": mutual_interactions,
+    }
+
+
+def _read_analysis_gene_names(project_dir: Path, manifest: dict) -> set[str] | None:
+    expression_path, _uses_preprocessed_expression = _analysis_expression_path(
+        project_dir,
+        manifest,
+    )
+    if not expression_path:
+        return None
+
+    delimiter = _detect_delimiter(expression_path)
+    gene_names: set[str] = set()
+    with expression_path.open(
+        "r",
+        encoding="utf-8-sig",
+        errors="replace",
+        newline="",
+    ) as handle:
+        reader = csv.reader(handle, delimiter=delimiter)
+        next(reader, None)
+        for row in reader:
+            if not row:
+                continue
+            gene_name = str(row[0]).strip()
+            if gene_name and gene_name.lower() != "nan":
+                gene_names.add(gene_name)
+    return gene_names
+
+
 def build_ground_truth_context(*, project_dir: Path, manifest: dict) -> dict:
     path = _ground_truth_path(project_dir, manifest)
     if not path:
         return {"available": False}
     try:
-        edges = read_ground_truth_edges(path)
+        uploaded_edges = read_ground_truth_edges(path)
+        analysis_genes = _read_analysis_gene_names(project_dir, manifest)
     except (OSError, UnicodeError, ValueError, pd.errors.ParserError) as exc:
         return {"available": False, "reason": str(exc)}
-    if not edges:
+    if not uploaded_edges:
         return {"available": False, "reason": "Ground-truth network is empty."}
+
+    edges = [
+        edge
+        for edge in uploaded_edges
+        if edge["source"] != edge["target"]
+        and (
+            analysis_genes is None
+            or (
+                edge["source"] in analysis_genes
+                and edge["target"] in analysis_genes
+            )
+        )
+    ]
     return {
         "available": True,
         "filename": path.name,
-        "edge_count": len(edges),
+        "edge_count": len(uploaded_edges),
+        "eligible_edge_count": len(edges),
+        "excluded_edge_count": len(uploaded_edges) - len(edges),
+        "analysis_gene_count": (
+            len(analysis_genes) if analysis_genes is not None else None
+        ),
+        "motif_reference": _beeline_motif_summary(uploaded_edges),
         "edges": edges,
     }
 

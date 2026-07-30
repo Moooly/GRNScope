@@ -86,13 +86,13 @@ class PPCORGeneFilterTests(unittest.TestCase):
             root = Path(temp_dir)
             source = root / "ExpressionData.csv"
             source.write_text(
-                ",cell-1,cell-2,cell-3,cell-4,cell-5,cell-6\n"
-                "gene-a,0,0,0,0,0,0\n"
-                "gene-b,0,1,2,3,4,5\n"
-                "gene-c,0,2,4,6,8,10\n"
-                "gene-d,1,1,1,1,1,1\n"
-                "gene-e,0,3,6,9,12,15\n"
-                "gene-f,0,4,8,12,16,20\n",
+                ",cell-1,cell-2,cell-3,cell-4,cell-5,cell-6,cell-7,cell-8,cell-9,cell-10,cell-11\n"
+                "gene-a,0,0,0,0,0,0,0,0,0,0,0\n"
+                "gene-b,0,1,2,3,4,5,6,7,8,9,10\n"
+                "gene-c,0,2,4,6,8,10,12,14,16,18,20\n"
+                "gene-d,1,1,1,1,1,1,1,1,1,1,1\n"
+                "gene-e,0,3,6,9,12,15,18,21,24,27,30\n"
+                "gene-f,0,4,8,12,16,20,24,28,32,36,40\n",
                 encoding="utf-8",
             )
 
@@ -103,13 +103,13 @@ class PPCORGeneFilterTests(unittest.TestCase):
                     "algorithm_parameters": {
                         "PPCOR": {"maxGenes": 500},
                     },
-                    "confidence_bootstrap_runs": 1,
                 },
                 preprocessed_expression=source,
             )
 
-            # This deterministic six-cell bootstrap contains five unique cells,
-            # so PPCOR retains at most four genes to keep p-values available.
+            # Across the automatic bootstrap plan, the smallest deterministic
+            # sample contains five unique cells, so PPCOR retains at most four
+            # genes to keep p-values available.
             with result.open(encoding="utf-8", newline="") as handle:
                 rows = list(csv.reader(handle))
             self.assertEqual(len(rows) - 1, 4)
@@ -171,7 +171,6 @@ class PPCORGeneFilterTests(unittest.TestCase):
                         "algorithm_parameters": {
                             "PPCOR": {"maxGenes": 500},
                         },
-                        "confidence_bootstrap_runs": 1,
                     },
                     preprocessed_expression=source,
                 )
@@ -197,13 +196,13 @@ class SINCERITIESGeneFilterTests(unittest.TestCase):
             root = Path(temp_dir)
             source = root / "ExpressionData.csv"
             source.write_text(
-                ",cell-1,cell-2,cell-3,cell-4,cell-5,cell-6\n"
-                "gene-a,0,0,0,0,0,0\n"
-                "gene-b,0,1,2,3,4,5\n"
-                "gene-c,0,2,4,6,8,10\n"
-                "gene-d,1,1,1,1,1,1\n"
-                "gene-e,0,3,6,9,12,15\n"
-                "gene-f,0,4,8,12,16,20\n",
+                ",cell-1,cell-2,cell-3,cell-4,cell-5,cell-6,cell-7,cell-8,cell-9,cell-10,cell-11\n"
+                "gene-a,0,0,0,0,0,0,0,0,0,0,0\n"
+                "gene-b,0,1,2,3,4,5,6,7,8,9,10\n"
+                "gene-c,0,2,4,6,8,10,12,14,16,18,20\n"
+                "gene-d,1,1,1,1,1,1,1,1,1,1,1\n"
+                "gene-e,0,3,6,9,12,15,18,21,24,27,30\n"
+                "gene-f,0,4,8,12,16,20,24,28,32,36,40\n",
                 encoding="utf-8",
             )
 
@@ -214,12 +213,11 @@ class SINCERITIESGeneFilterTests(unittest.TestCase):
                     "algorithm_parameters": {
                         "SINCERITIES": {"maxGenes": 500},
                     },
-                    "confidence_bootstrap_runs": 1,
                 },
                 preprocessed_expression=source,
             )
 
-            # Six uploaded cells become five cells per confidence run. The
+            # The smallest planned bootstrap sample has five unique cells. The
             # partial-correlation input is therefore capped at four genes.
             with result.open(encoding="utf-8", newline="") as handle:
                 rows = list(csv.reader(handle))

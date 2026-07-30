@@ -15,6 +15,7 @@ interface AlgorithmStepProps {
   datasetSummary: DatasetSummary;
   isLoadingAlgorithms: boolean;
   algorithmLoadError: string | null;
+  onRetryAlgorithms: () => void;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
   expandedAlgorithmId?: string | null;
   onToggleAlgorithmExpanded?: (algorithmId: string) => void;
@@ -35,6 +36,7 @@ export default function AlgorithmStep({
   datasetSummary,
   isLoadingAlgorithms,
   algorithmLoadError,
+  onRetryAlgorithms,
   onToggleAlgorithm,
   expandedAlgorithmId = null,
   onToggleAlgorithmExpanded,
@@ -113,8 +115,17 @@ export default function AlgorithmStep({
     <div>
       <section>
         {algorithmLoadError ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            {algorithmLoadError}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-medium text-red-700">
+              {algorithmLoadError}
+            </p>
+            <button
+              type="button"
+              onClick={onRetryAlgorithms}
+              className="cursor-pointer rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-100"
+            >
+              Try again
+            </button>
           </div>
         ) : null}
 

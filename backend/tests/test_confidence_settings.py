@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.api.projects import normalize_bootstrap_replicates
 from app.services.beeline_service import (
     CONFIDENCE_RESAMPLING_SCHEME,
     FULL_DATA_RUN_ID,
@@ -16,28 +15,38 @@ from app.services.beeline_service import (
     merge_full_data_with_bootstrap_edges,
     plan_confidence_run_inputs,
     resolve_confidence_settings,
+    spearman_stability_check,
     summarize_repeat_run_spearman,
     update_confidence_accumulator,
 )
 
 
 class ConfidenceSettingsTests(unittest.TestCase):
-    def test_project_bootstrap_profiles_are_bounded_to_supported_values(self):
-        self.assertEqual(normalize_bootstrap_replicates("30"), 30)
-        self.assertEqual(normalize_bootstrap_replicates("100"), 100)
-        self.assertEqual(normalize_bootstrap_replicates("300"), 300)
-        self.assertEqual(normalize_bootstrap_replicates("12"), 100)
-        self.assertEqual(normalize_bootstrap_replicates("invalid"), 100)
+    def test_bootstrap_run_ceiling_is_automatically_bounded_to_three_through_fifteen(self):
+        self.assertEqual(
+            resolve_confidence_settings(
+                {"confidence_bootstrap_runs": 1},
+                gene_count=100,
+            )["bootstrap_runs"],
+            3,
+        )
+        self.assertEqual(
+            resolve_confidence_settings(
+                {"confidence_bootstrap_runs": 300},
+                gene_count=100,
+            )["bootstrap_runs"],
+            15,
+        )
 
     def test_confidence_runs_are_enabled_by_default(self):
         with patch.dict(os.environ, {}, clear=True):
             settings = resolve_confidence_settings({}, gene_count=100)
 
         self.assertTrue(settings["confidence_enabled"])
-        self.assertEqual(settings["bootstrap_runs"], 100)
-        self.assertEqual(settings["min_runs"], 100)
+        self.assertEqual(settings["bootstrap_runs"], 15)
+        self.assertEqual(settings["min_runs"], 3)
         self.assertEqual(settings["subsample_fraction"], 1.0)
-        self.assertFalse(settings["early_stopping_enabled"])
+        self.assertTrue(settings["early_stopping_enabled"])
         self.assertTrue(settings["sampling_with_replacement"])
         self.assertEqual(
             settings["resampling_scheme"],
@@ -45,14 +54,14 @@ class ConfidenceSettingsTests(unittest.TestCase):
         )
         self.assertEqual(settings["stop_rho"], 0.95)
 
-    def test_project_can_override_default_spearman_threshold(self):
+    def test_spearman_threshold_is_fixed_at_point_nine_five(self):
         with patch.dict(os.environ, {}, clear=True):
             settings = resolve_confidence_settings(
                 {"confidence_stop_rho": 0.97},
                 gene_count=100,
             )
 
-        self.assertEqual(settings["stop_rho"], 0.97)
+        self.assertEqual(settings["stop_rho"], 0.95)
 
     def test_legacy_activation_flags_cannot_disable_confidence_runs(self):
         with patch.dict(
@@ -66,8 +75,8 @@ class ConfidenceSettingsTests(unittest.TestCase):
             )
 
         self.assertTrue(settings["confidence_enabled"])
-        self.assertEqual(settings["bootstrap_runs"], 100)
-        self.assertEqual(settings["min_runs"], 100)
+        self.assertEqual(settings["bootstrap_runs"], 15)
+        self.assertEqual(settings["min_runs"], 3)
 
     def test_remaining_time_range_uses_stability_streak_and_maximum_runs(self):
         metadata = {
@@ -89,10 +98,9 @@ class ConfidenceSettingsTests(unittest.TestCase):
             current_run_elapsed_seconds=30,
         )
 
-        # Median of the last three completed runs is 105 seconds. A legacy
-        # adaptive estimate can finish after one run, while the fixed maximum
-        # supplied by the caller remains 30.
-        self.assertEqual(remaining, (75, 2700))
+        # Median of the last three completed runs is 105 seconds. The automatic
+        # ceiling is 15 even when an archived caller supplies 30.
+        self.assertEqual(remaining, (75, 1125))
 
     def test_remaining_time_range_requires_two_future_checks_after_failed_stability(self):
         metadata = {
@@ -138,6 +146,28 @@ class ConfidenceSettingsTests(unittest.TestCase):
         self.assertEqual(summary["pair_count"], 3)
         self.assertAlmostEqual(summary["median_rho"], 1.0)
         self.assertAlmostEqual(summary["mad_rho"], 0.0)
+
+    def test_spearman_stability_stops_at_point_nine_five(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            check = spearman_stability_check(
+                runtime_root=Path(temp_dir),
+                previous_edges=[
+                    {"source": "A", "target": "B", "confidence": 0.9},
+                    {"source": "A", "target": "C", "confidence": 0.5},
+                    {"source": "B", "target": "C", "confidence": 0.1},
+                ],
+                current_edges=[
+                    {"source": "A", "target": "B", "confidence": 0.8},
+                    {"source": "A", "target": "C", "confidence": 0.4},
+                    {"source": "B", "target": "C", "confidence": 0.2},
+                ],
+                current_run_count=3,
+                stop_rho=0.95,
+            )
+
+        self.assertAlmostEqual(check["rho"], 1.0)
+        self.assertTrue(check["stop_early"])
+        self.assertEqual(check["status"], "stable")
 
     def test_planner_adds_full_data_fit_and_n_out_of_n_bootstrap_draws(self):
         with tempfile.TemporaryDirectory() as temp_dir:
