@@ -11,6 +11,10 @@ import {
   registerPendingProjectUpload,
   startPendingProjectUpload,
 } from "../_lib/pendingProjectUpload";
+import {
+  inspectExpressionMatrix,
+  type MatrixStateDetection,
+} from "../_lib/matrixStateDetection";
 
 type BackendAlgorithmEntry = {
   id: string;
@@ -55,6 +59,13 @@ type CreateProjectResponsePayload = {
   errors?: string[];
 };
 
+type SpeciesInferencePayload = {
+  ok?: boolean;
+  inference?: {
+    species?: string;
+  } | null;
+};
+
 async function readCreateProjectResponse(response: Response) {
   const responseText = await response.text();
   if (!responseText.trim()) return null;
@@ -93,76 +104,6 @@ function mapBackendAlgorithm(algorithm: BackendAlgorithmEntry): ProjectAlgorithm
     recommended: algorithm.recommended,
     runner: algorithm.runner,
     parameters: algorithm.parameters ?? [],
-  };
-}
-
-function countDelimitedFields(line: string, delimiter: string): number {
-  let fieldCount = 1;
-  let insideQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"') {
-      if (insideQuotes && line[index + 1] === '"') {
-        index += 1;
-      } else {
-        insideQuotes = !insideQuotes;
-      }
-    } else if (character === delimiter && !insideQuotes) {
-      fieldCount += 1;
-    }
-  }
-
-  return fieldCount;
-}
-
-function detectMatrixDelimiter(header: string): string {
-  return [",", "\t", ";"].reduce((bestDelimiter, delimiter) =>
-    countDelimitedFields(header, delimiter) >
-    countDelimitedFields(header, bestDelimiter)
-      ? delimiter
-      : bestDelimiter,
-  );
-}
-
-async function readMatrixDimensions(file: File): Promise<{
-  label: string;
-  geneCount: number;
-  cellCount: number;
-}> {
-  const reader = file.stream().getReader();
-  const decoder = new TextDecoder();
-  let pendingText = "";
-  let header: string | null = null;
-  let geneCount = 0;
-
-  const processLine = (rawLine: string) => {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    if (header === null) {
-      if (line.trim()) header = line.replace(/^\uFEFF/, "");
-      return;
-    }
-    if (line.trim()) geneCount += 1;
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    pendingText += decoder.decode(value, { stream: !done });
-    const lines = pendingText.split("\n");
-    pendingText = lines.pop() ?? "";
-    lines.forEach(processLine);
-    if (done) break;
-  }
-
-  if (pendingText) processLine(pendingText);
-  if (header === null) throw new Error("The expression matrix is empty.");
-
-  const delimiter = detectMatrixDelimiter(header);
-  const cellCount = Math.max(0, countDelimitedFields(header, delimiter) - 1);
-  return {
-    label: `${geneCount.toLocaleString()} genes × ${cellCount.toLocaleString()} cells`,
-    geneCount,
-    cellCount,
   };
 }
 
@@ -233,6 +174,15 @@ export default function CreateProjectFlow({
   >(null);
   const [geneCount, setGeneCount] = useState<number | null>(null);
   const [cellCount, setCellCount] = useState<number | null>(null);
+  const [matrixState, setMatrixState] = useState("");
+  const [matrixStateDetection, setMatrixStateDetection] =
+    useState<MatrixStateDetection | null>(null);
+  const [isMatrixStateDetecting, setIsMatrixStateDetecting] = useState(false);
+  const [datasetSpecies, setDatasetSpecies] = useState("");
+  const [isSpeciesDetecting, setIsSpeciesDetecting] = useState(false);
+  const speciesSelectionSourceRef = useRef<
+    "automatic" | "manual" | "prefill" | null
+  >(null);
   const [pseudotimeFileName, setPseudotimeFileName] = useState("");
   const [groundTruthFileName, setGroundTruthFileName] = useState("");
   const [clusterLabelsFileName, setClusterLabelsFileName] = useState("");
@@ -244,18 +194,74 @@ export default function CreateProjectFlow({
       setExpressionMatrixDimensions(null);
       setGeneCount(null);
       setCellCount(null);
+      setMatrixState("");
+      setMatrixStateDetection(null);
+      setIsMatrixStateDetecting(false);
+      setIsSpeciesDetecting(false);
+      if (speciesSelectionSourceRef.current === "automatic") {
+        speciesSelectionSourceRef.current = null;
+        setDatasetSpecies("");
+      }
       return;
     }
 
-    setExpressionMatrixDimensions("Reading dimensions…");
+    setExpressionMatrixDimensions("Inspecting matrix…");
     setGeneCount(null);
     setCellCount(null);
-    void readMatrixDimensions(expressionFile)
-      .then((dimensions) => {
-        if (!cancelled) {
-          setExpressionMatrixDimensions(dimensions.label);
-          setGeneCount(dimensions.geneCount);
-          setCellCount(dimensions.cellCount);
+    setMatrixState("");
+    setMatrixStateDetection(null);
+    setIsMatrixStateDetecting(true);
+    setIsSpeciesDetecting(true);
+    if (
+      speciesSelectionSourceRef.current === null ||
+      speciesSelectionSourceRef.current === "automatic"
+    ) {
+      speciesSelectionSourceRef.current = null;
+      setDatasetSpecies("");
+    }
+    void inspectExpressionMatrix(expressionFile)
+      .then(async (inspection) => {
+        if (cancelled) return;
+
+        setExpressionMatrixDimensions(inspection.label);
+        setGeneCount(inspection.geneCount);
+        setCellCount(inspection.cellCount);
+        setMatrixStateDetection(inspection.detection);
+        // Only auto-apply the detected scaling when we're reasonably sure. A
+        // low-confidence guess is left blank so the user must confirm it — a
+        // wrong guess here would double-log and silently corrupt the run.
+        if (
+          inspection.detection.detectedState &&
+          inspection.detection.confidence !== "low"
+        ) {
+          setMatrixState(inspection.detection.detectedState);
+        }
+
+        try {
+          const response = await apiFetch(`${API_BASE}/uploads/infer-species`, {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ gene_names: inspection.geneNames }),
+          });
+          const payload = (await response.json()) as SpeciesInferencePayload;
+          if (
+            !cancelled &&
+            response.ok &&
+            payload.inference?.species &&
+            speciesSelectionSourceRef.current !== "manual" &&
+            speciesSelectionSourceRef.current !== "prefill"
+          ) {
+            speciesSelectionSourceRef.current = "automatic";
+            setDatasetSpecies(payload.inference.species);
+          }
+        } catch {
+          // Species remains a compact manual selection when inference is
+          // unavailable or inconclusive.
+        } finally {
+          if (!cancelled) setIsSpeciesDetecting(false);
         }
       })
       .catch(() => {
@@ -263,17 +269,24 @@ export default function CreateProjectFlow({
           setExpressionMatrixDimensions("Dimensions unavailable");
           setGeneCount(null);
           setCellCount(null);
+          setMatrixStateDetection({
+            detectedState: null,
+            confidence: "low",
+            reasons: ["Automatic detection could not inspect this file."],
+          });
+          setIsSpeciesDetecting(false);
         }
+      })
+      .finally(() => {
+        if (!cancelled) setIsMatrixStateDetecting(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [expressionFile]);
+  }, [API_BASE, expressionFile]);
 
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
-  const [matrixState, setMatrixState] = useState("");
-  const [datasetSpecies, setDatasetSpecies] = useState("");
   const [customTfListFile, setCustomTfListFile] = useState<File | null>(null);
   const [customTfListFileName, setCustomTfListFileName] = useState("");
   const [detectionThreshold, setDetectionThreshold] = useState("10");
@@ -292,6 +305,14 @@ export default function CreateProjectFlow({
   const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
+
+  useEffect(() => {
+    if (datasetSpecies && datasetSpecies !== "other") {
+      setCellOracleSpecies(datasetSpecies);
+      setCustomTfListFile(null);
+      setCustomTfListFileName("");
+    }
+  }, [datasetSpecies]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasUserAdjustedAlgorithms, setHasUserAdjustedAlgorithms] = useState(false);
@@ -328,9 +349,13 @@ export default function CreateProjectFlow({
     setGroundTruthFileName("");
     setClusterLabelsFileName("");
     setIncludeAllTFs(initialValues?.includeAllTFs ?? true);
-    setMatrixState(initialValues?.matrixState ?? "");
+    setMatrixState("");
+    setMatrixStateDetection(null);
+    setIsMatrixStateDetecting(false);
     const initialDatasetSpecies = initialValues?.datasetSpecies ?? "";
     setDatasetSpecies(initialDatasetSpecies);
+    speciesSelectionSourceRef.current = initialDatasetSpecies ? "prefill" : null;
+    setIsSpeciesDetecting(false);
     setCustomTfListFile(null);
     setCustomTfListFileName("");
     setDetectionThreshold(initialValues?.detectionThreshold ?? "10");
@@ -635,6 +660,7 @@ export default function CreateProjectFlow({
   };
 
   const handleSetDatasetSpecies = (nextSpecies: string) => {
+    speciesSelectionSourceRef.current = "manual";
     setDatasetSpecies(nextSpecies);
     if (nextSpecies && nextSpecies !== "other") {
       setCellOracleSpecies(nextSpecies);
@@ -649,6 +675,10 @@ export default function CreateProjectFlow({
     const formData = new FormData();
     formData.append("project_name", projectName);
     formData.append("matrix_state", matrixState);
+    formData.append(
+      "matrix_state_source",
+      "automatic",
+    );
     formData.append("dataset_species", datasetSpecies);
     formData.append(
       "enabled_gene_selection_stages",
@@ -746,7 +776,10 @@ export default function CreateProjectFlow({
       }
     }
     if (!matrixState) {
-      validationErrors.push("Select the current state of the matrix values.");
+      validationErrors.push(
+        matrixStateDetection?.reasons[0] ??
+          "The expression matrix state could not be detected automatically.",
+      );
     }
     if (!datasetSpecies) {
       validationErrors.push("Select the species represented by the matrix.");
@@ -930,7 +963,10 @@ export default function CreateProjectFlow({
       groundTruthFileName={groundTruthFileName}
       clusterLabelsFileName={clusterLabelsFileName}
       matrixState={matrixState}
+      setMatrixState={setMatrixState}
+      isMatrixStateDetecting={isMatrixStateDetecting}
       datasetSpecies={datasetSpecies}
+      isSpeciesDetecting={isSpeciesDetecting}
       customTfListFileName={customTfListFileName}
       detectionThreshold={detectionThreshold}
       enabledGeneSelectionStages={enabledGeneSelectionStages}
@@ -968,7 +1004,6 @@ export default function CreateProjectFlow({
       onSelectAll={handleSelectAll}
       onToggleAlgorithm={toggleAlgorithm}
       setProjectName={setProjectName}
-      setMatrixState={setMatrixState}
       setDatasetSpecies={handleSetDatasetSpecies}
       setCustomTfListFile={setCustomTfListFile}
       setCustomTfListFileName={setCustomTfListFileName}

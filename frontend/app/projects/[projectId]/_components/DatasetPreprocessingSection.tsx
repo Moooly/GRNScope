@@ -16,6 +16,10 @@ import type {
   PreprocessingConfig,
   PreprocessingResult,
 } from "../_lib/types";
+import {
+  DOWNLOAD_BUTTON_CLASS,
+  DownloadIcon,
+} from "./DownloadMenu";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 export type MethodGeneAdjustment = {
@@ -690,9 +694,20 @@ export default function DatasetPreprocessingSection({
               aria-haspopup="dialog"
               aria-label="Download project files"
               title="Download project files"
-              className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+              className={DOWNLOAD_BUTTON_CLASS}
             >
+              <DownloadIcon />
               Download
+              <svg
+                viewBox="0 0 16 16"
+                className={`h-3.5 w-3.5 transition-transform ${
+                  isDownloadMenuOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                aria-hidden="true"
+              >
+                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
             {downloadMenu}
           </div>

@@ -213,7 +213,7 @@ export default function AlgorithmsPage() {
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_10px_35px_rgba(15,23,42,0.035)]">
-              <div className={`hidden gap-x-4 border-b border-slate-200 bg-slate-50/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 md:grid ${GRID_TEMPLATE}`}>
+              <div className={`grn-table-header-grid hidden gap-x-4 border-b border-slate-200 px-5 py-2.5 md:grid ${GRID_TEMPLATE}`}>
                 <span>Algorithm</span>
                 <span className="text-center">Pseudotime</span>
                 <span className="text-center">Direction</span>

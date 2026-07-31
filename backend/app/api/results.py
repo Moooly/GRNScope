@@ -328,6 +328,18 @@ def compact_result_for_client(result: dict) -> dict:
                 )
                 if repeat_run_stability.get(key) is not None
             }
+            compact_pairs = []
+            for pair in repeat_run_stability.get("pairs", []):
+                if not isinstance(pair, dict):
+                    continue
+                compact_pairs.append(
+                    {
+                        key: pair.get(key)
+                        for key in ("first_run", "second_run", "rho")
+                        if pair.get(key) is not None
+                    }
+                )
+            compact_repeat_run_stability["pairs"] = compact_pairs
 
         compact_summary = {
             key: summary.get(key)

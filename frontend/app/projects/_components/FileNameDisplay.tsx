@@ -38,7 +38,7 @@ export default function FileNameDisplay({
 
   return (
     <span
-      className={`block w-full max-w-full overflow-hidden px-2 text-center text-base font-bold leading-7 text-slate-950 ${className}`}
+      className={`block w-full max-w-full overflow-hidden px-2 text-center text-sm font-semibold leading-5 text-slate-950 ${className}`}
       title={hasFile ? fileName : undefined}
     >
       <span className="inline-block max-w-full break-words align-middle">

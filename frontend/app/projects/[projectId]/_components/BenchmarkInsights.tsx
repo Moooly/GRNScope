@@ -2,6 +2,7 @@
 
 import {
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -19,6 +20,8 @@ import {
   type BenchmarkCurvePoint,
   type ReferenceSign,
 } from "../_lib/benchmark";
+import { downloadSvg, downloadSvgPng } from "../_lib/downloads";
+import DownloadMenu from "./DownloadMenu";
 
 type GroundTruthContext = {
   available: boolean;
@@ -145,34 +148,6 @@ function Panel({
       </div>
       <div className="mt-5">{children}</div>
     </section>
-  );
-}
-
-function ExportButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Export benchmark summary as CSV"
-      title="Export benchmark summary as CSV"
-      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"
-    >
-      <svg
-        viewBox="0 0 20 20"
-        className="h-4 w-4"
-        fill="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M10 3.25v8.5m0 0 3-3m-3 3-3-3M4.25 13.5v1.25A1.75 1.75 0 0 0 6 16.5h8a1.75 1.75 0 0 0 1.75-1.75V13.5"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      CSV
-    </button>
   );
 }
 
@@ -730,9 +705,9 @@ function MotifRecovery({
     <div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <table className="w-full min-w-[46rem] table-fixed border-collapse">
-          <thead className="bg-slate-50/80">
+          <thead className="grn-table-header">
             <tr className="text-left">
-              <th className="w-[22%] border-b border-slate-200 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+              <th className="w-[22%] border-b border-slate-200 px-4 py-3">
                 Algorithm
               </th>
             {motifs.map((motif) => (
@@ -740,10 +715,10 @@ function MotifRecovery({
                   key={motif.key}
                   className="border-b border-l border-slate-200 px-4 py-3"
                 >
-                  <span className="block text-xs font-bold text-slate-700">
+                  <span className="block">
                     {motif.label}
                   </span>
-                  <span className="mt-0.5 block text-[10px] font-medium text-slate-400">
+                  <span className="mt-0.5 block text-[10px] font-medium normal-case tracking-normal text-slate-400">
                     {motif.note}
                   </span>
                 </th>
@@ -842,7 +817,7 @@ function PathBreakdown({
     <div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <div className="min-w-[40rem]">
-          <div className="grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+          <div className="grn-table-header-grid grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-200 px-4 py-2.5 text-center">
             <span>Algorithm</span>
             <span>Top predictions</span>
           </div>
@@ -1048,6 +1023,8 @@ export default function BenchmarkInsights({
   selectedResultScopeId: string;
   tasks: ProjectTask[];
 }) {
+  const prChartRef = useRef<HTMLDivElement | null>(null);
+  const rocChartRef = useRef<HTMLDivElement | null>(null);
   const benchmark = useMemo(() => {
     const truthEdges = groundTruth?.edges ?? [];
     if (!truthEdges.length) {
@@ -1199,63 +1176,83 @@ export default function BenchmarkInsights({
   const signedMetricsAvailable = rows.some(
     (row) => row.activationEpr !== null || row.inhibitionEpr !== null,
   );
+  const downloadChart = async (
+    container: HTMLDivElement | null,
+    filename: string,
+    format: "svg" | "png",
+  ) => {
+    const svg = container?.querySelector("svg");
+    if (!svg) throw new Error("The chart is not available to download.");
+    if (format === "svg") {
+      downloadSvg(svg, `${filename}.svg`);
+    } else {
+      await downloadSvgPng(svg, `${filename}.png`);
+    }
+  };
   return (
     <div className="space-y-5">
       <Panel
         title="Benchmark summary"
         description="How well each method recovers the uploaded reference network."
         aside={
-          <ExportButton
-            onClick={() =>
-              downloadCsv("benchmark-summary.csv", [
-                [
-                  "algorithm",
-                  "directionality",
-                  "nonzero_predictions",
-                  "evaluated_genes",
-                  "possible_directed_interactions",
-                  "reference_interactions",
-                  "random_precision",
-                  "auprc",
-                  "auprc_ratio",
-                  "early_precision",
-                  "early_precision_ratio",
-                  "early_precision_selected_edges",
-                  "activation_early_precision",
-                  "activation_epr",
-                  "activation_selected_edges",
-                  "inhibition_early_precision",
-                  "inhibition_epr",
-                  "inhibition_selected_edges",
-                  "auroc",
-                  "runtime_seconds",
-                ],
-                ...rows.map((row) => [
-                  row.algorithmId,
-                  algorithmMetaMap.get(row.algorithmId)?.directed === false
-                    ? "undirected"
-                    : "directed",
-                  row.evaluatedEdges,
-                  benchmark.candidateGeneCount,
-                  benchmark.possibleEdges,
-                  benchmark.eligibleReferenceEdges,
-                  benchmark.randomBaseline.toFixed(6),
-                  row.auprc.toFixed(3),
-                  row.auprcRatio.toFixed(3),
-                  row.precisionAtK.toFixed(3),
-                  row.earlyPrecisionRatio.toFixed(3),
-                  row.earlyPrecisionSelectedCount,
-                  row.activationPrecision?.toFixed(3) ?? "",
-                  row.activationEpr?.toFixed(3) ?? "",
-                  row.activationSelectedCount ?? "",
-                  row.inhibitionPrecision?.toFixed(3) ?? "",
-                  row.inhibitionEpr?.toFixed(3) ?? "",
-                  row.inhibitionSelectedCount ?? "",
-                  row.auroc.toFixed(3),
-                  row.runtimeSeconds.toFixed(3),
-                ]),
-              ])
-            }
+          <DownloadMenu
+            ariaLabel="Download benchmark summary"
+            items={[
+              {
+                label: "Complete benchmark table",
+                format: "CSV",
+                description: "All displayed and supporting BEELINE metrics.",
+                onSelect: () =>
+                  downloadCsv("benchmark-summary.csv", [
+                    [
+                      "algorithm",
+                      "directionality",
+                      "nonzero_predictions",
+                      "evaluated_genes",
+                      "possible_directed_interactions",
+                      "reference_interactions",
+                      "random_precision",
+                      "auprc",
+                      "auprc_ratio",
+                      "early_precision",
+                      "early_precision_ratio",
+                      "early_precision_selected_edges",
+                      "activation_early_precision",
+                      "activation_epr",
+                      "activation_selected_edges",
+                      "inhibition_early_precision",
+                      "inhibition_epr",
+                      "inhibition_selected_edges",
+                      "auroc",
+                      "runtime_seconds",
+                    ],
+                    ...rows.map((row) => [
+                      row.algorithmId,
+                      algorithmMetaMap.get(row.algorithmId)?.directed === false
+                        ? "undirected"
+                        : "directed",
+                      row.evaluatedEdges,
+                      benchmark.candidateGeneCount,
+                      benchmark.possibleEdges,
+                      benchmark.eligibleReferenceEdges,
+                      benchmark.randomBaseline.toFixed(6),
+                      row.auprc.toFixed(3),
+                      row.auprcRatio.toFixed(3),
+                      row.precisionAtK.toFixed(3),
+                      row.earlyPrecisionRatio.toFixed(3),
+                      row.earlyPrecisionSelectedCount,
+                      row.activationPrecision?.toFixed(3) ?? "",
+                      row.activationEpr?.toFixed(3) ?? "",
+                      row.activationSelectedCount ?? "",
+                      row.inhibitionPrecision?.toFixed(3) ?? "",
+                      row.inhibitionEpr?.toFixed(3) ?? "",
+                      row.inhibitionSelectedCount ?? "",
+                      row.auroc.toFixed(3),
+                      row.runtimeSeconds.toFixed(3),
+                    ]),
+                  ]),
+              },
+            ]}
           />
         }
       >
@@ -1306,9 +1303,9 @@ export default function BenchmarkInsights({
                 </>
               ) : null}
             </colgroup>
-            <thead className="bg-slate-50/80">
-              <tr className="border-b border-slate-200 text-[11px] font-bold text-slate-500">
-                <th className="sticky left-0 z-20 bg-slate-50 px-4 py-3 text-left shadow-[1px_0_0_0_#e2e8f0]">
+            <thead className="grn-table-header">
+              <tr className="border-b border-slate-200">
+                <th className="sticky left-0 z-20 bg-slate-50/90 px-4 py-3 text-left shadow-[1px_0_0_0_#e2e8f0]">
                   Algorithm
                 </th>
                 <th className="border-l border-slate-200 px-4 py-3 text-left">
@@ -1410,6 +1407,48 @@ export default function BenchmarkInsights({
       <Panel
         title="Precision–recall performance"
         description="Performance across all directed candidate edges; missing predictions score zero."
+        aside={
+          <DownloadMenu
+            ariaLabel="Download precision–recall performance"
+            items={[
+              {
+                label: "Chart image",
+                format: "PNG",
+                onSelect: () =>
+                  downloadChart(
+                    prChartRef.current,
+                    "precision-recall-performance",
+                    "png",
+                  ),
+              },
+              {
+                label: "Vector chart",
+                format: "SVG",
+                onSelect: () =>
+                  downloadChart(
+                    prChartRef.current,
+                    "precision-recall-performance",
+                    "svg",
+                  ),
+              },
+              {
+                label: "Curve values",
+                format: "CSV",
+                onSelect: () =>
+                  downloadCsv("precision-recall-curves.csv", [
+                    ["algorithm", "recall", "precision"],
+                    ...rows.flatMap((row) =>
+                      row.pr.map((point) => [
+                        row.algorithmId,
+                        point.x,
+                        point.y,
+                      ]),
+                    ),
+                  ]),
+              },
+            ]}
+          />
+        }
       >
         <div className="mb-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
           <span className="rounded-full bg-slate-100 px-3 py-1.5">
@@ -1419,16 +1458,18 @@ export default function BenchmarkInsights({
             Random precision {benchmark.randomBaseline.toFixed(3)}
           </span>
         </div>
-        <LineChart
-          series={rows.map((row) => ({
-            name: row.algorithmId,
-            points: row.pr,
-            summary: `AUPRC ${row.auprc.toFixed(3)}`,
-          }))}
-          xLabel="Recall"
-          yLabel="Precision"
-          randomBaseline={benchmark.randomBaseline}
-        />
+        <div ref={prChartRef}>
+          <LineChart
+            series={rows.map((row) => ({
+              name: row.algorithmId,
+              points: row.pr,
+              summary: `AUPRC ${row.auprc.toFixed(3)}`,
+            }))}
+            xLabel="Recall"
+            yLabel="Precision"
+            randomBaseline={benchmark.randomBaseline}
+          />
+        </div>
       </Panel>
 
       <details className="group rounded-[1.25rem] border border-slate-200 bg-white">
@@ -1447,13 +1488,41 @@ export default function BenchmarkInsights({
         </summary>
         <div className="space-y-7 border-t border-slate-100 px-5 py-5 sm:px-6">
           <section>
-            <h4 className="text-sm font-extrabold text-slate-900">
-              Motif count ratios
-            </h4>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Counts in each top-k predicted network divided by the
-              corresponding reference-network count.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  Motif count ratios
+                </h4>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Counts in each top-k predicted network divided by the
+                  corresponding reference-network count.
+                </p>
+              </div>
+              <DownloadMenu
+                ariaLabel="Download motif count ratios"
+                items={[
+                  {
+                    label: "Motif count table",
+                    format: "CSV",
+                    onSelect: () =>
+                      downloadCsv("motif-count-ratios.csv", [
+                        [
+                          "algorithm",
+                          "feedback_loops",
+                          "feed_forward_loops",
+                          "mutual_interactions",
+                        ],
+                        ...rows.map((row) => [
+                          row.algorithmId,
+                          row.motifs?.feedbackLoops ?? "",
+                          row.motifs?.feedForwardLoops ?? "",
+                          row.motifs?.mutualInteractions ?? "",
+                        ]),
+                      ]),
+                  },
+                ]}
+              />
+            </div>
             <div className="mt-4">
               <MotifRecovery
                 rows={rows}
@@ -1463,14 +1532,50 @@ export default function BenchmarkInsights({
             </div>
           </section>
           <section className="border-t border-slate-100 pt-6">
-            <h4 className="text-sm font-extrabold text-slate-900">
-              How the top predictions compare with the reference
-            </h4>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Every bar contains the top {benchmark.eligibleReferenceEdges}{" "}
-              predictions. Blue is correct; the remaining colors explain the
-              incorrect predictions.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  How the top predictions compare with the reference
+                </h4>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Every bar contains the top {benchmark.eligibleReferenceEdges}{" "}
+                  predictions. Blue is correct; the remaining colors explain the
+                  incorrect predictions.
+                </p>
+              </div>
+              <DownloadMenu
+                ariaLabel="Download top-prediction path context"
+                items={[
+                  {
+                    label: "Path context table",
+                    format: "CSV",
+                    onSelect: () =>
+                      downloadCsv("top-prediction-path-context.csv", [
+                        [
+                          "algorithm",
+                          "exact_reference_edge",
+                          "incorrect_2_steps",
+                          "incorrect_3_steps",
+                          "incorrect_4_steps",
+                          "incorrect_5_steps",
+                          "incorrect_more_than_5_steps",
+                          "incorrect_no_path",
+                        ],
+                        ...rows.map((row) => [
+                          row.algorithmId,
+                          row.pathCounts?.truePositive ?? "",
+                          row.pathCounts?.path2 ?? "",
+                          row.pathCounts?.path3 ?? "",
+                          row.pathCounts?.path4 ?? "",
+                          row.pathCounts?.path5 ?? "",
+                          row.pathCounts?.pathMoreThan5 ?? "",
+                          row.pathCounts?.noPath ?? "",
+                        ]),
+                      ]),
+                  },
+                ]}
+              />
+            </div>
             <div className="mt-4">
               <PathBreakdown
                 rows={rows}
@@ -1479,12 +1584,54 @@ export default function BenchmarkInsights({
             </div>
           </section>
           <section className="border-t border-slate-100 pt-6">
-            <h4 className="text-sm font-extrabold text-slate-900">ROC curves</h4>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              A secondary view; sparse networks can make ROC performance look
-              optimistic.
-            </p>
-            <div className="mt-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  ROC curves
+                </h4>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  A secondary view; sparse networks can make ROC performance look
+                  optimistic.
+                </p>
+              </div>
+              <DownloadMenu
+                ariaLabel="Download ROC curves"
+                items={[
+                  {
+                    label: "Chart image",
+                    format: "PNG",
+                    onSelect: () =>
+                      downloadChart(rocChartRef.current, "roc-curves", "png"),
+                  },
+                  {
+                    label: "Vector chart",
+                    format: "SVG",
+                    onSelect: () =>
+                      downloadChart(rocChartRef.current, "roc-curves", "svg"),
+                  },
+                  {
+                    label: "Curve values",
+                    format: "CSV",
+                    onSelect: () =>
+                      downloadCsv("roc-curves.csv", [
+                        [
+                          "algorithm",
+                          "false_positive_rate",
+                          "true_positive_rate",
+                        ],
+                        ...rows.flatMap((row) =>
+                          row.roc.map((point) => [
+                            row.algorithmId,
+                            point.x,
+                            point.y,
+                          ]),
+                        ),
+                      ]),
+                  },
+                ]}
+              />
+            </div>
+            <div ref={rocChartRef} className="mt-4">
               <LineChart
                 series={rows.map((row) => ({
                   name: row.algorithmId,

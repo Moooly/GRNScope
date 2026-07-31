@@ -16,6 +16,10 @@ import type {
   PerturbationRun,
   PerturbationState,
 } from "../_lib/types";
+import {
+  DOWNLOAD_BUTTON_CLASS,
+  DownloadIcon,
+} from "./DownloadMenu";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 
@@ -859,9 +863,20 @@ function FigureExportMenu({
         disabled={isExporting}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 disabled:cursor-wait disabled:opacity-60"
+        className={DOWNLOAD_BUTTON_CLASS}
       >
+        <DownloadIcon />
         {isExporting ? "Preparing…" : "Download"}
+        <svg
+          viewBox="0 0 16 16"
+          className={`h-3.5 w-3.5 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          fill="none"
+          aria-hidden="true"
+        >
+          <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       {isOpen && (
         <div
@@ -3045,9 +3060,20 @@ function ResultSummary({
               aria-haspopup="dialog"
               aria-label="Download perturbation data"
               title="Download perturbation data"
-              className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10"
+              className={DOWNLOAD_BUTTON_CLASS}
             >
+              <DownloadIcon />
               Download
+              <svg
+                viewBox="0 0 16 16"
+                className={`h-3.5 w-3.5 transition-transform ${
+                  isDownloadDialogOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                aria-hidden="true"
+              >
+                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
             {isDownloadDialogOpen && (
               <PerturbationDownloadPopover
@@ -3126,12 +3152,12 @@ function ResultSummary({
             {showAllGenes && (
               <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.1em] text-slate-500">
-                <th className="px-3 py-3 font-bold">Rank</th>
-                <th className="px-3 py-3 font-bold">Gene</th>
-                <th className="px-3 py-3 text-right font-bold">Mean change</th>
-                <th className="px-3 py-3 text-right font-bold">Mean absolute change</th>
+            <thead className="grn-table-header">
+              <tr className="border-b border-slate-200">
+                <th className="px-3 py-3">Rank</th>
+                <th className="px-3 py-3">Gene</th>
+                <th className="px-3 py-3 text-right">Mean change</th>
+                <th className="px-3 py-3 text-right">Mean absolute change</th>
               </tr>
             </thead>
             <tbody>

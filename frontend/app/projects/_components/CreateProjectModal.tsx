@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { DragEvent, ReactNode } from "react";
 import type { ProjectAlgorithm } from "../page";
 import AlgorithmStep from "./AlgorithmStep";
@@ -25,19 +26,10 @@ const DATASET_SPECIES_OPTIONS = [
 ];
 
 const MATRIX_STATE_OPTIONS = [
-  {
-    value: "raw",
-    label: "Raw counts",
-  },
-  {
-    value: "normalized",
-    label: "Normalized",
-  },
-  {
-    value: "log_normalized",
-    label: "Log-normalized",
-  },
-];
+  { value: "raw", label: "Raw counts" },
+  { value: "normalized", label: "Normalized" },
+  { value: "log_normalized", label: "Log-normalized" },
+] as const;
 
 const CUSTOM_TF_LIST_SAMPLE = `gene_symbol,reference_gene_id
 TP53,ENSG00000141510
@@ -57,6 +49,131 @@ interface DatasetSummary {
   preprocessingSummary: string[];
 }
 
+// A small, editable "detected fact" chip. Shows the auto-detected value quietly
+// and opens a popover to change it; when nothing is set yet it becomes an accent
+// prompt so the user knows to confirm it. Used for species and matrix values so
+// both stay lightweight but correctable — the "upload and go" path.
+function EditableChip({
+  value,
+  options,
+  onChange,
+  unsetLabel,
+  ariaLabel,
+  detecting = false,
+}: {
+  value: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  unsetLabel: string;
+  ariaLabel: string;
+  detecting?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Position the menu in a portal (document.body) so it escapes the matrix
+  // card's overflow-hidden and the scroll container — otherwise it gets clipped.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect) setMenuPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    };
+    place();
+    const handlePointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  if (detecting) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-400">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300" aria-hidden="true" />
+        {unsetLabel === "Confirm values" ? "Inspecting…" : "Detecting…"}
+      </span>
+    );
+  }
+
+  const current = options.find((option) => option.value === value);
+
+  return (
+    <span className="inline-block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((previous) => !previous)}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold transition ${
+          current
+            ? "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/40 hover:text-[#155f87]"
+            : "border-[#1b75a6]/50 bg-[#eef7fc] text-[#1b75a6] hover:bg-[#e2f1fa]"
+        }`}
+      >
+        {current ? current.label : unsetLabel}
+        <span aria-hidden="true" className="text-[0.6em] opacity-70">
+          ▼
+        </span>
+      </button>
+      {open && menuPos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              style={{
+                position: "fixed",
+                top: menuPos.top,
+                left: menuPos.left,
+                minWidth: Math.max(menuPos.width, 176),
+                zIndex: 200,
+              }}
+              className="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white p-1 text-left shadow-xl shadow-slate-950/10"
+            >
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className={`block w-full rounded-lg px-3 py-1.5 text-left text-sm font-medium transition ${
+                    option.value === value
+                      ? "bg-[#eef7fc] text-[#155f87]"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
+}
+
 interface CreateProjectModalProps {
   isCreateVisible: boolean;
   isCreateClosing: boolean;
@@ -67,7 +184,10 @@ interface CreateProjectModalProps {
   groundTruthFileName: string;
   clusterLabelsFileName: string;
   matrixState: string;
+  setMatrixState: (value: string) => void;
+  isMatrixStateDetecting: boolean;
   datasetSpecies: string;
+  isSpeciesDetecting: boolean;
   customTfListFileName: string;
   detectionThreshold: string;
   enabledGeneSelectionStages: GeneSelectionStage[];
@@ -110,7 +230,6 @@ interface CreateProjectModalProps {
   onSelectAll: () => void;
   onToggleAlgorithm: (algorithmId: string, disabled: boolean) => void;
   setProjectName: (value: string) => void;
-  setMatrixState: (value: string) => void;
   setDatasetSpecies: (value: string) => void;
   setCustomTfListFile: (file: File | null) => void;
   setCustomTfListFileName: (value: string) => void;
@@ -149,7 +268,10 @@ export default function CreateProjectModal({
   groundTruthFileName,
   clusterLabelsFileName,
   matrixState,
+  setMatrixState,
+  isMatrixStateDetecting,
   datasetSpecies,
+  isSpeciesDetecting,
   customTfListFileName,
   detectionThreshold,
   enabledGeneSelectionStages,
@@ -189,7 +311,6 @@ export default function CreateProjectModal({
   onSelectAll,
   onToggleAlgorithm,
   setProjectName,
-  setMatrixState,
   setDatasetSpecies,
   setCustomTfListFile,
   setCustomTfListFileName,
@@ -252,6 +373,14 @@ export default function CreateProjectModal({
   const hasExpressionFile = Boolean(expressionFileName);
 
   const selectExpressionFile = (file: File | null) => {
+    if (!file && expressionFileName) {
+      const previousBaseName = expressionFileName.replace(/\.csv$/i, "").trim();
+      if (projectName.trim() === previousBaseName) {
+        setProjectName("");
+      }
+      setIsCustomizeOpen(false);
+      setOpenAdvancedSection(null);
+    }
     setExpressionFile(file);
     setExpressionFileName(file?.name ?? "");
   };
@@ -387,22 +516,30 @@ export default function CreateProjectModal({
   const startDisabled =
     isSubmitting ||
     !hasExpressionFile ||
+    isMatrixStateDetecting ||
     !matrixState ||
     !datasetSpecies ||
     selectedAlgorithms.length === 0 ||
     isLoadingAlgorithms;
 
-  // Named so the footer can explain a disabled Start instead of just greying out.
-  const missingRequirements = [
-    !hasExpressionFile ? "an expression matrix" : null,
-    !matrixState ? "matrix values" : null,
-    !datasetSpecies ? "a species" : null,
-    !isLoadingAlgorithms && selectedAlgorithms.length === 0
-      ? "at least one algorithm"
-      : null,
-  ].filter((item): item is string => item !== null);
+  const startHint = !hasExpressionFile
+    ? "Upload an expression matrix to continue."
+    : isMatrixStateDetecting
+      ? "Inspecting the expression matrix…"
+      : !matrixState
+        ? "This matrix could not be prepared automatically."
+        : !datasetSpecies
+          ? "Select a species to continue."
+          : isLoadingAlgorithms
+            ? "Loading compatible algorithms…"
+            : selectedAlgorithms.length === 0
+              ? "Select at least one algorithm to continue."
+              : null;
 
   const willRunSummary = (() => {
+    if (!hasExpressionFile) {
+      return "Upload a matrix to configure";
+    }
     const selectionLabels = [
       enabledGeneSelectionStages.includes("detection")
         ? `Detection ≥${detectionThreshold || "—"}%`
@@ -462,20 +599,20 @@ export default function CreateProjectModal({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm sm:px-6 lg:py-14 ${
+      className={`fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-10 backdrop-blur-sm sm:px-6 lg:py-14 ${
         isModalClosing ? "animate-modal-overlay-out" : "animate-modal-overlay"
       }`}
       onClick={cellOracleHelpTopic ? undefined : handleOutsideClose}
     >
       <div
         data-create-project-modal
-        className={`relative flex max-h-[calc(100vh-5rem)] w-full max-w-[56rem] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 lg:p-8 ${
+        className={`relative flex max-h-[calc(100vh-5rem)] w-full max-w-[48rem] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 transition-[height] duration-300 ease-out lg:p-8 ${
           isModalClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-6">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-950">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-950">
             Start an analysis
           </h2>
           <button
@@ -488,169 +625,85 @@ export default function CreateProjectModal({
           </button>
         </div>
 
-        <div className="mt-5 min-h-0 flex-1 scroll-pb-24 space-y-6 overflow-y-auto pb-24 pr-4 [scrollbar-gutter:stable]">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:items-start">
+        <div className="mt-5 min-h-0 flex-1 scroll-pb-6 space-y-5 overflow-y-auto pb-2 pr-4 [scrollbar-gutter:stable]">
+          <div>
             {expressionFileName ? (
-              <div className="flex min-h-40 min-w-0 items-center justify-between gap-4 rounded-[1.25rem] border border-slate-200 bg-slate-50/60 px-6 py-5">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
-                    Expression matrix
-                  </p>
-                  <p
-                    className="mt-1 truncate text-sm font-semibold text-slate-800"
-                    title={expressionFileName}
-                  >
-                    {formatFileNameForDisplay(expressionFileName, 42)}
-                  </p>
-                  {expressionMatrixDimensions !== null ? (
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      {expressionMatrixDimensions}
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60">
+                <div className="flex min-h-28 items-center justify-between gap-5 px-5 py-4">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
+                      Expression matrix
                     </p>
-                  ) : null}
+                    <p
+                      className="mt-1 truncate text-sm font-semibold text-slate-800"
+                      title={expressionFileName}
+                    >
+                      {formatFileNameForDisplay(expressionFileName, 42)}
+                    </p>
+                    {/* Detected facts as editable chips: auto-filled and quiet
+                        in the happy path, correctable in one click. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs font-medium text-slate-500">
+                      {expressionMatrixDimensions !== null ? (
+                        <>
+                          <span className="font-semibold text-slate-600">
+                            {expressionMatrixDimensions}
+                          </span>
+                          <span aria-hidden="true" className="text-slate-300">
+                            ·
+                          </span>
+                        </>
+                      ) : null}
+                      <EditableChip
+                        value={datasetSpecies}
+                        options={DATASET_SPECIES_OPTIONS}
+                        onChange={setDatasetSpecies}
+                        unsetLabel="Add species"
+                        ariaLabel="Dataset species"
+                        detecting={isSpeciesDetecting && !datasetSpecies}
+                      />
+                      <EditableChip
+                        value={matrixState}
+                        options={MATRIX_STATE_OPTIONS}
+                        onChange={setMatrixState}
+                        unsetLabel="Confirm values"
+                        ariaLabel="Matrix values"
+                        detecting={isMatrixStateDetecting && !matrixState}
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] leading-4 text-slate-400">
+                      Auto-detected from your matrix — click a chip to change.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
+                      Replace
+                      <input
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          selectExpressionFile(file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => selectExpressionFile(null)}
+                      className="cursor-pointer text-sm font-medium text-slate-500 transition hover:text-rose-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
-                    Replace
-                    <input
-                      type="file"
-                      accept=".csv"
-                      className="hidden"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        selectExpressionFile(file);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => selectExpressionFile(null)}
-                    className="cursor-pointer text-sm font-medium text-slate-500 transition hover:text-rose-600"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <label
-                className="relative flex min-h-40 min-w-0 cursor-pointer flex-col items-center justify-center rounded-[1.25rem] border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-5 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onDrop={handleExpressionDrop}
-              >
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    selectExpressionFile(file);
-                  }}
-                />
-                <FileNameDisplay
-                  fileName=""
-                  placeholder="Drop expression matrix CSV here"
-                />
-                <span className="mt-1.5 text-sm text-slate-500">
-                  or click to browse
-                </span>
-                <span className="mt-2 text-xs text-slate-400">
-                  Rows = genes; columns = cells
-                </span>
-              </label>
-            )}
-
-            <div className="min-w-0">
-              <fieldset className="min-w-0">
-                <legend className="text-sm font-semibold text-slate-800">
-                  Matrix values
-                  {!matrixState ? (
-                    <span className="ml-1.5 text-xs font-semibold text-[#1b75a6]/80">
-                      · required
-                    </span>
-                  ) : null}
-                </legend>
-                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
-                  {MATRIX_STATE_OPTIONS.map((option) => {
-                    const selected = matrixState === option.value;
-                    return (
-                      <label
-                        key={option.value}
-                        className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"
-                      >
-                        <input
-                          type="radio"
-                          name="matrix-state"
-                          value={option.value}
-                          checked={selected}
-                          onChange={() => setMatrixState(option.value)}
-                          className="sr-only"
-                        />
-                        {/* Round, not square: these options are mutually
-                            exclusive, and a checkbox shape would imply
-                            multi-select. */}
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
-                            selected
-                              ? "border-[#1b75a6] bg-white"
-                              : "border-slate-300 bg-white"
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {selected ? (
-                            <span className="h-2.5 w-2.5 rounded-full bg-[#1b75a6]" />
-                          ) : null}
-                        </span>
-                        {option.label}
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-
-              <div className="mt-7">
-                <label
-                  htmlFor="datasetSpecies"
-                  className="text-sm font-semibold text-slate-800"
-                >
-                  Dataset species
-                  {!datasetSpecies ? (
-                    <span className="ml-1.5 text-xs font-semibold text-[#1b75a6]/80">
-                      · required
-                    </span>
-                  ) : null}
-                </label>
-                <span className="relative mt-0.5 flex items-center">
-                  <select
-                    id="datasetSpecies"
-                    value={datasetSpecies}
-                    onChange={(event) => setDatasetSpecies(event.target.value)}
-                    className="w-full appearance-none border-0 border-b border-slate-200 bg-transparent px-0 py-2.5 pr-7 text-sm font-medium text-slate-800 outline-none transition focus:border-[#1b75a6]"
-                  >
-                    <option value="">Select species</option>
-                    {DATASET_SPECIES_OPTIONS.map((species) => (
-                      <option key={species.value} value={species.value}>
-                        {species.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-0 text-sm text-slate-500" aria-hidden="true">
-                    ▾
-                  </span>
-                </span>
                 {datasetSpecies === "other" ? (
-                  <div className="mt-5">
+                  <div className="border-t border-slate-200 bg-white/70 px-6 py-4">
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-slate-800">
-                            Upload your TF list
+                            TF list
                           </p>
                           <CellOracleHelpButton
                             label="Transcription factor list CSV format"
@@ -663,10 +716,10 @@ export default function CreateProjectModal({
                         </div>
                         {customTfListFileName ? (
                           <p
-                            className="mt-1 max-w-[15rem] truncate text-xs font-medium text-slate-500"
+                            className="mt-1 max-w-[28rem] truncate text-xs font-medium text-slate-500"
                             title={customTfListFileName}
                           >
-                            {formatFileNameForDisplay(customTfListFileName, 34)}
+                            {formatFileNameForDisplay(customTfListFileName, 52)}
                           </p>
                         ) : null}
                       </div>
@@ -705,23 +758,15 @@ export default function CreateProjectModal({
                         className="mt-3 rounded-xl border border-[#1b75a6]/15 bg-[#f7fbfd] px-3.5 py-3"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-bold text-slate-800">
-                              Required CSV format
-                            </p>
-                            <p className="mt-1 max-w-md text-xs leading-5 text-slate-600">
-                              Providing a transcription factor list can improve
-                              prediction performance.{" "}
-                              Use one TF per row. The{" "}
-                              <code className="font-semibold">gene_symbol</code>{" "}
-                              header is required;{" "}
-                              <code className="font-semibold">
-                                reference_gene_id
-                              </code>{" "}
-                              is optional. Identifiers should match gene rows in
-                              the expression matrix.
-                            </p>
-                          </div>
+                          <p className="max-w-md text-xs leading-5 text-slate-600">
+                            Use one TF per row.{" "}
+                            <code className="font-semibold">gene_symbol</code>{" "}
+                            is required;{" "}
+                            <code className="font-semibold">
+                              reference_gene_id
+                            </code>{" "}
+                            is optional.
+                          </p>
                           <a
                             href={`data:text/csv;charset=utf-8,${encodeURIComponent(
                               CUSTOM_TF_LIST_SAMPLE,
@@ -732,34 +777,87 @@ export default function CreateProjectModal({
                             Download sample
                           </a>
                         </div>
-                        <pre className="mt-2.5 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] leading-5 text-slate-600">
-                          {CUSTOM_TF_LIST_SAMPLE.trim()}
-                        </pre>
                       </div>
                     ) : null}
                   </div>
                 ) : null}
               </div>
-            </div>
+            ) : (
+              <label
+                className="relative flex min-h-40 min-w-0 cursor-pointer flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-[#1b75a6]/30 bg-[#f7fbff] px-6 py-6 text-center transition hover:border-[#1b75a6]/50 hover:bg-[#f2f9fc]"
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDrop={handleExpressionDrop}
+              >
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    selectExpressionFile(file);
+                  }}
+                />
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#e6f2fa] text-[#1b75a6]">
+                  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+                    <path
+                      d="M12 15V4m0 0 4 4m-4-4-4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <FileNameDisplay
+                    fileName=""
+                    placeholder="Drop expression matrix CSV here"
+                  />
+                  <span className="mt-1.5 block text-xs text-slate-500">
+                    or click to browse
+                    <span className="mx-2 text-slate-300" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="text-slate-400">
+                      Rows = genes; columns = cells
+                    </span>
+                  </span>
+                </div>
+              </label>
+            )}
           </div>
 
-          {/* Sits after the upload because it is auto-filled from that file. */}
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-800">
-              Analysis name
-            </span>
-            <input
-              id="projectName"
-              type="text"
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
-              placeholder="Auto-filled from uploaded expression matrix"
-              className="mt-1.5 w-full border-0 border-b border-slate-200 bg-transparent px-0 py-2.5 text-sm font-medium text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-[#1b75a6]"
-            />
-          </label>
+          {/* Only after upload — it is auto-filled from that file, so there is
+              nothing to name before one exists. */}
+          {expressionFileName ? (
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-800">
+                Analysis name
+              </span>
+              <input
+                id="projectName"
+                type="text"
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                placeholder="Auto-filled from uploaded expression matrix"
+                className="mt-1.5 w-full border-0 border-b border-slate-200 bg-transparent px-0 py-2.5 text-sm font-medium text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-[#1b75a6]"
+              />
+            </label>
+          ) : null}
 
           <div className="pt-5">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-50/80 px-4 py-3">
+            <div
+              className={`flex flex-wrap items-center justify-between gap-4 rounded-xl px-4 py-3 ${
+                hasExpressionFile ? "bg-slate-50/80" : "bg-slate-50/55"
+              }`}
+            >
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
                   Advanced settings
@@ -770,11 +868,12 @@ export default function CreateProjectModal({
               </div>
               <button
                 type="button"
+                disabled={!hasExpressionFile}
                 onClick={() => {
                   if (isCustomizeOpen) setOpenAdvancedSection(null);
                   setIsCustomizeOpen((prev) => !prev);
                 }}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:hover:border-slate-200"
                 aria-expanded={isCustomizeOpen}
               >
                 {isCustomizeOpen ? "Hide advanced ▴" : "Show advanced ▾"}
@@ -962,9 +1061,9 @@ export default function CreateProjectModal({
 
         <div className="-mx-6 -mb-6 mt-5 flex shrink-0 flex-wrap items-center justify-end gap-3 bg-white px-6 py-4 sm:rounded-b-[2rem] lg:-mx-8 lg:-mb-8 lg:px-8">
           {/* Say why Start is unavailable instead of leaving a dead button. */}
-          {!isSubmitting && missingRequirements.length > 0 ? (
+          {!isSubmitting && startHint ? (
             <p className="mr-auto text-xs font-medium text-slate-500">
-              Add {missingRequirements.join(", ")} to continue.
+              {startHint}
             </p>
           ) : null}
 

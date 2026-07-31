@@ -57,6 +57,10 @@ class PreprocessingContractTests(unittest.TestCase):
             ["detection", "trajectory", "variance"],
         )
         self.assertEqual(config["matrix_state"], "raw")
+        self.assertEqual(
+            config["matrix_state_selection"],
+            {"source": "user_override", "selected_state": "raw"},
+        )
         self.assertEqual(config["dataset_species"], "human")
         self.assertEqual(config["detection"]["minimum_cell_percent"], 10)
         self.assertEqual(config["trajectory"]["p_value_threshold"], 0.01)
@@ -84,6 +88,25 @@ class PreprocessingContractTests(unittest.TestCase):
                 values["enabled_gene_selection_stages"] = raw_stages
                 with self.assertRaises(ValueError):
                     build_preprocessing_config(**values)
+
+    def test_records_automatic_matrix_state_selection(self) -> None:
+        values = valid_form_values()
+        values["matrix_state"] = "log_normalized"
+        values["matrix_state_source"] = "automatic"
+
+        config = build_preprocessing_config(**values)
+
+        self.assertEqual(
+            config["matrix_state_selection"],
+            {
+                "source": "automatic",
+                "selected_state": "log_normalized",
+            },
+        )
+
+        values["matrix_state_source"] = "guessed"
+        with self.assertRaisesRegex(ValueError, "automatic or user_override"):
+            build_preprocessing_config(**values)
 
     def test_requires_filename_for_enabled_uploaded_gene_ordering(self) -> None:
         values = valid_form_values()

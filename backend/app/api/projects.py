@@ -29,6 +29,7 @@ from ..algorithm_registry import (
 from ..atomic_io import atomic_write_json
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
 from ..preprocessing_contract import build_preprocessing_config
+from ..matrix_state_detection import detect_matrix_state
 from .client_identity import (
     get_or_create_client_id,
     project_belongs_to_client,
@@ -342,6 +343,7 @@ async def create_pending_project(
     project_name: str = Form(...),
     project_description: str = Form(""),
     matrix_state: str = Form(...),
+    matrix_state_source: str = Form("user_override"),
     dataset_species: str = Form(...),
     enabled_gene_selection_stages: str = Form(...),
     detection_threshold_percent: str = Form("10"),
@@ -379,6 +381,7 @@ async def create_pending_project(
         )
         preprocessing_config = build_preprocessing_config(
             matrix_state=matrix_state,
+            matrix_state_source=matrix_state_source,
             dataset_species=dataset_species,
             enabled_gene_selection_stages=enabled_gene_selection_stages,
             detection_threshold_percent=detection_threshold_percent,
@@ -632,6 +635,36 @@ async def upload_project_dataset_and_start(
         )
         save_upload_file(expression_matrix, expression_path)
 
+        preprocessing_config = project_manifest.setdefault("preprocessing", {})
+        matrix_state_selection = preprocessing_config.setdefault(
+            "matrix_state_selection",
+            {
+                "source": "user_override",
+                "selected_state": preprocessing_config.get("matrix_state"),
+            },
+        )
+        try:
+            server_detection = detect_matrix_state(expression_path)
+        except Exception as exc:
+            server_detection = {
+                "version": 1,
+                "detected_state": None,
+                "confidence": "low",
+                "reasons": [f"Automatic detection could not be completed: {exc}"],
+            }
+        matrix_state_selection["server_detection"] = server_detection
+        detected_state = server_detection.get("detected_state")
+        if (
+            matrix_state_selection.get("source") == "automatic"
+            and detected_state in {"raw", "normalized", "log_normalized"}
+        ):
+            preprocessing_config["matrix_state"] = detected_state
+            matrix_state_selection["selected_state"] = detected_state
+        matrix_state_selection["agrees_with_server"] = (
+            detected_state is None
+            or detected_state == preprocessing_config.get("matrix_state")
+        )
+
         pseudotime_path: Path | None = None
         if pseudotime:
             pseudotime_path = (
@@ -769,6 +802,7 @@ async def upload_project_dataset_and_start(
                 "known_tf_reference": project_manifest.get(
                     "known_tf_reference", {}
                 ),
+                "preprocessing": preprocessing_config,
                 "gene_ordering_validation": {
                     "status": "pending" if gene_ordering_path else "not_required",
                 },

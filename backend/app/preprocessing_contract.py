@@ -84,6 +84,7 @@ def parse_enabled_preprocessing_stages(raw: str) -> list[str]:
 def build_preprocessing_config(
     *,
     matrix_state: str,
+    matrix_state_source: str = "user_override",
     dataset_species: str,
     enabled_gene_selection_stages: str,
     detection_threshold_percent: str,
@@ -98,6 +99,12 @@ def build_preprocessing_config(
     normalized_matrix_state = str(matrix_state).strip().lower()
     if normalized_matrix_state not in MATRIX_STATE_OPTIONS:
         raise ValueError(f"Unsupported matrix state: {normalized_matrix_state or 'empty'}.")
+
+    normalized_matrix_state_source = str(matrix_state_source).strip().lower()
+    if normalized_matrix_state_source not in {"automatic", "user_override"}:
+        raise ValueError(
+            "Matrix state source must be automatic or user_override."
+        )
 
     normalized_species = str(dataset_species).strip().lower()
     if normalized_species not in DATASET_SPECIES_OPTIONS:
@@ -153,6 +160,10 @@ def build_preprocessing_config(
     return {
         "schema_version": PREPROCESSING_SCHEMA_VERSION,
         "matrix_state": normalized_matrix_state,
+        "matrix_state_selection": {
+            "source": normalized_matrix_state_source,
+            "selected_state": normalized_matrix_state,
+        },
         "dataset_species": normalized_species,
         "enabled_stages": enabled_stages,
         "detection": {

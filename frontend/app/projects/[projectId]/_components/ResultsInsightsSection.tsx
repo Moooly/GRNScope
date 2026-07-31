@@ -20,6 +20,7 @@ import BenchmarkInsights from "./BenchmarkInsights";
 import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
+import DownloadMenu from "./DownloadMenu";
 
 export type VisualizationContext = {
   trajectory?: TrajectoryData;
@@ -127,25 +128,6 @@ function Panel({
     </section>
   );
 }
-
-function ExportButton({
-  label = "Export CSV",
-  onClick,
-}: {
-  label?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead]"
-    >
-      {label}
-    </button>
-  );
-}
-
 
 type ComparisonMode = "topology" | "direction" | "sign";
 type AgreementMetric = "jaccard" | "rbo" | "spearman";
@@ -519,6 +501,7 @@ function legacyRunStability(
     ]),
   );
   const values: number[] = [];
+  const valuesByRun = new Map(runIds.map((runId) => [runId, [] as number[]]));
   for (let firstIndex = 0; firstIndex < runIds.length; firstIndex += 1) {
     for (
       let secondIndex = firstIndex + 1;
@@ -529,7 +512,11 @@ function legacyRunStability(
         vectors.get(runIds[firstIndex]) ?? [],
         vectors.get(runIds[secondIndex]) ?? [],
       );
-      if (value !== null) values.push(value);
+      if (value !== null) {
+        values.push(value);
+        valuesByRun.get(runIds[firstIndex])?.push(value);
+        valuesByRun.get(runIds[secondIndex])?.push(value);
+      }
     }
   }
   if (!values.length) return null;
@@ -541,6 +528,13 @@ function legacyRunStability(
     madRho:
       values.reduce((sum, value) => sum + Math.abs(value - mean), 0) /
       values.length,
+    runAgreement: runIds.map((runId) => {
+      const runValues = valuesByRun.get(runId) ?? [];
+      return {
+        runId,
+        rho: runValues.length ? median(runValues) : null,
+      };
+    }),
   };
 }
 
@@ -556,308 +550,550 @@ function RepeatRunStabilityPanel({
   const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(
     null,
   );
-  const rows = useMemo(
-    () =>
-      activeAlgorithmIds.map((algorithmId) => {
-        const selected = selectedResultForScope(
-          algorithmResults[algorithmId],
-          selectedResultScopeId,
-        );
-        const summary = selected?.confidenceSummary;
-        const isGenuineBootstrap =
-          summary?.resampling_scheme ===
-            "cell_bootstrap_with_replacement_v1" &&
-          summary?.sampling_with_replacement === true;
-        const repeat = summary?.repeat_run_stability;
-        const earlyStopping = summary?.early_stopping;
-        const checks = (earlyStopping?.checks ?? [])
-          .map((check) => ({
-            runCount: Number(check.run_count) || 0,
-            rho: numericValue(check.rho),
-            status: check.status ?? "",
-          }))
-          .filter((check) => check.runCount > 0);
-        const fallback = repeat ? null : legacyRunStability(selected?.edges ?? []);
-        const runCount =
-          numericValue(summary?.bootstrap_runs) ??
-          numericValue(repeat?.run_count) ??
-          fallback?.runCount ??
-          0;
-        const usableRunCount =
-          numericValue(repeat?.usable_run_count) ??
-          numericValue(repeat?.run_count) ??
-          fallback?.runCount ??
-          runCount;
-        const medianRho =
-          numericValue(repeat?.median_rho) ?? fallback?.medianRho ?? null;
-        const madRho =
-          numericValue(repeat?.mad_rho) ?? fallback?.madRho ?? null;
-        const stopRho =
-          numericValue(earlyStopping?.stop_rho) ??
-          numericValue(summary?.stop_rho) ??
-          0.95;
-        const stopStreak =
-          numericValue(earlyStopping?.stop_streak) ??
-          numericValue(summary?.stop_streak) ??
-          2;
-        const earlyStoppingEnabled =
-          earlyStopping?.enabled === true ||
-          summary?.early_stopping_enabled === true;
 
-        let status = "Unavailable";
-        let tone = "bg-slate-100 text-slate-600";
-        if (earlyStopping?.stopped_early) {
-          status = "Stop rule met";
-          tone = "bg-emerald-50 text-emerald-700";
-        } else if (earlyStoppingEnabled) {
-          status = "Run cap reached";
-          tone = "bg-amber-50 text-amber-700";
-        } else if (isGenuineBootstrap) {
-          status = "Fixed bootstrap";
-          tone = "bg-emerald-50 text-emerald-700";
-        } else if (medianRho !== null) {
-          status = "Stability only";
-          tone = "bg-sky-50 text-[#087ead]";
-        }
+  const rows = useMemo(() => {
+    const built = activeAlgorithmIds.map((algorithmId) => {
+      const selected = selectedResultForScope(
+        algorithmResults[algorithmId],
+        selectedResultScopeId,
+      );
+      const summary = selected?.confidenceSummary;
+      const isGenuineBootstrap =
+        summary?.resampling_scheme === "cell_bootstrap_with_replacement_v1" &&
+        summary?.sampling_with_replacement === true;
+      const repeat = summary?.repeat_run_stability;
+      const earlyStopping = summary?.early_stopping;
+      const fallback = repeat ? null : legacyRunStability(selected?.edges ?? []);
+      const pairValuesByRun = new Map<string, number[]>();
+      for (const pair of repeat?.pairs ?? []) {
+        const firstRun = String(pair.first_run ?? "").trim();
+        const secondRun = String(pair.second_run ?? "").trim();
+        const rho = numericValue(pair.rho);
+        if (!firstRun || !secondRun || rho === null) continue;
+        if (!pairValuesByRun.has(firstRun)) pairValuesByRun.set(firstRun, []);
+        if (!pairValuesByRun.has(secondRun)) pairValuesByRun.set(secondRun, []);
+        pairValuesByRun.get(firstRun)?.push(rho);
+        pairValuesByRun.get(secondRun)?.push(rho);
+      }
+      const runAgreement = pairValuesByRun.size
+        ? [...pairValuesByRun.entries()]
+            .map(([runId, values]) => ({
+              runId,
+              rho: values.length ? median(values) : null,
+            }))
+            .sort((first, second) => {
+              const firstNumber = Number(first.runId.split("-").at(-1));
+              const secondNumber = Number(second.runId.split("-").at(-1));
+              return (
+                firstNumber - secondNumber ||
+                first.runId.localeCompare(second.runId)
+              );
+            })
+        : (fallback?.runAgreement ?? []);
+      const runCount =
+        numericValue(summary?.bootstrap_runs) ??
+        numericValue(repeat?.run_count) ??
+        fallback?.runCount ??
+        0;
+      const usableRunCount =
+        numericValue(repeat?.usable_run_count) ??
+        numericValue(repeat?.run_count) ??
+        fallback?.runCount ??
+        runCount;
+      const medianRho =
+        numericValue(repeat?.median_rho) ?? fallback?.medianRho ?? null;
+      const madRho =
+        numericValue(repeat?.mad_rho) ?? fallback?.madRho ?? null;
+      const stopRho =
+        numericValue(earlyStopping?.stop_rho) ??
+        numericValue(summary?.stop_rho) ??
+        0.95;
+      const stopStreak =
+        numericValue(earlyStopping?.stop_streak) ??
+        numericValue(summary?.stop_streak) ??
+        2;
+      const earlyStoppingEnabled =
+        earlyStopping?.enabled === true ||
+        summary?.early_stopping_enabled === true;
 
-        return {
-          algorithmId,
-          checks,
-          runCount,
-          usableRunCount,
-          pairCount:
-            numericValue(repeat?.pair_count) ?? fallback?.pairCount ?? 0,
-          medianRho,
-          madRho,
-          stopRho,
-          stopStreak,
-          status,
-          tone,
-          isGenuineBootstrap,
-          earlyStoppingEnabled,
-          hasLegacySummary: Boolean(fallback),
-        };
-      }),
-    [activeAlgorithmIds, algorithmResults, selectedResultScopeId],
+      return {
+        algorithmId,
+        runAgreement,
+        runCount,
+        usableRunCount,
+        medianRho,
+        madRho,
+        stopRho,
+        stopStreak,
+        stoppedEarly: earlyStopping?.stopped_early === true,
+        isGenuineBootstrap,
+        earlyStoppingEnabled,
+        hasLegacySummary: Boolean(fallback),
+      };
+    });
+    return built.slice().sort((a, b) => {
+      if (a.medianRho === null && b.medianRho === null) return 0;
+      if (a.medianRho === null) return 1;
+      if (b.medianRho === null) return -1;
+      return b.medianRho - a.medianRho;
+    });
+  }, [activeAlgorithmIds, algorithmResults, selectedResultScopeId]);
+
+  const uniformRule =
+    rows.length > 0 &&
+    rows.every(
+      (r) =>
+        r.stopRho === rows[0].stopRho && r.stopStreak === rows[0].stopStreak,
+    )
+      ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
+      : null;
+  const stabilityDescription = uniformRule
+    ? `Median pairwise Spearman ρ; stops after ${uniformRule.stopStreak} checks ≥ ${uniformRule.stopRho.toFixed(2)} in a row (3–15 runs).`
+    : "Median pairwise Spearman ρ; each method uses its own aggregate-ranking stop rule.";
+  const validRhos = rows
+    .map((row) => row.medianRho)
+    .filter((rho): rho is number => rho !== null);
+  const lowestRho = validRhos.length ? Math.min(...validRhos) : 0;
+  const plotMin = Math.max(
+    -1,
+    Math.min(0.9, Math.floor((lowestRho - 0.04) * 10) / 10),
   );
+  const plotMidpoint = (plotMin + 1) / 2;
+  const plotPosition = (rho: number) =>
+    Math.max(0, Math.min(100, ((rho - plotMin) / (1 - plotMin)) * 100));
+
+  const handleDownloadCsv = () => {
+    const maximumRunCount = Math.max(
+      0,
+      ...rows.map((row) => row.runAgreement.length),
+    );
+    const runHeaders = Array.from(
+      { length: maximumRunCount },
+      (_, index) => `run_${index + 1}_median_spearman_rho`,
+    );
+    downloadCsv("repeat-run-stability.csv", [
+      [
+        "algorithm",
+        "median_pairwise_spearman_rho",
+        "mean_absolute_deviation",
+        "bootstrap_runs",
+        "usable_runs",
+        "excluded_runs",
+        "stopped_early",
+        "stop_rho",
+        "required_consecutive_checks",
+        ...runHeaders,
+      ],
+      ...rows.map((row) => [
+        row.algorithmId,
+        row.medianRho ?? "",
+        row.madRho ?? "",
+        row.runCount,
+        row.usableRunCount,
+        Math.max(0, row.runCount - row.usableRunCount),
+        row.stoppedEarly ? "yes" : "no",
+        row.stopRho,
+        row.stopStreak,
+        ...Array.from({ length: maximumRunCount }, (_, index) => {
+          const rho = row.runAgreement[index]?.rho;
+          return rho === null || rho === undefined ? "" : rho;
+        }),
+      ]),
+    ]);
+  };
+
+  const handleDownloadPng = () => {
+    const width = 1600;
+    const margin = 56;
+    const titleY = 68;
+    const descriptionY = 102;
+    const tableY = 132;
+    const headerHeight = 58;
+    const rowHeight = 64;
+    const axisHeight = 38;
+    const tableHeight = headerHeight + rows.length * rowHeight + axisHeight;
+    const height = tableY + tableHeight + 56;
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.scale(scale, scale);
+
+    const roundedRect = (
+      x: number,
+      y: number,
+      rectWidth: number,
+      rectHeight: number,
+      radius: number,
+    ) => {
+      const safeRadius = Math.min(radius, rectWidth / 2, rectHeight / 2);
+      context.beginPath();
+      context.moveTo(x + safeRadius, y);
+      context.lineTo(x + rectWidth - safeRadius, y);
+      context.quadraticCurveTo(
+        x + rectWidth,
+        y,
+        x + rectWidth,
+        y + safeRadius,
+      );
+      context.lineTo(x + rectWidth, y + rectHeight - safeRadius);
+      context.quadraticCurveTo(
+        x + rectWidth,
+        y + rectHeight,
+        x + rectWidth - safeRadius,
+        y + rectHeight,
+      );
+      context.lineTo(x + safeRadius, y + rectHeight);
+      context.quadraticCurveTo(
+        x,
+        y + rectHeight,
+        x,
+        y + rectHeight - safeRadius,
+      );
+      context.lineTo(x, y + safeRadius);
+      context.quadraticCurveTo(x, y, x + safeRadius, y);
+      context.closePath();
+    };
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#0f172a";
+    context.font =
+      '800 28px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.fillText("Repeat-run stability", margin, titleY);
+    context.fillStyle = "#475569";
+    context.font =
+      '400 16px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.fillText(stabilityDescription, margin, descriptionY);
+
+    const tableX = margin;
+    const tableWidth = width - margin * 2;
+    roundedRect(tableX, tableY, tableWidth, tableHeight, 18);
+    context.fillStyle = "#ffffff";
+    context.fill();
+    context.strokeStyle = "#dbe4ee";
+    context.lineWidth = 1.5;
+    context.stroke();
+
+    const algorithmX = tableX + 26;
+    const plotStart = tableX + 370;
+    const plotEnd = tableX + 1110;
+    const medianX = tableX + 1150;
+    const runsX = tableX + 1355;
+    context.fillStyle = "#f8fafc";
+    roundedRect(tableX + 1, tableY + 1, tableWidth - 2, headerHeight, 17);
+    context.fill();
+    context.fillStyle = "#475569";
+    context.font =
+      '700 14px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    const headerBaseline = tableY + 35;
+    context.fillText("Algorithm", algorithmX, headerBaseline);
+    context.fillText(
+      "Repeat-run correlation (ρ)",
+      plotStart,
+      headerBaseline,
+    );
+    context.fillText("Median ρ", medianX, headerBaseline);
+    context.fillText("Bootstrap runs", runsX, headerBaseline);
+
+    rows.forEach((row, index) => {
+      const rowTop = tableY + headerHeight + index * rowHeight;
+      const centerY = rowTop + rowHeight / 2;
+      context.strokeStyle = "#e8eef5";
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(tableX, rowTop);
+      context.lineTo(tableX + tableWidth, rowTop);
+      context.stroke();
+
+      context.fillStyle = "#0f172a";
+      context.font =
+        '700 17px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      context.fillText(row.algorithmId, algorithmX, centerY + 6);
+
+      context.strokeStyle = "#dbe4ee";
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.moveTo(plotStart, centerY);
+      context.lineTo(plotEnd, centerY);
+      context.stroke();
+      [plotStart, (plotStart + plotEnd) / 2, plotEnd].forEach((x) => {
+        context.beginPath();
+        context.moveTo(x, centerY - 8);
+        context.lineTo(x, centerY + 8);
+        context.stroke();
+      });
+
+      if (row.medianRho !== null) {
+        const medianPosition =
+          plotStart + (plotEnd - plotStart) * (plotPosition(row.medianRho) / 100);
+        if (row.madRho !== null) {
+          const deviationStart =
+            plotStart +
+            (plotEnd - plotStart) *
+              (plotPosition(row.medianRho - row.madRho) / 100);
+          const deviationEnd =
+            plotStart +
+            (plotEnd - plotStart) *
+              (plotPosition(row.medianRho + row.madRho) / 100);
+          context.strokeStyle = "#8fc4d8";
+          context.lineWidth = 6;
+          context.lineCap = "round";
+          context.beginPath();
+          context.moveTo(deviationStart, centerY);
+          context.lineTo(Math.max(deviationStart + 2, deviationEnd), centerY);
+          context.stroke();
+          context.lineCap = "butt";
+        }
+        context.beginPath();
+        context.arc(medianPosition, centerY, 8, 0, Math.PI * 2);
+        context.fillStyle = "#087ead";
+        context.fill();
+        context.strokeStyle = "#ffffff";
+        context.lineWidth = 3;
+        context.stroke();
+      }
+
+      context.fillStyle = "#0f172a";
+      context.font =
+        '800 18px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      context.fillText(
+        row.medianRho === null ? "—" : row.medianRho.toFixed(3),
+        medianX,
+        centerY + 6,
+      );
+      context.fillStyle = "#475569";
+      context.font =
+        '600 15px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      context.fillText(
+        row.runCount ? plural(row.runCount, "run") : "—",
+        runsX,
+        centerY + 5,
+      );
+    });
+
+    const axisTop = tableY + headerHeight + rows.length * rowHeight;
+    context.strokeStyle = "#dbe4ee";
+    context.beginPath();
+    context.moveTo(tableX, axisTop);
+    context.lineTo(tableX + tableWidth, axisTop);
+    context.stroke();
+    context.fillStyle = "#94a3b8";
+    context.font =
+      '500 13px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.textAlign = "left";
+    context.fillText(plotMin.toFixed(2), plotStart, axisTop + 24);
+    context.textAlign = "center";
+    context.fillText(
+      plotMidpoint.toFixed(2),
+      (plotStart + plotEnd) / 2,
+      axisTop + 24,
+    );
+    context.textAlign = "right";
+    context.fillText("1.00", plotEnd, axisTop + 24);
+    context.textAlign = "left";
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "repeat-run-stability.png";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  };
 
   return (
     <Panel
       title="Repeat-run stability"
-      description="Spearman correlation summarizes consistency across bootstrap networks. Open a method for its run details."
+      description={stabilityDescription}
+      aside={
+        <DownloadMenu
+          ariaLabel="Download repeat-run stability"
+          items={[
+            {
+              label: "Table image",
+              format: "PNG",
+              description: "Presentation-ready view of the current table.",
+              onSelect: handleDownloadPng,
+            },
+            {
+              label: "Complete table",
+              format: "CSV",
+              description: "Includes every run-level Spearman value.",
+              onSelect: handleDownloadCsv,
+            },
+          ]}
+        />
+      }
     >
       <div className="overflow-hidden rounded-xl border border-slate-200">
-        <div className="hidden grid-cols-[minmax(8rem,0.8fr)_minmax(12rem,1.4fr)_5rem_4.5rem_8rem] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400 md:grid">
-          <span>Method</span>
-          <span>Run-to-run stability</span>
-          <span
-            className="cursor-help text-right"
-            tabIndex={0}
-            title="Mean absolute deviation of the pairwise Spearman correlations. Lower values indicate more consistent run pairs."
-            aria-label="MAD: mean absolute deviation of pairwise Spearman correlations"
-          >
-            MAD <span aria-hidden="true">ⓘ</span>
+        <div className="grn-table-header-grid hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] items-center gap-4 border-b border-slate-200 px-4 py-2.5 md:grid">
+          <span>Algorithm</span>
+          <span>
+            Repeat-run correlation (<span className="normal-case">ρ</span>)
           </span>
-          <span className="text-right">Runs</span>
-          <span className="text-right">Run plan</span>
+          <span>
+            Median <span className="normal-case">ρ</span>
+          </span>
+          <span>Bootstrap runs</span>
+          <span />
         </div>
         <div className="divide-y divide-slate-100">
-          {rows.map((row, rowIndex) => {
-            const normalized =
-              row.medianRho === null
-                ? null
-                : Math.max(0, Math.min(100, ((row.medianRho + 1) / 2) * 100));
-            const isExpanded = expandedAlgorithmId === row.algorithmId;
-            const panelId = `stability-checks-${rowIndex}`;
-            const excludedRunCount = Math.max(
-              0,
-              row.runCount - row.usableRunCount,
-            );
-            return (
-              <div key={row.algorithmId}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedAlgorithmId((current) =>
-                      current === row.algorithmId ? null : row.algorithmId,
-                    )
-                  }
-                  aria-expanded={isExpanded}
-                  aria-controls={panelId}
-                  className={`grid w-full cursor-pointer gap-3 px-4 py-3.5 text-left transition md:grid-cols-[minmax(8rem,0.8fr)_minmax(12rem,1.4fr)_5rem_4.5rem_8rem] md:items-center md:gap-4 ${
-                    isExpanded ? "bg-slate-50/70" : "hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-extrabold text-slate-900">
-                      {row.algorithmId}
-                    </span>
-                    <svg
-                      viewBox="0 0 16 16"
-                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform md:hidden ${
-                        isExpanded ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="m3.5 6 4.5 4 4.5-4"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 md:hidden">
-                      Stability
-                    </span>
-                    <span className="relative h-2.5 min-w-24 flex-1 rounded-full bg-gradient-to-r from-rose-100 via-slate-100 to-sky-200">
-                      {normalized !== null ? (
-                        <span
-                          className="absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#087ead] shadow-[0_0_0_2px_white]"
-                          style={{ left: `${normalized}%` }}
-                        />
-                      ) : null}
-                    </span>
-                    <span className="w-12 text-right text-sm font-extrabold tabular-nums text-slate-800">
-                      {row.medianRho === null ? "—" : row.medianRho.toFixed(3)}
-                    </span>
-                  </span>
-                  <span className="flex items-center justify-between gap-3 text-xs font-bold tabular-nums text-slate-600 md:block md:text-right">
-                    <span className="font-semibold text-slate-400 md:hidden">
-                      MAD
-                    </span>
-                    {row.madRho === null ? "—" : row.madRho.toFixed(3)}
-                  </span>
-                  <span className="flex items-center justify-between gap-3 text-xs font-bold tabular-nums text-slate-600 md:block md:text-right">
-                    <span className="font-semibold text-slate-400 md:hidden">
-                      Runs
-                    </span>
-                    {row.runCount || "—"}
-                  </span>
-                  <span className="flex items-center justify-between gap-2 md:justify-end">
-                    <span className="font-semibold text-slate-400 md:hidden">
-                      Run plan
-                    </span>
+        {rows.map((row, rowIndex) => {
+          const isExpanded = expandedAlgorithmId === row.algorithmId;
+          const panelId = `stability-checks-${rowIndex}`;
+          const excludedRunCount = Math.max(
+            0,
+            row.runCount - row.usableRunCount,
+          );
+          const rhoPosition =
+            row.medianRho === null ? null : plotPosition(row.medianRho);
+          const deviationStart =
+            row.medianRho === null || row.madRho === null
+              ? null
+              : plotPosition(row.medianRho - row.madRho);
+          const deviationEnd =
+            row.medianRho === null || row.madRho === null
+              ? null
+              : plotPosition(row.medianRho + row.madRho);
+          return (
+            <div
+              key={row.algorithmId}
+              className={isExpanded ? "bg-slate-50/70" : "bg-white"}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedAlgorithmId((current) =>
+                    current === row.algorithmId ? null : row.algorithmId,
+                  )
+                }
+                aria-expanded={isExpanded}
+                aria-controls={panelId}
+                className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-50 md:grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] md:gap-4"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
+                  {row.algorithmId}
+                </span>
+                <span className="relative hidden h-5 md:block">
+                  <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-slate-200" />
+                  <span className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-slate-200" />
+                  <span className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-slate-200" />
+                  <span className="absolute right-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-slate-200" />
+                  {deviationStart !== null && deviationEnd !== null ? (
                     <span
-                      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-extrabold ${row.tone}`}
-                    >
-                      {row.status}
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#8fc4d8]"
+                      style={{
+                        left: `${deviationStart}%`,
+                        width: `${Math.max(0.5, deviationEnd - deviationStart)}%`,
+                      }}
+                      title="Mean absolute deviation"
+                    />
+                  ) : null}
+                  {rhoPosition !== null ? (
+                    <span
+                      className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#087ead] shadow-sm"
+                      style={{ left: `${rhoPosition}%` }}
+                    />
+                  ) : null}
+                </span>
+                <span className="whitespace-nowrap text-sm font-extrabold tabular-nums text-slate-900">
+                  {row.medianRho === null
+                    ? "—"
+                    : row.medianRho.toFixed(3)}
+                </span>
+                <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-slate-500">
+                  {row.runCount ? plural(row.runCount, "run") : "—"}
+                </span>
+                <svg
+                  viewBox="0 0 16 16"
+                  className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+                    isExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="m3.5 6 4.5 4 4.5-4"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              {isExpanded ? (
+                <div
+                  id={panelId}
+                  className="border-t border-slate-200 bg-white px-4 py-3 text-xs"
+                >
+                  {row.runAgreement.length ? (
+                    <>
+                      <div className="mb-2 flex items-baseline justify-between gap-3">
+                        <span className="font-semibold text-slate-600">
+                          Spearman by run
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Median ρ vs other runs
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                        {row.runAgreement.map((run, runIndex) => (
+                          <span
+                            key={`${row.algorithmId}-${run.runId}`}
+                            className="inline-flex items-baseline gap-1 font-medium text-slate-500"
+                          >
+                            Run {runIndex + 1}
+                            <span className="tabular-nums text-slate-800">
+                              {run.rho === null
+                                ? "ρ —"
+                                : `ρ ${run.rho.toFixed(3)}`}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <span className="leading-5 text-slate-500">
+                      {row.earlyStoppingEnabled || row.isGenuineBootstrap
+                        ? "Per-run Spearman values were unavailable for this result."
+                        : row.hasLegacySummary
+                          ? "Per-run Spearman values could not be reconstructed."
+                          : "No per-run Spearman values were saved for this result."}
                     </span>
-                    <svg
-                      viewBox="0 0 16 16"
-                      className={`hidden h-4 w-4 shrink-0 text-slate-400 transition-transform md:block ${
-                        isExpanded ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="m3.5 6 4.5 4 4.5-4"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                {isExpanded ? (
-                  <div
-                    id={panelId}
-                    className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-xs"
-                  >
-                    {row.checks.length ? (
-                      <>
-                        <span className="font-bold text-slate-500">
-                          Stopping checks
-                        </span>
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          {row.checks.map((check) => {
-                            const passes =
-                              check.rho !== null && check.rho >= row.stopRho;
-                            return (
-                              <span
-                                key={`${row.algorithmId}-${check.runCount}`}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-600"
-                                title={
-                                  check.rho === null
-                                    ? check.status || "Unavailable"
-                                    : passes
-                                      ? "Stop condition met"
-                                      : "Below stop threshold"
-                                }
-                              >
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${
-                                    check.rho === null
-                                      ? "bg-slate-300"
-                                      : passes
-                                        ? "bg-emerald-500"
-                                        : "bg-[#087ead]"
-                                  }`}
-                                />
-                                Run {check.runCount}
-                                <span className="tabular-nums text-slate-800">
-                                  {check.rho === null
-                                    ? "ρ —"
-                                    : `ρ ${check.rho.toFixed(3)}`}
-                                </span>
-                              </span>
-                            );
-                          })}
-                        </span>
-                        <span className="text-slate-300" aria-hidden="true">
-                          ·
-                        </span>
-                        <span className="font-medium text-slate-500">
-                          Rule: {row.stopStreak} consecutive{" "}
-                          {row.stopStreak === 1 ? "check" : "checks"} at ρ ≥{" "}
-                          {row.stopRho.toFixed(2)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="leading-5 text-slate-500">
-                        {row.earlyStoppingEnabled
-                          ? "No usable Spearman stopping checks were available; all planned bootstrap samples were used."
-                          : row.isGenuineBootstrap
-                          ? "All planned with-replacement cell-bootstrap samples were used; data-dependent early stopping is disabled."
-                          : row.hasLegacySummary
-                          ? "Stopping checks were not saved; stability was reconstructed from the run rankings."
-                          : "No stopping checks were saved for this result."}
-                      </span>
-                    )}
-                    {row.medianRho !== null ? (
-                      <span className="ml-auto flex items-center gap-2 whitespace-nowrap text-[11px] font-semibold text-slate-400">
-                        <span>{plural(row.pairCount, "run pair")}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                          {excludedRunCount.toLocaleString()} excluded
-                        </span>
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+                  )}
+                  {excludedRunCount > 0 ? (
+                    <div className="mt-2 text-[10px] font-medium text-slate-400">
+                      {plural(excludedRunCount, "run")} excluded
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
         </div>
-      </div>
-      <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-500">
-        <span
-          className="mt-0.5 inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500"
-          tabIndex={0}
-          title="Pairwise correlations use the saved directed-edge universe. Edges missing from a run are aligned to zero; constant runs that cannot be correlated are excluded."
-          aria-label="Stability calculation details"
-        >
-          i
-        </span>
-        <p>
-          This measures consistency within each method. It is separate from the
-          method-agreement matrix below, which compares different algorithms.
-        </p>
+        <div className="hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] items-center gap-4 border-t border-slate-200 bg-slate-50/50 px-4 py-2 md:grid">
+          <span />
+          <span className="relative block h-3 text-[10px] font-medium text-slate-400">
+            <span className="absolute left-0 tabular-nums">
+              {plotMin.toFixed(2)}
+            </span>
+            <span className="absolute left-1/2 -translate-x-1/2 tabular-nums">
+              {plotMidpoint.toFixed(2)}
+            </span>
+            <span className="absolute right-0 tabular-nums">1.00</span>
+          </span>
+          <span />
+          <span />
+          <span />
+        </div>
       </div>
     </Panel>
   );
@@ -1265,6 +1501,17 @@ function ConsensusEdgeExplorer({
             onSortChange={changeSort}
             onMinimumSupportChange={changeMinimumSupport}
           />
+          <DownloadMenu
+            ariaLabel={`Download ${title.toLowerCase()}`}
+            items={[
+              {
+                label: "Complete edge table",
+                format: "CSV",
+                description: "Exports all matching rows, not only this page.",
+                onSelect: handleExport,
+              },
+            ]}
+          />
         </div>
       }
     >
@@ -1287,7 +1534,7 @@ function ConsensusEdgeExplorer({
                   <col className="w-[17%]" />
                   <col className="w-[5%]" />
                 </colgroup>
-                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-400 shadow-[0_1px_0_0_#e2e8f0]">
+                <thead className="grn-table-header sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
                   <tr>
                     <th className="px-4 py-3 text-center">Rank</th>
                     <th className="px-4 py-3">Regulation</th>
@@ -1592,27 +1839,6 @@ function ConsensusEdgeExplorer({
               Page {safePage} of {totalPages}
             </p>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleExport}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 font-bold text-slate-600 transition hover:border-[#087ead]/35 hover:bg-[#f2f9fc] hover:text-[#087ead]"
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  className="h-4 w-4"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M8 2.5v7m0 0 2.5-2.5M8 9.5 5.5 7M3 11.5v1.25c0 .41.34.75.75.75h8.5c.41 0 .75-.34.75-.75V11.5"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                CSV
-              </button>
               <div
                 className="inline-flex h-9 items-stretch overflow-hidden rounded-full border border-slate-200 bg-white"
                 role="group"
@@ -1896,27 +2122,51 @@ function AgreementView({
         title="Method agreement"
         description="Compare top-ranked results across methods. Select a cell to inspect shared and method-specific edges."
         aside={
-          <ComparisonSettingsMenu
-            topK={topK}
-            metric={metric}
-            mode={mode}
-            onTopKChange={setTopK}
-            onMetricChange={setMetric}
-            onModeChange={setMode}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <ComparisonSettingsMenu
+              topK={topK}
+              metric={metric}
+              mode={mode}
+              onTopKChange={setTopK}
+              onMetricChange={setMetric}
+              onModeChange={setMode}
+            />
+            <DownloadMenu
+              ariaLabel="Download method-agreement matrix"
+              items={[
+                {
+                  label: "Agreement matrix",
+                  format: "CSV",
+                  description: "Current methods, metric, mode, and top-edge limit.",
+                  onSelect: () =>
+                    downloadCsv("method-agreement.csv", [
+                      ["algorithm", ...eligibleAlgorithmIds],
+                      ...eligibleAlgorithmIds.map((rowId) => [
+                        rowId,
+                        ...eligibleAlgorithmIds.map((columnId) =>
+                          rowId === columnId
+                            ? 1
+                            : similarity(rowId, columnId).toFixed(6),
+                        ),
+                      ]),
+                    ]),
+                },
+              ]}
+            />
+          </div>
         }
       >
         {eligibleAlgorithmIds.length >= 2 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[38rem] border-separate border-spacing-1.5">
-                <thead>
+                <thead className="grn-table-header">
                   <tr>
-                    <th />
+                    <th className="rounded-l-lg px-3 py-2.5" />
                     {eligibleAlgorithmIds.map((algorithmId) => (
                       <th
                         key={algorithmId}
-                        className="max-w-28 truncate pb-2 text-center text-xs font-bold text-slate-500"
+                        className="max-w-28 truncate px-3 py-2.5 text-center"
                         title={algorithmId}
                       >
                         {algorithmId}
@@ -2037,9 +2287,15 @@ function AgreementView({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <ExportButton
-                      onClick={() =>
-                        downloadCsv("algorithm-pair-comparison.csv", [
+                    <DownloadMenu
+                      label="Download"
+                      ariaLabel="Download algorithm pair comparison"
+                      items={[
+                        {
+                          label: "Pair comparison",
+                          format: "CSV",
+                          onSelect: () =>
+                            downloadCsv("algorithm-pair-comparison.csv", [
                           ["group", "edge"],
                           ...pairDetails.shared.map((key) => ["shared", key]),
                           ...pairDetails.firstOnly.map((key) => [
@@ -2050,8 +2306,9 @@ function AgreementView({
                             `${pairDetails.secondId}_only`,
                             key,
                           ]),
-                        ])
-                      }
+                            ]),
+                        },
+                      ]}
                     />
                     <button
                       type="button"

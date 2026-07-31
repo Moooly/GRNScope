@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  downloadCsv,
+  downloadSvg,
+  downloadSvgPng,
+} from "../_lib/downloads";
+import DownloadMenu from "./DownloadMenu";
 
 export type TrajectoryData = {
   available: boolean;
@@ -693,6 +699,8 @@ export default function TrajectoryInsights({
   const [requestedLineageName, setRequestedLineageName] = useState("");
   const [geneQuery, setGeneQuery] = useState("");
   const [isGeneSearchOpen, setIsGeneSearchOpen] = useState(false);
+  const cellChartRef = useRef<HTMLDivElement | null>(null);
+  const geneChartRef = useRef<HTMLDivElement | null>(null);
   const lineages = useMemo(
     () => trajectory?.lineages ?? [],
     [trajectory?.lineages],
@@ -759,11 +767,44 @@ export default function TrajectoryInsights({
     trajectory.pseudotime_source === "estimated"
       ? "Estimated pseudotime"
       : "Uploaded pseudotime";
+  const activeChartRef = mode === "cells" ? cellChartRef : geneChartRef;
+  const activeFilename =
+    mode === "cells" ? "cell-trajectory" : "gene-trends-over-pseudotime";
+  const downloadActiveChart = async (format: "svg" | "png") => {
+    const svg = activeChartRef.current?.querySelector("svg");
+    if (!svg) throw new Error("The current chart is not available to download.");
+    if (format === "svg") {
+      downloadSvg(svg, `${activeFilename}.svg`);
+    } else {
+      await downloadSvgPng(svg, `${activeFilename}.png`);
+    }
+  };
+  const downloadActiveData = () => {
+    if (mode === "cells" && trajectory.embedding) {
+      downloadCsv("cell-trajectory.csv", [
+        ["cell", "embedding_x", "embedding_y", "lineage", "pseudotime"],
+        ...trajectory.embedding.points.map((point) => [
+          point.cell,
+          point.x,
+          point.y,
+          lineage.name,
+          point.pseudotime[lineage.name],
+        ]),
+      ]);
+      return;
+    }
+    downloadCsv("gene-trends-over-pseudotime.csv", [
+      ["gene", "pseudotime", "fitted_expression"],
+      ...series.flatMap((item) =>
+        item.trend.map((point) => [item.name, point.x, point.y]),
+      ),
+    ]);
+  };
 
   return (
     <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="min-w-0 flex-1">
           <h3 className="text-lg font-extrabold text-slate-950">
             {mode === "cells"
               ? "Cell trajectory"
@@ -777,11 +818,33 @@ export default function TrajectoryInsights({
               : "Relative gene-trend shapes independently scaled from 0 to 1. Compare timing and shape, not expression magnitude."}
           </p>
         </div>
-        <LineageMenu
-          lineages={lineages}
-          value={lineage.name}
-          onChange={setRequestedLineageName}
-        />
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <LineageMenu
+            lineages={lineages}
+            value={lineage.name}
+            onChange={setRequestedLineageName}
+          />
+          <DownloadMenu
+            ariaLabel={`Download ${mode === "cells" ? "cell trajectory" : "gene trends"}`}
+            items={[
+              {
+                label: "Chart image",
+                format: "PNG",
+                onSelect: () => downloadActiveChart("png"),
+              },
+              {
+                label: "Vector chart",
+                format: "SVG",
+                onSelect: () => downloadActiveChart("svg"),
+              },
+              {
+                label: "Chart values",
+                format: "CSV",
+                onSelect: downloadActiveData,
+              },
+            ]}
+          />
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200">
@@ -825,10 +888,12 @@ export default function TrajectoryInsights({
         {mode === "cells" ? (
           hasEmbedding && trajectory.embedding ? (
             <>
-              <CellTrajectoryChart
-                embedding={trajectory.embedding}
-                lineageName={lineage.name}
-              />
+              <div ref={cellChartRef}>
+                <CellTrajectoryChart
+                  embedding={trajectory.embedding}
+                  lineageName={lineage.name}
+                />
+              </div>
               <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
                 {hasFittedSlingshotCurve
                   ? `Cell positions use the ${trajectory.embedding.method} coordinates supplied to Slingshot. The solid line is Slingshot's fitted principal curve; it is not reconstructed from display bins.`
@@ -929,7 +994,9 @@ export default function TrajectoryInsights({
                 ) : null}
               </div>
             </div>
-            <GeneTrendComparisonChart series={series} />
+            <div ref={geneChartRef}>
+              <GeneTrendComparisonChart series={series} />
+            </div>
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
               Shape only: every low-complexity cubic trend is independently
               scaled from 0 to 1. Hover a line to see its original fitted{" "}

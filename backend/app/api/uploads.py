@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from ..schemas import TempUploadResponse
 from ..species_inference import infer_species_from_gene_names
@@ -29,8 +30,25 @@ router = APIRouter()
 METADATA_NAME_PREVIEW_LIMIT = 1000
 
 
+class SpeciesInferenceRequest(BaseModel):
+    gene_names: list[str]
+
+
 def preview_names(names: list[str]) -> list[str]:
     return names[:METADATA_NAME_PREVIEW_LIMIT]
+
+
+@router.post("/api/uploads/infer-species")
+async def infer_uploaded_species(request: SpeciesInferenceRequest):
+    if len(request.gene_names) > 100_000:
+        raise HTTPException(
+            status_code=400,
+            detail="Too many gene identifiers were submitted for species detection.",
+        )
+    return {
+        "ok": True,
+        "inference": infer_species_from_gene_names(request.gene_names),
+    }
 
 
 @router.post("/api/uploads/temp-dataset", response_model=TempUploadResponse)
