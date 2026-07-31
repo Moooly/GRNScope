@@ -54,6 +54,38 @@ const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
 const CELLORACLE_SPECIES_ERROR_TYPE = "celloracle_species_mismatch";
 
+function markJobTasksStopping(
+  job: ProjectJob | null,
+  shouldStop: (algorithmId: string) => boolean,
+) {
+  if (!job) return job;
+
+  let changed = false;
+  const tasks = job.tasks.map((task) => {
+    if (
+      !shouldStop(task.algorithm_id) ||
+      (task.status !== "Running" && task.status !== "Queued")
+    ) {
+      return task;
+    }
+
+    changed = true;
+    return {
+      ...task,
+      status: "Stopping",
+      progress_label: "Stopping",
+    };
+  });
+
+  return changed
+    ? {
+        ...job,
+        overall_status: "Stopping",
+        tasks,
+      }
+    : job;
+}
+
 function isCellOracleSpeciesMismatch(
   algorithmId: string,
   errorMessage: string,
@@ -354,6 +386,7 @@ export default function ProjectDetailPage() {
   const [isStopProjectModalClosing, setIsStopProjectModalClosing] = useState(false);
   const [isStoppingProject, setIsStoppingProject] = useState(false);
   const [stopProjectError, setStopProjectError] = useState("");
+  const [backgroundActionError, setBackgroundActionError] = useState("");
   const [resultsHubView, setResultsHubView] = useState<ResultsHubView>("network");
   const [visualizationContext, setVisualizationContext] =
     useState<VisualizationContext | null>(null);
@@ -364,6 +397,7 @@ export default function ProjectDetailPage() {
   const networkGraphRef = useRef<Core | null>(null);
   const hasAppliedDemoDefaultsRef = useRef(false);
   const algorithmActionCloseTimeoutRef = useRef<number | null>(null);
+  const stopProjectCloseTimeoutRef = useRef<number | null>(null);
 
   const demoProjectFlag = project as (ProjectManifest & { is_demo?: boolean; read_only?: boolean }) | null;
   const demoMetadataFlag = metadata as (MetadataManifest & { is_demo?: boolean; read_only?: boolean }) | null;
@@ -402,6 +436,9 @@ export default function ProjectDetailPage() {
     return () => {
       if (algorithmActionCloseTimeoutRef.current) {
         window.clearTimeout(algorithmActionCloseTimeoutRef.current);
+      }
+      if (stopProjectCloseTimeoutRef.current) {
+        window.clearTimeout(stopProjectCloseTimeoutRef.current);
       }
     };
   }, []);
@@ -1831,13 +1868,61 @@ export default function ProjectDetailPage() {
     const jobId = latestJob.job_id;
     const { algorithmId, type } = pendingAlgorithmAction;
 
+    if (type === "stop") {
+      const action = pendingAlgorithmAction;
+      const previousJob = latestJob;
+
+      setAlgorithmActionError("");
+      setBackgroundActionError("");
+      setLatestJob((currentJob) =>
+        markJobTasksStopping(
+          currentJob,
+          (taskAlgorithmId) => taskAlgorithmId === algorithmId,
+        ),
+      );
+      clearCachedResults(projectId);
+      finishAlgorithmActionModal();
+
+      void (async () => {
+        try {
+          const response = await apiFetch(
+            `${API_BASE}/projects/${projectId}/jobs/${jobId}/tasks/${algorithmId}/stop`,
+            { method: "POST", keepalive: true },
+          );
+          const payload = await response.json().catch(() => null) as {
+            detail?: string;
+            latest_job?: ProjectJob;
+          } | null;
+
+          if (!response.ok) {
+            throw new Error(
+              payload?.detail || `The server returned HTTP ${response.status}.`,
+            );
+          }
+
+          if (payload?.latest_job) {
+            setLatestJob(payload.latest_job);
+          }
+        } catch (actionError) {
+          setLatestJob(previousJob);
+          setBackgroundActionError(
+            actionError instanceof Error && actionError.message
+              ? `Could not stop ${action.algorithmName}: ${actionError.message}`
+              : `Could not stop ${action.algorithmName}. Please try again.`,
+          );
+          void refreshProjectData();
+        }
+      })();
+      return;
+    }
+
     setIsAlgorithmActionSubmitting(true);
     setAlgorithmActionError("");
     let succeeded = false;
 
     try {
       const response = await apiFetch(
-        `${API_BASE}/projects/${projectId}/jobs/${jobId}/tasks/${algorithmId}/${type === "stop" ? "stop" : "rerun"}`,
+        `${API_BASE}/projects/${projectId}/jobs/${jobId}/tasks/${algorithmId}/rerun`,
         { method: "POST" }
       );
 
@@ -1854,9 +1939,6 @@ export default function ProjectDetailPage() {
       // A stop/rerun changes this project's results, so drop any cached edges
       // for it — the next visit must reload fresh.
       if (projectId) clearCachedResults(projectId);
-      // Apply the optimistic state the endpoint returns (e.g. "Stopping")
-      // right away, then reconcile with a full refresh in the background so
-      // the modal can close without waiting on the heavier fetch.
       if (payload?.latest_job) {
         setLatestJob(payload.latest_job);
       }
@@ -1877,55 +1959,75 @@ export default function ProjectDetailPage() {
   const closeStopProjectModal = () => {
     if (isStoppingProject) return;
     setIsStopProjectModalClosing(true);
-    window.setTimeout(() => {
+    if (stopProjectCloseTimeoutRef.current) {
+      window.clearTimeout(stopProjectCloseTimeoutRef.current);
+    }
+    stopProjectCloseTimeoutRef.current = window.setTimeout(() => {
       setIsStopProjectModalOpen(false);
       setIsStopProjectModalClosing(false);
+      stopProjectCloseTimeoutRef.current = null;
     }, 280);
   };
 
-  const confirmStopProject = async () => {
+  const confirmStopProject = () => {
     if (!projectId || isDemoProject) return;
+
+    const previousJob = latestJob;
     setIsStoppingProject(true);
     setStopProjectError("");
-    let succeeded = false;
-    try {
-      const response = await apiFetch(`${API_BASE}/projects/${projectId}/stop`, {
-        method: "POST",
-      });
-      const payload = await response.json().catch(() => null) as {
-        detail?: string;
-        latest_job?: ProjectJob;
-      } | null;
-      if (!response.ok) {
-        throw new Error(
-          payload?.detail || `The server returned HTTP ${response.status}.`,
-        );
-      }
+    setBackgroundActionError("");
+    setLatestJob((currentJob) =>
+      markJobTasksStopping(currentJob, () => true),
+    );
+    clearCachedResults(projectId);
+    setIsStopProjectModalClosing(true);
 
-      if (projectId) clearCachedResults(projectId);
-      if (payload?.latest_job) {
-        setLatestJob(payload.latest_job);
-      }
-      void refreshProjectData();
-      succeeded = true;
-    } catch (stopError) {
-      setStopProjectError(
-        stopError instanceof Error && stopError.message
-          ? stopError.message
-          : "The project could not be stopped. Please try again.",
-      );
-    } finally {
-      setIsStoppingProject(false);
-      if (succeeded) {
-        setIsStopProjectModalClosing(true);
-        window.setTimeout(() => {
-          setIsStopProjectModalOpen(false);
-          setIsStopProjectModalClosing(false);
-        }, 280);
-      }
+    if (stopProjectCloseTimeoutRef.current) {
+      window.clearTimeout(stopProjectCloseTimeoutRef.current);
     }
+    stopProjectCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsStopProjectModalOpen(false);
+      setIsStopProjectModalClosing(false);
+      stopProjectCloseTimeoutRef.current = null;
+    }, 280);
+
+    void (async () => {
+      try {
+        const response = await apiFetch(`${API_BASE}/projects/${projectId}/stop`, {
+          method: "POST",
+          keepalive: true,
+        });
+        const payload = await response.json().catch(() => null) as {
+          detail?: string;
+          latest_job?: ProjectJob;
+        } | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload?.detail || `The server returned HTTP ${response.status}.`,
+          );
+        }
+
+        if (payload?.latest_job) {
+          setLatestJob(payload.latest_job);
+        }
+      } catch (stopError) {
+        setLatestJob(previousJob);
+        setBackgroundActionError(
+          stopError instanceof Error && stopError.message
+            ? `Could not stop the analysis: ${stopError.message}`
+            : "The analysis could not be stopped. Please try again.",
+        );
+        void refreshProjectData();
+      } finally {
+        setIsStoppingProject(false);
+      }
+    })();
   };
 
+  const hasStoppableTasks = allJobTasks.some(
+    (task) => task.status === "Running" || task.status === "Queued",
+  );
   const stopRunningCount = allJobTasks.filter(
     (task) => task.status === "Running" || task.status === "Stopping",
   ).length;
@@ -2253,6 +2355,22 @@ useEffect(() => {
 
   return (
     <main className="min-h-screen bg-[#f7fbff] text-slate-900">
+      {backgroundActionError ? (
+        <div
+          role="alert"
+          className="fixed bottom-6 left-6 right-6 z-[95] flex max-w-sm items-start gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-semibold text-rose-700 shadow-xl shadow-slate-900/10 sm:left-auto"
+        >
+          <span className="min-w-0 flex-1">{backgroundActionError}</span>
+          <button
+            type="button"
+            onClick={() => setBackgroundActionError("")}
+            aria-label="Dismiss stop error"
+            className="shrink-0 rounded-full px-1 text-lg leading-none text-rose-400 transition hover:bg-rose-50 hover:text-rose-700"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <section className="relative overflow-x-clip overflow-y-visible bg-[#f7fbff]">
         <div className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10">
           <ProjectHeader
@@ -2280,7 +2398,7 @@ useEffect(() => {
                         isDemoProject ? undefined : handleSaveNotificationEmail
                       }
                       onStopProject={
-                        isDemoProject
+                        isDemoProject || !hasStoppableTasks
                           ? undefined
                           : () => {
                               setStopProjectError("");

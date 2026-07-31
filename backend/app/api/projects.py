@@ -1291,7 +1291,7 @@ def delete_project(project_id: str, request: Request, response: Response):
 
 
 @router.post("/api/projects/{project_id}/stop")
-async def stop_project(
+def stop_project(
     project_id: str,
     request: Request,
     response: Response,

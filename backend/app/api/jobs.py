@@ -34,7 +34,7 @@ async def get_project_jobs(project_id: str, request: Request, response: Response
 
 
 @router.post("/api/projects/{project_id}/jobs/{job_id}/tasks/{algorithm_id}/stop")
-async def stop_project_algorithm(
+def stop_project_algorithm(
     project_id: str,
     job_id: str,
     algorithm_id: str,
