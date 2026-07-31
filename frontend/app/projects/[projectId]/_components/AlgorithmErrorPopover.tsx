@@ -82,6 +82,8 @@ export default function AlgorithmErrorPopover({
   }, [task, anchorElement, onClose]);
 
   if (!task || typeof document === "undefined") return null;
+  const isCellOracleSpeciesMismatch =
+    task.errorType === "celloracle_species_mismatch";
 
   const openContactSupport = () => {
     const pageUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -114,7 +116,21 @@ export default function AlgorithmErrorPopover({
       }}
       className="z-[70] w-[min(22rem,calc(100vw-1rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/15"
     >
-      <p className="text-sm leading-6 text-slate-700">{task.errorMessage}</p>
+      {isCellOracleSpeciesMismatch ? (
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">
+            Dataset setting
+          </p>
+          <h3 className="mt-1 text-base font-extrabold text-slate-950">
+            Possible species mismatch
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            {task.errorMessage}
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm leading-6 text-slate-700">{task.errorMessage}</p>
+      )}
       <div className="mt-4 flex items-center justify-end gap-2">
         <button
           type="button"
