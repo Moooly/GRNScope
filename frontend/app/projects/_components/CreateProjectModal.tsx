@@ -640,8 +640,8 @@ export default function CreateProjectModal({
                     >
                       {formatFileNameForDisplay(expressionFileName, 42)}
                     </p>
-                    {/* Detected facts as editable chips: auto-filled and quiet
-                        in the happy path, correctable in one click. */}
+                    {/* Keep detected facts compact and editable. Species gets a
+                        lightweight required cue until the user confirms it. */}
                     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs font-medium text-slate-500">
                       {expressionMatrixDimensions !== null ? (
                         <>
@@ -653,14 +653,22 @@ export default function CreateProjectModal({
                           </span>
                         </>
                       ) : null}
-                      <EditableChip
-                        value={datasetSpecies}
-                        options={DATASET_SPECIES_OPTIONS}
-                        onChange={setDatasetSpecies}
-                        unsetLabel="Add species"
-                        ariaLabel="Dataset species"
-                        detecting={isSpeciesDetecting && !datasetSpecies}
-                      />
+                      <span className="relative inline-flex">
+                        {!datasetSpecies && !isSpeciesDetecting ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute -right-0.5 -top-0.5 z-10 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-slate-50"
+                          />
+                        ) : null}
+                        <EditableChip
+                          value={datasetSpecies}
+                          options={DATASET_SPECIES_OPTIONS}
+                          onChange={setDatasetSpecies}
+                          unsetLabel="Choose species"
+                          ariaLabel="Dataset species, required"
+                          detecting={isSpeciesDetecting && !datasetSpecies}
+                        />
+                      </span>
                       <EditableChip
                         value={matrixState}
                         options={MATRIX_STATE_OPTIONS}
@@ -670,9 +678,18 @@ export default function CreateProjectModal({
                         detecting={isMatrixStateDetecting && !matrixState}
                       />
                     </div>
-                    <p className="mt-2 text-[11px] leading-4 text-slate-400">
-                      Auto-detected from your matrix — click a chip to change.
-                    </p>
+                    {!datasetSpecies && !isSpeciesDetecting ? (
+                      <p className="mt-2 text-[11px] font-medium leading-4 text-[#1b75a6]">
+                        <span>
+                          <span className="font-semibold">Choose a species</span>{" "}
+                          to continue to analysis
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-[11px] leading-4 text-slate-400">
+                        Auto-detected from your matrix — click a chip to change.
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
