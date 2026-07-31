@@ -266,6 +266,8 @@ const CIRCOS_EXPORT_STYLE_PROPERTIES = [
   "text-anchor",
   "dominant-baseline",
 ];
+const WEBSITE_EXPORT_FONT_FAMILY = "Arial, Helvetica, sans-serif";
+const NETWORK_EXPORT_LEGEND_HEIGHT = 92;
 
 function getSvgExportSize(svgElement: SVGSVGElement) {
   const viewBox = svgElement.getAttribute("viewBox");
@@ -323,6 +325,264 @@ function inlineSvgComputedStyles(sourceSvg: SVGSVGElement, clonedSvg: SVGSVGElem
     }
     clonedElement.removeAttribute("class");
   });
+}
+
+function appendSvgElement(
+  parent: Element,
+  tagName: string,
+  attributes: Record<string, string | number>,
+  text?: string,
+) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tagName);
+  Object.entries(attributes).forEach(([name, value]) => {
+    element.setAttribute(name, String(value));
+  });
+  if (text !== undefined) element.textContent = text;
+  parent.appendChild(element);
+  return element;
+}
+
+function appendNetworkExportLegend(
+  svgElement: SVGSVGElement,
+  width: number,
+  height: number,
+  variant: "network" | "circos",
+) {
+  const legendTop = height;
+  const legendBottom = height + NETWORK_EXPORT_LEGEND_HEIGHT;
+  svgElement.style.fontFamily = WEBSITE_EXPORT_FONT_FAMILY;
+  svgElement.setAttribute("viewBox", `0 0 ${width} ${legendBottom}`);
+  svgElement.setAttribute("width", String(width));
+  svgElement.setAttribute("height", String(legendBottom));
+
+  const legend = appendSvgElement(svgElement, "g", {
+    "aria-label": "Network legend",
+    "font-family": WEBSITE_EXPORT_FONT_FAMILY,
+  });
+  appendSvgElement(legend, "rect", {
+    x: 0,
+    y: legendTop,
+    width,
+    height: NETWORK_EXPORT_LEGEND_HEIGHT,
+    fill: "#f8fafc",
+  });
+  appendSvgElement(legend, "line", {
+    x1: 0,
+    x2: width,
+    y1: legendTop,
+    y2: legendTop,
+    stroke: "#dbe4ee",
+  });
+  appendSvgElement(
+    legend,
+    "text",
+    {
+      x: 24,
+      y: legendTop + 24,
+      fill: "#475569",
+      "font-size": 12,
+      "font-weight": 700,
+    },
+    "Legend",
+  );
+
+  const firstRowY = legendTop + 45;
+  const secondRowY = legendTop + 72;
+  const columnWidth = Math.max(150, (width - 48) / 3);
+  const addText = (x: number, y: number, label: string) =>
+    appendSvgElement(
+      legend,
+      "text",
+      {
+        x,
+        y,
+        fill: "#475569",
+        "font-size": 11,
+        "font-weight": 600,
+      },
+      label,
+    );
+
+  const addLineMeaning = (
+    column: number,
+    y: number,
+    label: string,
+    head: "arrow" | "tee" | "none",
+    color = "#64748b",
+  ) => {
+    const x = 24 + column * columnWidth;
+    appendSvgElement(legend, "line", {
+      x1: x,
+      x2: x + 34,
+      y1: y - 4,
+      y2: y - 4,
+      stroke: color,
+      "stroke-width": 2.5,
+      "stroke-linecap": "round",
+    });
+    if (head === "arrow") {
+      appendSvgElement(legend, "path", {
+        d: `M ${x + 28} ${y - 10} L ${x + 38} ${y - 4} L ${x + 28} ${y + 2} Z`,
+        fill: color,
+      });
+    } else if (head === "tee") {
+      appendSvgElement(legend, "line", {
+        x1: x + 35,
+        x2: x + 35,
+        y1: y - 11,
+        y2: y + 3,
+        stroke: color,
+        "stroke-width": 3,
+        "stroke-linecap": "round",
+      });
+    }
+    addText(x + 47, y, label);
+  };
+
+  if (variant === "circos") {
+    addLineMeaning(0, firstRowY, "Activation ribbon", "none", "#0072B2");
+    addLineMeaning(1, firstRowY, "Repression ribbon", "none", "#D55E00");
+    addLineMeaning(2, firstRowY, "Unsigned ribbon", "none", "#94a3b8");
+    const x = 24;
+    appendSvgElement(legend, "line", {
+      x1: x,
+      x2: x + 38,
+      y1: secondRowY - 4,
+      y2: secondRowY - 4,
+      stroke: "#64748b",
+      "stroke-width": 5,
+      "stroke-linecap": "round",
+      opacity: 0.78,
+    });
+    addText(x + 48, secondRowY, "Ribbon width and opacity indicate stronger evidence");
+  } else {
+    addLineMeaning(0, firstRowY, "Activation", "arrow");
+    addLineMeaning(1, firstRowY, "Repression", "tee");
+    addLineMeaning(2, firstRowY, "Unannotated regulation", "none");
+
+    const firstX = 24;
+    appendSvgElement(legend, "path", {
+      d: `M ${firstX + 8} ${secondRowY - 14} L ${firstX + 17} ${secondRowY - 5} L ${firstX + 8} ${secondRowY + 4} L ${firstX - 1} ${secondRowY - 5} Z`,
+      fill: "#334155",
+    });
+    addText(firstX + 27, secondRowY, "Transcription factor");
+
+    const secondX = 24 + columnWidth;
+    appendSvgElement(legend, "circle", {
+      cx: secondX + 8,
+      cy: secondRowY - 5,
+      r: 9,
+      fill: "#334155",
+    });
+    addText(secondX + 27, secondRowY, "Target gene");
+
+    const thirdX = 24 + columnWidth * 2;
+    appendSvgElement(legend, "line", {
+      x1: thirdX,
+      x2: thirdX + 38,
+      y1: secondRowY - 5,
+      y2: secondRowY - 5,
+      stroke: "#64748b",
+      "stroke-width": 5,
+      "stroke-linecap": "round",
+    });
+    addText(thirdX + 48, secondRowY, "Thicker line = stronger evidence");
+  }
+
+  return {
+    width,
+    height: legendBottom,
+  };
+}
+
+function drawNetworkCanvasLegend(
+  context: CanvasRenderingContext2D,
+  width: number,
+  legendTop: number,
+) {
+  context.fillStyle = "#f8fafc";
+  context.fillRect(0, legendTop, width, NETWORK_EXPORT_LEGEND_HEIGHT);
+  context.strokeStyle = "#dbe4ee";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(0, legendTop);
+  context.lineTo(width, legendTop);
+  context.stroke();
+
+  context.fillStyle = "#475569";
+  context.font = `700 12px ${WEBSITE_EXPORT_FONT_FAMILY}`;
+  context.fillText("Legend", 24, legendTop + 24);
+  context.font = `600 11px ${WEBSITE_EXPORT_FONT_FAMILY}`;
+
+  const columnWidth = Math.max(150, (width - 48) / 3);
+  const firstRowY = legendTop + 45;
+  const secondRowY = legendTop + 72;
+  const drawLineMeaning = (
+    column: number,
+    label: string,
+    head: "arrow" | "tee" | "none",
+  ) => {
+    const x = 24 + column * columnWidth;
+    context.strokeStyle = "#64748b";
+    context.fillStyle = "#64748b";
+    context.lineWidth = 2.5;
+    context.lineCap = "round";
+    context.beginPath();
+    context.moveTo(x, firstRowY - 4);
+    context.lineTo(x + 34, firstRowY - 4);
+    context.stroke();
+    if (head === "arrow") {
+      context.beginPath();
+      context.moveTo(x + 28, firstRowY - 10);
+      context.lineTo(x + 38, firstRowY - 4);
+      context.lineTo(x + 28, firstRowY + 2);
+      context.closePath();
+      context.fill();
+    } else if (head === "tee") {
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(x + 35, firstRowY - 11);
+      context.lineTo(x + 35, firstRowY + 3);
+      context.stroke();
+    }
+    context.fillStyle = "#475569";
+    context.fillText(label, x + 47, firstRowY);
+  };
+
+  drawLineMeaning(0, "Activation", "arrow");
+  drawLineMeaning(1, "Repression", "tee");
+  drawLineMeaning(2, "Unannotated regulation", "none");
+
+  const firstX = 24;
+  context.fillStyle = "#334155";
+  context.beginPath();
+  context.moveTo(firstX + 8, secondRowY - 14);
+  context.lineTo(firstX + 17, secondRowY - 5);
+  context.lineTo(firstX + 8, secondRowY + 4);
+  context.lineTo(firstX - 1, secondRowY - 5);
+  context.closePath();
+  context.fill();
+  context.fillStyle = "#475569";
+  context.fillText("Transcription factor", firstX + 27, secondRowY);
+
+  const secondX = 24 + columnWidth;
+  context.fillStyle = "#334155";
+  context.beginPath();
+  context.arc(secondX + 8, secondRowY - 5, 9, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#475569";
+  context.fillText("Target gene", secondX + 27, secondRowY);
+
+  const thirdX = 24 + columnWidth * 2;
+  context.strokeStyle = "#64748b";
+  context.lineWidth = 5;
+  context.beginPath();
+  context.moveTo(thirdX, secondRowY - 5);
+  context.lineTo(thirdX + 38, secondRowY - 5);
+  context.stroke();
+  context.fillStyle = "#475569";
+  context.fillText("Thicker line = stronger evidence", thirdX + 48, secondRowY);
+  context.lineCap = "butt";
 }
 
 export default function ProjectDetailPage() {
@@ -2080,15 +2340,19 @@ export default function ProjectDetailPage() {
       inlineSvgComputedStyles(svgElement, clonedSvg);
 
       clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      clonedSvg.setAttribute("width", String(width));
-      clonedSvg.setAttribute("height", String(height));
       clonedSvg.setAttribute("viewBox", viewBox);
+      const exportSize = appendNetworkExportLegend(
+        clonedSvg,
+        width,
+        height,
+        "circos",
+      );
 
       const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       background.setAttribute("x", "0");
       background.setAttribute("y", "0");
-      background.setAttribute("width", String(width));
-      background.setAttribute("height", String(height));
+      background.setAttribute("width", String(exportSize.width));
+      background.setAttribute("height", String(exportSize.height));
       background.setAttribute("fill", "#ffffff");
       clonedSvg.insertBefore(background, clonedSvg.firstChild);
 
@@ -2110,8 +2374,8 @@ export default function ProjectDetailPage() {
 
         const scale = 3;
         const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(width * scale));
-        canvas.height = Math.max(1, Math.round(height * scale));
+        canvas.width = Math.max(1, Math.round(exportSize.width * scale));
+        canvas.height = Math.max(1, Math.round(exportSize.height * scale));
 
         const context = canvas.getContext("2d");
         if (!context) return;
@@ -2134,7 +2398,7 @@ export default function ProjectDetailPage() {
   );
 
   const handleExportNetwork = useCallback(
-    (format: "png" | "svg") => {
+    async (format: "png" | "svg") => {
       const cy = networkGraphRef.current;
       if (!cy) return;
 
@@ -2144,14 +2408,34 @@ export default function ProjectDetailPage() {
       const baseFilename = `${projectId ?? "project"}-${activeViewLabel}-${networkLayout}-${isolatedLabel}`;
 
       if (format === "png") {
+        const scale = 3;
         const pngDataUrl = cy.png({
           full: false,
-          scale: 3,
+          scale,
           bg: "#eef4fb",
         });
+        const image = new Image();
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("Could not render the network export."));
+          image.src = pngDataUrl;
+        });
+
+        const graphWidth = Math.max(1, Math.round(image.naturalWidth / scale));
+        const graphHeight = Math.max(1, Math.round(image.naturalHeight / scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight + NETWORK_EXPORT_LEGEND_HEIGHT * scale;
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        context.drawImage(image, 0, 0);
+        context.save();
+        context.scale(scale, scale);
+        drawNetworkCanvasLegend(context, graphWidth, graphHeight);
+        context.restore();
 
         const link = document.createElement("a");
-        link.href = pngDataUrl;
+        link.href = canvas.toDataURL("image/png");
         link.download = `${baseFilename}.png`;
         document.body.appendChild(link);
         link.click();
@@ -2184,9 +2468,13 @@ export default function ProjectDetailPage() {
         svgElement.setAttribute("viewBox", `0 0 ${safeWidth} ${safeHeight}`);
       }
 
-      svgElement.setAttribute("width", "100%");
-      svgElement.setAttribute("height", "100%");
       svgElement.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      appendNetworkExportLegend(
+        svgElement as unknown as SVGSVGElement,
+        safeWidth,
+        safeHeight,
+        "network",
+      );
 
       const serializedSvg = new XMLSerializer().serializeToString(svgDocument);
       const blob = new Blob([serializedSvg], {

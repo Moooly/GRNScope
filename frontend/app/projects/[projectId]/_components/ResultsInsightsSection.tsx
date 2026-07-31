@@ -21,6 +21,7 @@ import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
 import DownloadMenu from "./DownloadMenu";
+import { WEBSITE_FONT_FAMILY } from "../_lib/downloads";
 
 export type VisualizationContext = {
   trajectory?: TrajectoryData;
@@ -712,7 +713,7 @@ function RepeatRunStabilityPanel({
     const rowHeight = 64;
     const axisHeight = 38;
     const tableHeight = headerHeight + rows.length * rowHeight + axisHeight;
-    const height = tableY + tableHeight + 56;
+    const height = tableY + tableHeight + 104;
     const scale = 2;
     const canvas = document.createElement("canvas");
     canvas.width = width * scale;
@@ -760,12 +761,10 @@ function RepeatRunStabilityPanel({
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, width, height);
     context.fillStyle = "#0f172a";
-    context.font =
-      '800 28px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.font = `800 28px ${WEBSITE_FONT_FAMILY}`;
     context.fillText("Repeat-run stability", margin, titleY);
     context.fillStyle = "#475569";
-    context.font =
-      '400 16px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.font = `400 16px ${WEBSITE_FONT_FAMILY}`;
     context.fillText(stabilityDescription, margin, descriptionY);
 
     const tableX = margin;
@@ -786,8 +785,7 @@ function RepeatRunStabilityPanel({
     roundedRect(tableX + 1, tableY + 1, tableWidth - 2, headerHeight, 17);
     context.fill();
     context.fillStyle = "#475569";
-    context.font =
-      '700 14px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.font = `700 14px ${WEBSITE_FONT_FAMILY}`;
     const headerBaseline = tableY + 35;
     context.fillText("Algorithm", algorithmX, headerBaseline);
     context.fillText(
@@ -809,8 +807,7 @@ function RepeatRunStabilityPanel({
       context.stroke();
 
       context.fillStyle = "#0f172a";
-      context.font =
-        '700 17px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      context.font = `700 17px ${WEBSITE_FONT_FAMILY}`;
       context.fillText(row.algorithmId, algorithmX, centerY + 6);
 
       context.strokeStyle = "#dbe4ee";
@@ -857,16 +854,14 @@ function RepeatRunStabilityPanel({
       }
 
       context.fillStyle = "#0f172a";
-      context.font =
-        '800 18px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      context.font = `800 18px ${WEBSITE_FONT_FAMILY}`;
       context.fillText(
         row.medianRho === null ? "—" : row.medianRho.toFixed(3),
         medianX,
         centerY + 6,
       );
       context.fillStyle = "#475569";
-      context.font =
-        '600 15px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      context.font = `600 15px ${WEBSITE_FONT_FAMILY}`;
       context.fillText(
         row.runCount ? plural(row.runCount, "run") : "—",
         runsX,
@@ -881,8 +876,7 @@ function RepeatRunStabilityPanel({
     context.lineTo(tableX + tableWidth, axisTop);
     context.stroke();
     context.fillStyle = "#94a3b8";
-    context.font =
-      '500 13px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    context.font = `500 13px ${WEBSITE_FONT_FAMILY}`;
     context.textAlign = "left";
     context.fillText(plotMin.toFixed(2), plotStart, axisTop + 24);
     context.textAlign = "center";
@@ -894,6 +888,33 @@ function RepeatRunStabilityPanel({
     context.textAlign = "right";
     context.fillText("1.00", plotEnd, axisTop + 24);
     context.textAlign = "left";
+
+    const legendY = axisTop + 68;
+    context.fillStyle = "#475569";
+    context.font = `700 13px ${WEBSITE_FONT_FAMILY}`;
+    context.fillText("Legend", tableX, legendY);
+
+    context.strokeStyle = "#8fc4d8";
+    context.lineWidth = 6;
+    context.lineCap = "round";
+    context.beginPath();
+    context.moveTo(tableX + 78, legendY - 4);
+    context.lineTo(tableX + 124, legendY - 4);
+    context.stroke();
+    context.lineCap = "butt";
+    context.fillStyle = "#475569";
+    context.font = `600 13px ${WEBSITE_FONT_FAMILY}`;
+    context.fillText("Mean absolute deviation", tableX + 136, legendY);
+
+    context.beginPath();
+    context.arc(tableX + 355, legendY - 4, 7, 0, Math.PI * 2);
+    context.fillStyle = "#087ead";
+    context.fill();
+    context.strokeStyle = "#ffffff";
+    context.lineWidth = 2.5;
+    context.stroke();
+    context.fillStyle = "#475569";
+    context.fillText("Median correlation", tableX + 371, legendY);
 
     canvas.toBlob((blob) => {
       if (!blob) return;

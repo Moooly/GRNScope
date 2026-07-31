@@ -1,3 +1,5 @@
+export const WEBSITE_FONT_FAMILY = "Arial, Helvetica, sans-serif";
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -29,11 +31,36 @@ export function downloadCsv(
 function serializedSvg(svg: SVGSVGElement) {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.style.fontFamily = WEBSITE_FONT_FAMILY;
+
   const viewBox = clone.viewBox.baseVal;
+  const viewBoxX = viewBox?.x || 0;
+  const viewBoxY = viewBox?.y || 0;
   const width =
     viewBox?.width || svg.getBoundingClientRect().width || svg.clientWidth || 1200;
-  const height =
+  const baseHeight =
     viewBox?.height || svg.getBoundingClientRect().height || svg.clientHeight || 800;
+  const exportOnlyGroups = Array.from(
+    clone.querySelectorAll<SVGElement>("[data-export-only]"),
+  );
+  const extraHeight = exportOnlyGroups.reduce((maximum, group) => {
+    const value = Number(group.dataset.exportExtraHeight ?? 0);
+    return Number.isFinite(value) ? Math.max(maximum, value) : maximum;
+  }, 0);
+  const height = baseHeight + extraHeight;
+
+  if (extraHeight > 0) {
+    clone.setAttribute(
+      "viewBox",
+      `${viewBoxX} ${viewBoxY} ${width} ${height}`,
+    );
+    exportOnlyGroups.forEach((group) => {
+      group.style.removeProperty("display");
+      group.removeAttribute("data-export-only");
+      group.removeAttribute("data-export-extra-height");
+    });
+  }
+
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
   if (!clone.querySelector("rect[data-export-background]")) {

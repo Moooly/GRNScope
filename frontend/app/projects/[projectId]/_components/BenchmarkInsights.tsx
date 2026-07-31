@@ -404,6 +404,37 @@ function LineChart({
       ? hoveredY + 12
       : hoveredY - tooltipHeight - 12
     : 0;
+  const exportLegendItems = [
+    ...series.map((item, index) => ({
+      name: item.name,
+      summary: item.summary,
+      color: PALETTE[index % PALETTE.length],
+      dashed: false,
+    })),
+    ...(randomBaseline !== undefined
+      ? [{
+          name: "Random precision",
+          summary: randomBaseline.toFixed(3),
+          color: "#5fc8bd",
+          dashed: true,
+        }]
+      : []),
+    ...(diagonalBaseline
+      ? [{
+          name: "Random classifier",
+          summary: undefined,
+          color: "#94a3b8",
+          dashed: true,
+        }]
+      : []),
+  ];
+  const exportLegendColumns = Math.min(3, exportLegendItems.length);
+  const exportLegendRows = Math.ceil(
+    exportLegendItems.length / Math.max(1, exportLegendColumns),
+  );
+  const exportLegendExtraHeight = 34 + exportLegendRows * 22;
+  const exportLegendColumnWidth =
+    (width - left - right) / Math.max(1, exportLegendColumns);
 
   return (
     <div className="relative">
@@ -607,6 +638,58 @@ function LineChart({
         >
           {yLabel}
         </text>
+        <g
+          data-export-only
+          data-export-extra-height={exportLegendExtraHeight}
+          style={{ display: "none" }}
+          aria-label="Chart legend"
+        >
+          <line
+            x1={left}
+            x2={width - right}
+            y1={height + 8}
+            y2={height + 8}
+            stroke="#e2e8f0"
+          />
+          <text
+            x={left}
+            y={height + 27}
+            fill="#475569"
+            fontSize="11"
+            fontWeight="700"
+          >
+            Legend
+          </text>
+          {exportLegendItems.map((item, index) => {
+            const column = index % exportLegendColumns;
+            const row = Math.floor(index / exportLegendColumns);
+            const x = left + column * exportLegendColumnWidth;
+            const y = height + 48 + row * 22;
+            return (
+              <g key={`export-legend-${item.name}`} transform={`translate(${x} ${y})`}>
+                <line
+                  x1="0"
+                  x2="22"
+                  y1="-4"
+                  y2="-4"
+                  stroke={item.color}
+                  strokeWidth="3"
+                  strokeDasharray={item.dashed ? "5 4" : undefined}
+                  strokeLinecap="round"
+                />
+                <text x="30" y="0" fill="#334155" fontSize="10.5" fontWeight="700">
+                  {item.name}
+                  {item.summary ? (
+                    <tspan fill="#64748b" fontWeight="600">
+                      {" · "}
+                      {item.summary}
+                    </tspan>
+                  ) : null}
+                </text>
+              </g>
+            );
+          })}
+        </g>
       </svg>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         {series.map((item, index) => (

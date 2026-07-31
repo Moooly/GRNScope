@@ -156,22 +156,45 @@ function buildComparisonFigureSvg({
   predictedTitle,
   randomizedTitle,
   subtitle,
+  clusterColors,
 }: {
   predictedSvg: SVGSVGElement;
   randomizedSvg: SVGSVGElement;
   predictedTitle: string;
   randomizedTitle: string;
   subtitle: string;
+  clusterColors?: Map<string, string>;
 }) {
   const predictedViewBox = predictedSvg.getAttribute("viewBox") ?? `0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`;
   const randomizedViewBox = randomizedSvg.getAttribute("viewBox") ?? `0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`;
   const predictedContents = cleanPlotSvgContents(predictedSvg);
   const randomizedContents = cleanPlotSvgContents(randomizedSvg);
   const panelWidth = 740;
-  const panelHeight = 470;
+  const panelHeight = 445;
   const leftX = 40;
   const rightX = 820;
-  const panelY = 158;
+  const panelY = 178;
+  const clusterEntries = clusterColors
+    ? Array.from(clusterColors.entries()).slice(0, 18)
+    : [];
+  const remainingClusterCount = Math.max(
+    0,
+    (clusterColors?.size ?? 0) - clusterEntries.length,
+  );
+  const clusterLegend = clusterEntries.length
+    ? `<g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600" fill="#475569">
+    <text x="40" y="106" font-weight="700">Clusters</text>
+    ${clusterEntries.map(([label, color], index) => {
+      const column = index % 9;
+      const row = Math.floor(index / 9);
+      const x = 112 + column * 158;
+      const y = 102 + row * 23;
+      const displayLabel = label.length > 17 ? `${label.slice(0, 16)}…` : label;
+      return `<circle cx="${x}" cy="${y}" r="5" fill="${escapeXml(color)}"/><text x="${x + 11}" y="${y + 4}">${escapeXml(displayLabel)}</text>`;
+    }).join("")}
+    ${remainingClusterCount > 0 ? `<text x="1535" y="129" text-anchor="end" fill="#94a3b8">+${remainingClusterCount} more</text>` : ""}
+  </g>`
+    : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${FIGURE_WIDTH}" height="${FIGURE_HEIGHT}" viewBox="0 0 ${FIGURE_WIDTH} ${FIGURE_HEIGHT}" role="img" aria-label="Cell-state shift comparison">
@@ -183,9 +206,9 @@ function buildComparisonFigureSvg({
     <line x1="94" y1="31" x2="124" y2="31" stroke="#087ead" stroke-width="2"/>
     <path d="M 116 25 L 124 31 L 116 37" fill="none" stroke="#087ead" stroke-width="2"/>
     <text x="136" y="36">Average local shift</text>
-  </g>
-  <text x="${leftX}" y="137" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(predictedTitle)}</text>
-  <text x="${rightX}" y="137" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(randomizedTitle)}</text>
+  </g>${clusterLegend}
+  <text x="${leftX}" y="157" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(predictedTitle)}</text>
+  <text x="${rightX}" y="157" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeXml(randomizedTitle)}</text>
   <rect x="${leftX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" rx="18" fill="#f7fbff" stroke="#e2e8f0" stroke-width="2"/>
   <rect x="${rightX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" rx="18" fill="#f7fbff" stroke="#e2e8f0" stroke-width="2"/>
   <svg x="${leftX}" y="${panelY}" width="${panelWidth}" height="${panelHeight}" viewBox="${escapeXml(predictedViewBox)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">${predictedContents}</svg>
@@ -2932,6 +2955,7 @@ function ResultSummary({
         predictedTitle: predictedPlotTitle,
         randomizedTitle: randomizedPlotTitle,
         subtitle,
+        clusterColors: clusterColors ?? undefined,
       });
       const perturbationLabel = result.perturbation_value === 0
         ? "knockout"

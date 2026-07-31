@@ -5,6 +5,7 @@ export function getNetworkGraphStylesheet() {
       style: {
         label: "data(label)",
         color: "#ffffff",
+        "font-family": "Arial, Helvetica, sans-serif",
         "font-size": 11,
         "font-weight": 700,
         "text-wrap": "none",

@@ -156,9 +156,11 @@ function CellTrajectoryChart({
   const pseudotimeMax = Math.max(...activeValues);
   const activePath = embedding.paths.find((path) => path.name === lineageName);
   const displayedCount = activeValues.length;
+  const otherLineageCount = Math.max(0, embedding.points.length - displayedCount);
   const isFittedSlingshotCurve =
     embedding.path_source === "slingshot_curve";
   const activeStrokeDasharray = isFittedSlingshotCurve ? undefined : "8 6";
+  const exportLegendExtraHeight = 70;
 
   return (
     <div>
@@ -169,6 +171,12 @@ function CellTrajectoryChart({
           role="img"
           aria-label={`${embedding.method} cell embedding colored by ${lineageName} pseudotime`}
         >
+          <defs>
+            <linearGradient id="trajectory-pseudotime-export-scale" x1="0" x2="1">
+              <stop offset="0" stopColor="rgb(7,89,133)" />
+              <stop offset="1" stopColor="rgb(186,230,253)" />
+            </linearGradient>
+          </defs>
           <rect width={width} height={height} fill="#f8fafc" />
           {embedding.points.map((point) => {
             const pseudotime = point.pseudotime[lineageName];
@@ -286,6 +294,64 @@ function CellTrajectoryChart({
           >
             {embedding.method} 2
           </text>
+          <g
+            data-export-only
+            data-export-extra-height={exportLegendExtraHeight}
+            style={{ display: "none" }}
+            aria-label="Cell trajectory legend"
+          >
+            <line
+              x1={left}
+              x2={width - right}
+              y1={height + 8}
+              y2={height + 8}
+              stroke="#e2e8f0"
+            />
+            <text
+              x={left}
+              y={height + 27}
+              fill="#475569"
+              fontSize="11"
+              fontWeight="700"
+            >
+              Legend
+            </text>
+            <text x={left} y={height + 51} fill="#64748b" fontSize="10.5" fontWeight="600">
+              Early
+            </text>
+            <rect
+              x={left + 34}
+              y={height + 42}
+              width="104"
+              height="9"
+              rx="4.5"
+              fill="url(#trajectory-pseudotime-export-scale)"
+            />
+            <text x={left + 146} y={height + 51} fill="#64748b" fontSize="10.5" fontWeight="600">
+              Late
+            </text>
+            <line
+              x1={left + 210}
+              x2={left + 244}
+              y1={height + 46}
+              y2={height + 46}
+              stroke="#0f789f"
+              strokeWidth="3"
+              strokeDasharray={activeStrokeDasharray}
+              strokeLinecap="round"
+            />
+            <text x={left + 254} y={height + 51} fill="#334155" fontSize="10.5" fontWeight="600">
+              {isFittedSlingshotCurve ? "Fitted Slingshot curve" : "Pseudotime guide"}
+            </text>
+            {otherLineageCount > 0 ? (
+              <>
+                <circle cx={left + 482} cy={height + 46} r="4" fill="#b6c2d0" fillOpacity="0.7" />
+                <text x={left + 493} y={height + 51} fill="#334155" fontSize="10.5" fontWeight="600">
+                  Other-lineage cells
+                </text>
+              </>
+            ) : null}
+          </g>
         </svg>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-semibold text-slate-500">
@@ -372,6 +438,13 @@ function GeneTrendComparisonChart({ series }: { series: ExpressionSeries[] }) {
       })),
     };
   });
+  const exportLegendColumns = Math.min(4, normalizedSeries.length);
+  const exportLegendRows = Math.ceil(
+    normalizedSeries.length / Math.max(1, exportLegendColumns),
+  );
+  const exportLegendExtraHeight = 34 + exportLegendRows * 22;
+  const exportLegendColumnWidth =
+    (width - left - right) / Math.max(1, exportLegendColumns);
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -522,6 +595,51 @@ function GeneTrendComparisonChart({ series }: { series: ExpressionSeries[] }) {
         >
           Relative trend
         </text>
+        <g
+          data-export-only
+          data-export-extra-height={exportLegendExtraHeight}
+          style={{ display: "none" }}
+          aria-label="Gene trend legend"
+        >
+          <line
+            x1={left}
+            x2={width - right}
+            y1={height + 8}
+            y2={height + 8}
+            stroke="#e2e8f0"
+          />
+          <text
+            x={left}
+            y={height + 27}
+            fill="#475569"
+            fontSize="11"
+            fontWeight="700"
+          >
+            Legend
+          </text>
+          {normalizedSeries.map((item, index) => {
+            const column = index % exportLegendColumns;
+            const row = Math.floor(index / exportLegendColumns);
+            const x = left + column * exportLegendColumnWidth;
+            const y = height + 48 + row * 22;
+            return (
+              <g key={`export-gene-${item.name}`} transform={`translate(${x} ${y})`}>
+                <line
+                  x1="0"
+                  x2="22"
+                  y1="-4"
+                  y2="-4"
+                  stroke={item.color}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+                <text x="30" y="0" fill="#334155" fontSize="10.5" fontWeight="700">
+                  {item.name}
+                </text>
+              </g>
+            );
+          })}
+        </g>
       </svg>
       {hoveredTrend ? (
         <div className="pointer-events-none absolute right-4 top-4 min-w-48 rounded-xl border border-slate-200 bg-white/95 px-3.5 py-3 text-xs shadow-lg backdrop-blur-sm">
