@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -388,6 +389,56 @@ function jaccardSimilarity(a: string[], b: string[]) {
   return union ? intersection / union : 0;
 }
 
+/**
+ * Cheap seriation: grow a chain from the most-similar pair, repeatedly adding
+ * whichever method is closest to either end. Puts methods that agree next to
+ * each other so the matrix shows blocks instead of an arbitrary order.
+ */
+function seriateBySimilarity(
+  ids: string[],
+  similarityOf: (first: string, second: string) => number,
+) {
+  if (ids.length < 3) return ids;
+  let seed: [string, string] | null = null;
+  let bestScore = -Infinity;
+  for (let i = 0; i < ids.length; i += 1) {
+    for (let j = i + 1; j < ids.length; j += 1) {
+      const score = similarityOf(ids[i], ids[j]);
+      if (score > bestScore) {
+        bestScore = score;
+        seed = [ids[i], ids[j]];
+      }
+    }
+  }
+  if (!seed) return ids;
+  const order = [seed[0], seed[1]];
+  const remaining = new Set(ids.filter((id) => !order.includes(id)));
+  while (remaining.size) {
+    let pick: string | null = null;
+    let pickScore = -Infinity;
+    let prepend = false;
+    for (const id of remaining) {
+      const toStart = similarityOf(id, order[0]);
+      if (toStart > pickScore) {
+        pickScore = toStart;
+        pick = id;
+        prepend = true;
+      }
+      const toEnd = similarityOf(id, order[order.length - 1]);
+      if (toEnd > pickScore) {
+        pickScore = toEnd;
+        pick = id;
+        prepend = false;
+      }
+    }
+    if (!pick) break;
+    if (prepend) order.unshift(pick);
+    else order.push(pick);
+    remaining.delete(pick);
+  }
+  return order;
+}
+
 function rankBiasedOverlap(a: string[], b: string[], persistence = 0.9) {
   const depth = Math.max(a.length, b.length);
   if (!depth) return 0;
@@ -648,9 +699,12 @@ function RepeatRunStabilityPanel({
     )
       ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
       : null;
+  // The plotted number and the stop rule are different statistics: the rule
+  // tests consecutive-run checks, not this median. Say so, so a method below
+  // the stop threshold here is not misread as having failed to stabilise.
   const stabilityDescription = uniformRule
-    ? `Median pairwise Spearman ρ; stops after ${uniformRule.stopStreak} checks ≥ ${uniformRule.stopRho.toFixed(2)} in a row (3–15 runs).`
-    : "Median pairwise Spearman ρ; each method uses its own aggregate-ranking stop rule.";
+    ? `Median pairwise Spearman ρ across bootstrap runs (3–15). Stopping is judged separately, on ${uniformRule.stopStreak} consecutive checks at ρ ≥ ${uniformRule.stopRho.toFixed(2)}.`
+    : "Median pairwise Spearman ρ across bootstrap runs. Stopping is judged separately, by each method's own aggregate-ranking rule.";
   const validRhos = rows
     .map((row) => row.medianRho)
     .filter((rho): rho is number => rho !== null);
@@ -957,11 +1011,9 @@ function RepeatRunStabilityPanel({
         <div className="grn-table-header-grid hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] items-center gap-4 border-b border-slate-200 px-4 py-2.5 md:grid">
           <span>Algorithm</span>
           <span>
-            Repeat-run correlation (<span className="normal-case">ρ</span>)
+            Median pairwise Spearman <span className="normal-case">ρ</span>
           </span>
-          <span>
-            Median <span className="normal-case">ρ</span>
-          </span>
+          <span />
           <span>Bootstrap runs</span>
           <span />
         </div>
@@ -983,6 +1035,15 @@ function RepeatRunStabilityPanel({
             row.medianRho === null || row.madRho === null
               ? null
               : plotPosition(row.medianRho + row.madRho);
+          // Answers the stop rule named in the panel description, which the
+          // plotted median cannot answer on its own.
+          const stopOutcome = row.stoppedEarly
+            ? { label: "stopped early", tone: "text-slate-400" }
+            : row.earlyStoppingEnabled
+              ? { label: "ran to cap", tone: "text-amber-600" }
+              : row.isGenuineBootstrap
+                ? { label: "fixed plan", tone: "text-slate-400" }
+                : null;
           return (
             <div
               key={row.algorithmId}
@@ -1029,8 +1090,13 @@ function RepeatRunStabilityPanel({
                     ? "—"
                     : row.medianRho.toFixed(3)}
                 </span>
-                <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-slate-500">
-                  {row.runCount ? plural(row.runCount, "run") : "—"}
+                <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-slate-600">
+                  {row.runCount || "—"}
+                  {stopOutcome ? (
+                    <span className={`ml-1.5 font-medium ${stopOutcome.tone}`}>
+                      · {stopOutcome.label}
+                    </span>
+                  ) : null}
                 </span>
                 <svg
                   viewBox="0 0 16 16"
@@ -1056,12 +1122,12 @@ function RepeatRunStabilityPanel({
                 >
                   {row.runAgreement.length ? (
                     <>
-                      <div className="mb-2 flex items-baseline justify-between gap-3">
+                      <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <span className="font-semibold text-slate-600">
                           Spearman by run
                         </span>
                         <span className="text-[10px] text-slate-400">
-                          Median ρ vs other runs
+                          each run&apos;s median ρ against the others
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1.5">
@@ -1115,6 +1181,23 @@ function RepeatRunStabilityPanel({
           <span />
           <span />
         </div>
+      </div>
+      {/* Mirrors the legend the PNG export already draws. */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="h-2.5 w-2.5 rounded-full border-2 border-white bg-[#087ead] shadow-sm"
+            aria-hidden="true"
+          />
+          Median ρ
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="h-1 w-6 rounded-full bg-[#8fc4d8]"
+            aria-hidden="true"
+          />
+          ± mean absolute deviation
+        </span>
       </div>
     </Panel>
   );
@@ -1351,6 +1434,24 @@ function ConsensusEdgeExplorer({
     (safePage - 1) * EDGE_EXPLORER_PAGE_SIZE,
     safePage * EDGE_EXPLORER_PAGE_SIZE,
   );
+  // Ranks arrive as midranks, so a four-way tie for positions 1-4 reads as
+  // "2.5" and the table looks like it starts at 2.5. Recover the tie block from
+  // the group size and show it as a range instead.
+  const rankGroupSizes = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const edge of rows) {
+      counts.set(edge.rank, (counts.get(edge.rank) ?? 0) + 1);
+    }
+    return counts;
+  }, [rows]);
+
+  const formatRank = (rank: number) => {
+    const size = rankGroupSizes.get(rank) ?? 1;
+    const start = Math.round(rank - (size - 1) / 2);
+    const end = Math.round(rank + (size - 1) / 2);
+    return start === end ? `${start}` : `${start}–${end}`;
+  };
+
   const selectedEdge =
     filteredRows.find((edge) => edge.key === selectedEdgeKey) ?? null;
   const methodEvidenceRows = useMemo(
@@ -1624,6 +1725,26 @@ function ConsensusEdgeExplorer({
                       edge.directionConfidence === null
                         ? null
                         : Math.round(edge.directionConfidence * 100);
+                    // The arrow always shows the plurality orientation, and
+                    // directionConfidence is |net vote| / denominator — a margin,
+                    // so a low value means the reporting methods are split, not
+                    // that the reverse wins. Coverage separates "split" from
+                    // "no method reported a direction at all".
+                    const directionCoveragePercent = Math.round(
+                      edge.directionCoverage * 100,
+                    );
+                    const directionUnsupported =
+                      directionConfidencePercent === null ||
+                      edge.directionCoverage < 0.5;
+                    const directionSplit =
+                      !directionUnsupported &&
+                      directionConfidencePercent !== null &&
+                      directionConfidencePercent < 50;
+                    const directionUncertain =
+                      !directionUnsupported &&
+                      directionConfidencePercent !== null &&
+                      directionConfidencePercent >= 50 &&
+                      directionConfidencePercent < 80;
                     return (
                       <Fragment key={edge.key}>
                         <tr
@@ -1644,14 +1765,31 @@ function ConsensusEdgeExplorer({
                           }`}
                         >
                           <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-400">
-                            {edge.rank.toLocaleString(undefined, {
-                              maximumFractionDigits: 1,
-                            })}
+                            {formatRank(edge.rank)}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="font-extrabold text-slate-900">
+                            <span
+                              className="font-extrabold text-slate-900"
+                              title={
+                                directionSplit
+                                  ? `Direction unresolved: methods reporting direction are close to evenly split (${directionConfidencePercent}% margin)`
+                                  : directionUnsupported
+                                    ? `Only ${directionCoveragePercent}% of the supporting evidence comes from direction-aware methods`
+                                    : undefined
+                              }
+                            >
                               {edge.source}
-                              <span className="px-2 text-[#087ead]">→</span>
+                              <span
+                                className={`px-2 ${
+                                  directionSplit
+                                    ? "text-amber-600"
+                                    : directionUnsupported || directionUncertain
+                                      ? "text-slate-400"
+                                      : "text-[#087ead]"
+                                }`}
+                              >
+                                {directionUnsupported || directionSplit ? "⇢" : "→"}
+                              </span>
                               {edge.target}
                             </span>
                           </td>
@@ -1660,7 +1798,7 @@ function ConsensusEdgeExplorer({
                               {edge.score.toFixed(3)}
                             </td>
                           ) : null}
-                          <td className="px-4 py-3 text-center text-xs font-extrabold tabular-nums text-[#087ead]">
+                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-700">
                             <span
                               title={
                                 edge.bootstrapVerified
@@ -1683,10 +1821,44 @@ function ConsensusEdgeExplorer({
                               </span>
                             </td>
                           ) : null}
-                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-600">
-                            {directionConfidencePercent === null
-                              ? "—"
-                              : `${directionConfidencePercent}%`}
+                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-700">
+                            {directionUnsupported ? (
+                              <span
+                                className="font-medium text-slate-400"
+                                title={`Only ${directionCoveragePercent}% of the supporting evidence comes from direction-aware methods`}
+                              >
+                                no direction data
+                              </span>
+                            ) : directionSplit ? (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700"
+                                title="Direction unresolved: the methods reporting direction are close to evenly split"
+                              >
+                                <svg
+                                  viewBox="0 0 16 16"
+                                  className="h-3 w-3 shrink-0"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    d="M8 2.5 15 14H1L8 2.5Z"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinejoin="round"
+                                  />
+                                  <path
+                                    d="M8 6.5v3.2"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                  />
+                                  <circle cx="8" cy="11.6" r="0.7" fill="currentColor" />
+                                </svg>
+                                {directionConfidencePercent}%
+                              </span>
+                            ) : (
+                              `${directionConfidencePercent}%`
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span
@@ -1849,6 +2021,42 @@ function ConsensusEdgeExplorer({
               </table>
             </div>
           </div>
+          {/* Column meanings were hover-only tooltips, unreachable on touch. */}
+          <dl className="mt-3 grid gap-x-6 gap-y-1 px-1 text-[11px] leading-4 text-slate-500 sm:grid-cols-2">
+            {comparesMethods ? (
+              <div>
+                <dt className="inline font-bold text-slate-600">Evidence</dt>{" "}
+                <dd className="inline">
+                  mean normalized edge score across the selected methods.
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="inline font-bold text-slate-600">
+                Bootstrap confidence
+              </dt>{" "}
+              <dd className="inline">
+                share of bootstrap samples that recovered the edge.
+              </dd>
+            </div>
+            {comparesMethods ? (
+              <div>
+                <dt className="inline font-bold text-slate-600">Support</dt>{" "}
+                <dd className="inline">methods reporting the edge.</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="inline font-bold text-slate-600">
+                Direction confidence
+              </dt>{" "}
+              <dd className="inline">
+                margin by which direction-aware methods favour the orientation
+                shown. Low values mean they are split, not that the reverse is
+                right; edges backed mostly by undirected methods show &ldquo;no
+                direction data&rdquo;.
+              </dd>
+            </div>
+          </dl>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1 py-1 text-xs">
             <p className="font-semibold text-slate-500">
               <span className="font-bold text-slate-700">
@@ -2067,6 +2275,64 @@ function AgreementView({
     return jaccardSimilarity(first, second);
   };
 
+  // Every off-diagonal pair, computed once: seriation and rendering both need
+  // the whole matrix, and recomputing per cell would be O(n^2) set operations.
+  const similarityMatrix = useMemo(() => {
+    const values = new Map<string, number>();
+    const compute = (firstId: string, secondId: string) => {
+      const first = rankedKeys.get(firstId) ?? [];
+      const second = rankedKeys.get(secondId) ?? [];
+      if (metric === "rbo") return rankBiasedOverlap(first, second);
+      if (metric === "spearman") return spearmanSimilarity(first, second);
+      return jaccardSimilarity(first, second);
+    };
+    for (let i = 0; i < eligibleAlgorithmIds.length; i += 1) {
+      for (let j = i + 1; j < eligibleAlgorithmIds.length; j += 1) {
+        values.set(
+          `${eligibleAlgorithmIds[i]}|${eligibleAlgorithmIds[j]}`,
+          compute(eligibleAlgorithmIds[i], eligibleAlgorithmIds[j]),
+        );
+      }
+    }
+    return values;
+  }, [eligibleAlgorithmIds, metric, rankedKeys]);
+
+  const pairSimilarity = useCallback(
+    (firstId: string, secondId: string) =>
+      firstId === secondId
+        ? 1
+        : (similarityMatrix.get(`${firstId}|${secondId}`) ??
+          similarityMatrix.get(`${secondId}|${firstId}`) ??
+          0),
+    [similarityMatrix],
+  );
+
+  const orderedAlgorithmIds = useMemo(
+    () => seriateBySimilarity(eligibleAlgorithmIds, pairSimilarity),
+    [eligibleAlgorithmIds, pairSimilarity],
+  );
+
+  // Colour is scaled to the off-diagonal values actually present. The diagonal
+  // is structurally 1 for every method, so including it would push every real
+  // value into a narrow, indistinguishable band of the ramp.
+  const agreementDomain = useMemo(() => {
+    const values = [...similarityMatrix.values()];
+    if (!values.length) return { min: 0, max: 1, span: 1 };
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min;
+    return { min, max, span: span > 1e-6 ? span : 0 };
+  }, [similarityMatrix]);
+
+  const agreementFill = (value: number) => {
+    const ratio =
+      agreementDomain.span === 0
+        ? 0.5
+        : (value - agreementDomain.min) / agreementDomain.span;
+    // Capped at 0.85 so the darkest cell still clears 5:1 against slate-900 text.
+    return `rgba(8, 126, 173, ${0.12 + Math.max(0, Math.min(1, ratio)) * 0.73})`;
+  };
+
   const selectedPair = useMemo(
     () =>
       requestedPair &&
@@ -2161,13 +2427,13 @@ function AgreementView({
                   description: "Current methods, metric, mode, and top-edge limit.",
                   onSelect: () =>
                     downloadCsv("method-agreement.csv", [
-                      ["algorithm", ...eligibleAlgorithmIds],
-                      ...eligibleAlgorithmIds.map((rowId) => [
+                      ["algorithm", ...orderedAlgorithmIds],
+                      ...orderedAlgorithmIds.map((rowId) => [
                         rowId,
-                        ...eligibleAlgorithmIds.map((columnId) =>
+                        ...orderedAlgorithmIds.map((columnId) =>
                           rowId === columnId
                             ? 1
-                            : similarity(rowId, columnId).toFixed(6),
+                            : pairSimilarity(rowId, columnId).toFixed(6),
                         ),
                       ]),
                     ]),
@@ -2184,7 +2450,7 @@ function AgreementView({
                 <thead className="grn-table-header">
                   <tr>
                     <th className="rounded-l-lg px-3 py-2.5" />
-                    {eligibleAlgorithmIds.map((algorithmId) => (
+                    {orderedAlgorithmIds.map((algorithmId) => (
                       <th
                         key={algorithmId}
                         className="max-w-28 truncate px-3 py-2.5 text-center"
@@ -2196,27 +2462,32 @@ function AgreementView({
                   </tr>
                 </thead>
                 <tbody>
-                  {eligibleAlgorithmIds.map((rowId, rowIndex) => (
+                  {orderedAlgorithmIds.map((rowId, rowIndex) => (
                     <tr key={rowId}>
                       <th className="max-w-32 truncate pr-3 text-left text-xs font-bold text-slate-600">
                         {rowId}
                       </th>
-                      {eligibleAlgorithmIds.map((columnId, columnIndex) => {
+                      {orderedAlgorithmIds.map((columnId, columnIndex) => {
+                        // Symmetric, so the upper half is redundant rather than
+                        // missing: leave it empty instead of marking it "—".
                         if (columnIndex > rowIndex) {
                           return (
-                            <td
-                              key={columnId}
-                              className="h-12 min-w-16 rounded-lg bg-slate-50 text-center text-slate-300"
-                              aria-hidden="true"
-                            >
-                              —
+                            <td key={columnId} className="h-12 min-w-16" />
+                          );
+                        }
+                        // The diagonal is 1 by construction; show it as the
+                        // matrix's spine, not as a result.
+                        if (rowId === columnId) {
+                          return (
+                            <td key={columnId}>
+                              <div
+                                className="h-12 w-full min-w-16 rounded-lg bg-slate-100"
+                                title={`${rowId} compared with itself`}
+                              />
                             </td>
                           );
                         }
-                        const value =
-                          rowId === columnId ? 1 : similarity(rowId, columnId);
-                        const normalized =
-                          metric === "spearman" ? (value + 1) / 2 : value;
+                        const value = pairSimilarity(rowId, columnId);
                         const isSelected =
                           selectedPair?.[0] === columnId &&
                           selectedPair?.[1] === rowId;
@@ -2224,10 +2495,7 @@ function AgreementView({
                           <td key={columnId}>
                             <button
                               type="button"
-                              disabled={rowId === columnId}
-                              aria-pressed={
-                                rowId === columnId ? undefined : isSelected
-                              }
+                              aria-pressed={isSelected}
                               onClick={() => {
                                 if (isSelected) {
                                   setRequestedPair(null);
@@ -2236,19 +2504,12 @@ function AgreementView({
                                 setPairDetailGroup("shared");
                                 setRequestedPair([columnId, rowId]);
                               }}
-                              className={`h-12 w-full min-w-16 rounded-lg text-center text-xs font-extrabold transition ${
-                                rowId === columnId
-                                  ? "cursor-default"
-                                  : isSelected
-                                    ? "ring-2 ring-[#087ead] ring-offset-2"
-                                    : "ring-offset-2 hover:ring-2 hover:ring-[#087ead]/40"
+                              className={`h-12 w-full min-w-16 rounded-lg text-center text-xs font-extrabold text-slate-900 transition ${
+                                isSelected
+                                  ? "ring-2 ring-[#087ead] ring-offset-2"
+                                  : "ring-offset-2 hover:ring-2 hover:ring-[#087ead]/40"
                               }`}
-                              style={{
-                                backgroundColor: `rgba(8, 126, 173, ${
-                                  0.08 + Math.max(0, normalized) * 0.84
-                                })`,
-                                color: normalized > 0.55 ? "white" : "#334155",
-                              }}
+                              style={{ backgroundColor: agreementFill(value) }}
                               title={`${rowId} vs ${columnId}: ${value.toFixed(3)}`}
                             >
                               {value.toFixed(3)}
@@ -2264,15 +2525,27 @@ function AgreementView({
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
               <p className="text-xs leading-5 text-slate-500">
                 {metric === "jaccard"
-                  ? "Jaccard = shared edges ÷ unique edges."
+                  ? "Jaccard = shared edges ÷ all distinct edges (shared plus method-specific). Rows and columns are ordered so methods that agree sit together."
                   : metric === "rbo"
-                    ? "Rank-biased overlap emphasizes agreement near the top of each ranking (p = 0.9)."
-                    : "Spearman compares ranks across the union; missing edges receive the next rank."}
+                    ? "Rank-biased overlap emphasizes agreement near the top of each ranking (p = 0.9). Rows and columns are ordered so methods that agree sit together."
+                    : "Spearman compares ranks across the union; missing edges receive the next rank. Rows and columns are ordered so methods that agree sit together."}
               </p>
+              {/* Scaled to the values present, so the shading is readable. */}
               <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-                <span>{metric === "spearman" ? "−1" : "0"}</span>
-                <span className="h-2.5 w-28 rounded-full bg-gradient-to-r from-sky-50 via-sky-400 to-[#087ead]" />
-                <span>1</span>
+                <span className="tabular-nums">
+                  {agreementDomain.min.toFixed(2)}
+                </span>
+                <span
+                  className="h-2.5 w-28 rounded-full"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, rgba(8,126,173,0.12), rgba(8,126,173,0.85))",
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="tabular-nums">
+                  {agreementDomain.max.toFixed(2)}
+                </span>
               </div>
             </div>
             {omittedAlgorithmIds.length ? (

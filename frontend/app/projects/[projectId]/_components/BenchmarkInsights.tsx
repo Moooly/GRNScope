@@ -68,9 +68,11 @@ type BenchmarkRow = {
   activationPrecision: number | null;
   activationEpr: number | null;
   activationSelectedCount: number | null;
+  activationReferenceCount: number | null;
   inhibitionPrecision: number | null;
   inhibitionEpr: number | null;
   inhibitionSelectedCount: number | null;
+  inhibitionReferenceCount: number | null;
   runtimeSeconds: number;
   pr: CurvePoint[];
   roc: CurvePoint[];
@@ -171,6 +173,68 @@ function MetricLabel({
         {explanation}
       </span>
     </span>
+  );
+}
+
+type BenchmarkSortKey =
+  | "auprcRatio"
+  | "earlyPrecisionRatio"
+  | "activationEpr"
+  | "inhibitionEpr";
+
+/** Header that explains its metric and both shows and controls the table sort. */
+function SortableMetricHeader({
+  children,
+  explanation,
+  sortKey,
+  activeSort,
+  onSort,
+  subLabel,
+}: {
+  children: ReactNode;
+  explanation: string;
+  sortKey: BenchmarkSortKey;
+  activeSort: BenchmarkSortKey;
+  onSort: (key: BenchmarkSortKey) => void;
+  subLabel?: string;
+}) {
+  const isActive = activeSort === sortKey;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`group/sort inline-flex items-center gap-1 text-left transition ${
+          isActive ? "text-slate-900" : "hover:text-slate-700"
+        }`}
+        title={`Sort by ${typeof children === "string" ? children : "this metric"}`}
+      >
+        <MetricLabel explanation={explanation}>{children}</MetricLabel>
+        <svg
+          viewBox="0 0 16 16"
+          className={`h-3 w-3 shrink-0 transition ${
+            isActive
+              ? "text-[#087ead]"
+              : "text-slate-300 group-hover/sort:text-slate-400"
+          }`}
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M8 3.5v9M4.5 9l3.5 3.5L11.5 9"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {subLabel ? (
+        <span className="text-[10px] font-medium normal-case tracking-normal text-slate-400">
+          {subLabel}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -335,9 +399,11 @@ function benchmarkAlgorithm({
     activationPrecision: metrics.activation?.precision ?? null,
     activationEpr: metrics.activation?.ratio ?? null,
     activationSelectedCount: metrics.activation?.selectedCount ?? null,
+    activationReferenceCount: metrics.activation?.referenceCount ?? null,
     inhibitionPrecision: metrics.inhibition?.precision ?? null,
     inhibitionEpr: metrics.inhibition?.ratio ?? null,
     inhibitionSelectedCount: metrics.inhibition?.selectedCount ?? null,
+    inhibitionReferenceCount: metrics.inhibition?.referenceCount ?? null,
     runtimeSeconds,
     pr: metrics.pr,
     roc: metrics.roc,
@@ -1108,6 +1174,8 @@ export default function BenchmarkInsights({
 }) {
   const prChartRef = useRef<HTMLDivElement | null>(null);
   const rocChartRef = useRef<HTMLDivElement | null>(null);
+  const [benchmarkSort, setBenchmarkSort] =
+    useState<BenchmarkSortKey>("auprcRatio");
   const benchmark = useMemo(() => {
     const truthEdges = groundTruth?.edges ?? [];
     if (!truthEdges.length) {
@@ -1253,12 +1321,21 @@ export default function BenchmarkInsights({
   }
 
   const rows = benchmark.rows;
-  const sortedRows = [...rows].sort(
-    (first, second) => second.auprcRatio - first.auprcRatio,
-  );
+  const sortedRows = [...rows].sort((first, second) => {
+    const value = (row: BenchmarkRow) => row[benchmarkSort] ?? -Infinity;
+    return value(second) - value(first) || second.auprcRatio - first.auprcRatio;
+  });
   const signedMetricsAvailable = rows.some(
     (row) => row.activationEpr !== null || row.inhibitionEpr !== null,
   );
+  // Reference sign composition: without it, an inhibition EPR of 0.000x cannot
+  // be told apart from "the reference barely contains inhibitory edges".
+  const activationReferenceCount =
+    rows.find((row) => row.activationReferenceCount !== null)
+      ?.activationReferenceCount ?? null;
+  const inhibitionReferenceCount =
+    rows.find((row) => row.inhibitionReferenceCount !== null)
+      ?.inhibitionReferenceCount ?? null;
   const downloadChart = async (
     container: HTMLDivElement | null,
     filename: string,
@@ -1359,6 +1436,23 @@ export default function BenchmarkInsights({
               {benchmark.eligibleReferenceEdges.toLocaleString()}
             </strong>{" "}
             reference interactions
+            {activationReferenceCount !== null ||
+            inhibitionReferenceCount !== null ? (
+              <>
+                {" ("}
+                {activationReferenceCount !== null
+                  ? `${activationReferenceCount.toLocaleString()} activating`
+                  : null}
+                {activationReferenceCount !== null &&
+                inhibitionReferenceCount !== null
+                  ? ", "
+                  : null}
+                {inhibitionReferenceCount !== null
+                  ? `${inhibitionReferenceCount.toLocaleString()} inhibitory`
+                  : null}
+                {")"}
+              </>
+            ) : null}
           </span>
           <span aria-hidden="true">·</span>
           <span>
@@ -1391,27 +1485,75 @@ export default function BenchmarkInsights({
                 <th className="sticky left-0 z-20 bg-slate-50/90 px-4 py-3 text-left shadow-[1px_0_0_0_#e2e8f0]">
                   Algorithm
                 </th>
-                <th className="border-l border-slate-200 px-4 py-3 text-left">
-                  <MetricLabel explanation="AUPRC across the complete ranked network, divided by random precision. The raw AUPRC appears underneath.">
+                <th
+                  aria-sort={benchmarkSort === "auprcRatio" ? "descending" : "none"}
+                  className="border-l border-slate-200 px-4 py-3 text-left"
+                >
+                  <SortableMetricHeader
+                    explanation="AUPRC across the complete ranked network, divided by random precision. The raw AUPRC appears underneath."
+                    sortKey="auprcRatio"
+                    activeSort={benchmarkSort}
+                    onSort={setBenchmarkSort}
+                  >
                     AUPRC ratio
-                  </MetricLabel>
+                  </SortableMetricHeader>
                 </th>
-                <th className="px-4 py-3 text-left">
-                  <MetricLabel explanation="Precision among approximately the top K predictions, divided by random precision. K is the number of reference interactions and ties are included.">
+                <th
+                  aria-sort={
+                    benchmarkSort === "earlyPrecisionRatio" ? "descending" : "none"
+                  }
+                  className="px-4 py-3 text-left"
+                >
+                  <SortableMetricHeader
+                    explanation="Precision among approximately the top K predictions, divided by random precision. K is the number of reference interactions and ties are included."
+                    sortKey="earlyPrecisionRatio"
+                    activeSort={benchmarkSort}
+                    onSort={setBenchmarkSort}
+                  >
                     Early precision ratio
-                  </MetricLabel>
+                  </SortableMetricHeader>
                 </th>
                 {signedMetricsAvailable ? (
                   <>
-                    <th className="border-l border-slate-200 px-4 py-3 text-left">
-                      <MetricLabel explanation="Early precision ratio for interactions labelled activating in the reference. It does not mean that the method inferred a positive sign.">
+                    <th
+                      aria-sort={
+                        benchmarkSort === "activationEpr" ? "descending" : "none"
+                      }
+                      className="border-l border-slate-200 px-4 py-3 text-left"
+                    >
+                      <SortableMetricHeader
+                        explanation="Early precision ratio for interactions labelled activating in the reference. It does not mean that the method inferred a positive sign."
+                        sortKey="activationEpr"
+                        activeSort={benchmarkSort}
+                        onSort={setBenchmarkSort}
+                        subLabel={
+                          activationReferenceCount === null
+                            ? undefined
+                            : `${activationReferenceCount.toLocaleString()} reference edges`
+                        }
+                      >
                         Activation EPR
-                      </MetricLabel>
+                      </SortableMetricHeader>
                     </th>
-                    <th className="px-4 py-3 text-left">
-                      <MetricLabel explanation="Early precision ratio for interactions labelled inhibitory in the reference. It does not mean that the method inferred a negative sign.">
+                    <th
+                      aria-sort={
+                        benchmarkSort === "inhibitionEpr" ? "descending" : "none"
+                      }
+                      className="px-4 py-3 text-left"
+                    >
+                      <SortableMetricHeader
+                        explanation="Early precision ratio for interactions labelled inhibitory in the reference. It does not mean that the method inferred a negative sign."
+                        sortKey="inhibitionEpr"
+                        activeSort={benchmarkSort}
+                        onSort={setBenchmarkSort}
+                        subLabel={
+                          inhibitionReferenceCount === null
+                            ? undefined
+                            : `${inhibitionReferenceCount.toLocaleString()} reference edges`
+                        }
+                      >
                         Inhibition EPR
-                      </MetricLabel>
+                      </SortableMetricHeader>
                     </th>
                   </>
                 ) : null}
