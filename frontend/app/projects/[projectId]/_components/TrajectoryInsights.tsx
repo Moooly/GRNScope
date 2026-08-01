@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   downloadCsv,
   downloadSvg,
@@ -220,33 +222,6 @@ function smoothSvgPath(points: ChartPoint[]) {
   return path;
 }
 
-/** Nudges end-of-line labels apart while keeping their original vertical order. */
-function resolveLabelPositions(
-  targets: number[],
-  minimumGap: number,
-  minimumY: number,
-  maximumY: number,
-) {
-  const ordered = targets
-    .map((y, index) => ({ index, y }))
-    .sort((left, right) => left.y - right.y);
-  for (let index = 1; index < ordered.length; index += 1) {
-    const gap = ordered[index].y - ordered[index - 1].y;
-    if (gap < minimumGap) ordered[index].y = ordered[index - 1].y + minimumGap;
-  }
-  const overflow = ordered.length
-    ? ordered[ordered.length - 1].y - maximumY
-    : 0;
-  if (overflow > 0) for (const entry of ordered) entry.y -= overflow;
-  if (ordered.length && ordered[0].y < minimumY) {
-    const shift = minimumY - ordered[0].y;
-    for (const entry of ordered) entry.y += shift;
-  }
-  const resolved = new Array<number>(targets.length);
-  for (const entry of ordered) resolved[entry.index] = entry.y;
-  return resolved;
-}
-
 /**
  * SVG text shrinks with the viewBox, so on a phone a 12-unit label renders at
  * ~5px. Holding the chart to a minimum width and letting its own container
@@ -282,14 +257,297 @@ function EmptyTrajectory({
   );
 }
 
+function TrajectoryFormula({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-slate-900 [&_math]:mx-auto [&_math]:min-w-max [&_math]:text-[1.05rem] sm:[&_math]:text-[1.15rem]">
+      {children}
+    </div>
+  );
+}
+
+function TrajectoryHelpModal({
+  mode,
+  trajectory,
+  lineage,
+  expressionLabel,
+  onClose,
+}: {
+  mode: "cells" | "genes";
+  trajectory: TrajectoryData;
+  lineage: NonNullable<TrajectoryData["lineages"]>[number];
+  expressionLabel: string;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const isCells = mode === "cells";
+  const isFittedSlingshotCurve =
+    trajectory.embedding?.path_source === "slingshot_curve";
+  const titleId = `${mode}-trajectory-help-title`;
+  const summaryId = `${mode}-trajectory-help-summary`;
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-[2px] animate-modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={summaryId}
+        className="flex max-h-[min(800px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl animate-modal-panel"
+      >
+        <header className="flex items-start justify-between gap-5 border-b border-slate-100 px-6 py-5">
+          <div>
+            <h3
+              id={titleId}
+              className="text-lg font-extrabold tracking-tight text-slate-950"
+            >
+              {isCells
+                ? "Understanding the cell trajectory"
+                : "Understanding gene trends"}
+            </h3>
+            <p id={summaryId} className="mt-1 text-sm leading-5 text-slate-500">
+              {isCells
+                ? "How cells, pseudotime, lineages, and the trajectory path are displayed."
+                : "How expression curves are fitted, scaled, compared, and downloaded."}
+            </p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            aria-label={`Close ${isCells ? "cell trajectory" : "gene trends"} help`}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
+          {isCells ? (
+            <>
+              <section>
+                <h4 className="font-extrabold text-slate-900">How to read the view</h4>
+                <ul className="mt-2 space-y-2">
+                  <li>
+                    <strong className="text-slate-800">Each dot is one displayed cell.</strong>{" "}
+                    Colored cells belong to <strong>{lineage.name}</strong>; light blue is
+                    early and deep blue is late. Pale gray cells belong to other lineages
+                    and provide spatial context.
+                  </li>
+                  <li>
+                    <strong className="text-slate-800">Pseudotime is an ordering, not elapsed time.</strong>{" "}
+                    Its units and spacing do not imply minutes, division rates, or equal
+                    biological change between adjacent values.
+                  </li>
+                  <li>
+                    The {trajectory.embedding?.method ?? "2D"} axes are embedding
+                    coordinates, not pseudotime axes. Both use the same scale so the cloud
+                    is not stretched; local neighborhoods are generally more meaningful
+                    than long-range distances.
+                  </li>
+                </ul>
+              </section>
+
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">How this map is constructed</h4>
+                {isFittedSlingshotCurve ? (
+                  <p className="mt-2">
+                    The chart uses the saved {trajectory.embedding?.method ?? "2D"}
+                    coordinates and Slingshot principal curves supplied with the project.
+                    GRNScope does not refit the embedding or lineage curve in this view.
+                    The solid line is that fitted curve; the open circle marks its early
+                    end and the arrow marks its late end.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-2">
+                      GRNScope takes up to 700 cells while preserving coverage across every
+                      lineage and its early-to-late range. It embeds the cells using the 500
+                      most variable genes: missing values are replaced by the gene mean,
+                      every gene is standardized and clipped to ±8, then t-SNE is used when
+                      at least 25 cells are available; otherwise PCA is used as the fallback.
+                    </p>
+                    <p className="mt-2">
+                      The dashed path is descriptive. Cells in the selected lineage are
+                      rank-ordered by pseudotime, split into as many as 24 equal-count bins,
+                      and each bin becomes one mean coordinate. Interior coordinates receive
+                      one weighted smoothing pass before a terminal reversal, when detected,
+                      is trimmed.
+                    </p>
+                    <TrajectoryFormula>
+                      <math display="block" aria-label="Smoothed coordinate j equals coordinate j minus one plus two coordinate j plus coordinate j plus one, divided by four">
+                        <mrow>
+                          <msub><mi>c̃</mi><mi>j</mi></msub>
+                          <mo>=</mo>
+                          <mfrac>
+                            <mrow>
+                              <msub><mi>c</mi><mrow><mi>j</mi><mo>−</mo><mn>1</mn></mrow></msub>
+                              <mo>+</mo><mn>2</mn><msub><mi>c</mi><mi>j</mi></msub>
+                              <mo>+</mo><msub><mi>c</mi><mrow><mi>j</mi><mo>+</mo><mn>1</mn></mrow></msub>
+                            </mrow>
+                            <mn>4</mn>
+                          </mfrac>
+                        </mrow>
+                      </math>
+                    </TrajectoryFormula>
+                    <p className="mt-2 text-xs text-slate-500">
+                      This guide summarizes the ordering in the displayed embedding; it is
+                      not a fitted Slingshot curve and should not be read as a statistical
+                      trajectory model.
+                    </p>
+                  </>
+                )}
+              </section>
+
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">Counts and controls</h4>
+                <p className="mt-2">
+                  <strong>{lineage.cell_count.toLocaleString()}</strong> cells have a finite
+                  pseudotime in this lineage. The chart currently contains{" "}
+                  <strong>{trajectory.embedding?.sampled_cell_count.toLocaleString() ?? "0"}</strong>{" "}
+                  of <strong>{trajectory.embedding?.total_cell_count.toLocaleString() ?? "0"}</strong>{" "}
+                  total cells. Hover a dot for its cell ID and pseudotime; drag to pan,
+                  pinch or use ± to zoom, and choose Fit to reset the view.
+                </p>
+              </section>
+
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">Downloads</h4>
+                <p className="mt-2">
+                  PNG and SVG export the chart with its legend. CSV exports the displayed
+                  cell IDs, embedding coordinates, selected lineage, and each cell&apos;s
+                  pseudotime; blank pseudotime means the cell belongs only to another lineage.
+                </p>
+              </section>
+            </>
+          ) : (
+            <>
+              <section>
+                <h4 className="font-extrabold text-slate-900">What the curves show</h4>
+                <p className="mt-2">
+                  Each colored curve summarizes <strong>{expressionLabel.toLowerCase()}</strong>{" "}
+                  across cells ordered along <strong>{lineage.name}</strong>. Pseudotime is a
+                  relative progression, not elapsed time. The colored gene chips are the
+                  legend; add or remove genes there, with 1–8 genes shown at once.
+                </p>
+                <p className="mt-2">
+                  Hover near a curve to see its original fitted value and fitted range at the
+                  nearest pseudotime point. Click to pin that gene and dim the others; click
+                  the curve or pinned label again to clear it.
+                </p>
+              </section>
+
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">How each trend is fitted</h4>
+                <p className="mt-2">
+                  For every selected gene, cells with finite pseudotime and expression are
+                  sorted by pseudotime. Cells sharing an identical pseudotime are collapsed
+                  to their mean expression, while their count is retained as the fit weight.
+                  The fitted curve is evaluated at 100 evenly spaced pseudotime points and
+                  clipped to the gene&apos;s observed expression range.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <strong className="block text-slate-800">8+ unique values</strong>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Weighted least-squares cubic B-spline with two internal knots at the
+                      ⅓ and ⅔ pseudotime quantiles.
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <strong className="block text-slate-800">5–7 unique values</strong>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Weighted cubic smoothing spline.
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <strong className="block text-slate-800">Fewer than 5</strong>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Linear interpolation. A failed spline fit also falls back safely.
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">Why every curve spans 0–1</h4>
+                <p className="mt-2">
+                  The chart independently rescales each gene&apos;s fitted values. This makes
+                  activation timing and curve shape comparable, but deliberately removes
+                  between-gene magnitude differences.
+                </p>
+                <TrajectoryFormula>
+                  <math display="block" aria-label="Relative trend for gene g at pseudotime t equals fitted expression minus its minimum, divided by its maximum minus its minimum">
+                    <mrow>
+                      <msub><mi>R</mi><mi>g</mi></msub>
+                      <mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo>
+                      <mo>=</mo>
+                      <mfrac>
+                        <mrow>
+                          <msub><mi>x̂</mi><mi>g</mi></msub>
+                          <mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo>
+                          <mo>−</mo><msub><mi>x</mi><mrow><mi>g</mi><mo>,</mo><mi>min</mi></mrow></msub>
+                        </mrow>
+                        <mrow>
+                          <msub><mi>x</mi><mrow><mi>g</mi><mo>,</mo><mi>max</mi></mrow></msub>
+                          <mo>−</mo><msub><mi>x</mi><mrow><mi>g</mi><mo>,</mo><mi>min</mi></mrow></msub>
+                        </mrow>
+                      </mfrac>
+                    </mrow>
+                  </math>
+                </TrajectoryFormula>
+                <p className="mt-2 text-xs text-slate-500">
+                  If a fitted trend is constant, its relative value is 0 throughout. A peak
+                  at 1 means that gene&apos;s own maximum—not equal absolute expression across genes.
+                </p>
+              </section>
+
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">Downloads</h4>
+                <p className="mt-2">
+                  PNG and SVG export the relative 0–1 chart. CSV keeps the original fitted
+                  expression values for every selected gene and pseudotime point, before
+                  display scaling, so quantitative values are not lost.
+                </p>
+              </section>
+            </>
+          )}
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function CellTrajectoryChart({
   embedding,
   lineageName,
-  note,
 }: {
   embedding: NonNullable<TrajectoryData["embedding"]>;
   lineageName: string;
-  note: string;
 }) {
   // Embedding coordinates are arbitrary, so there are no tick values to leave
   // room for: the gutters hold only the axis titles, at the canvas edge.
@@ -355,7 +613,7 @@ function CellTrajectoryChart({
   const displayedCount = activeValues.length;
   const otherLineageCount = Math.max(0, embedding.points.length - displayedCount);
   const isFittedSlingshotCurve = embedding.path_source === "slingshot_curve";
-  const exportLegendExtraHeight = otherLineageCount > 0 ? 108 : 88;
+  const exportLegendExtraHeight = 56;
   const activeChartPoints = (activePath?.points ?? []).map((point) => ({
     x: xPosition(point.x),
     y: yPosition(point.y),
@@ -645,42 +903,39 @@ function CellTrajectoryChart({
               y2={height + 8}
               stroke="#e2e8f0"
             />
-            <text x={left} y={height + 27} fill="#475569" fontSize="11" fontWeight="700">
-              Legend
-            </text>
-            <text x={left} y={height + 51} fill="#64748b" fontSize="10.5" fontWeight="600">
+            <text x={left} y={height + 39} fill="#64748b" fontSize="10.5" fontWeight="600">
               {formatAxisValue(pseudotimeMin)}
             </text>
             <rect
-              x={left + 40}
-              y={height + 42}
-              width="104"
+              x={left + 24}
+              y={height + 30}
+              width="108"
               height="9"
               rx="4.5"
               fill="url(#trajectory-pseudotime-export-scale)"
             />
-            <text x={left + 152} y={height + 51} fill="#64748b" fontSize="10.5" fontWeight="600">
+            <text x={left + 140} y={height + 39} fill="#64748b" fontSize="10.5" fontWeight="600">
               {formatAxisValue(pseudotimeMax)} pseudotime
             </text>
             <line
-              x1={left}
-              x2={left + 34}
-              y1={height + 68}
-              y2={height + 68}
+              x1={left + 282}
+              x2={left + 316}
+              y1={height + 35}
+              y2={height + 35}
               stroke="#0f789f"
               strokeWidth="3"
               strokeDasharray={isFittedSlingshotCurve ? undefined : "8 6"}
               strokeLinecap="round"
             />
-            <text x={left + 44} y={height + 72} fill="#334155" fontSize="10.5" fontWeight="600">
+            <text x={left + 326} y={height + 39} fill="#334155" fontSize="10.5" fontWeight="600">
               {isFittedSlingshotCurve
-                ? "Fitted Slingshot curve, arrow at late end"
-                : "Pseudotime guide, arrow at late end"}
+                ? "Fitted Slingshot curve → late"
+                : "Pseudotime guide → late"}
             </text>
             {otherLineageCount > 0 ? (
               <>
-                <circle cx={left + 3} cy={height + 89} r="3" fill="#cbd5e1" />
-                <text x={left + 44} y={height + 93} fill="#334155" fontSize="10.5" fontWeight="600">
+                <circle cx={width - right - 142} cy={height + 35} r="3" fill="#cbd5e1" />
+                <text x={width - right - 132} y={height + 39} fill="#334155" fontSize="10.5" fontWeight="600">
                   Other-lineage cells
                 </text>
               </>
@@ -793,7 +1048,6 @@ function CellTrajectoryChart({
           </button>
         </div>
 
-        <p className="text-[11px] leading-4 text-slate-400">{note}</p>
       </aside>
     </div>
   );
@@ -826,8 +1080,7 @@ function GeneTrendComparisonChart({
   const width = 820;
   const height = 380;
   const left = 58;
-  // Room on the right for end-of-line gene labels, which replace the legend.
-  const right = 70;
+  const right = 20;
   const top = 14;
   const bottom = 40;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -862,13 +1115,12 @@ function GeneTrendComparisonChart({
       })),
     };
   });
+  const exportLegendColumns = Math.min(4, Math.max(1, normalizedSeries.length));
+  const exportLegendRows = Math.ceil(normalizedSeries.length / exportLegendColumns);
+  const exportLegendColumnWidth = (width - left - right) / exportLegendColumns;
+  const exportLegendNoteY = height + 35 + exportLegendRows * 23;
+  const exportLegendExtraHeight = 58 + exportLegendRows * 23;
   const focusedName = pinnedGene ?? hoveredTrend?.name ?? null;
-  const labelY = resolveLabelPositions(
-    normalizedSeries.map((item) => item.chartPoints.at(-1)?.y ?? yPosition(0)),
-    14,
-    top + 4,
-    height - bottom,
-  );
 
   const resolveNearest = (clientX: number, clientY: number, svg: SVGSVGElement) => {
     const bounds = svg.getBoundingClientRect();
@@ -995,40 +1247,6 @@ function GeneTrendComparisonChart({
             />
           );
         })}
-        {normalizedSeries.map((item, index) => {
-          const endPoint = item.chartPoints.at(-1);
-          if (!endPoint) return null;
-          const isFocused = !focusedName || focusedName === item.name;
-          const y = labelY[index];
-          return (
-            <g
-              key={`${item.name}-label`}
-              opacity={isFocused ? 1 : 0.24}
-              className="transition-opacity duration-150"
-            >
-              {Math.abs(y - endPoint.y) > 2 ? (
-                <polyline
-                  points={`${endPoint.x},${endPoint.y} ${endPoint.x + 6},${y} ${
-                    width - right + 4
-                  },${y}`}
-                  fill="none"
-                  stroke={item.color}
-                  strokeWidth="1"
-                  opacity="0.5"
-                />
-              ) : null}
-              <text
-                x={width - right + 8}
-                y={y + 4}
-                fill={item.color}
-                fontSize="12.5"
-                fontWeight="700"
-              >
-                {item.name}
-              </text>
-            </g>
-          );
-        })}
         {hoveredTrend ? (
           <circle
             cx={hoveredTrend.x}
@@ -1082,6 +1300,74 @@ function GeneTrendComparisonChart({
         >
           Relative trend
         </text>
+        <g
+          data-export-only
+          data-export-extra-height={exportLegendExtraHeight}
+          style={{ display: "none" }}
+          aria-label="Gene trend legend"
+        >
+          <line
+            x1={left}
+            x2={width - right}
+            y1={height + 8}
+            y2={height + 8}
+            stroke="#e2e8f0"
+          />
+          {normalizedSeries.map((item, index) => {
+            const column = index % exportLegendColumns;
+            const row = Math.floor(index / exportLegendColumns);
+            const x = left + column * exportLegendColumnWidth;
+            const y = height + 31 + row * 23;
+            return (
+              <g key={`export-legend-${item.name}`}>
+                <line
+                  x1={x}
+                  x2={x + 22}
+                  y1={y}
+                  y2={y}
+                  stroke={item.color}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+                <text
+                  x={x + 31}
+                  y={y + 4}
+                  fill="#334155"
+                  fontSize="10.5"
+                  fontWeight="700"
+                >
+                  {item.name}
+                </text>
+              </g>
+            );
+          })}
+          <line
+            x1={left}
+            x2={width - right}
+            y1={exportLegendNoteY - 11}
+            y2={exportLegendNoteY - 11}
+            stroke="#f1f5f9"
+          />
+          <text
+            x={left}
+            y={exportLegendNoteY + 7}
+            fill="#64748b"
+            fontSize="10"
+            fontWeight="600"
+          >
+            Relative trend · each gene independently scaled 0–1
+          </text>
+          <text
+            x={width - right}
+            y={exportLegendNoteY + 7}
+            textAnchor="end"
+            fill="#64748b"
+            fontSize="10"
+            fontWeight="600"
+          >
+            Pseudotime · relative order, not elapsed time
+          </text>
+        </g>
       </svg>
       {hoveredTrend ? (
         <div
@@ -1282,6 +1568,7 @@ export default function TrajectoryInsights({
   const [geneQuery, setGeneQuery] = useState("");
   const [isGeneSearchOpen, setIsGeneSearchOpen] = useState(false);
   const [pinnedGene, setPinnedGene] = useState<string | null>(null);
+  const [helpMode, setHelpMode] = useState<"cells" | "genes" | null>(null);
   const cellChartRef = useRef<HTMLDivElement | null>(null);
   const geneChartRef = useRef<HTMLDivElement | null>(null);
   const lineages = useMemo(
@@ -1344,8 +1631,6 @@ export default function TrajectoryInsights({
   const hasEmbedding = Boolean(
     trajectory.embedding?.points.length && trajectory.embedding.paths.length,
   );
-  const hasFittedSlingshotCurve =
-    trajectory.embedding?.path_source === "slingshot_curve";
   const pseudotimeSourceLabel =
     trajectory.pseudotime_source === "estimated"
       ? "Estimated pseudotime"
@@ -1388,17 +1673,27 @@ export default function TrajectoryInsights({
     <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
         <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-extrabold text-slate-950">
-            {mode === "cells"
-              ? "Cell trajectory"
-              : "Gene trends over pseudotime"}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-extrabold text-slate-950">
+              {mode === "cells"
+                ? "Cell trajectory"
+                : "Gene trends over pseudotime"}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setHelpMode(mode)}
+              aria-label={`How to read ${mode === "cells" ? "the cell trajectory" : "gene trends"}`}
+              aria-haspopup="dialog"
+              aria-controls={`${mode}-trajectory-help-title`}
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            >
+              ?
+            </button>
+          </div>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
             {mode === "cells"
-              ? hasFittedSlingshotCurve
-                ? `${trajectory.embedding?.method ?? "2D"} embedding colored from light early to deep late pseudotime, with the fitted Slingshot lineage curve. Both axes share one scale, so distances are undistorted.`
-                : `${trajectory.embedding?.method ?? "2D"} embedding colored from light early to deep late pseudotime. The dashed line is a descriptive guide through ordered cell groups.`
-              : "Relative gene-trend shapes independently scaled from 0 to 1. Compare timing and shape, not expression magnitude."}
+              ? `${trajectory.embedding?.method ?? "2D"} view of cells colored from early to late pseudotime.`
+              : "Compare relative gene-expression shapes across pseudotime."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -1474,11 +1769,6 @@ export default function TrajectoryInsights({
               <CellTrajectoryChart
                 embedding={trajectory.embedding}
                 lineageName={lineage.name}
-                note={
-                  hasFittedSlingshotCurve
-                    ? `Slingshot's fitted principal curve, on the ${trajectory.embedding.method} coordinates it was given.`
-                    : "Guide joins smoothed pseudotime-bin averages — descriptive, not a fitted Slingshot curve."
-                }
               />
             </div>
           ) : (
@@ -1584,16 +1874,18 @@ export default function TrajectoryInsights({
                 onPinnedGeneChange={setPinnedGene}
               />
             </div>
-            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-              Shape only: every low-complexity cubic trend is independently
-              scaled from 0 to 1. Hover anywhere to read the nearest line&apos;s
-              original fitted {expressionLabel.toLowerCase()} and range, and
-              click to keep it highlighted; heights cannot be compared between
-              genes. Pseudotime orders different cells and is not elapsed time.
-            </p>
           </>
         )}
       </div>
+      {helpMode && typeof document !== "undefined" ? (
+        <TrajectoryHelpModal
+          mode={helpMode}
+          trajectory={trajectory}
+          lineage={lineage}
+          expressionLabel={expressionLabel}
+          onClose={() => setHelpMode(null)}
+        />
+      ) : null}
     </section>
   );
 }

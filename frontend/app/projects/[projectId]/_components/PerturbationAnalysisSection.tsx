@@ -2739,6 +2739,281 @@ function GeneExpressionDistributionInspector({
   );
 }
 
+function PerturbationFormula({ children }: { children: ReactNode }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-slate-900 [&_math]:mx-auto [&_math]:min-w-max [&_math]:text-[1.05rem] sm:[&_math]:text-[1.15rem]">
+      {children}
+    </div>
+  );
+}
+
+function CellFateHelpModal({
+  result,
+  scope,
+  meanShift,
+  meanRandomShift,
+  perturbationScore,
+  perturbationScorePValue,
+  onClose,
+}: {
+  result: PerturbationResult;
+  scope: string;
+  meanShift: number | null;
+  meanRandomShift: number | null;
+  perturbationScore: number | null;
+  perturbationScorePValue: number | null;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const shiftRatio =
+    meanShift !== null && meanRandomShift !== null && meanRandomShift > 0
+      ? meanShift / meanRandomShift
+      : null;
+  const scopeLabel = scope === "global" ? "Global" : scope;
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-[2px] animate-modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cell-fate-help-title"
+        aria-describedby="cell-fate-help-summary"
+        className="flex max-h-[min(820px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl animate-modal-panel"
+      >
+        <header className="flex items-start justify-between gap-5 border-b border-slate-100 px-6 py-5">
+          <div>
+            <h3
+              id="cell-fate-help-title"
+              className="text-lg font-extrabold tracking-tight text-slate-950"
+            >
+              Understanding cell fate response
+            </h3>
+            <p
+              id="cell-fate-help-summary"
+              className="mt-1 text-sm leading-5 text-slate-500"
+            >
+              How CellOracle turns a simulated gene intervention into movement and
+              development-alignment maps.
+            </p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            aria-label="Close cell fate response help"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
+          <section>
+            <h4 className="font-extrabold text-slate-900">What this run simulates</h4>
+            <p className="mt-2">
+              CellOracle starts from its imputed expression state and inferred regulatory
+              network, sets <strong>{result.gene}</strong> to the requested value, and
+              propagates that intervention through the network for{" "}
+              <strong>{result.n_propagation}</strong>{" "}
+              {result.n_propagation === 1 ? "step" : "steps"}. This view shows the{" "}
+              <strong>{scopeLabel}</strong> scope for{" "}
+              <strong>{formatPerturbation(result.gene, result.perturbation_value)}</strong>.
+            </p>
+            <PerturbationFormula>
+              <math
+                display="block"
+                aria-label="Delta X equals simulated expression minus baseline expression"
+              >
+                <mrow>
+                  <mi>Δ</mi><mi>X</mi><mo>=</mo>
+                  <msub><mi>X</mi><mtext>simulated</mtext></msub>
+                  <mo>−</mo>
+                  <msub><mi>X</mi><mtext>baseline</mtext></msub>
+                </mrow>
+              </math>
+            </PerturbationFormula>
+            <p className="mt-2 text-xs text-slate-500">
+              The resulting expression change is converted into transition probabilities
+              and projected into the same two-dimensional cell embedding. The map predicts
+              a direction of state change; it is not elapsed time or literal physical cell
+              movement. {result.clip_delta_x ? (
+                <>This run constrained simulated changes to the fitted expression range.</>
+              ) : (
+                <>This run did not apply expression-range clipping.</>
+              )}
+            </p>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Cell-state shift</h4>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <strong className="text-slate-800">Predicted response</strong>
+                <p className="mt-1 text-xs leading-5">
+                  Points are analyzed cells at their existing embedding positions—gray by
+                  default, or cluster-colored when labels were uploaded. Blue arrows are
+                  density-smoothed local averages of the CellOracle shift, not one arrow per
+                  cell. Direction shows where nearby cells are predicted to move; length
+                  shows relative shift magnitude.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <strong className="text-slate-800">Randomized control</strong>
+                <p className="mt-1 text-xs leading-5">
+                  CellOracle repeats the transition calculation with its randomized-neighbor
+                  control. It uses the same cells, embedding, smoothing, density mask, view,
+                  and arrow scale, so coherent structure beyond the control is easier to see.
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Both fields are evaluated on a 40 × 40 grid, smoothed with CellOracle&apos;s
+              0.8 setting, and hidden where local cell mass is below 0.01. Sparse blank
+              regions therefore mean there was not enough local support to draw a stable
+              grid arrow.
+            </p>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Movement summaries</h4>
+            <p className="mt-2">
+              Mean shift averages the Euclidean length of every analyzed cell&apos;s
+              predicted displacement. The control is calculated identically, and their
+              ratio reports relative movement magnitude.
+            </p>
+            <PerturbationFormula>
+              <math
+                display="block"
+                aria-label="Mean predicted shift is the average Euclidean norm of cell shifts; movement ratio is predicted mean shift divided by randomized mean shift"
+              >
+                <mrow>
+                  <msub><mi>m</mi><mtext>pred</mtext></msub><mo>=</mo>
+                  <mfrac>
+                    <mn>1</mn>
+                    <mi>n</mi>
+                  </mfrac>
+                  <munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover>
+                  <msub>
+                    <mrow><mo>‖</mo><msub><mi>Δ</mi><mi>i</mi></msub><mo>‖</mo></mrow>
+                    <mn>2</mn>
+                  </msub>
+                  <mspace width="1.5em" />
+                  <mi>R</mi><mo>=</mo>
+                  <mfrac><msub><mi>m</mi><mtext>pred</mtext></msub><msub><mi>m</mi><mtext>control</mtext></msub></mfrac>
+                </mrow>
+              </math>
+            </PerturbationFormula>
+            <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50/60 p-4 text-xs leading-5">
+              <p className="font-extrabold text-slate-900">Current scope</p>
+              <p className="mt-1 text-slate-600">
+                Predicted mean shift: <strong>{meanShift === null ? "Unavailable" : formatScientific(meanShift)}</strong>
+                {" · "}Control mean shift:{" "}
+                <strong>{meanRandomShift === null ? "Unavailable" : formatScientific(meanRandomShift)}</strong>
+                {" · "}Ratio: <strong>{shiftRatio === null ? "Unavailable" : `${shiftRatio.toFixed(2)}×`}</strong>
+              </p>
+              <p className="mt-1 text-slate-500">
+                The ratio is descriptive. It is not a p-value and does not by itself show
+                that the perturbation changes cell fate.
+              </p>
+            </div>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Development impact</h4>
+            <p className="mt-2">
+              When pseudotime is available, CellOracle estimates a natural early-to-late
+              development vector at each supported grid point and compares it with the
+              trajectory-specific perturbation vector. Their inner product is the local
+              alignment score.
+            </p>
+            <PerturbationFormula>
+              <math
+                display="block"
+                aria-label="Local alignment is perturbation flow dot development flow; perturbation score is the mean local alignment"
+              >
+                <mrow>
+                  <msub><mi>a</mi><mi>j</mi></msub><mo>=</mo>
+                  <msub><mi>v</mi><mi>j</mi></msub>
+                  <mo>·</mo>
+                  <msub><mi>g</mi><mi>j</mi></msub>
+                  <mspace width="1.5em" />
+                  <mtext>PS</mtext><mo>=</mo>
+                  <mfrac><mn>1</mn><mi>k</mi></mfrac>
+                  <munderover><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>k</mi></munderover>
+                  <msub><mi>a</mi><mi>j</mi></msub>
+                </mrow>
+              </math>
+            </PerturbationFormula>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs leading-5">
+                <strong className="text-emerald-800">Positive · promotes</strong>
+                <p className="mt-1">Perturbation flow points with natural development.</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5">
+                <strong className="text-slate-700">Near zero · neutral</strong>
+                <p className="mt-1">Little net directional alignment.</p>
+              </div>
+              <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-xs leading-5">
+                <strong className="text-rose-700">Negative · blocks</strong>
+                <p className="mt-1">Perturbation flow opposes natural development.</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Current PS: <strong>{perturbationScore === null ? "Unavailable" : formatScientific(perturbationScore)}</strong>
+              {" · "}Directional paired-Wilcoxon p-value:{" "}
+              <strong>{perturbationScorePValue === null ? "Unavailable" : formatPValue(perturbationScorePValue)}</strong>.
+              Green and red map colors show the local score. Their symmetric display range
+              is capped at the 98th percentile of absolute scores so an outlier cannot wash
+              out the map; this changes only the colors, not PS or its p-value.
+            </p>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">How to inspect—and what not to infer</h4>
+            <p className="mt-2">
+              Hover an arrow for predicted and control magnitudes, click to pin it, and use
+              the synchronized zoom to compare identical regions. In Development impact,
+              side-by-side separates natural flow from alignment; Overlay draws the exact
+              perturbation field used in the inner product over the color map.
+            </p>
+            <p className="mt-2 rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs leading-5 text-amber-900">
+              These are model-based hypotheses, not experimental proof of causality or
+              final cell fate. Large out-of-distribution warnings mean the simulated
+              expression moved beyond values well represented during fitting and should be
+              interpreted cautiously. Embedding axes have no direct biological units.
+            </p>
+          </section>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function ResultSummary({
   projectId,
   result,
@@ -2755,6 +3030,7 @@ function ResultSummary({
   const [pinnedVectorPlot, setPinnedVectorPlot] = useState<PlotKind | null>(null);
   const [plotViewport, setPlotViewport] = useState<PlotViewport>(DEFAULT_PLOT_VIEWPORT);
   const [isComparisonExpanded, setIsComparisonExpanded] = useState(false);
+  const [isCellFateHelpOpen, setIsCellFateHelpOpen] = useState(false);
   const [mapView, setMapView] = useState<"shift" | "development-impact">("shift");
   const [mapControlsHost, setMapControlsHost] = useState<HTMLDivElement | null>(null);
 
@@ -2771,7 +3047,6 @@ function ResultSummary({
   const [showAllGenes, setShowAllGenes] = useState(false);
   const [expandedGene, setExpandedGene] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
-  const howToReadRef = useRef<HTMLDetailsElement | null>(null);
   const figureExportMenuRef = useRef<HTMLDivElement | null>(null);
   const expandedFigureExportMenuRef = useRef<HTMLDivElement | null>(null);
   const predictedPlotSvgRef = useRef<SVGSVGElement | null>(null);
@@ -3023,26 +3298,6 @@ function ResultSummary({
   }, [isDownloadDialogOpen]);
 
   useEffect(() => {
-    const dismissHowToRead = () => {
-      if (howToReadRef.current) howToReadRef.current.open = false;
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      const popup = howToReadRef.current;
-      const target = event.target;
-      if (popup?.open && target instanceof Node && !popup.contains(target)) dismissHowToRead();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && howToReadRef.current?.open) dismissHowToRead();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!figureExportMenu) return;
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -3256,32 +3511,16 @@ function ResultSummary({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className={RESULT_SECTION_HEADING_CLASS}>Cell fate response</h3>
-            <details ref={howToReadRef} className="group relative">
-              <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#087ead]/10 [&::-webkit-details-marker]:hidden">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold" aria-hidden="true">?</span>
-                How to read
-              </summary>
-              <div className="absolute left-0 top-8 z-30 w-[calc(100vw-3rem)] max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-950/10">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-950">Cell-state shift</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Shows where the simulated perturbation moves cells compared with a randomized GRN control. Both maps use the same arrow scale.
-                    </p>
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-950">Development impact</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      Flow arrows follow pseudotime. Green alignment follows development, red opposes it, and pale regions have little alignment.
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] leading-5 text-slate-500">
-                  In Overlay, perturbation arrows are drawn over the alignment colors; the separate development-flow map remains the natural reference. Alignment limits are symmetric and clipped at the 98th percentile.
-                  The predicted/control ratio is descriptive, not a significance test.
-                </p>
-              </div>
-            </details>
+            <button
+              type="button"
+              onClick={() => setIsCellFateHelpOpen(true)}
+              aria-label="How to read cell fate response"
+              aria-haspopup="dialog"
+              aria-controls="cell-fate-help-title"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            >
+              ?
+            </button>
           </div>
           <p className="mt-1.5 text-sm leading-6 text-slate-600">
             Predicted cell movement and its alignment with natural development.
@@ -3342,16 +3581,11 @@ function ResultSummary({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-500" aria-label="Plot legend">
-          {clusterColors ? (
+        {clusterColors ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-500" aria-label="Plot legend">
             <ClusterLegend colors={clusterColors} className="" />
-          ) : (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#9fb6c8]" aria-hidden="true" />
-              Cells
-            </span>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {mapView === "shift" ? (
           <div className="mt-3">
@@ -3396,6 +3630,34 @@ function ResultSummary({
           <DevelopmentImpactPanel key={result.run_id} projectId={projectId} result={result} controlsHost={mapControlsHost} />
         )}
       </section>
+
+      {isCellFateHelpOpen && typeof document !== "undefined" ? (
+        <CellFateHelpModal
+          result={result}
+          scope={resultScope}
+          meanShift={
+            isClusterScope
+              ? selectedClusterSummary?.mean_shift_magnitude ?? null
+              : result.mean_shift_magnitude
+          }
+          meanRandomShift={
+            isClusterScope
+              ? selectedClusterSummary?.mean_random_shift_magnitude ?? null
+              : result.mean_random_shift_magnitude
+          }
+          perturbationScore={
+            isClusterScope
+              ? selectedClusterSummary?.perturbation_score ?? null
+              : result.perturbation_score ?? null
+          }
+          perturbationScorePValue={
+            isClusterScope
+              ? selectedClusterSummary?.perturbation_score_p_value ?? null
+              : result.perturbation_score_p_value ?? null
+          }
+          onClose={() => setIsCellFateHelpOpen(false)}
+        />
+      ) : null}
 
       {isComparisonExpanded && (
         <div

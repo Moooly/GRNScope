@@ -22,6 +22,7 @@ import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
 import DownloadMenu from "./DownloadMenu";
+import EdgeCalculationGuide from "./EdgeCalculationGuide";
 import { WEBSITE_FONT_FAMILY } from "../_lib/downloads";
 
 export type VisualizationContext = {
@@ -109,17 +110,22 @@ function Panel({
   description,
   children,
   aside,
+  titleAction,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   aside?: ReactNode;
+  titleAction?: ReactNode;
 }) {
   return (
     <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1 basis-80">
-          <h3 className="text-lg font-extrabold text-slate-950">{title}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-extrabold text-slate-950">{title}</h3>
+            {titleAction}
+          </div>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
             {description}
           </p>
@@ -128,6 +134,221 @@ function Panel({
       </div>
       <div className="mt-5">{children}</div>
     </section>
+  );
+}
+
+function RepeatRunStabilityHelpModal({
+  uniformRule,
+  onClose,
+}: {
+  uniformRule: { stopRho: number; stopStreak: number } | null;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-[2px] animate-modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="repeat-run-stability-help-title"
+        aria-describedby="repeat-run-stability-help-summary"
+        className="flex max-h-[min(760px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl animate-modal-panel"
+      >
+        <header className="flex items-start justify-between gap-5 border-b border-slate-100 px-6 py-5">
+          <div>
+            <h3
+              id="repeat-run-stability-help-title"
+              className="text-lg font-extrabold tracking-tight text-slate-950"
+            >
+              Understanding repeat-run stability
+            </h3>
+            <p
+              id="repeat-run-stability-help-summary"
+              className="mt-1 text-sm leading-5 text-slate-500"
+            >
+              A consistency check for the networks produced by repeated
+              bootstrap samples.
+            </p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            aria-label="Close repeat-run stability help"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
+          <section>
+            <h4 className="font-extrabold text-slate-900">How to read the table</h4>
+            <ul className="mt-2 space-y-2">
+              <li className="flex gap-3">
+                <span
+                  className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-[#087ead] shadow-sm"
+                  aria-hidden="true"
+                />
+                <span>
+                  The <strong className="text-slate-800">blue dot</strong> is
+                  the median pairwise Spearman ρ. Values near 1 mean the run
+                  rankings are very similar; values near 0 mean little rank
+                  consistency, and negative values mean reversed rankings.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span
+                  className="mt-[0.65rem] h-1 w-7 shrink-0 rounded-full bg-[#8fc4d8]"
+                  aria-hidden="true"
+                />
+                <span>
+                  The <strong className="text-slate-800">light bar</strong>{" "}
+                  shows ± mean absolute deviation. A shorter bar means the
+                  pairwise correlations are more tightly grouped.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span
+                  className="mt-1.5 inline-flex h-4 min-w-7 shrink-0 items-center justify-center rounded bg-slate-100 px-1 text-[10px] font-bold text-slate-500"
+                  aria-hidden="true"
+                >
+                  runs
+                </span>
+                <span>
+                  <strong className="text-slate-800">Bootstrap runs</strong>{" "}
+                  is the number completed. “Stopped early” means the aggregate
+                  ranking met the stability rule before the run cap.
+                </span>
+              </li>
+            </ul>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">How values are calculated</h4>
+            <p className="mt-2">
+              For each algorithm, we align every usable pair of bootstrap runs
+              on the union of their directed edges. An edge missing from one
+              run receives a score of 0. We then calculate Spearman rank
+              correlation for every run pair and report the median ρ.
+            </p>
+            <p className="mt-2">
+              The deviation is the average absolute distance of those pairwise
+              ρ values from their mean. Runs without enough edges or rank
+              variation cannot produce a correlation and are excluded.
+            </p>
+          </section>
+
+          <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h4 className="font-extrabold text-slate-900">Brief example</h4>
+            <p className="mt-2">
+              Suppose the correlations between three run pairs are 0.95, 0.96,
+              and 0.97. The blue dot is their median, 0.96, and the mean
+              absolute deviation is about 0.007—so the light bar is short and
+              the runs are consistently ranked.
+            </p>
+            <h5 className="mt-4 font-bold text-slate-800">
+              How consecutive checks work
+            </h5>
+            <p className="mt-1">
+              After each bootstrap run, we rebuild one cumulative
+              edge-confidence ranking using every run completed so far. We
+              then calculate Spearman ρ between that new aggregate and the
+              immediately previous aggregate—not directly between the two raw
+              bootstrap runs. Edges found in only one snapshot are aligned with
+              confidence 0 in the other.
+            </p>
+            <ol className="mt-3 grid gap-2 text-xs leading-5 sm:grid-cols-3">
+              <li className="rounded-lg border border-slate-200 bg-white p-3">
+                <span className="block font-bold text-slate-800">After Run 1</span>
+                Build the first aggregate from Run 1. There is no earlier
+                aggregate to score yet.
+              </li>
+              <li className="rounded-lg border border-slate-200 bg-white p-3">
+                <span className="block font-bold text-slate-800">Run 2 check</span>
+                Compare the Run 1–2 aggregate with the Run 1 aggregate. If ρ =
+                0.96, the passing streak becomes 1.
+              </li>
+              <li className="rounded-lg border border-slate-200 bg-white p-3">
+                <span className="block font-bold text-slate-800">Run 3 check</span>
+                Compare the Run 1–3 aggregate with the Run 1–2 aggregate. If ρ
+                = 0.97, the streak becomes 2.
+              </li>
+            </ol>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              With a minimum of 3 runs and a rule of ρ ≥ 0.95 for 2 consecutive
+              checks, the analysis may now stop. If the Run 3 check were 0.94,
+              the streak would reset to 0; two new passing checks would then be
+              required.
+            </p>
+          </section>
+
+          <section className="mt-5 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] p-4">
+            <h4 className="font-extrabold text-slate-900">Confidence-run strategy</h4>
+            <p className="mt-2">
+              We fit the algorithm once on the full dataset, then run 3–15
+              bootstrap replicates. Each replicate draws the same number of
+              cells as the original dataset, with replacement, and reruns the
+              algorithm. Edge confidence is its recovery frequency among the
+              top-ranked candidates across these replicates.
+            </p>
+            <p className="mt-2">
+              {uniformRule ? (
+                <>
+                  After at least 3 bootstrap runs, we stop when the aggregate
+                  edge-confidence ranking reaches ρ ≥{" "}
+                  <strong className="tabular-nums text-slate-800">
+                    {uniformRule.stopRho.toFixed(2)}
+                  </strong>{" "}
+                  for{" "}
+                  <strong className="tabular-nums text-slate-800">
+                    {uniformRule.stopStreak}
+                  </strong>{" "}
+                  consecutive checks. Otherwise, the run continues to its cap.
+                </>
+              ) : (
+                <>
+                  After at least 3 bootstrap runs, consecutive aggregate
+                  edge-confidence rankings are compared for stability. Stored
+                  results in this table use their own recorded thresholds and
+                  streak requirements; otherwise, the run continues to its cap.
+                </>
+              )}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              The stopping check compares consecutive aggregate rankings. It
+              is separate from the all-pairs median shown by the blue dot.
+            </p>
+          </section>
+        </div>
+      </section>
+    </div>,
+    document.body,
   );
 }
 
@@ -153,6 +374,176 @@ const COMPARISON_MODE_LABELS: Record<ComparisonMode, string> = {
   direction: "Direction",
   sign: "Direction + sign",
 };
+
+function MethodAgreementHelpModal({ onClose }: { onClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-[2px] animate-modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="method-agreement-help-title"
+        aria-describedby="method-agreement-help-summary"
+        className="flex max-h-[min(780px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl animate-modal-panel"
+      >
+        <header className="flex items-start justify-between gap-5 border-b border-slate-100 px-6 py-5">
+          <div>
+            <h3
+              id="method-agreement-help-title"
+              className="text-lg font-extrabold tracking-tight text-slate-950"
+            >
+              Understanding method agreement
+            </h3>
+            <p
+              id="method-agreement-help-summary"
+              className="mt-1 text-sm leading-5 text-slate-500"
+            >
+              How top-ranked networks are matched and scored across algorithms.
+            </p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            aria-label="Close method agreement help"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
+          <section>
+            <h4 className="font-extrabold text-slate-900">How to read the matrix</h4>
+            <p className="mt-2">
+              Each row and column is an algorithm. Select a scored cell to
+              inspect shared and method-specific edges. Only the lower half is
+              filled because every comparison is symmetric; the pale diagonal
+              represents a method compared with itself.
+            </p>
+            <p className="mt-2">
+              Darker blue means higher agreement. The color scale uses the
+              lowest and highest off-diagonal values currently visible, so use
+              the numbers—not color alone—when comparing different settings.
+              Similar methods are placed near one another; this ordering does
+              not change their scores.
+            </p>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Edge identity modes</h4>
+            <dl className="mt-2 space-y-3">
+              <div>
+                <dt className="font-bold text-slate-800">Adjacency</dt>
+                <dd>
+                  Compares connected gene pairs only. Direction and sign are
+                  ignored, so A → B and B → A count as the same connection.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Direction</dt>
+                <dd>
+                  Source and target must match. A → B is different from B → A;
+                  methods without directed output are omitted.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Direction + sign</dt>
+                <dd>
+                  Source, target, and regulatory sign must match. Activation,
+                  repression, and unknown sign are distinct; methods without
+                  signed output are omitted.
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Agreement metrics</h4>
+            <dl className="mt-2 space-y-3">
+              <div>
+                <dt className="font-bold text-slate-800">Jaccard</dt>
+                <dd>
+                  Shared edges ÷ all distinct edges in the two top-edge sets.
+                  Rank order within each set is ignored.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Top-rank overlap</dt>
+                <dd>
+                  Rank-biased overlap with persistence p = 0.9. Agreement near
+                  the top receives the most weight, while deeper matches still
+                  contribute progressively less.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Spearman</dt>
+                <dd>
+                  Correlates edge ranks across the union of both lists. An edge
+                  missing from a list receives the next rank after the longer
+                  list; scores range from −1 to 1.
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h4 className="font-extrabold text-slate-900">Brief example</h4>
+            <div className="mt-2 space-y-1 font-semibold text-slate-700">
+              <p>Method A: A → B, C → D, E → F</p>
+              <p>Method B: A → B, C → D, G → H</p>
+            </div>
+            <p className="mt-2">
+              In Adjacency mode, Jaccard is 2 shared connections ÷ 4 distinct
+              connections = 0.50. If Method B reverses A → B to B → A,
+              Adjacency still treats it as shared, but Direction does not.
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Top-rank overlap gives extra credit because the two matches are
+              near the top. Spearman instead asks whether the full edge order
+              is similar, including the penalty ranks assigned to missing edges.
+            </p>
+          </section>
+
+          <section className="mt-5 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] p-4">
+            <h4 className="font-extrabold text-slate-900">Top-edge selection</h4>
+            <p className="mt-2">
+              Within each algorithm, edges are sorted by saved rank and then by
+              confidence. Duplicate identities under the selected mode are
+              collapsed before the chosen Top 50–1,000 limit is applied.
+            </p>
+          </section>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
 
 function ComparisonSettingsMenu({
   topK,
@@ -599,9 +990,7 @@ function RepeatRunStabilityPanel({
   activeAlgorithmIds: string[];
   selectedResultScopeId: string;
 }) {
-  const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(
-    null,
-  );
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const rows = useMemo(() => {
     const built = activeAlgorithmIds.map((algorithmId) => {
@@ -680,7 +1069,6 @@ function RepeatRunStabilityPanel({
         stoppedEarly: earlyStopping?.stopped_early === true,
         isGenuineBootstrap,
         earlyStoppingEnabled,
-        hasLegacySummary: Boolean(fallback),
       };
     });
     return built.slice().sort((a, b) => {
@@ -699,12 +1087,8 @@ function RepeatRunStabilityPanel({
     )
       ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
       : null;
-  // The plotted number and the stop rule are different statistics: the rule
-  // tests consecutive-run checks, not this median. Say so, so a method below
-  // the stop threshold here is not misread as having failed to stabilise.
-  const stabilityDescription = uniformRule
-    ? `Median pairwise Spearman ρ across bootstrap runs (3–15). Stopping is judged separately, on ${uniformRule.stopStreak} consecutive checks at ρ ≥ ${uniformRule.stopRho.toFixed(2)}.`
-    : "Median pairwise Spearman ρ across bootstrap runs. Stopping is judged separately, by each method's own aggregate-ranking rule.";
+  const stabilityDescription =
+    "Median rank agreement across bootstrap runs; higher values mean more consistent results.";
   const validRhos = rows
     .map((row) => row.medianRho)
     .filter((rho): rho is number => rho !== null);
@@ -760,14 +1144,12 @@ function RepeatRunStabilityPanel({
   const handleDownloadPng = () => {
     const width = 1600;
     const margin = 56;
-    const titleY = 68;
-    const descriptionY = 102;
-    const tableY = 132;
+    const tableY = margin;
     const headerHeight = 58;
     const rowHeight = 64;
     const axisHeight = 38;
     const tableHeight = headerHeight + rows.length * rowHeight + axisHeight;
-    const height = tableY + tableHeight + 104;
+    const height = tableY + tableHeight + 84;
     const scale = 2;
     const canvas = document.createElement("canvas");
     canvas.width = width * scale;
@@ -814,12 +1196,6 @@ function RepeatRunStabilityPanel({
 
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, width, height);
-    context.fillStyle = "#0f172a";
-    context.font = `800 28px ${WEBSITE_FONT_FAMILY}`;
-    context.fillText("Repeat-run stability", margin, titleY);
-    context.fillStyle = "#475569";
-    context.font = `400 16px ${WEBSITE_FONT_FAMILY}`;
-    context.fillText(stabilityDescription, margin, descriptionY);
 
     const tableX = margin;
     const tableWidth = width - margin * 2;
@@ -944,31 +1320,27 @@ function RepeatRunStabilityPanel({
     context.textAlign = "left";
 
     const legendY = axisTop + 68;
-    context.fillStyle = "#475569";
-    context.font = `700 13px ${WEBSITE_FONT_FAMILY}`;
-    context.fillText("Legend", tableX, legendY);
-
     context.strokeStyle = "#8fc4d8";
     context.lineWidth = 6;
     context.lineCap = "round";
     context.beginPath();
-    context.moveTo(tableX + 78, legendY - 4);
-    context.lineTo(tableX + 124, legendY - 4);
+    context.moveTo(tableX, legendY - 4);
+    context.lineTo(tableX + 46, legendY - 4);
     context.stroke();
     context.lineCap = "butt";
     context.fillStyle = "#475569";
     context.font = `600 13px ${WEBSITE_FONT_FAMILY}`;
-    context.fillText("Mean absolute deviation", tableX + 136, legendY);
+    context.fillText("Mean absolute deviation", tableX + 58, legendY);
 
     context.beginPath();
-    context.arc(tableX + 355, legendY - 4, 7, 0, Math.PI * 2);
+    context.arc(tableX + 277, legendY - 4, 7, 0, Math.PI * 2);
     context.fillStyle = "#087ead";
     context.fill();
     context.strokeStyle = "#ffffff";
     context.lineWidth = 2.5;
     context.stroke();
     context.fillStyle = "#475569";
-    context.fillText("Median correlation", tableX + 371, legendY);
+    context.fillText("Median correlation", tableX + 293, legendY);
 
     canvas.toBlob((blob) => {
       if (!blob) return;
@@ -984,47 +1356,53 @@ function RepeatRunStabilityPanel({
   };
 
   return (
-    <Panel
-      title="Repeat-run stability"
-      description={stabilityDescription}
-      aside={
-        <DownloadMenu
-          ariaLabel="Download repeat-run stability"
-          items={[
-            {
-              label: "Table image",
-              format: "PNG",
-              description: "Presentation-ready view of the current table.",
-              onSelect: handleDownloadPng,
-            },
-            {
-              label: "Complete table",
-              format: "CSV",
-              description: "Includes every run-level Spearman value.",
-              onSelect: handleDownloadCsv,
-            },
-          ]}
-        />
-      }
-    >
-      <div className="overflow-hidden rounded-xl border border-slate-200">
-        <div className="grn-table-header-grid hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] items-center gap-4 border-b border-slate-200 px-4 py-2.5 md:grid">
-          <span>Algorithm</span>
-          <span>
-            Median pairwise Spearman <span className="normal-case">ρ</span>
-          </span>
-          <span />
-          <span>Bootstrap runs</span>
-          <span />
-        </div>
-        <div className="divide-y divide-slate-100">
-        {rows.map((row, rowIndex) => {
-          const isExpanded = expandedAlgorithmId === row.algorithmId;
-          const panelId = `stability-checks-${rowIndex}`;
-          const excludedRunCount = Math.max(
-            0,
-            row.runCount - row.usableRunCount,
-          );
+    <>
+      <Panel
+        title="Repeat-run stability"
+        titleAction={
+          <button
+            type="button"
+            onClick={() => setIsHelpOpen(true)}
+            aria-label="How to read repeat-run stability"
+            aria-haspopup="dialog"
+            aria-controls="repeat-run-stability-help-title"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+          >
+            ?
+          </button>
+        }
+        description={stabilityDescription}
+        aside={
+          <DownloadMenu
+            ariaLabel="Download repeat-run stability"
+            items={[
+              {
+                label: "Table image",
+                format: "PNG",
+                description: "Presentation-ready view of the current table.",
+                onSelect: handleDownloadPng,
+              },
+              {
+                label: "Complete table",
+                format: "CSV",
+                description: "Includes every run-level Spearman value.",
+                onSelect: handleDownloadCsv,
+              },
+            ]}
+          />
+        }
+      >
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="grn-table-header-grid hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem] items-center gap-4 border-b border-slate-200 px-4 py-2.5 md:grid">
+            <span>Algorithm</span>
+            <span>
+              Median pairwise Spearman <span className="normal-case">ρ</span>
+            </span>
+            <span />
+            <span>Bootstrap runs</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+          {rows.map((row) => {
           const rhoPosition =
             row.medianRho === null ? null : plotPosition(row.medianRho);
           const deviationStart =
@@ -1035,7 +1413,7 @@ function RepeatRunStabilityPanel({
             row.medianRho === null || row.madRho === null
               ? null
               : plotPosition(row.medianRho + row.madRho);
-          // Answers the stop rule named in the panel description, which the
+          // Answers the stop rule explained in the help modal, which the
           // plotted median cannot answer on its own.
           const stopOutcome = row.stoppedEarly
             ? { label: "stopped early", tone: "text-slate-400" }
@@ -1045,20 +1423,9 @@ function RepeatRunStabilityPanel({
                 ? { label: "fixed plan", tone: "text-slate-400" }
                 : null;
           return (
-            <div
-              key={row.algorithmId}
-              className={isExpanded ? "bg-slate-50/70" : "bg-white"}
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedAlgorithmId((current) =>
-                    current === row.algorithmId ? null : row.algorithmId,
-                  )
-                }
-                aria-expanded={isExpanded}
-                aria-controls={panelId}
-                className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-50 md:grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] md:gap-4"
+              <div
+                key={row.algorithmId}
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 bg-white px-4 py-2.5 text-left md:grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem] md:gap-4"
               >
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
                   {row.algorithmId}
@@ -1098,108 +1465,33 @@ function RepeatRunStabilityPanel({
                     </span>
                   ) : null}
                 </span>
-                <svg
-                  viewBox="0 0 16 16"
-                  className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
-                    isExpanded ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="m3.5 6 4.5 4 4.5-4"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-              {isExpanded ? (
-                <div
-                  id={panelId}
-                  className="border-t border-slate-200 bg-white px-4 py-3 text-xs"
-                >
-                  {row.runAgreement.length ? (
-                    <>
-                      <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="font-semibold text-slate-600">
-                          Spearman by run
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          each run&apos;s median ρ against the others
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                        {row.runAgreement.map((run, runIndex) => (
-                          <span
-                            key={`${row.algorithmId}-${run.runId}`}
-                            className="inline-flex items-baseline gap-1 font-medium text-slate-500"
-                          >
-                            Run {runIndex + 1}
-                            <span className="tabular-nums text-slate-800">
-                              {run.rho === null
-                                ? "ρ —"
-                                : `ρ ${run.rho.toFixed(3)}`}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="leading-5 text-slate-500">
-                      {row.earlyStoppingEnabled || row.isGenuineBootstrap
-                        ? "Per-run Spearman values were unavailable for this result."
-                        : row.hasLegacySummary
-                          ? "Per-run Spearman values could not be reconstructed."
-                          : "No per-run Spearman values were saved for this result."}
-                    </span>
-                  )}
-                  {excludedRunCount > 0 ? (
-                    <div className="mt-2 text-[10px] font-medium text-slate-400">
-                      {plural(excludedRunCount, "run")} excluded
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-        </div>
-        <div className="hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem_1rem] items-center gap-4 border-t border-slate-200 bg-slate-50/50 px-4 py-2 md:grid">
-          <span />
-          <span className="relative block h-3 text-[10px] font-medium text-slate-400">
-            <span className="absolute left-0 tabular-nums">
-              {plotMin.toFixed(2)}
+              </div>
+            );
+          })}
+          </div>
+          <div className="hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem] items-center gap-4 border-t border-slate-200 bg-slate-50/50 px-4 py-2 md:grid">
+            <span />
+            <span className="relative block h-3 text-[10px] font-medium text-slate-400">
+              <span className="absolute left-0 tabular-nums">
+                {plotMin.toFixed(2)}
+              </span>
+              <span className="absolute left-1/2 -translate-x-1/2 tabular-nums">
+                {plotMidpoint.toFixed(2)}
+              </span>
+              <span className="absolute right-0 tabular-nums">1.00</span>
             </span>
-            <span className="absolute left-1/2 -translate-x-1/2 tabular-nums">
-              {plotMidpoint.toFixed(2)}
-            </span>
-            <span className="absolute right-0 tabular-nums">1.00</span>
-          </span>
-          <span />
-          <span />
-          <span />
+            <span />
+            <span />
+          </div>
         </div>
-      </div>
-      {/* Mirrors the legend the PNG export already draws. */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-slate-500">
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className="h-2.5 w-2.5 rounded-full border-2 border-white bg-[#087ead] shadow-sm"
-            aria-hidden="true"
-          />
-          Median ρ
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className="h-1 w-6 rounded-full bg-[#8fc4d8]"
-            aria-hidden="true"
-          />
-          ± mean absolute deviation
-        </span>
-      </div>
-    </Panel>
+      </Panel>
+      {isHelpOpen && typeof document !== "undefined" ? (
+        <RepeatRunStabilityHelpModal
+          uniformRule={uniformRule}
+          onClose={() => setIsHelpOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -1361,6 +1653,241 @@ function EdgeExplorerSettingsMenu({
   );
 }
 
+function ConsensusEdgeExplorerHelpModal({
+  comparesMethods,
+  methodCount,
+  onClose,
+}: {
+  comparesMethods: boolean;
+  methodCount: number;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-[2px] animate-modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="consensus-edge-explorer-help-title"
+        aria-describedby="consensus-edge-explorer-help-summary"
+        className="flex max-h-[min(800px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl animate-modal-panel"
+      >
+        <header className="flex items-start justify-between gap-5 border-b border-slate-100 px-6 py-5">
+          <div>
+            <h3
+              id="consensus-edge-explorer-help-title"
+              className="text-lg font-extrabold tracking-tight text-slate-950"
+            >
+              {comparesMethods
+                ? "Understanding consensus edges"
+                : "Understanding ranked edges"}
+            </h3>
+            <p
+              id="consensus-edge-explorer-help-summary"
+              className="mt-1 text-sm leading-5 text-slate-500"
+            >
+              {comparesMethods
+                ? "How evidence from selected methods is combined and interpreted."
+                : "How the selected method’s edge evidence is ranked and interpreted."}
+            </p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+            aria-label="Close edge explorer help"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
+          {comparesMethods ? (
+            <section>
+              <h4 className="font-extrabold text-slate-900">
+                How the consensus is formed
+              </h4>
+              <p className="mt-2">
+                Each method&apos;s saved edge evidence is normalized to 0–1.
+                Opposite orientations are grouped as one gene pair, and the
+                stronger orientation from each method contributes to that pair.
+                A method that has no evidence for the pair contributes 0.
+              </p>
+              <p className="mt-2">
+                <strong className="text-slate-800">Consensus evidence</strong>{" "}
+                is the sum of those normalized values divided by all{" "}
+                {methodCount} selected methods. It therefore rewards both strong
+                evidence and broad agreement; methods without the edge still
+                lower the result.
+              </p>
+            </section>
+          ) : (
+            <section>
+              <h4 className="font-extrabold text-slate-900">
+                How the ranking is formed
+              </h4>
+              <p className="mt-2">
+                The table uses the complete saved ranking from the selected
+                method. Edge evidence is normalized to 0–1, and bootstrap
+                recovery is used as the default sort.
+              </p>
+            </section>
+          )}
+
+          <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Column guide</h4>
+            <dl className="mt-2 space-y-3">
+              <div>
+                <dt className="font-bold text-slate-800">Rank</dt>
+                <dd>
+                  The saved consensus position based on bootstrap confidence,
+                  then evidence. Equal values share a rank range such as 1–4.
+                  Changing the table sort rearranges rows but does not rewrite
+                  this saved rank.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Regulation</dt>
+                <dd>
+                  Shows the plurality source-to-target orientation. A blue → is
+                  well supported; a grey or amber ⇢ means direction evidence is
+                  limited or split and should be interpreted cautiously.
+                </dd>
+              </div>
+              {comparesMethods ? (
+                <div>
+                  <dt className="font-bold text-slate-800">Evidence</dt>
+                  <dd>
+                    Mean normalized edge evidence across every selected method,
+                    including zeros from methods that do not report the edge.
+                  </dd>
+                </div>
+              ) : null}
+              <div>
+                <dt className="font-bold text-slate-800">
+                  Bootstrap confidence
+                </dt>
+                <dd>
+                  {comparesMethods
+                    ? "The median bootstrap recovery among methods that support the edge."
+                    : "The share of with-replacement cell-bootstrap samples that recovered the edge."}{" "}
+                  A “legacy” label identifies an older subsampling result rather
+                  than genuine with-replacement bootstrap confidence; rerun that
+                  method to update it.
+                </dd>
+              </div>
+              {comparesMethods ? (
+                <div>
+                  <dt className="font-bold text-slate-800">Support</dt>
+                  <dd>
+                    The number of selected methods that report the edge. For
+                    example, 3/{methodCount} means three of the {methodCount}{" "}
+                    methods support it.
+                  </dd>
+                </div>
+              ) : null}
+              <div>
+                <dt className="font-bold text-slate-800">
+                  Direction confidence
+                </dt>
+                <dd>
+                  The absolute forward-versus-reverse evidence margin divided
+                  by all direction-aware evidence. A low value means the methods
+                  are split—not that the reverse direction is correct. “No
+                  direction data” appears when direction-aware methods provide
+                  less than half of the edge&apos;s total evidence.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Regulatory sign</dt>
+                <dd>
+                  Activation or repression follows the evidence-weighted vote
+                  from signed methods. Its percentage is bootstrap agreement
+                  with that displayed sign when signed recoveries are available.
+                  Unsigned, undirected, or “no stability data” means the required
+                  sign evidence was not available.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-slate-800">Row details</dt>
+                <dd>
+                  Select any row to see each method&apos;s normalized evidence and
+                  which methods do not support the edge.
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <EdgeCalculationGuide />
+
+          {comparesMethods ? (
+            <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h4 className="font-extrabold text-slate-900">Brief example</h4>
+              <p className="mt-2">
+                With five selected methods, suppose A → B has normalized
+                evidence 0.90, 0.80, 0.70, 0, and 0. Its consensus evidence is
+                (0.90 + 0.80 + 0.70) ÷ 5 = 0.48 and its support is 3/5. If those
+                three supporting methods recover it in 90%, 80%, and 70% of
+                bootstrap samples, bootstrap confidence is their median: 80%.
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                If direction-aware evidence leans forward 1.6 versus reverse
+                0.4, direction confidence is |1.6 − 0.4| ÷ 2.0 = 60%. The arrow
+                points A → B, but the grey treatment warns that orientation is
+                not yet strong; 60% is an evidence margin, not a probability.
+              </p>
+            </section>
+          ) : null}
+
+          <section className="mt-5 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] p-4">
+            <h4 className="font-extrabold text-slate-900">
+              Search, filters, sorting, and export
+            </h4>
+            <p className="mt-2">
+              Search matches source genes, target genes, and supporting method
+              names. Settings can sort by confidence, evidence, support, or gene
+              name{comparesMethods ? " and require a minimum method support" : ""}.
+              These controls do not depend on Network-tab filters.
+            </p>
+            <p className="mt-2">
+              The CSV download includes every row matching the current search
+              and minimum-support setting, not only the visible page, plus the
+              underlying confidence, coverage, sign, and bootstrap fields.
+            </p>
+          </section>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function ConsensusEdgeExplorer({
   rows,
   activeAlgorithmIds,
@@ -1372,6 +1899,7 @@ function ConsensusEdgeExplorer({
   const [sort, setSort] = useState<EdgeExplorerSort>("confidence");
   const [minimumSupport, setMinimumSupport] = useState(1);
   const [page, setPage] = useState(1);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [methodEvidencePopover, setMethodEvidencePopover] = useState<{
     top: number;
@@ -1581,6 +2109,18 @@ function ConsensusEdgeExplorer({
     <>
       <Panel
       title={title}
+      titleAction={
+        <button
+          type="button"
+          onClick={() => setIsHelpOpen(true)}
+          aria-label={`How to read the ${title.toLowerCase()}`}
+          aria-haspopup="dialog"
+          aria-controls="consensus-edge-explorer-help-title"
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+        >
+          ?
+        </button>
+      }
       description={
         comparesMethods
           ? "Explore combined evidence across methods."
@@ -1647,7 +2187,7 @@ function ConsensusEdgeExplorer({
                 }`}
               >
                 <colgroup>
-                  <col className="w-[6%]" />
+                  <col className="w-[5rem]" />
                   <col className={comparesMethods ? "w-[28%]" : "w-[45%]"} />
                   {comparesMethods ? <col className="w-[10%]" /> : null}
                   <col className={comparesMethods ? "w-[10%]" : "w-[13%]"} />
@@ -1764,7 +2304,7 @@ function ConsensusEdgeExplorer({
                               : "hover:bg-slate-50"
                           }`}
                         >
-                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-400">
+                          <td className="whitespace-nowrap px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-400">
                             {formatRank(edge.rank)}
                           </td>
                           <td className="px-4 py-3">
@@ -2021,42 +2561,6 @@ function ConsensusEdgeExplorer({
               </table>
             </div>
           </div>
-          {/* Column meanings were hover-only tooltips, unreachable on touch. */}
-          <dl className="mt-3 grid gap-x-6 gap-y-1 px-1 text-[11px] leading-4 text-slate-500 sm:grid-cols-2">
-            {comparesMethods ? (
-              <div>
-                <dt className="inline font-bold text-slate-600">Evidence</dt>{" "}
-                <dd className="inline">
-                  mean normalized edge score across the selected methods.
-                </dd>
-              </div>
-            ) : null}
-            <div>
-              <dt className="inline font-bold text-slate-600">
-                Bootstrap confidence
-              </dt>{" "}
-              <dd className="inline">
-                share of bootstrap samples that recovered the edge.
-              </dd>
-            </div>
-            {comparesMethods ? (
-              <div>
-                <dt className="inline font-bold text-slate-600">Support</dt>{" "}
-                <dd className="inline">methods reporting the edge.</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt className="inline font-bold text-slate-600">
-                Direction confidence
-              </dt>{" "}
-              <dd className="inline">
-                margin by which direction-aware methods favour the orientation
-                shown. Low values mean they are split, not that the reverse is
-                right; edges backed mostly by undirected methods show &ldquo;no
-                direction data&rdquo;.
-              </dd>
-            </div>
-          </dl>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1 py-1 text-xs">
             <p className="font-semibold text-slate-500">
               <span className="font-bold text-slate-700">
@@ -2139,6 +2643,13 @@ function ConsensusEdgeExplorer({
         </div>
       )}
       </Panel>
+      {isHelpOpen && typeof document !== "undefined" ? (
+        <ConsensusEdgeExplorerHelpModal
+          comparesMethods={comparesMethods}
+          methodCount={methodCount}
+          onClose={() => setIsHelpOpen(false)}
+        />
+      ) : null}
       {methodEvidencePopover && typeof document !== "undefined"
         ? createPortal(
             <div
@@ -2239,6 +2750,7 @@ function AgreementView({
   const [topK, setTopK] = useState(100);
   const [metric, setMetric] = useState<AgreementMetric>("jaccard");
   const [mode, setMode] = useState<ComparisonMode>("topology");
+  const [isAgreementHelpOpen, setIsAgreementHelpOpen] = useState(false);
   const [requestedPair, setRequestedPair] = useState<[string, string] | null>(null);
   const [pairDetailGroup, setPairDetailGroup] =
     useState<PairDetailGroup>("shared");
@@ -2333,6 +2845,208 @@ function AgreementView({
     return `rgba(8, 126, 173, ${0.12 + Math.max(0, Math.min(1, ratio)) * 0.73})`;
   };
 
+  const handleDownloadAgreementPng = () => {
+    if (!orderedAlgorithmIds.length) return;
+
+    const width = 1600;
+    const margin = 56;
+    const tableY = margin;
+    const labelWidth = 220;
+    const headerHeight = 64;
+    const rowHeight = 64;
+    const cellGap = 6;
+    const tableWidth = width - margin * 2;
+    const cellWidth = (tableWidth - labelWidth) / orderedAlgorithmIds.length;
+    const tableHeight = headerHeight + orderedAlgorithmIds.length * rowHeight;
+    const height = tableY + tableHeight + 92;
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.scale(scale, scale);
+
+    const roundedRect = (
+      x: number,
+      y: number,
+      rectWidth: number,
+      rectHeight: number,
+      radius: number,
+    ) => {
+      const safeRadius = Math.min(radius, rectWidth / 2, rectHeight / 2);
+      context.beginPath();
+      context.moveTo(x + safeRadius, y);
+      context.lineTo(x + rectWidth - safeRadius, y);
+      context.quadraticCurveTo(
+        x + rectWidth,
+        y,
+        x + rectWidth,
+        y + safeRadius,
+      );
+      context.lineTo(x + rectWidth, y + rectHeight - safeRadius);
+      context.quadraticCurveTo(
+        x + rectWidth,
+        y + rectHeight,
+        x + rectWidth - safeRadius,
+        y + rectHeight,
+      );
+      context.lineTo(x + safeRadius, y + rectHeight);
+      context.quadraticCurveTo(
+        x,
+        y + rectHeight,
+        x,
+        y + rectHeight - safeRadius,
+      );
+      context.lineTo(x, y + safeRadius);
+      context.quadraticCurveTo(x, y, x + safeRadius, y);
+      context.closePath();
+    };
+
+    const fitLabel = (label: string, maximumWidth: number) => {
+      if (context.measureText(label).width <= maximumWidth) return label;
+      let fitted = label;
+      while (
+        fitted.length > 1 &&
+        context.measureText(`${fitted}…`).width > maximumWidth
+      ) {
+        fitted = fitted.slice(0, -1);
+      }
+      return `${fitted}…`;
+    };
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.textBaseline = "middle";
+
+    context.fillStyle = "#f8fafc";
+    roundedRect(
+      margin + cellGap / 2,
+      tableY + cellGap / 2,
+      labelWidth - cellGap,
+      headerHeight - cellGap,
+      10,
+    );
+    context.fill();
+    context.fillStyle = "#475569";
+    context.font = `700 14px ${WEBSITE_FONT_FAMILY}`;
+    context.textAlign = "left";
+    context.fillText("Algorithm", margin + 18, tableY + headerHeight / 2);
+
+    orderedAlgorithmIds.forEach((algorithmId, columnIndex) => {
+      const cellX = margin + labelWidth + columnIndex * cellWidth;
+      context.fillStyle = "#f8fafc";
+      roundedRect(
+        cellX + cellGap / 2,
+        tableY + cellGap / 2,
+        cellWidth - cellGap,
+        headerHeight - cellGap,
+        10,
+      );
+      context.fill();
+      context.fillStyle = "#475569";
+      context.font = `700 13px ${WEBSITE_FONT_FAMILY}`;
+      context.textAlign = "center";
+      context.fillText(
+        fitLabel(algorithmId, cellWidth - 20),
+        cellX + cellWidth / 2,
+        tableY + headerHeight / 2,
+      );
+    });
+
+    orderedAlgorithmIds.forEach((rowId, rowIndex) => {
+      const rowTop = tableY + headerHeight + rowIndex * rowHeight;
+      context.fillStyle = "#475569";
+      context.font = `700 14px ${WEBSITE_FONT_FAMILY}`;
+      context.textAlign = "left";
+      context.fillText(
+        fitLabel(rowId, labelWidth - 30),
+        margin + 18,
+        rowTop + rowHeight / 2,
+      );
+
+      orderedAlgorithmIds.forEach((columnId, columnIndex) => {
+        if (columnIndex > rowIndex) return;
+        const cellX = margin + labelWidth + columnIndex * cellWidth;
+        const boxX = cellX + cellGap / 2;
+        const boxY = rowTop + cellGap / 2;
+        const boxWidth = cellWidth - cellGap;
+        const boxHeight = rowHeight - cellGap;
+
+        context.fillStyle =
+          rowId === columnId
+            ? "#f1f5f9"
+            : agreementFill(pairSimilarity(rowId, columnId));
+        roundedRect(boxX, boxY, boxWidth, boxHeight, 10);
+        context.fill();
+
+        if (rowId !== columnId) {
+          context.fillStyle = "#0f172a";
+          context.font = `800 14px ${WEBSITE_FONT_FAMILY}`;
+          context.textAlign = "center";
+          context.fillText(
+            pairSimilarity(rowId, columnId).toFixed(3),
+            cellX + cellWidth / 2,
+            rowTop + rowHeight / 2,
+          );
+        }
+      });
+    });
+
+    const footerY = tableY + tableHeight + 48;
+    context.fillStyle = "#64748b";
+    context.font = `600 13px ${WEBSITE_FONT_FAMILY}`;
+    context.textAlign = "left";
+    context.fillText(
+      `Top ${topK.toLocaleString()} · ${AGREEMENT_METRIC_SHORT_LABELS[metric]} · ${COMPARISON_MODE_LABELS[mode]}`,
+      margin,
+      footerY,
+    );
+
+    const legendRight = margin + tableWidth;
+    const gradientWidth = 180;
+    const gradientEnd = legendRight - 38;
+    const gradientStart = gradientEnd - gradientWidth;
+    context.font = `600 12px ${WEBSITE_FONT_FAMILY}`;
+    context.fillStyle = "#64748b";
+    context.textAlign = "right";
+    context.fillText(
+      agreementDomain.min.toFixed(2),
+      gradientStart - 12,
+      footerY,
+    );
+    const gradient = context.createLinearGradient(
+      gradientStart,
+      footerY,
+      gradientEnd,
+      footerY,
+    );
+    gradient.addColorStop(0, "rgba(8, 126, 173, 0.12)");
+    gradient.addColorStop(1, "rgba(8, 126, 173, 0.85)");
+    context.fillStyle = gradient;
+    roundedRect(gradientStart, footerY - 5, gradientWidth, 10, 5);
+    context.fill();
+    context.fillStyle = "#64748b";
+    context.textAlign = "left";
+    context.fillText(
+      agreementDomain.max.toFixed(2),
+      gradientEnd + 12,
+      footerY,
+    );
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `method-agreement-${metric}-${mode}-top-${topK}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  };
+
   const selectedPair = useMemo(
     () =>
       requestedPair &&
@@ -2407,7 +3121,19 @@ function AgreementView({
       {activeAlgorithmIds.length >= 2 ? (
       <Panel
         title="Method agreement"
-        description="Compare top-ranked results across methods. Select a cell to inspect shared and method-specific edges."
+        titleAction={
+          <button
+            type="button"
+            onClick={() => setIsAgreementHelpOpen(true)}
+            aria-label="How to read method agreement"
+            aria-haspopup="dialog"
+            aria-controls="method-agreement-help-title"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+          >
+            ?
+          </button>
+        }
+        description="Compare top-ranked networks across methods; select a cell for details."
         aside={
           <div className="flex flex-wrap items-center gap-2">
             <ComparisonSettingsMenu
@@ -2422,11 +3148,17 @@ function AgreementView({
               ariaLabel="Download method-agreement matrix"
               items={[
                 {
-                  label: "Agreement matrix",
+                  label: "Matrix image",
+                  format: "PNG",
+                  description: "Current matrix, settings, and color scale.",
+                  onSelect: handleDownloadAgreementPng,
+                },
+                {
+                  label: "Complete matrix",
                   format: "CSV",
                   description: "Current methods, metric, mode, and top-edge limit.",
                   onSelect: () =>
-                    downloadCsv("method-agreement.csv", [
+                    downloadCsv(`method-agreement-${metric}-${mode}-top-${topK}.csv`, [
                       ["algorithm", ...orderedAlgorithmIds],
                       ...orderedAlgorithmIds.map((rowId) => [
                         rowId,
@@ -2522,14 +3254,7 @@ function AgreementView({
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-              <p className="text-xs leading-5 text-slate-500">
-                {metric === "jaccard"
-                  ? "Jaccard = shared edges ÷ all distinct edges (shared plus method-specific). Rows and columns are ordered so methods that agree sit together."
-                  : metric === "rbo"
-                    ? "Rank-biased overlap emphasizes agreement near the top of each ranking (p = 0.9). Rows and columns are ordered so methods that agree sit together."
-                    : "Spearman compares ranks across the union; missing edges receive the next rank. Rows and columns are ordered so methods that agree sit together."}
-              </p>
+            <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
               {/* Scaled to the values present, so the shading is readable. */}
               <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
                 <span className="tabular-nums">
@@ -2724,6 +3449,11 @@ function AgreementView({
           />
         )}
       </Panel>
+      ) : null}
+      {isAgreementHelpOpen && typeof document !== "undefined" ? (
+        <MethodAgreementHelpModal
+          onClose={() => setIsAgreementHelpOpen(false)}
+        />
       ) : null}
       <ConsensusEdgeExplorer
         rows={edgeExplorerRows}

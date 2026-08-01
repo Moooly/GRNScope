@@ -94,7 +94,7 @@ export function downloadSvg(svg: SVGSVGElement, filename: string) {
 export async function downloadSvgPng(
   svg: SVGSVGElement,
   filename: string,
-  scale = 2,
+  scale = 3,
 ) {
   const { markup, width, height } = serializedSvg(svg);
   const sourceUrl = URL.createObjectURL(

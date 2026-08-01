@@ -6,6 +6,7 @@ import NetworkGraph, {
   MIN_NETWORK_ZOOM,
 } from "./NetworkGraph";
 import CircosNetworkGraph from "./CircosNetworkGraph";
+import EdgeCalculationGuide from "./EdgeCalculationGuide";
 import {
   DOWNLOAD_BUTTON_CLASS,
   DownloadIcon,
@@ -302,8 +303,10 @@ export default function NetworkVisualizationSection({
                 setIsVisualGuideClosing(false);
                 setIsVisualGuideOpen(true);
               }}
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
               aria-label="Open network visual guide"
+              aria-haspopup="dialog"
+              aria-controls="network-visual-guide-title"
               title="Open network visual guide"
             >
               ?
@@ -516,7 +519,7 @@ export default function NetworkVisualizationSection({
                     setIsInspectionGuideClosing(false);
                     setIsInspectionGuideOpen(true);
                   }}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1b75a6]/20 bg-[#f2f9fc] text-xs font-bold text-[#1b75a6] transition hover:border-[#1b75a6]/35 hover:bg-[#e8f5fb]"
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
                   aria-label="Open edge inspection guide"
                   title="Open edge inspection guide"
                 >
@@ -841,98 +844,272 @@ export default function NetworkVisualizationSection({
         isVisualGuideOpen &&
         createPortal(
           <div
-            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm ${
+            className={`fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-[2px] ${
               isVisualGuideClosing
                 ? "animate-modal-overlay-out"
                 : "animate-modal-overlay"
             }`}
             onClick={closeVisualGuide}
+            role="presentation"
           >
-            <div
-              className={`w-full max-w-lg rounded-[1.5rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="network-visual-guide-title"
+              aria-describedby="network-visual-guide-summary"
+              className={`flex max-h-[min(800px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-slate-900 shadow-2xl ${
                 isVisualGuideClosing
                   ? "animate-modal-panel-out"
                   : "animate-modal-panel"
               }`}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-4">
+              <header className="flex items-start justify-between gap-5 border-b border-slate-100 px-6 py-5">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
-                    Visual guide
+                  <h3
+                    id="network-visual-guide-title"
+                    className="text-lg font-extrabold tracking-tight text-slate-950"
+                  >
+                    Understanding the network
+                  </h3>
+                  <p
+                    id="network-visual-guide-summary"
+                    className="mt-1 text-sm leading-5 text-slate-500"
+                  >
+                    How genes, regulations, evidence, confidence, and controls
+                    work together.
                   </p>
-                  <h5 className="mt-2 text-lg font-bold text-slate-950">
-                    How to read network edges
-                  </h5>
                 </div>
                 <button
                   type="button"
                   onClick={closeVisualGuide}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-500 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
                   aria-label="Close visual guide"
                 >
                   ×
                 </button>
-              </div>
+              </header>
 
-              <div className="mt-5 space-y-5">
-                <div>
-                  <h6 className="text-sm font-bold text-slate-950">Relationship head</h6>
-                  <div className="mt-3 grid gap-2">
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="inline-flex h-5 w-14 items-center">
-                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                          <path d="M2 9H39" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
-                          <path d="M39 3L53 9L39 15Z" fill="#64748b" />
-                        </svg>
-                      </span>
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Activation</span>
-                        <span className="block text-xs text-slate-500">arrowhead points to the regulated gene</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="inline-flex h-5 w-14 items-center">
-                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                          <path d="M2 9H44" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
-                          <path d="M44 3V15" stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
-                        </svg>
-                      </span>
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Repression</span>
-                        <span className="block text-xs text-slate-500">bar head marks inhibitory regulation</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="inline-flex h-5 w-14 items-center">
-                        <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                          <path d="M2 9H50" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </span>
-                      <span className="leading-5">
-                        <span className="block text-sm font-semibold text-slate-800">Unannotated</span>
-                        <span className="block text-xs text-slate-500">no supported sign or direction annotation</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
+              <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
+                <section>
+                  <h4 className="font-extrabold text-slate-900">
+                    What is currently drawn
+                  </h4>
+                  <p className="mt-2">
+                    Results Settings first selects the result scope and methods,
+                    then applies minimum evidence, bootstrap confidence,
+                    direction confidence, sign stability, and—when comparing
+                    methods—minimum support. Search keeps regulations whose
+                    source or target matches the gene name.
+                  </p>
+                  <p className="mt-2">
+                    The graph draws the first requested number of matching edges
+                    in saved rank order and only the genes connected by those
+                    edges. Isolating a gene keeps its directly incident edges;
+                    it does not recalculate evidence or rank.
+                  </p>
+                </section>
 
-                <div>
-                  <h6 className="text-sm font-bold text-slate-950">Thickness</h6>
+                <section className="mt-5 border-t border-slate-100 pt-5">
+                  <h4 className="font-extrabold text-slate-900">
+                    Visual language
+                  </h4>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="h-px w-12 rounded-full bg-slate-500" />
-                      <span className="text-sm font-semibold text-slate-800">Low evidence</span>
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-6 w-6 shrink-0 rotate-45 rounded-[4px] bg-slate-700" />
+                      <span>
+                        <strong className="block text-slate-800">
+                          Transcription factor
+                        </strong>
+                        <span className="text-xs text-slate-500">
+                          diamond-shaped regulator
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-7 w-7 shrink-0 rounded-full bg-slate-700" />
+                      <span>
+                        <strong className="block text-slate-800">Other gene</strong>
+                        <span className="text-xs text-slate-500">
+                          circular target or regulator
+                        </span>
+                      </span>
                     </div>
                     <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <span className="h-1.5 w-12 rounded-full bg-slate-500" />
-                      <span className="text-sm font-semibold text-slate-800">High evidence</span>
+                      <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                        <path d="M2 9H39" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                        <path d="M39 3L53 9L39 15Z" fill="#64748b" />
+                      </svg>
+                      <span>
+                        <strong className="block text-slate-800">Activation</strong>
+                        <span className="text-xs text-slate-500">
+                          arrow points to the regulated gene
+                        </span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                        <path d="M2 9H44" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                        <path d="M44 3V15" stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
+                      </svg>
+                      <span>
+                        <strong className="block text-slate-800">Repression</strong>
+                        <span className="text-xs text-slate-500">
+                          bar marks inhibitory regulation
+                        </span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
+                        <path d="M2 9H50" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                      <span>
+                        <strong className="block text-slate-800">
+                          Unannotated line
+                        </strong>
+                        <span className="text-xs text-slate-500">
+                          direction or sign is unavailable
+                        </span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="flex flex-col gap-1.5">
+                        <span className="h-px w-12 rounded-full bg-slate-500" />
+                        <span className="h-1.5 w-12 rounded-full bg-slate-500" />
+                      </span>
+                      <span>
+                        <strong className="block text-slate-800">
+                          Relative evidence
+                        </strong>
+                        <span className="text-xs text-slate-500">
+                          thicker means stronger among visible edges
+                        </span>
+                      </span>
                     </div>
                   </div>
-                </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    Thickness is scaled from the lowest to highest evidence in
+                    the current visible set; compare the numeric values when
+                    switching filters. Reciprocal regulations curve apart, and
+                    the selected edge and its endpoints are highlighted blue.
+                  </p>
+                </section>
 
+                <section className="mt-5 border-t border-slate-100 pt-5">
+                  <h4 className="font-extrabold text-slate-900">
+                    Edge metrics
+                  </h4>
+                  <dl className="mt-2 space-y-3">
+                    <div>
+                      <dt className="font-bold text-slate-800">
+                        Regulation evidence
+                      </dt>
+                      <dd>
+                        A normalized 0–1 full-data score. For one method it is
+                        the saved per-target rank evidence. With multiple
+                        methods it is the mean normalized evidence across every
+                        selected method, including 0 for methods without the
+                        edge. A 95% interval appears when bootstrap evidence
+                        bounds are available.
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-bold text-slate-800">
+                        Rank and bootstrap confidence
+                      </dt>
+                      <dd>
+                        Rank is assigned by bootstrap confidence and then
+                        evidence. For one method, confidence is the share of
+                        with-replacement cell-bootstrap samples that recover the
+                        edge; for a consensus it is the median recovery among
+                        supporting methods. Legacy scores predate genuine cell
+                        bootstrapping and require a rerun.
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-bold text-slate-800">
+                        Direction confidence and coverage
+                      </dt>
+                      <dd>
+                        Confidence is the absolute forward-versus-reverse
+                        evidence margin divided by all direction-aware evidence.
+                        Low values mean a split, not that the reverse is correct.
+                        Coverage is the share of total edge evidence supplied by
+                        methods capable of voting on direction.
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-bold text-slate-800">
+                        Sign stability and coverage
+                      </dt>
+                      <dd>
+                        Activation or repression follows the evidence-weighted
+                        signed vote. Stability is the share of signed bootstrap
+                        recoveries agreeing with that displayed sign; coverage
+                        is how often recovered samples supplied a nonzero sign.
+                        Unsigned methods abstain.
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-bold text-slate-800">
+                        Support and method evidence
+                      </dt>
+                      <dd>
+                        Support counts selected methods reporting the edge. The
+                        inspection panel lists each supporting method&apos;s
+                        normalized full-data evidence so the consensus can be
+                        audited.
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    These values measure agreement and sensitivity to sampled
+                    cells. They are not probabilities of biological causality.
+                  </p>
+                </section>
+
+                <EdgeCalculationGuide />
+
+                <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="font-extrabold text-slate-900">Brief example</h4>
+                  <p className="mt-2">
+                    With five selected methods, suppose A → B has evidence
+                    0.90, 0.80, 0.70, 0, and 0. Consensus evidence is 0.48 and
+                    support is 3/5. If the three supporting methods recover it
+                    in 90%, 80%, and 70% of bootstrap samples, consensus
+                    confidence is the median: 80%.
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    If direction-aware evidence is 1.6 forward and 0.4 reverse,
+                    direction confidence is |1.6 − 0.4| ÷ 2.0 = 60%. The graph
+                    leans A → B, but that 60% is an evidence margin rather than
+                    a probability.
+                  </p>
+                </section>
+
+                <section className="mt-5 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] p-4">
+                  <h4 className="font-extrabold text-slate-900">
+                    Inspecting and navigating
+                  </h4>
+                  <p className="mt-2">
+                    Hover an edge for a quick metric summary. Select an edge for
+                    its full evidence panel, or select a node for its type,
+                    incoming-regulator count, outgoing-target count, top
+                    neighbors, sub-network isolation, and CellOracle
+                    perturbation when available. Select empty canvas space to
+                    close the inspection panel.
+                  </p>
+                  <p className="mt-2">
+                    Force groups connected genes; Hierarchical places
+                    regulation in layers; Hubs centers high-degree regulators;
+                    Circular arranges genes on rings; and Circos uses genomic
+                    position when available. You can pan, zoom, and drag nodes.
+                    SVG preserves the current layout and node positions; PNG
+                    captures the current canvas, zoom, and isolated view.
+                  </p>
+                </section>
               </div>
-            </div>
+            </section>
           </div>,
           portalRoot
         )}

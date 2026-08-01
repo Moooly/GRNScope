@@ -8,7 +8,7 @@
     "name": "BEELINE GSD example",
     "expression_file": "ExpressionData.csv",
     "pseudotime_file": "PseudoTime.csv",
-    "ground_truth_file": null,
+    "ground_truth_file": "refNetwork.csv",
     "gene_count": 19,
     "cell_count": 2000,
     "dimensions": {
@@ -18,7 +18,7 @@
       "columns_label": "cells"
     },
     "has_pseudotime": true,
-    "has_ground_truth": false
+    "has_ground_truth": true
   },
   "inputs": [
     {
@@ -30,6 +30,11 @@
       "name": "PseudoTime.csv",
       "path": "inputs/PseudoTime.csv",
       "description": "Demo pseudotime file used by pseudotime-based algorithms."
+    },
+    {
+      "name": "refNetwork.csv",
+      "path": "inputs/refNetwork.csv",
+      "description": "Illustrative GSD-style reference network used to demonstrate the benchmark views. Not a curated gold standard."
     }
   ],
   "algorithms": [
