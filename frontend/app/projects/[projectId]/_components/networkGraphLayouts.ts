@@ -257,12 +257,15 @@ export function buildConcentricPositions(
 ): PositionMap {
   if (nodes.length === 0) return {} as PositionMap;
 
-  // Sort by priority: TF status (boost), out-degree (regulators are hubs),
-  // total degree, with id tiebreak for stable layouts.
+  // Rank by hubness. nodePriority() weights TF status at 1000, which for a view
+  // called "Hubs" swamps the thing being shown -- a degree-9 target ranked below
+  // a degree-1 TF. Here TF only breaks ties between similarly connected genes.
+  const hubScore = (node: NetworkNode) =>
+    node.degree + node.outDegree * 0.6 + (node.isTF ? 1.5 : 0);
+
   const sorted = [...nodes].sort((a, b) => {
-    const priorityA = nodePriority(a);
-    const priorityB = nodePriority(b);
-    if (priorityA !== priorityB) return priorityB - priorityA;
+    const scoreDelta = hubScore(b) - hubScore(a);
+    if (scoreDelta !== 0) return scoreDelta;
     if (b.degree !== a.degree) return b.degree - a.degree;
     return a.id.localeCompare(b.id);
   });
@@ -270,50 +273,57 @@ export function buildConcentricPositions(
   const positions: PositionMap = {};
   if (sorted.length === 0) return positions;
 
-  const topPriority = nodePriority(sorted[0]);
-  const coreCount = Math.max(
-    1,
-    Math.min(
-      4,
-      sorted.filter((node) => nodePriority(node) >= topPriority * 0.72).length,
-      Math.ceil(Math.sqrt(sorted.length) / 2)
-    )
-  );
-  const coreNodes = sorted.slice(0, coreCount);
-  const rest = sorted.slice(coreCount);
+  const nodeSpacing = 92;
+  const coreRadius = 82;
+  const baseRadius = 190;
+  const radiusStep = 118;
+  const radiusFor = (ringIndex: number) =>
+    ringIndex === 0 ? coreRadius : baseRadius + (ringIndex - 1) * radiusStep;
+  const capacityFor = (ringIndex: number) =>
+    Math.max(3, Math.floor((2 * Math.PI * radiusFor(ringIndex)) / nodeSpacing));
 
+  // Ring sizes grow linearly outward (1:2:3...), so hubness actually decreases
+  // with radius. Filling purely by circumference let one ring swallow 14 of 19
+  // nodes and flattened the gradient the layout exists to show.
+  const ringCount = Math.max(
+    2,
+    Math.min(5, Math.round(Math.sqrt(sorted.length / 2)))
+  );
+  const weightTotal = (ringCount * (ringCount + 1)) / 2;
+  const targets: number[] = [];
+  let allocated = 0;
+  for (let index = 0; index < ringCount; index += 1) {
+    const share = Math.max(
+      1,
+      Math.round(((index + 1) / weightTotal) * sorted.length)
+    );
+    targets.push(Math.min(share, capacityFor(index)));
+    allocated += targets[index];
+  }
+  // Push any shortfall or excess onto the outermost ring, which has the room.
+  targets[ringCount - 1] += sorted.length - allocated;
+  if (targets[ringCount - 1] < 0) targets[ringCount - 1] = 0;
+
+  const ringGroups: NetworkNode[][] = [];
+  let cursor = 0;
+  for (let index = 0; index < ringCount; index += 1) {
+    const take = index === ringCount - 1 ? sorted.length - cursor : targets[index];
+    ringGroups.push(sorted.slice(cursor, cursor + Math.max(0, take)));
+    cursor += Math.max(0, take);
+  }
+
+  const coreNodes = ringGroups[0] ?? [];
   if (coreNodes.length === 1) {
     positions[coreNodes[0].id] = { x: 0, y: 0 };
   } else {
-    const coreRadius = 72;
     coreNodes.forEach((node, idx) => {
-      const angle = -Math.PI / 2 + (idx / coreNodes.length) * Math.PI * 2;
+      const angle = -Math.PI / 2 + (idx / Math.max(coreNodes.length, 1)) * Math.PI * 2;
       positions[node.id] = polarPosition(angle, coreRadius);
     });
   }
 
-  if (rest.length === 0) return positions;
-
-  // Determine ring count based on remaining count. Each ring holds about
-  // (2π·radius / nodeSpacing) nodes, with radius growing per ring.
-  const nodeSpacing = 92;
-  const baseRadius = coreNodes.length === 1 ? 165 : 205;
-  const radiusStep = 132;
-
-  const ringCapacityFor = (ringIndex: number) => {
-    const radius = baseRadius + ringIndex * radiusStep;
-    return Math.max(6, Math.floor((2 * Math.PI * radius) / nodeSpacing));
-  };
-
-  const rings: NetworkNode[][] = [];
-  let remaining = rest;
-  let ringIndex = 0;
-  while (remaining.length > 0) {
-    const capacity = ringCapacityFor(ringIndex);
-    rings.push(remaining.slice(0, capacity));
-    remaining = remaining.slice(capacity);
-    ringIndex += 1;
-  }
+  const rings = ringGroups.slice(1).filter((ring) => ring.length > 0);
+  if (rings.length === 0) return positions;
 
   // If we have edges, order each ring by barycenter relative to inner-ring
   // angular positions. This pulls connected nodes close together so radial
@@ -327,7 +337,7 @@ export function buildConcentricPositions(
   });
 
   rings.forEach((ringNodes, idx) => {
-    const radius = baseRadius + idx * radiusStep;
+    const radius = radiusFor(idx + 1);
 
     // Order based on barycenter of already-placed neighbors
     const ordered =
@@ -389,41 +399,140 @@ function computeAngularBarycenter(
 // Hierarchical layout (edge-aware topological layering)
 // ----------------------------------------------------------------------------
 
+/**
+ * Tarjan's strongly connected components, emitted in reverse topological order
+ * of the condensation DAG.
+ */
+function stronglyConnectedComponents(
+  nodes: NetworkNode[],
+  outMap: Map<string, Set<string>>
+): string[][] {
+  const index = new Map<string, number>();
+  const lowLink = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const components: string[][] = [];
+  let counter = 0;
+
+  const strongConnect = (start: string) => {
+    // Iterative so a deep chain cannot overflow the call stack.
+    const work: Array<{ id: string; next: string[]; cursor: number }> = [];
+    index.set(start, counter);
+    lowLink.set(start, counter);
+    counter += 1;
+    stack.push(start);
+    onStack.add(start);
+    work.push({ id: start, next: [...(outMap.get(start) ?? [])], cursor: 0 });
+
+    while (work.length) {
+      const frame = work[work.length - 1];
+      if (frame.cursor < frame.next.length) {
+        const child = frame.next[frame.cursor];
+        frame.cursor += 1;
+        if (!index.has(child)) {
+          index.set(child, counter);
+          lowLink.set(child, counter);
+          counter += 1;
+          stack.push(child);
+          onStack.add(child);
+          work.push({
+            id: child,
+            next: [...(outMap.get(child) ?? [])],
+            cursor: 0,
+          });
+        } else if (onStack.has(child)) {
+          lowLink.set(
+            frame.id,
+            Math.min(lowLink.get(frame.id)!, index.get(child)!)
+          );
+        }
+        continue;
+      }
+
+      work.pop();
+      if (work.length) {
+        const parent = work[work.length - 1];
+        lowLink.set(
+          parent.id,
+          Math.min(lowLink.get(parent.id)!, lowLink.get(frame.id)!)
+        );
+      }
+      if (lowLink.get(frame.id) === index.get(frame.id)) {
+        const component: string[] = [];
+        let member: string;
+        do {
+          member = stack.pop()!;
+          onStack.delete(member);
+          component.push(member);
+        } while (member !== frame.id);
+        components.push(component);
+      }
+    }
+  };
+
+  for (const node of nodes) {
+    if (!index.has(node.id)) strongConnect(node.id);
+  }
+  return components;
+}
+
+/** Node diameter (62) plus breathing room, so a row can never self-overlap. */
+const HIERARCHY_MIN_NODE_GAP = 86;
+
 export function buildHierarchicalPositions(
   nodes: NetworkNode[],
   edges: NetworkEdge[] = []
 ): PositionMap {
   if (nodes.length === 0) return {} as PositionMap;
 
-  const { inMap, outMap } = buildAdjacency(nodes, edges);
+  const { inMap, outMap, undirected } = buildAdjacency(nodes, edges);
 
-  // Longest-path layering: a node's level is 1 + max(level of its regulators).
-  // Nodes that are part of a cycle break it by treating already-visiting
-  // ancestors as level 0 (Sugiyama-style cycle handling without full SCC
-  // condensation).
-  const level = new Map<string, number>();
-  const visiting = new Set<string>();
+  // Layer the condensation of the strongly connected components rather than the
+  // raw graph. Longest-path layering on a cyclic graph gives every node its own
+  // level -- on a 19-node/60-edge network that produced 15 levels and a frame
+  // 218px wide by 3026px tall. Collapsing each cycle to one vertex keeps mutually
+  // regulating genes on a shared level and makes the depth the real hierarchy.
+  const components = stronglyConnectedComponents(nodes, outMap);
+  const componentOf = new Map<string, number>();
+  components.forEach((component, componentIndex) => {
+    for (const id of component) componentOf.set(id, componentIndex);
+  });
 
-  const computeLevel = (id: string): number => {
-    if (level.has(id)) return level.get(id)!;
-    if (visiting.has(id)) return 0; // cycle break
-
-    visiting.add(id);
-    const regulators = inMap.get(id);
-    let maxRegLevel = -1;
-    if (regulators) {
-      for (const regId of regulators) {
-        maxRegLevel = Math.max(maxRegLevel, computeLevel(regId));
-      }
-    }
-    visiting.delete(id);
-    const lvl = maxRegLevel + 1;
-    level.set(id, lvl);
-    return lvl;
-  };
-
+  const componentIn = new Map<number, Set<number>>();
   for (const node of nodes) {
-    if (!level.has(node.id)) computeLevel(node.id);
+    const from = componentOf.get(node.id);
+    if (from === undefined) continue;
+    for (const targetId of outMap.get(node.id) ?? []) {
+      const to = componentOf.get(targetId);
+      if (to === undefined || to === from) continue;
+      if (!componentIn.has(to)) componentIn.set(to, new Set());
+      componentIn.get(to)!.add(from);
+    }
+  }
+
+  // Tarjan emits components in reverse topological order, so walking backwards
+  // visits every predecessor before its successors -- no recursion needed.
+  const componentLevel = new Map<number, number>();
+  for (let index = components.length - 1; index >= 0; index -= 1) {
+    let maxPredecessor = -1;
+    for (const predecessor of componentIn.get(index) ?? []) {
+      maxPredecessor = Math.max(
+        maxPredecessor,
+        componentLevel.get(predecessor) ?? 0,
+      );
+    }
+    componentLevel.set(index, maxPredecessor + 1);
+  }
+
+  const level = new Map<string, number>();
+  for (const node of nodes) {
+    const componentIndex = componentOf.get(node.id);
+    level.set(
+      node.id,
+      componentIndex === undefined
+        ? 0
+        : (componentLevel.get(componentIndex) ?? 0),
+    );
   }
 
   // Group nodes by level
@@ -501,12 +610,29 @@ export function buildHierarchicalPositions(
       const startX = -rowWidth / 2;
       const y = centerY + (rowIndex - (rowCount - 1) / 2) * wrappedRowGap;
 
-      rowNodes.forEach((node, idx) => {
+      // The barycenter passes pull nodes toward their neighbours' centres, which
+      // can drag two nodes on top of each other. Lay the row out, then sweep
+      // left-to-right enforcing a minimum gap so a pull can never overlap them.
+      const placed = rowNodes.map((node, idx) => {
         const orderedX = startX + idx * minColumnGap;
-        const x = resolveX ? resolveX(node, orderedX) : orderedX;
-        positions[node.id] = { x, y };
-        xPositionById.set(node.id, x);
+        return { node, x: resolveX ? resolveX(node, orderedX) : orderedX };
       });
+      placed.sort((first, second) => first.x - second.x);
+      for (let index = 1; index < placed.length; index += 1) {
+        const gap = placed[index].x - placed[index - 1].x;
+        if (gap < HIERARCHY_MIN_NODE_GAP) {
+          placed[index].x = placed[index - 1].x + HIERARCHY_MIN_NODE_GAP;
+        }
+      }
+      if (placed.length > 1) {
+        // Re-centre so the separation sweep does not drift the row off-axis.
+        const drift = (placed[0].x + placed[placed.length - 1].x) / 2;
+        for (const entry of placed) entry.x -= drift;
+      }
+      for (const entry of placed) {
+        positions[entry.node.id] = { x: entry.x, y };
+        xPositionById.set(entry.node.id, entry.x);
+      }
     }
   };
 
@@ -588,6 +714,46 @@ export function buildHierarchicalPositions(
         ? orderedX
         : orderedX * 0.55 + childBarycenter * 0.45;
     });
+  }
+
+  // Same-level pass. After SCC condensation a whole cycle shares one level, so a
+  // large cluster can put 40%+ of all edges flat across one row. Ordering those
+  // members by the barycenter of their *same-level* neighbours shortens those
+  // horizontal runs; the parent/child passes above ignore them entirely.
+  for (let lvl = 0; lvl <= maxLevel; lvl++) {
+    const levelNodes = sortedLevels[lvl];
+    if (!levelNodes || levelNodes.length < 3) continue;
+
+    const levelIds = new Set(levelNodes.map((node) => node.id));
+    const sameLevelNeighbours = new Map<string, Set<string>>();
+    let sameLevelEdgeCount = 0;
+    for (const node of levelNodes) {
+      const peers = new Set<string>();
+      for (const neighbourId of undirected.get(node.id) ?? []) {
+        if (levelIds.has(neighbourId)) peers.add(neighbourId);
+      }
+      sameLevelEdgeCount += peers.size;
+      sameLevelNeighbours.set(node.id, peers);
+    }
+    if (sameLevelEdgeCount === 0) continue;
+
+    // A few sweeps: order by the mean x of same-level neighbours, re-place, repeat.
+    for (let sweep = 0; sweep < 3; sweep += 1) {
+      const ordered = [...levelNodes].sort((a, b) => {
+        const baryA = computeBarycenter(a.id, sameLevelNeighbours, xPositionById);
+        const baryB = computeBarycenter(b.id, sameLevelNeighbours, xPositionById);
+        if (baryA === null && baryB === null) {
+          const parentA = computeBarycenter(a.id, inMap, xPositionById);
+          const parentB = computeBarycenter(b.id, inMap, xPositionById);
+          if (parentA !== null && parentB !== null) return parentA - parentB;
+          return a.id.localeCompare(b.id);
+        }
+        if (baryA === null) return 1;
+        if (baryB === null) return -1;
+        return baryA - baryB;
+      });
+      placeOrderedLevel(ordered, lvl);
+    }
   }
 
   // Disconnected isolates that ended up alone at level 0 get tucked to the

@@ -113,6 +113,8 @@ export default function NetworkVisualizationSection({
   const [isInspectionGuideOpen, setIsInspectionGuideOpen] = useState(false);
   const [isInspectionGuideClosing, setIsInspectionGuideClosing] = useState(false);
   const [networkZoom, setNetworkZoom] = useState(1);
+  // Mirrors the graph's floor, which is relaxed per layout for tall graphs.
+  const [networkMinZoom, setNetworkMinZoom] = useState(MIN_NETWORK_ZOOM);
   const circosSvgRef = useRef<SVGSVGElement | null>(null);
   const graphCoreRef = useRef<Core | null>(null);
   const graphZoomHandlerRef = useRef<(() => void) | null>(null);
@@ -259,12 +261,17 @@ export default function NetworkVisualizationSection({
       graphZoomHandlerRef.current = null;
 
       if (graph && !graph.destroyed()) {
-        const handleZoom = () => setNetworkZoom(graph.zoom());
+        const handleZoom = () => {
+          setNetworkZoom(graph.zoom());
+          setNetworkMinZoom(graph.minZoom());
+        };
         graphZoomHandlerRef.current = handleZoom;
         graph.on("zoom", handleZoom);
         setNetworkZoom(graph.zoom());
+        setNetworkMinZoom(graph.minZoom());
       } else {
         setNetworkZoom(1);
+        setNetworkMinZoom(MIN_NETWORK_ZOOM);
       }
 
       onGraphReady?.(graph);
@@ -276,9 +283,11 @@ export default function NetworkVisualizationSection({
     const graph = graphCoreRef.current;
     if (!graph || graph.destroyed()) return;
 
+    // Use the graph's live floor, which is relaxed for tall layouts, rather than
+    // the static constant -- otherwise the button stops short of what fit allows.
     const nextZoom = Math.min(
       MAX_NETWORK_ZOOM,
-      Math.max(MIN_NETWORK_ZOOM, graph.zoom() * factor)
+      Math.max(graph.minZoom(), graph.zoom() * factor)
     );
 
     graph.stop(true, false);
@@ -351,7 +360,7 @@ export default function NetworkVisualizationSection({
               <button
                 type="button"
                 onClick={() => changeNetworkZoom(1 / NETWORK_ZOOM_FACTOR)}
-                disabled={networkZoom <= MIN_NETWORK_ZOOM + 0.001}
+                disabled={networkZoom <= networkMinZoom + 0.001}
                 className="inline-flex h-full w-10 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-600"
                 aria-label="Zoom out network"
                 title="Zoom out"

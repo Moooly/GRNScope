@@ -35,6 +35,32 @@ if (!cytoscapePluginRegistry.__grnScopeCoseBilkentRegistered) {
 }
 export const MIN_NETWORK_ZOOM = 0.3;
 export const MAX_NETWORK_ZOOM = 2.4;
+/** Hard floor; the working floor is derived per graph so `fit` can always succeed. */
+export const ABSOLUTE_MIN_NETWORK_ZOOM = 0.02;
+
+/**
+ * A fixed 0.3 floor makes tall graphs impossible to frame: a 3026px-tall layout
+ * in a 678px viewport needs zoom 0.187, so `fit()` silently clamped and left the
+ * graph cut off with no way to zoom out. Lower the floor to whatever this graph
+ * actually needs before fitting.
+ */
+function relaxZoomFloorForGraph(cy: Core, padding = 56) {
+  const box = cy.elements().boundingBox();
+  const width = cy.width();
+  const height = cy.height();
+  if (!box.w || !box.h || !width || !height) return;
+  const required = Math.min(
+    (width - padding * 2) / box.w,
+    (height - padding * 2) / box.h,
+  );
+  if (!Number.isFinite(required) || required <= 0) return;
+  cy.minZoom(
+    Math.max(
+      ABSOLUTE_MIN_NETWORK_ZOOM,
+      Math.min(MIN_NETWORK_ZOOM, required * 0.95),
+    ),
+  );
+}
 
 function getNodeDisplayLabel(node: NetworkNode) {
   if (node.showLabel === false) return "";
@@ -142,6 +168,7 @@ export default function NetworkGraph({
       return;
     }
 
+    relaxZoomFloorForGraph(cy);
     cy.fit(visibleElements, 56);
     cy.center(visibleElements);
   };
