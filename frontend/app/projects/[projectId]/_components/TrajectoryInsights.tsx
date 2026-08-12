@@ -80,7 +80,7 @@ const GENE_COLORS = [
 
 // Light early -> deep late, so "faded" reads as the start of the trajectory
 // rather than as unimportant.
-const PSEUDOTIME_EARLY_RGB: [number, number, number] = [125, 211, 252];
+const PSEUDOTIME_EARLY_RGB: [number, number, number] = [56, 170, 220];
 const PSEUDOTIME_LATE_RGB: [number, number, number] = [12, 74, 110];
 
 function formatAxisValue(value: number) {
@@ -794,9 +794,11 @@ function CellTrajectoryChart({
                     key={point.cell}
                     cx={xPosition(point.x)}
                     cy={yPosition(point.y)}
-                    r={(isActive ? 2.8 : 1.6) * strokeScale}
+                    r={(isActive ? 4 : 2.1) * strokeScale}
                     fill={isActive ? interpolateColor(progress) : "#cbd5e1"}
-                    fillOpacity={isActive ? 0.85 : 0.22}
+                    fillOpacity={isActive ? 1 : 0.11}
+                    stroke={isActive ? "#ffffff" : "none"}
+                    strokeWidth={isActive ? 0.6 * strokeScale : 0}
                   >
                     <title>
                       {point.cell}
@@ -957,55 +959,6 @@ function CellTrajectoryChart({
             <span>{formatAxisValue(pseudotimeMax)}</span>
           </div>
         </div>
-
-        {/* Legend and counts merged: each swatch carries the number it explains. */}
-        <dl className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <span
-              className="flex w-5 shrink-0 justify-center"
-              aria-hidden="true"
-            >
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: interpolateColor(0.45) }}
-              />
-            </span>
-            <dt className="flex-1 truncate text-slate-600">In {lineageName}</dt>
-            <dd className="font-semibold tabular-nums text-slate-800">
-              {displayedCount.toLocaleString()}
-            </dd>
-          </div>
-          {otherLineageCount > 0 ? (
-            <div className="flex items-center gap-2.5">
-              <span
-                className="flex w-5 shrink-0 justify-center"
-                aria-hidden="true"
-              >
-                <span className="h-2 w-2 rounded-full bg-slate-300" />
-              </span>
-              <dt className="flex-1 truncate text-slate-500">Other lineages</dt>
-              <dd className="font-semibold tabular-nums text-slate-500">
-                {otherLineageCount.toLocaleString()}
-              </dd>
-            </div>
-          ) : null}
-          <div className="flex items-center gap-2.5">
-            <span
-              className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-[#0f789f]"
-              aria-hidden="true"
-            >
-              <span
-                className={`inline-block w-3 border-t-2 border-[#0f789f] ${
-                  isFittedSlingshotCurve ? "" : "border-dashed"
-                }`}
-              />
-              ▸
-            </span>
-            <dt className="flex-1 text-slate-600">
-              {isFittedSlingshotCurve ? "Fitted curve" : "Pseudotime guide"}
-            </dt>
-          </div>
-        </dl>
 
         <div className="flex items-center gap-1.5 border-t border-slate-100 pt-4">
           <button

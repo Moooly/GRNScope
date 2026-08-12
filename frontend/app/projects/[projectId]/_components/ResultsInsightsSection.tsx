@@ -377,6 +377,10 @@ const COMPARISON_MODE_LABELS: Record<ComparisonMode, string> = {
   sign: "Direction + sign",
 };
 
+const METHOD_AGREEMENT_ROW_LIMIT = 6;
+const METHOD_AGREEMENT_LABEL_WIDTH = 154;
+const METHOD_AGREEMENT_COLUMN_WIDTH = 128;
+
 function MethodAgreementHelpModal({ onClose }: { onClose: () => void }) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -2825,6 +2829,12 @@ function AgreementView({
     () => seriateBySimilarity(eligibleAlgorithmIds, pairSimilarity),
     [eligibleAlgorithmIds, pairSimilarity],
   );
+  const [showAllAgreementRows, setShowAllAgreementRows] = useState(false);
+  const shouldCollapseAgreementRows =
+    orderedAlgorithmIds.length > METHOD_AGREEMENT_ROW_LIMIT;
+  const visibleAgreementRowIds = shouldCollapseAgreementRows && !showAllAgreementRows
+    ? orderedAlgorithmIds.slice(0, METHOD_AGREEMENT_ROW_LIMIT)
+    : orderedAlgorithmIds;
 
   // Colour is scaled to the off-diagonal values actually present. The diagonal
   // is structurally 1 for every method, so including it would push every real
@@ -3180,14 +3190,26 @@ function AgreementView({
         {eligibleAlgorithmIds.length >= 2 ? (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[38rem] border-separate border-spacing-1.5">
+              <table
+                className="w-full border-separate border-spacing-1.5"
+                style={{
+                  minWidth: `${METHOD_AGREEMENT_LABEL_WIDTH + orderedAlgorithmIds.length * METHOD_AGREEMENT_COLUMN_WIDTH}px`,
+                  tableLayout: "fixed",
+                }}
+              >
                 <thead className="grn-table-header">
                   <tr>
-                    <th className="rounded-l-lg px-3 py-2.5" />
+                    <th
+                      className="sticky left-0 z-30 rounded-l-lg bg-slate-50 px-3 py-2.5"
+                      style={{
+                        width: METHOD_AGREEMENT_LABEL_WIDTH,
+                      }}
+                    />
                     {orderedAlgorithmIds.map((algorithmId) => (
                       <th
                         key={algorithmId}
-                        className="max-w-28 truncate px-3 py-2.5 text-center"
+                        className="truncate px-3 py-2.5 text-center"
+                        style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
                         title={algorithmId}
                       >
                         {algorithmId}
@@ -3196,9 +3218,17 @@ function AgreementView({
                   </tr>
                 </thead>
                 <tbody>
-                  {orderedAlgorithmIds.map((rowId, rowIndex) => (
+                  {visibleAgreementRowIds.map((rowId) => {
+                    const rowIndex = orderedAlgorithmIds.indexOf(rowId);
+                    return (
                     <tr key={rowId}>
-                      <th className="max-w-32 truncate pr-3 text-left text-xs font-bold text-slate-600">
+                      <th
+                        className="sticky left-0 z-20 truncate bg-white pr-3 text-left text-xs font-bold text-slate-600"
+                        style={{
+                          width: METHOD_AGREEMENT_LABEL_WIDTH,
+                        }}
+                        title={rowId}
+                      >
                         {rowId}
                       </th>
                       {orderedAlgorithmIds.map((columnId, columnIndex) => {
@@ -3206,16 +3236,23 @@ function AgreementView({
                         // missing: leave it empty instead of marking it "—".
                         if (columnIndex > rowIndex) {
                           return (
-                            <td key={columnId} className="h-12 min-w-16" />
+                            <td
+                              key={columnId}
+                              className="h-12"
+                              style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
+                            />
                           );
                         }
                         // The diagonal is 1 by construction; show it as the
                         // matrix's spine, not as a result.
                         if (rowId === columnId) {
                           return (
-                            <td key={columnId}>
+                            <td
+                              key={columnId}
+                              style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
+                            >
                               <div
-                                className="h-12 w-full min-w-16 rounded-lg bg-slate-100"
+                                className="h-12 w-full rounded-lg bg-slate-100"
                                 title={`${rowId} compared with itself`}
                               />
                             </td>
@@ -3226,7 +3263,10 @@ function AgreementView({
                           selectedPair?.[0] === columnId &&
                           selectedPair?.[1] === rowId;
                         return (
-                          <td key={columnId}>
+                          <td
+                            key={columnId}
+                            style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
+                          >
                             <button
                               type="button"
                               aria-pressed={isSelected}
@@ -3238,7 +3278,7 @@ function AgreementView({
                                 setPairDetailGroup("shared");
                                 setRequestedPair([columnId, rowId]);
                               }}
-                              className={`h-12 w-full min-w-16 rounded-lg text-center text-xs font-extrabold text-slate-900 transition ${
+                              className={`h-12 w-full rounded-lg text-center text-xs font-extrabold text-slate-900 transition ${
                                 isSelected
                                   ? "ring-2 ring-[#087ead] ring-offset-2"
                                   : "ring-offset-2 hover:ring-2 hover:ring-[#087ead]/40"
@@ -3252,11 +3292,29 @@ function AgreementView({
                         );
                       })}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+              {shouldCollapseAgreementRows ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAgreementRows((visible) => !visible)}
+                  aria-expanded={showAllAgreementRows}
+                  className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#087ead] transition hover:text-[#06688f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+                >
+                  {showAllAgreementRows
+                    ? "Show fewer rows"
+                    : `Show all rows (${orderedAlgorithmIds.length})`}
+                  <span aria-hidden="true" className="text-sm leading-none">
+                    {showAllAgreementRows ? "▴" : "▾"}
+                  </span>
+                </button>
+              ) : (
+                <span />
+              )}
               {/* Scaled to the values present, so the shading is readable. */}
               <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
                 <span className="tabular-nums">
