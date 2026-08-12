@@ -1174,16 +1174,11 @@ export default function CreateProjectModal({
                                       setConfidenceBootstrapRuns("");
                                       return;
                                     }
-                                    const parsedValue = Number(nextValue);
-                                    if (!Number.isInteger(parsedValue)) return;
-                                    setConfidenceBootstrapRuns(
-                                      String(
-                                        Math.min(
-                                          Math.max(parsedValue, confidenceRunMin),
-                                          confidenceRunMax,
-                                        ),
-                                      ),
-                                    );
+                                    if (!/^\d+$/.test(nextValue)) return;
+                                    // Keep intermediate values such as "1" so
+                                    // users can type "10" before blur enforces
+                                    // the allowed 3–50 range.
+                                    setConfidenceBootstrapRuns(nextValue);
                                   }}
                                   onBlur={() => {
                                     const parsed = Number(confidenceBootstrapRuns.trim());
