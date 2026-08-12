@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import time
 import uuid
@@ -48,6 +49,7 @@ from ..repositories.project_repository import (
 from ..storage import save_upload_file
 from ..schemas import (
     CreateProjectResponse,
+    UpdateConfidenceRecoveryRankRequest,
     UpdateNotificationEmailRequest,
     UpdateProjectNameRequest,
 )
@@ -60,7 +62,9 @@ from ..services.beeline_service import (
     normalize_confidence_bootstrap_runs,
     normalize_confidence_evidence_threshold,
     normalize_confidence_run_mode,
+    recalculate_confidence_result_payload,
     read_delimited_header,
+    resolve_ranked_edges_per_target_limit,
     summarize_expression_matrix_issues,
 )
 from ..services.email_service import normalize_notification_email
@@ -75,6 +79,7 @@ from ..services.job_service import (
 )
 from ..services.worker_queue import enqueue_algorithm_job, queue_enabled
 from ..services.pseudotime_service import get_pseudotime_estimation_state
+from ..services.result_service import read_algorithm_result, write_algorithm_result
 from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
 from ..services.visualization_context_service import read_ground_truth_edges
 from ..services.tf_reference_service import (
@@ -997,6 +1002,91 @@ async def update_project_name(
             "project_name": new_name,
             "project": project_manifest,
         }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.patch("/api/projects/{project_id}/confidence-recovery-rank")
+async def update_confidence_recovery_rank(
+    project_id: str,
+    payload: UpdateConfidenceRecoveryRankRequest,
+    request: Request,
+    response: Response,
+):
+    owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        raise HTTPException(status_code=403, detail="Demo project is read-only.")
+
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    if not math.isfinite(payload.recovery_top_fraction):
+        raise HTTPException(status_code=400, detail="Recovery rank must be a number.")
+
+    top_fraction = max(0.01, min(0.99, float(payload.recovery_top_fraction)))
+    evidence_threshold = normalize_confidence_evidence_threshold(1.0 - top_fraction)
+
+    try:
+        project_manifest = read_project_manifest(project_dir)
+        jobs_manifest = read_jobs_manifest(project_dir)
+        latest_job = jobs_manifest[-1] if jobs_manifest else None
+        if isinstance(latest_job, dict) and any(
+            task.get("status") in {"Queued", "Running", "Stopping"}
+            for task in latest_job.get("tasks", [])
+            if isinstance(task, dict)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Wait until the current analysis finishes before changing the recovery rank.",
+            )
+
+        selected_algorithms = project_manifest.get("selected_algorithms") or []
+        updated_algorithms = 0
+        updated_scopes = 0
+        for algorithm_id in selected_algorithms:
+            try:
+                result_payload = read_algorithm_result(project_dir, str(algorithm_id))
+            except FileNotFoundError:
+                continue
+
+            max_edges_per_target = resolve_ranked_edges_per_target_limit(
+                str(algorithm_id),
+                project_manifest,
+            )
+            changed_scopes = recalculate_confidence_result_payload(
+                result_payload,
+                evidence_threshold=evidence_threshold,
+                max_edges_per_target=max_edges_per_target,
+            )
+            if changed_scopes <= 0:
+                continue
+
+            write_algorithm_result(project_dir, str(algorithm_id), result_payload)
+            updated_algorithms += 1
+            updated_scopes += changed_scopes
+
+        if updated_algorithms <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail="This analysis does not contain the archived confidence runs needed to recalculate the recovery rank.",
+            )
+
+        project_manifest["confidence_evidence_threshold"] = evidence_threshold
+        write_project_manifest(project_dir, project_manifest)
+
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "confidence_evidence_threshold": evidence_threshold,
+            "recovery_top_fraction": 1.0 - evidence_threshold,
+            "updated_algorithms": updated_algorithms,
+            "updated_scopes": updated_scopes,
+            "project": project_manifest,
+        }
+    except HTTPException:
+        raise
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:

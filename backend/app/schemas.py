@@ -32,6 +32,10 @@ class UpdateProjectNameRequest(BaseModel):
     project_name: str
 
 
+class UpdateConfidenceRecoveryRankRequest(BaseModel):
+    recovery_top_fraction: float
+
+
 class ContactSupportRequest(BaseModel):
     question: str
     reply_to_email: Optional[str] = None

@@ -3772,6 +3772,121 @@ def merge_full_data_with_bootstrap_edges(
     return merged
 
 
+def recalculate_confidence_result_payload(
+    result_payload: dict,
+    *,
+    evidence_threshold: float,
+    max_edges_per_target: int | None = None,
+) -> int:
+    """Rebuild saved confidence results from archived per-run edge files.
+
+    Confidence runs already archive their ranked edge files with each result.
+    Reusing those files lets the project-detail page change the recovery rank
+    without rerunning the underlying algorithms.
+    """
+
+    def recalculate_scope(scope_payload: dict) -> bool:
+        run_paths = scope_payload.get("run_ranked_edges_paths")
+        if not isinstance(run_paths, dict):
+            return False
+
+        confidence_summary = scope_payload.get("confidence_summary")
+        if not isinstance(confidence_summary, dict):
+            confidence_summary = {}
+        run_metadata = confidence_summary.get("run_metadata")
+        if not isinstance(run_metadata, dict):
+            run_metadata = {}
+
+        bootstrap_run_ids = [
+            str(run_id)
+            for run_id, path_value in run_paths.items()
+            if path_value
+            and str(run_id) != FULL_DATA_RUN_ID
+            and (
+                not run_metadata
+                or (
+                    isinstance(run_metadata.get(str(run_id)), dict)
+                    and run_metadata.get(str(run_id), {}).get("run_kind") == "bootstrap"
+                )
+            )
+        ]
+        if not bootstrap_run_ids:
+            return False
+
+        accumulator = create_confidence_accumulator()
+        for run_id in bootstrap_run_ids:
+            run_path = Path(str(run_paths[run_id]))
+            try:
+                run_edges, _summary = parse_ranked_edges_csv(
+                    run_path,
+                    max_edges_per_target=max_edges_per_target,
+                )
+            except EmptyRankedEdgesError:
+                run_edges = []
+            update_confidence_accumulator(
+                accumulator,
+                run_edges,
+                evidence_threshold=evidence_threshold,
+            )
+
+        aggregated_edges, updated_summary = finalize_confidence_accumulator(
+            accumulator,
+            run_count=len(bootstrap_run_ids),
+            evidence_threshold=evidence_threshold,
+        )
+
+        full_data_path_value = run_paths.get(FULL_DATA_RUN_ID)
+        full_data_present = bool(full_data_path_value)
+        if full_data_path_value:
+            try:
+                full_data_edges, _summary = parse_ranked_edges_csv(
+                    Path(str(full_data_path_value)),
+                    max_edges_per_target=max_edges_per_target,
+                )
+            except EmptyRankedEdgesError:
+                full_data_edges = []
+            aggregated_edges = merge_full_data_with_bootstrap_edges(
+                aggregated_edges,
+                full_data_edges,
+                bootstrap_runs=len(bootstrap_run_ids),
+                evidence_threshold=evidence_threshold,
+            )
+
+        previous_network_summary = scope_payload.get("network_summary")
+        scope_payload["top_edges"] = aggregated_edges
+        scope_payload["network_summary"] = {
+            **(previous_network_summary if isinstance(previous_network_summary, dict) else {}),
+            **updated_summary,
+            "edge_count": len(aggregated_edges),
+            "full_data_run_included": full_data_present,
+        }
+        scope_payload["confidence_summary"] = {
+            **confidence_summary,
+            **updated_summary,
+            "confidence_evidence_threshold": evidence_threshold,
+        }
+
+        ranked_edges_path_value = scope_payload.get("ranked_edges_path")
+        if ranked_edges_path_value:
+            write_confidence_ranked_edges_csv(
+                Path(str(ranked_edges_path_value)),
+                aggregated_edges,
+            )
+        return True
+
+    updated_count = 0
+    if recalculate_scope(result_payload):
+        updated_count += 1
+
+    scopes = result_payload.get("scopes")
+    if isinstance(scopes, dict):
+        for scope_payload in scopes.values():
+            if isinstance(scope_payload, dict) and recalculate_scope(scope_payload):
+                updated_count += 1
+
+    return updated_count
+
+
 def edge_confidence_key(edge: dict) -> tuple[str, str]:
     return str(edge.get("source", "")).strip(), str(edge.get("target", "")).strip()
 

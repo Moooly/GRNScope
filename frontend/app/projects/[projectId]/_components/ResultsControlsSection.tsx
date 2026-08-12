@@ -20,6 +20,10 @@ type ResultsControlsSectionProps = {
   onChangeEvidenceThreshold: (value: number) => void;
   confidenceThreshold: number;
   onChangeConfidenceThreshold: (value: number) => void;
+  confidenceRecoveryTopFraction?: number;
+  onApplyConfidenceRecoveryTopFraction?: (value: number) => Promise<void> | void;
+  isApplyingConfidenceRecoveryTopFraction?: boolean;
+  confidenceRecoveryUpdateError?: string;
   directionConfidenceThreshold: number;
   onChangeDirectionConfidenceThreshold: (value: number) => void;
   signConfidenceThreshold: number;
@@ -37,7 +41,7 @@ type ResultsControlsSectionProps = {
   onOpenGuide?: () => void;
 };
 
-type SettingsPanel = "algorithms";
+type SettingsPanel = "algorithms" | "confidence";
 type AlgorithmDirectionFilter = "all" | "directed" | "undirected";
 type AlgorithmSignFilter = "all" | "signed" | "unsigned";
 
@@ -53,6 +57,10 @@ export default function ResultsControlsSection({
   onChangeEvidenceThreshold = () => {},
   confidenceThreshold = 0.8,
   onChangeConfidenceThreshold = () => {},
+  confidenceRecoveryTopFraction = 0.2,
+  onApplyConfidenceRecoveryTopFraction,
+  isApplyingConfidenceRecoveryTopFraction = false,
+  confidenceRecoveryUpdateError = "",
   directionConfidenceThreshold = 0,
   onChangeDirectionConfidenceThreshold = () => {},
   signConfidenceThreshold = 0,
@@ -69,6 +77,7 @@ export default function ResultsControlsSection({
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
   const [edgeDisplayDraft, setEdgeDisplayDraft] = useState<string | null>(null);
+  const [recoveryRankDraft, setRecoveryRankDraft] = useState<string | null>(null);
   const [algorithmDirectionFilter, setAlgorithmDirectionFilter] =
     useState<AlgorithmDirectionFilter>("all");
   const [algorithmSignFilter, setAlgorithmSignFilter] =
@@ -100,6 +109,9 @@ export default function ResultsControlsSection({
   const effectiveMaxConsensusThreshold = Math.max(selectedAlgorithmIds.length, 1);
   const safeEvidenceThreshold = Number.isFinite(evidenceThreshold) ? evidenceThreshold : 0.8;
   const safeConfidenceThreshold = Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.8;
+  const safeConfidenceRecoveryTopFraction = Number.isFinite(confidenceRecoveryTopFraction)
+    ? Math.min(1, Math.max(0, confidenceRecoveryTopFraction))
+    : 0.2;
   const safeDirectionThreshold = Number.isFinite(directionConfidenceThreshold)
     ? directionConfidenceThreshold
     : 0;
@@ -199,7 +211,8 @@ export default function ResultsControlsSection({
 
   const panelHeader = (
     panel: SettingsPanel,
-    title: string
+    title: string,
+    subtitle?: string
   ) => {
     const isOpen = openPanel === panel;
 
@@ -213,11 +226,16 @@ export default function ResultsControlsSection({
             : "border-slate-200 bg-[#eef3f7] text-slate-800 hover:border-[#1b75a6]/30 hover:bg-[#e7f2f7]"
         }`}
       >
-        <span className="flex min-w-0 items-center">
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-bold">{title}</span>
+        <span className="min-w-0 truncate text-sm font-bold">{title}</span>
+        {subtitle && (
+          <span
+            className={`ml-auto shrink-0 truncate text-xs font-bold ${
+              isOpen ? "text-white/90" : "text-[#1b75a6]"
+            }`}
+          >
+            {subtitle}
           </span>
-        </span>
+        )}
         <span className="shrink-0 text-xs font-bold">{isOpen ? "▴" : "▾"}</span>
       </button>
     );
@@ -489,6 +507,120 @@ export default function ResultsControlsSection({
     </div>
   );
 
+  const clampRecoveryRankPercent = (value: number) =>
+    Math.min(99, Math.max(1, Math.round(value)));
+  const recoveryRankPercent = Math.round(safeConfidenceRecoveryTopFraction * 100);
+  const recoveryRankInputValue = recoveryRankDraft ?? String(recoveryRankPercent);
+  const requestedRecoveryRankPercent = clampRecoveryRankPercent(
+    Number(recoveryRankDraft ?? recoveryRankPercent)
+  );
+  const hasRecoveryRankChange =
+    recoveryRankDraft !== null && requestedRecoveryRankPercent !== recoveryRankPercent;
+  const adjustRecoveryRank = (delta: number) => {
+    setRecoveryRankDraft(
+      String(clampRecoveryRankPercent(Number(recoveryRankInputValue || recoveryRankPercent) + delta))
+    );
+  };
+  const applyRecoveryRank = async () => {
+    if (!hasRecoveryRankChange || !onApplyConfidenceRecoveryTopFraction) return;
+    await onApplyConfidenceRecoveryTopFraction(requestedRecoveryRankPercent / 100);
+    setRecoveryRankDraft(null);
+  };
+  const recoveryRankControl = (
+    <div className="grid h-9 w-[146px] shrink-0 grid-cols-[32px_52px_30px_32px] overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => adjustRecoveryRank(-5)}
+        disabled={isApplyingConfidenceRecoveryTopFraction || requestedRecoveryRankPercent <= 1}
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Decrease recovery rank"
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={recoveryRankInputValue}
+        onChange={(event) => setRecoveryRankDraft(event.target.value.replace(/[^0-9]/g, ""))}
+        onBlur={() => {
+          setRecoveryRankDraft(String(clampRecoveryRankPercent(Number(recoveryRankInputValue))));
+        }}
+        className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none"
+        aria-label="Top percentage of candidates for recovery"
+        disabled={isApplyingConfidenceRecoveryTopFraction}
+      />
+      <span className="flex h-full items-center justify-center border-r border-slate-200 text-xs font-bold text-slate-500">
+        %
+      </span>
+      <button
+        type="button"
+        onClick={() => adjustRecoveryRank(5)}
+        disabled={isApplyingConfidenceRecoveryTopFraction || requestedRecoveryRankPercent >= 99}
+        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Increase recovery rank"
+      >
+        +
+      </button>
+    </div>
+  );
+
+  const confidencePanel = (
+    <>
+      {panelHeader(
+        "confidence",
+        "Confidence",
+        `≥ ${Math.round(safeConfidenceThreshold * 100)}% · Top ${recoveryRankPercent}% recovery`
+      )}
+      {openPanel === "confidence" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-[#eef3f7] px-3 py-2">
+              <div className="min-w-0">
+                <span className="block text-sm font-bold text-slate-800">Confidence level</span>
+              </div>
+              {inlinePercentControl(
+                safeConfidenceThreshold,
+                onChangeConfidenceThreshold,
+                "Confidence level"
+              )}
+            </div>
+            <div className="rounded-lg bg-[#eef3f7] px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="block text-sm font-bold text-slate-800">Recovery rank</span>
+                </div>
+                {recoveryRankControl}
+              </div>
+              {confidenceRecoveryUpdateError && (
+                <p className="mt-2 text-[11px] font-semibold leading-4 text-red-600">
+                  {confidenceRecoveryUpdateError}
+                </p>
+              )}
+            </div>
+          </div>
+          <p className="mt-3 border-t border-slate-200 px-1 pt-3 text-[11px] font-medium leading-4 text-slate-500">
+            Confidence is the share of runs in which an edge ranks in the top {requestedRecoveryRankPercent}% for its target. Changing recovery rank recalculates confidence.
+          </p>
+          {(hasRecoveryRankChange || isApplyingConfidenceRecoveryTopFraction) && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={applyRecoveryRank}
+                disabled={!hasRecoveryRankChange || isApplyingConfidenceRecoveryTopFraction}
+                className="rounded-full bg-[#1b75a6] px-3.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {isApplyingConfidenceRecoveryTopFraction
+                  ? "Recalculating…"
+                  : "Recalculate confidence"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div
       ref={settingsMenuRef}
@@ -626,6 +758,7 @@ export default function ResultsControlsSection({
               </div>
             )}
 
+            {confidencePanel}
             {selectableResultScopes.length > 1 &&
               inlineRow("Result cluster", resultScopeControl())}
             {inlineRow(
@@ -634,14 +767,6 @@ export default function ResultsControlsSection({
                 safeEvidenceThreshold,
                 onChangeEvidenceThreshold,
                 "Evidence"
-              )
-            )}
-            {inlineRow(
-              "Confidence level",
-              inlinePercentControl(
-                safeConfidenceThreshold,
-                onChangeConfidenceThreshold,
-                "Confidence level"
               )
             )}
             {inlineRow(

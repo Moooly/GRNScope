@@ -626,6 +626,8 @@ export default function ProjectDetailPage() {
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
   const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
+  const [isApplyingConfidenceRecoveryRank, setIsApplyingConfidenceRecoveryRank] = useState(false);
+  const [confidenceRecoveryRankError, setConfidenceRecoveryRankError] = useState("");
   const [activeAlgorithmError, setActiveAlgorithmError] = useState<{
     task: {
       algorithmId: string;
@@ -871,6 +873,66 @@ export default function ProjectDetailPage() {
   const activeAlgorithmIds = useMemo(() => {
     return selectedAlgorithmIds.filter((id) => completedAlgorithmIds.includes(id));
   }, [completedAlgorithmIds, selectedAlgorithmIds]);
+
+  const confidenceRecoveryTopFraction = useMemo(() => {
+    const configuredThreshold = Number(project?.confidence_evidence_threshold);
+    if (Number.isFinite(configuredThreshold)) {
+      const threshold = configuredThreshold > 1 ? configuredThreshold / 100 : configuredThreshold;
+      return Math.min(1, Math.max(0, 1 - threshold));
+    }
+
+    for (const algorithmId of completedAlgorithmIds) {
+      const storedResult = algorithmResults[algorithmId];
+      const confidenceSummary =
+        selectedResultScopeId === "global"
+          ? storedResult?.confidence_summary
+          : storedResult?.scopes?.[selectedResultScopeId]?.confidence_summary;
+      const storedThreshold = Number(confidenceSummary?.confidence_evidence_threshold);
+      if (!Number.isFinite(storedThreshold)) continue;
+      const threshold = storedThreshold > 1 ? storedThreshold / 100 : storedThreshold;
+      return Math.min(1, Math.max(0, 1 - threshold));
+    }
+
+    return 0.2;
+  }, [algorithmResults, completedAlgorithmIds, project, selectedResultScopeId]);
+
+  const applyConfidenceRecoveryTopFraction = useCallback(
+    async (topFraction: number) => {
+      if (!projectId) return;
+      setIsApplyingConfidenceRecoveryRank(true);
+      setConfidenceRecoveryRankError("");
+
+      try {
+        const response = await apiFetch(
+          `${API_BASE}/projects/${projectId}/confidence-recovery-rank`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ recovery_top_fraction: topFraction }),
+          }
+        );
+        if (!response.ok) {
+          let message = "The recovery rank could not be applied.";
+          try {
+            const payload = await response.json();
+            if (typeof payload?.detail === "string") message = payload.detail;
+          } catch {
+            // Keep the friendly fallback when the server response is not JSON.
+          }
+          throw new Error(message);
+        }
+
+        await refreshProjectData();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The recovery rank could not be applied.";
+        setConfidenceRecoveryRankError(message);
+        throw error;
+      } finally {
+        setIsApplyingConfidenceRecoveryRank(false);
+      }
+    },
+    [projectId, refreshProjectData]
+  );
 
   const availableResultScopes = useMemo(() => {
     const scopeById = new Map<
@@ -2575,6 +2637,10 @@ useEffect(() => {
         onChangeConfidenceThreshold={(value) => {
           setConfidenceThreshold(value);
         }}
+        confidenceRecoveryTopFraction={confidenceRecoveryTopFraction}
+        onApplyConfidenceRecoveryTopFraction={applyConfidenceRecoveryTopFraction}
+        isApplyingConfidenceRecoveryTopFraction={isApplyingConfidenceRecoveryRank}
+        confidenceRecoveryUpdateError={confidenceRecoveryRankError}
         directionConfidenceThreshold={directionConfidenceThreshold}
         onChangeDirectionConfidenceThreshold={(value) => {
           setDirectionConfidenceThreshold(value);
