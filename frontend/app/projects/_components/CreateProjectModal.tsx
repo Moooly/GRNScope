@@ -550,28 +550,6 @@ export default function CreateProjectModal({
               ? "Select at least one algorithm to continue."
               : null;
 
-  const willRunSummary = (() => {
-    if (!hasExpressionFile) {
-      return "Upload a matrix to configure";
-    }
-    const selectionLabels = [
-      enabledGeneSelectionStages.includes("detection")
-        ? `Detection ≥${detectionThreshold || "—"}%`
-        : null,
-      enabledGeneSelectionStages.includes("trajectory")
-        ? "trajectory-aware"
-        : null,
-      enabledGeneSelectionStages.includes("variance")
-        ? `top ${hvgGeneCount || "—"} by variance`
-        : null,
-    ].filter((label): label is string => label !== null);
-    const algorithmLabel =
-      selectedAlgorithms.length === 1
-        ? "1 algorithm"
-        : `${selectedAlgorithms.length} algorithms`;
-    return `${selectionLabels.length ? selectionLabels.join(" → ") : "No gene filtering"} • ${algorithmLabel}`;
-  })();
-
   const cellOracleSpeciesLabel =
     CELLORACLE_SPECIES_OPTIONS.find((species) => species.value === cellOracleSpecies)?.label ??
     cellOracleSpecies;
@@ -613,6 +591,14 @@ export default function CreateProjectModal({
     confidenceRunMode === "fixed"
       ? `${maxEdgesPerTarget || "—"} edges per target · ${confidenceBootstrapRuns || "—"} confidence runs`
       : `${maxEdgesPerTarget || "—"} edges per target · Automatic confidence`;
+  const willRunSummary = hasExpressionFile
+    ? [
+        geneSelectionSummary,
+        optionalInputsSummary,
+        algorithmSectionSummary,
+        resultSettingsSummary,
+      ].join(" · ")
+    : "Upload a matrix to configure";
 
   return (
     <div
