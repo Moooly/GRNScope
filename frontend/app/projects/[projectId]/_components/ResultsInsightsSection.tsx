@@ -311,11 +311,13 @@ function RepeatRunStabilityHelpModal({
           <section className="mt-5 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] p-4">
             <h4 className="font-extrabold text-slate-900">Confidence-run strategy</h4>
             <p className="mt-2">
-              We fit the algorithm once on the full dataset, then run 3–15
-              bootstrap replicates. Each replicate draws the same number of
-              cells as the original dataset, with replacement, and reruns the
-              algorithm. Edge confidence is its recovery frequency among the
-              top-ranked candidates across these replicates.
+              We fit the algorithm once on the full dataset, then run between
+              3 and 50 bootstrap replicates. Each replicate draws the same
+              number of cells as the original dataset, with replacement, and
+              reruns the algorithm. Edge confidence is its recovery frequency
+              when its normalized per-target evidence reaches the configured
+              threshold τ across these replicates. Automatic runs may stop
+              early; fixed runs always use the selected count.
             </p>
             <p className="mt-2">
               {uniformRule ? (

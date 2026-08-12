@@ -44,6 +44,10 @@ type BackendAlgorithmEntry = {
 const MAX_PREPROCESSED_GENES = 8000;
 const RANKED_EDGES_HARD_MAX = 100;
 const DEFAULT_MAX_EDGES_PER_TARGET = "20";
+const DEFAULT_CONFIDENCE_RUN_MODE = "automatic" as const;
+const DEFAULT_CONFIDENCE_RUNS = "15";
+const CONFIDENCE_RUN_MIN = 3;
+const CONFIDENCE_RUN_MAX = 50;
 const SINCERITIES_DEFAULT_MAX_GENES = 500;
 const SINCERITIES_SAFE_CELL_FRACTION = 0.75;
 const SCRIBE_DEFAULT_MAX_GENES = 300;
@@ -137,6 +141,8 @@ export type CreateProjectPrefill = {
   trajectoryBonferroni?: boolean;
   includeSignificantTFs?: boolean;
   maxEdgesPerTarget?: string;
+  confidenceRunMode?: "automatic" | "fixed";
+  confidenceBootstrapRuns?: string;
   selectedIds?: string[];
   algorithmParameters?: Record<string, Record<string, unknown>>;
   ensembleEnabled?: boolean;
@@ -303,6 +309,11 @@ export default function CreateProjectFlow({
   const [trajectoryBonferroni, setTrajectoryBonferroni] = useState(true);
   const [includeSignificantTFs, setIncludeSignificantTFs] = useState(true);
   const [maxEdgesPerTarget, setMaxEdgesPerTarget] = useState(DEFAULT_MAX_EDGES_PER_TARGET);
+  const [confidenceRunMode, setConfidenceRunMode] = useState<
+    "automatic" | "fixed"
+  >(DEFAULT_CONFIDENCE_RUN_MODE);
+  const [confidenceBootstrapRuns, setConfidenceBootstrapRuns] =
+    useState(DEFAULT_CONFIDENCE_RUNS);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
@@ -370,6 +381,12 @@ export default function CreateProjectFlow({
     setTrajectoryBonferroni(initialValues?.trajectoryBonferroni ?? true);
     setIncludeSignificantTFs(initialValues?.includeSignificantTFs ?? true);
     setMaxEdgesPerTarget(initialValues?.maxEdgesPerTarget ?? DEFAULT_MAX_EDGES_PER_TARGET);
+    setConfidenceRunMode(
+      initialValues?.confidenceRunMode ?? DEFAULT_CONFIDENCE_RUN_MODE,
+    );
+    setConfidenceBootstrapRuns(
+      initialValues?.confidenceBootstrapRuns ?? DEFAULT_CONFIDENCE_RUNS,
+    );
     setCellOracleSpecies(
       initialDatasetSpecies && initialDatasetSpecies !== "other"
         ? initialDatasetSpecies
@@ -693,6 +710,17 @@ export default function CreateProjectFlow({
     formData.append("trajectory_bonferroni", JSON.stringify(trajectoryBonferroni));
     formData.append("include_significant_tfs", JSON.stringify(includeSignificantTFs));
     formData.append("ranked_edges_per_target", maxEdgesPerTarget.trim());
+    formData.append("confidence_run_mode", confidenceRunMode);
+    formData.append(
+      "confidence_bootstrap_runs",
+      confidenceRunMode === "automatic"
+        ? String(CONFIDENCE_RUN_MAX)
+        : confidenceBootstrapRuns.trim(),
+    );
+    formData.append(
+      "confidence_evidence_threshold",
+      "0.8",
+    );
     formData.append("selected_algorithms", JSON.stringify(safeSelectedIds));
     // Only submit overrides for algorithms that are actually selected.
     const selectedParameterOverrides: Record<string, Record<string, unknown>> = {};
@@ -854,6 +882,19 @@ export default function CreateProjectFlow({
       );
     }
 
+    if (confidenceRunMode === "fixed") {
+      const parsedConfidenceRuns = Number(confidenceBootstrapRuns.trim());
+      if (
+        !Number.isInteger(parsedConfidenceRuns) ||
+        parsedConfidenceRuns < CONFIDENCE_RUN_MIN ||
+        parsedConfidenceRuns > CONFIDENCE_RUN_MAX
+      ) {
+        validationErrors.push(
+          `Fixed confidence runs must be between ${CONFIDENCE_RUN_MIN} and ${CONFIDENCE_RUN_MAX}.`,
+        );
+      }
+    }
+
     if (isLoadingAlgorithms) {
       validationErrors.push("Algorithms are still loading. Please wait a moment and try again.");
     } else if (algorithmLoadError) {
@@ -979,6 +1020,10 @@ export default function CreateProjectFlow({
       includeAllTFs={includeAllTFs}
       maxEdgesPerTarget={maxEdgesPerTarget}
       maxEdgesLimit={maxEdgesLimit}
+      confidenceRunMode={confidenceRunMode}
+      confidenceBootstrapRuns={confidenceBootstrapRuns}
+      confidenceRunMin={CONFIDENCE_RUN_MIN}
+      confidenceRunMax={CONFIDENCE_RUN_MAX}
       pidcDefaultMaxGenes={pidcDefaultMaxGenes}
       sinceritiesDefaultMaxGenes={sinceritiesDefaultMaxGenes}
       scribeDefaultMaxGenes={scribeDefaultMaxGenes}
@@ -1028,6 +1073,8 @@ export default function CreateProjectFlow({
       setClusterLabelsFileName={setClusterLabelsFileName}
       setIncludeAllTFs={setIncludeAllTFs}
       setMaxEdgesPerTarget={setMaxEdgesPerTarget}
+      setConfidenceRunMode={setConfidenceRunMode}
+      setConfidenceBootstrapRuns={setConfidenceBootstrapRuns}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
       clearPseudotimeFile={clearPseudotimeFile}
       clearGroundTruthFile={clearGroundTruthFile}

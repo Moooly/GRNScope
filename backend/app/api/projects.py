@@ -53,8 +53,13 @@ from ..schemas import (
 )
 from ..validators import validate_csv_extension
 from ..services.beeline_service import (
+    CONFIDENCE_RUN_MODE_FIXED,
+    DEFAULT_CONFIDENCE_MAX_RUNS,
     collect_expression_matrix_issues,
     count_expression_gene_rows,
+    normalize_confidence_bootstrap_runs,
+    normalize_confidence_evidence_threshold,
+    normalize_confidence_run_mode,
     read_delimited_header,
     summarize_expression_matrix_issues,
 )
@@ -355,6 +360,9 @@ async def create_pending_project(
     trajectory_bonferroni: str = Form("true"),
     include_significant_tfs: str = Form("true"),
     ranked_edges_per_target: str = Form("20"),
+    confidence_run_mode: str = Form("automatic"),
+    confidence_bootstrap_runs: str = Form("15"),
+    confidence_evidence_threshold: str = Form("0.8"),
     selected_algorithms: str = Form(...),
     ensemble_enabled: str = Form(...),
     celloracle_species: str = Form("human"),
@@ -404,6 +412,20 @@ async def create_pending_project(
                 ),
             )
         )
+        normalized_confidence_run_mode = normalize_confidence_run_mode(
+            confidence_run_mode
+        )
+        normalized_confidence_bootstrap_runs = (
+            normalize_confidence_bootstrap_runs(
+                confidence_bootstrap_runs,
+                mode=normalized_confidence_run_mode,
+            )
+            if normalized_confidence_run_mode == CONFIDENCE_RUN_MODE_FIXED
+            else DEFAULT_CONFIDENCE_MAX_RUNS
+        )
+        normalized_confidence_evidence_threshold = (
+            normalize_confidence_evidence_threshold(confidence_evidence_threshold)
+        )
     except Exception as exc:
         return CreateProjectResponse(ok=False, errors=[str(exc)])
 
@@ -434,6 +456,9 @@ async def create_pending_project(
         "notification_email": None,
         "preprocessing": preprocessing_config,
         "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
+        "confidence_run_mode": normalized_confidence_run_mode,
+        "confidence_bootstrap_runs": normalized_confidence_bootstrap_runs,
+        "confidence_evidence_threshold": normalized_confidence_evidence_threshold,
         "selected_algorithms": selected_algorithms_list,
         "algorithm_parameters": validated_algorithm_parameters,
         "resolved_algorithm_parameters": resolved_algorithm_parameters,

@@ -65,7 +65,7 @@ class ResultCompactionTests(unittest.TestCase):
                     "resampling_scheme": "cell_bootstrap_with_replacement_v1",
                     "sampling_with_replacement": True,
                     "sample_size_fraction": 1.0,
-                    "confidence_definition": "top_k_recovery_frequency",
+                    "confidence_definition": "evidence_threshold_recovery_frequency",
                 },
             }
         )

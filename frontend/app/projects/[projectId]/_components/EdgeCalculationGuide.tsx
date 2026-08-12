@@ -119,7 +119,7 @@ export default function EdgeCalculationGuide() {
             <div className="space-y-2">
               <math
                 display="block"
-                aria-label="I sub m b of e equals one when rank is at most K, and zero otherwise"
+                aria-label="I sub m b of e equals one when normalized evidence reaches tau, and zero otherwise"
               >
                 <mrow>
                   <msub>
@@ -135,10 +135,10 @@ export default function EdgeCalculationGuide() {
                       <mtd>
                         <mtext>&nbsp;if&nbsp;</mtext>
                         <msub>
-                          <mi>r</mi>
+                          <mi>E</mi>
                           <mrow><mi>m</mi><mo>,</mo><mi>b</mi></mrow>
                         </msub>
-                        <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo><mo>≤</mo><mi>K</mi>
+                        <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo><mo>≥</mo><mi>τ</mi>
                       </mtd>
                     </mtr>
                     <mtr>
@@ -150,7 +150,7 @@ export default function EdgeCalculationGuide() {
               </math>
               <math
                 display="block"
-                aria-label="C sub m of e equals the sum over bootstrap runs of I sub m b of e divided by B sub m, which equals N selected divided by B sub m"
+                aria-label="C sub m of e equals the sum over bootstrap runs of I sub m b of e divided by B sub m, which equals N recovered divided by B sub m"
               >
                 <mrow>
                   <msub><mi>C</mi><mi>m</mi></msub>
@@ -171,7 +171,7 @@ export default function EdgeCalculationGuide() {
                   </mfrac>
                   <mo>=</mo>
                   <mfrac>
-                    <msub><mi>N</mi><mtext>selected</mtext></msub>
+                    <msub><mi>N</mi><mtext>recovered</mtext></msub>
                     <msub><mi>B</mi><mi>m</mi></msub>
                   </mfrac>
                 </mrow>
@@ -182,16 +182,16 @@ export default function EdgeCalculationGuide() {
           <p>
             Each bootstrap run samples the original number of cells with
             replacement, reruns the method, and recalculates the per-target
-            ranks. The edge is recovered only when it falls within the
-            configured top-<em>K</em> regulators for its target. <em>Bₘ</em> is
-            the completed run count and <em>Nselected</em> is the number of
+            evidence. The edge is recovered only when its normalized evidence
+            reaches the configured threshold <em>τ</em>. <em>Bₘ</em> is the
+            completed run count and <em>Nrecovered</em> is the number of
             recovered runs.
           </p>
           <p className="mt-2">
             The 95% evidence interval is the 2.5th and 97.5th percentiles of
             Eₘᵦ(e) across runs; a run in which the edge is absent contributes
             evidence 0. This interval describes evidence variation, while
-            Cₘ(e) describes top-<em>K</em> recovery frequency.
+            Cₘ(e) describes threshold-based recovery frequency.
           </p>
         </FormulaCard>
 

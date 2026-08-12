@@ -362,7 +362,7 @@ def compact_result_for_client(result: dict) -> dict:
                 "sign_coverage_definition",
                 "full_data_run_id",
                 "total_algorithm_runs",
-                "stability_top_k",
+                "confidence_evidence_threshold",
             )
             if summary.get(key) is not None
         }

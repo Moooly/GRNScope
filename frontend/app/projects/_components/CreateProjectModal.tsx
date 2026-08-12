@@ -200,6 +200,10 @@ interface CreateProjectModalProps {
   includeAllTFs: boolean;
   maxEdgesPerTarget: string;
   maxEdgesLimit: number;
+  confidenceRunMode: "automatic" | "fixed";
+  confidenceBootstrapRuns: string;
+  confidenceRunMin: number;
+  confidenceRunMax: number;
   pidcDefaultMaxGenes: number;
   sinceritiesDefaultMaxGenes: number;
   scribeDefaultMaxGenes: number;
@@ -252,6 +256,8 @@ interface CreateProjectModalProps {
   setClusterLabelsFileName: (value: string) => void;
   setIncludeAllTFs: (value: boolean) => void;
   setMaxEdgesPerTarget: (value: string) => void;
+  setConfidenceRunMode: (value: "automatic" | "fixed") => void;
+  setConfidenceBootstrapRuns: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
   clearPseudotimeFile: () => void;
   clearGroundTruthFile: () => void;
@@ -284,6 +290,10 @@ export default function CreateProjectModal({
   includeAllTFs,
   maxEdgesPerTarget,
   maxEdgesLimit,
+  confidenceRunMode,
+  confidenceBootstrapRuns,
+  confidenceRunMin,
+  confidenceRunMax,
   pidcDefaultMaxGenes,
   sinceritiesDefaultMaxGenes,
   scribeDefaultMaxGenes,
@@ -333,6 +343,8 @@ export default function CreateProjectModal({
   setClusterLabelsFileName,
   setIncludeAllTFs,
   setMaxEdgesPerTarget,
+  setConfidenceRunMode,
+  setConfidenceBootstrapRuns,
   setHasCellOracleSettingsConfigured,
   clearPseudotimeFile,
   clearGroundTruthFile,
@@ -350,6 +362,7 @@ export default function CreateProjectModal({
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(null);
+  const [isConfidenceStrategyOpen, setIsConfidenceStrategyOpen] = useState(false);
   const getAlgorithmContextualDefaults = useCallback(
     (algorithmId: string): Record<string, unknown> => {
       if (algorithmId === "PIDC") return { maxGenes: pidcDefaultMaxGenes };
@@ -418,6 +431,7 @@ export default function CreateProjectModal({
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
       setExpandedAlgorithmId(null);
+      setIsConfidenceStrategyOpen(false);
       setEnabledGeneSelectionStages(["detection"]);
       /* eslint-enable react-hooks/set-state-in-effect */
       autoSelectedDatasetRef.current = null;
@@ -595,7 +609,10 @@ export default function CreateProjectModal({
     algorithms.length - compatibleAlgorithms.length,
   );
   const algorithmSectionSummary = `${selectedAlgorithms.length} selected · ${unavailableAlgorithmCount} unavailable`;
-  const resultSettingsSummary = `${maxEdgesPerTarget || "—"} edges per target`;
+  const resultSettingsSummary =
+    confidenceRunMode === "fixed"
+      ? `${maxEdgesPerTarget || "—"} edges per target · ${confidenceBootstrapRuns || "—"} confidence runs`
+      : `${maxEdgesPerTarget || "—"} edges per target · Automatic confidence`;
 
   return (
     <div
@@ -1056,6 +1073,143 @@ export default function CreateProjectModal({
                         </span>
                       </span>
                     </div>
+                    <section className="relative bg-white">
+                      <div className="relative z-10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIsConfidenceStrategyOpen((current) => !current)
+                          }
+                          aria-expanded={isConfidenceStrategyOpen}
+                          aria-controls="confidence-run-strategy-details"
+                          className="min-w-0 cursor-pointer text-left"
+                        >
+                          <span className="block text-sm font-semibold text-slate-900">
+                            Confidence run strategy
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-slate-500">
+                            Choose how many runs are used to estimate edge confidence.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIsConfidenceStrategyOpen((current) => !current)
+                          }
+                          aria-expanded={isConfidenceStrategyOpen}
+                          aria-controls="confidence-run-strategy-details"
+                          className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-right transition hover:bg-slate-50"
+                        >
+                          <span className="hidden text-xs font-semibold text-[#1b75a6] sm:block">
+                            {confidenceRunMode === "fixed"
+                              ? `${confidenceBootstrapRuns || "—"} runs`
+                              : "Automatic"}
+                          </span>
+                          <span className="text-slate-400" aria-hidden="true">
+                            <DisclosureChevron open={isConfidenceStrategyOpen} />
+                          </span>
+                        </button>
+                      </div>
+
+                      {isConfidenceStrategyOpen ? (
+                        <div
+                          id="confidence-run-strategy-details"
+                          className="relative z-10 border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]"
+                        >
+                          <div
+                            role="radiogroup"
+                            aria-label="Confidence run strategy"
+                            className="flex flex-wrap items-center gap-x-7 gap-y-3"
+                          >
+                            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                              <input
+                                type="radio"
+                                name="confidence-run-mode"
+                                checked={confidenceRunMode === "automatic"}
+                                onChange={() => setConfidenceRunMode("automatic")}
+                                className="h-4 w-4 accent-[#1b75a6]"
+                              />
+                              Automatic
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                              <input
+                                type="radio"
+                                name="confidence-run-mode"
+                                checked={confidenceRunMode === "fixed"}
+                                onChange={() => setConfidenceRunMode("fixed")}
+                                className="h-4 w-4 accent-[#1b75a6]"
+                              />
+                              Fixed number
+                            </label>
+                          </div>
+
+                          <div className="mt-4 grid min-h-[5rem] items-center gap-3 border-t border-slate-200/70 pt-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                            {confidenceRunMode === "automatic" ? (
+                              <div>
+                                <p className="text-xs leading-5 text-slate-500">
+                                  Starts with 3 runs and compares consecutive aggregate rankings using Spearman correlation (ρ).
+                                </p>
+                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                                  Stops at ρ ≥ 0.95 for 2 consecutive checks; otherwise continues up to 50 runs.
+                                </p>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-xs leading-5 text-slate-500">
+                                  Run exactly the selected number of confidence runs.
+                                </p>
+                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                                  Allowed range: {confidenceRunMin}–{confidenceRunMax} runs.
+                                </p>
+                              </div>
+                            )}
+
+                            {confidenceRunMode === "fixed" ? (
+                              <span className="inline-flex items-center gap-2">
+                                <CompactNumberField
+                                  value={confidenceBootstrapRuns}
+                                  onChange={(nextValue) => {
+                                    if (nextValue === "") {
+                                      setConfidenceBootstrapRuns("");
+                                      return;
+                                    }
+                                    const parsedValue = Number(nextValue);
+                                    if (!Number.isInteger(parsedValue)) return;
+                                    setConfidenceBootstrapRuns(
+                                      String(
+                                        Math.min(
+                                          Math.max(parsedValue, confidenceRunMin),
+                                          confidenceRunMax,
+                                        ),
+                                      ),
+                                    );
+                                  }}
+                                  onBlur={() => {
+                                    const parsed = Number(confidenceBootstrapRuns.trim());
+                                    if (
+                                      !Number.isInteger(parsed) ||
+                                      parsed < confidenceRunMin
+                                    ) {
+                                      setConfidenceBootstrapRuns(String(confidenceRunMin));
+                                    } else if (parsed > confidenceRunMax) {
+                                      setConfidenceBootstrapRuns(String(confidenceRunMax));
+                                    }
+                                  }}
+                                  min={confidenceRunMin}
+                                  max={confidenceRunMax}
+                                  step={1}
+                                  ariaLabel="Fixed confidence runs"
+                                />
+                                <span className="text-xs font-medium text-slate-500">
+                                  runs
+                                </span>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </section>
                   </div>
                 </div>
               </AdvancedAccordionSection>

@@ -68,6 +68,9 @@ export type ProjectManifest = {
   preprocessing_status?: string | null;
   preprocessing_result?: PreprocessingResult | null;
   ranked_edges_per_target_limit?: number | string | null;
+  confidence_run_mode?: "automatic" | "fixed" | string | null;
+  confidence_bootstrap_runs?: number | string | null;
+  confidence_evidence_threshold?: number | string | null;
   algorithm_parameters?: Record<string, Record<string, unknown>>;
   resolved_algorithm_parameters?: Record<string, Record<string, unknown>>;
   celloracle?: {
@@ -339,6 +342,7 @@ export type ConfidenceSummary = {
   early_stopping_enabled?: boolean;
   subsample_fraction?: number;
   stability_top_k?: number;
+  confidence_evidence_threshold?: number;
   early_stopping?: {
     enabled?: boolean;
     method?: string;

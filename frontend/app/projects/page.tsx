@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CreateProjectFlow, {
   type CreateProjectPrefill,
 } from "./_components/CreateProjectFlow";
+
 import type { GeneSelectionStage } from "./_components/CreateProjectModal";
 import ProjectCard, { getProjectStatusLabel } from "./_components/ProjectCard";
 import ProjectsToolbar, {
@@ -225,6 +226,11 @@ function ProjectsPageContent() {
                 true,
               ),
               maxEdgesPerTarget: String(source.ranked_edges_per_target_limit ?? "20"),
+              confidenceRunMode:
+                source.confidence_run_mode === "fixed" ? "fixed" : "automatic",
+              confidenceBootstrapRuns: String(
+                source.confidence_bootstrap_runs ?? "15",
+              ),
               selectedIds: Array.isArray(source.selected_algorithms)
                 ? source.selected_algorithms.map(String)
                 : [],

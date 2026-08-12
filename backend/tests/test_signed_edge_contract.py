@@ -41,12 +41,12 @@ class SignedEdgeContractTests(unittest.TestCase):
                 {"source": "A", "target": "A", "score": 1.0},
                 {"source": "B", "target": "A", "score": 0.9},
             ],
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         bootstrap_edges, _summary = finalize_confidence_accumulator(
             accumulator,
             run_count=1,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         merged = merge_full_data_with_bootstrap_edges(
             [
@@ -63,7 +63,7 @@ class SignedEdgeContractTests(unittest.TestCase):
                 {"source": "B", "target": "A", "score": 0.9},
             ],
             bootstrap_runs=1,
-            selection_top_k=1,
+            evidence_threshold=1.0,
         )
         self.assertEqual(
             {(edge["source"], edge["target"]) for edge in merged},
@@ -108,12 +108,12 @@ class SignedEdgeContractTests(unittest.TestCase):
         update_confidence_accumulator(
             accumulator,
             parsed,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         aggregated, _summary = finalize_confidence_accumulator(
             accumulator,
             run_count=1,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
 
         self.assertEqual(aggregated[0]["mean_raw_score"], -0.9)
@@ -126,23 +126,23 @@ class SignedEdgeContractTests(unittest.TestCase):
         update_confidence_accumulator(
             accumulator,
             [{"source": "A", "target": "B", "score": 0.8}],
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         update_confidence_accumulator(
             accumulator,
             [{"source": "A", "target": "B", "score": -0.7}],
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         bootstrap_edges, _summary = finalize_confidence_accumulator(
             accumulator,
             run_count=2,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         aggregated = merge_full_data_with_bootstrap_edges(
             bootstrap_edges,
             [{"source": "A", "target": "B", "score": 0.9}],
             bootstrap_runs=2,
-            selection_top_k=1,
+            evidence_threshold=1.0,
         )
 
         self.assertEqual(aggregated[0]["confidence"], 1.0)
@@ -157,18 +157,18 @@ class SignedEdgeContractTests(unittest.TestCase):
             update_confidence_accumulator(
                 accumulator,
                 [{"source": "A", "target": "B", "score": score}],
-                stability_top_k=1,
+                evidence_threshold=1.0,
             )
         bootstrap_edges, _summary = finalize_confidence_accumulator(
             accumulator,
             run_count=3,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         aggregated = merge_full_data_with_bootstrap_edges(
             bootstrap_edges,
             [{"source": "A", "target": "B", "score": 0.9}],
             bootstrap_runs=3,
-            selection_top_k=1,
+            evidence_threshold=1.0,
         )
 
         edge = aggregated[0]
@@ -183,18 +183,18 @@ class SignedEdgeContractTests(unittest.TestCase):
             update_confidence_accumulator(
                 accumulator,
                 [{"source": "A", "target": "B", "score": score}],
-                stability_top_k=1,
+                evidence_threshold=1.0,
             )
         bootstrap_edges, _summary = finalize_confidence_accumulator(
             accumulator,
             run_count=3,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         aggregated = merge_full_data_with_bootstrap_edges(
             bootstrap_edges,
             [{"source": "A", "target": "B", "score": 0.9}],
             bootstrap_runs=3,
-            selection_top_k=1,
+            evidence_threshold=1.0,
         )
 
         edge = aggregated[0]

@@ -13,6 +13,7 @@ from app.services.beeline_service import (
     finalize_confidence_accumulator,
     materialize_confidence_run_input,
     merge_full_data_with_bootstrap_edges,
+    normalize_confidence_evidence_threshold,
     plan_confidence_run_inputs,
     resolve_confidence_settings,
     spearman_stability_check,
@@ -22,7 +23,7 @@ from app.services.beeline_service import (
 
 
 class ConfidenceSettingsTests(unittest.TestCase):
-    def test_bootstrap_run_ceiling_is_automatically_bounded_to_three_through_fifteen(self):
+    def test_bootstrap_run_ceiling_is_automatically_bounded_to_three_through_fifty(self):
         self.assertEqual(
             resolve_confidence_settings(
                 {"confidence_bootstrap_runs": 1},
@@ -35,7 +36,31 @@ class ConfidenceSettingsTests(unittest.TestCase):
                 {"confidence_bootstrap_runs": 300},
                 gene_count=100,
             )["bootstrap_runs"],
-            15,
+            50,
+        )
+
+    def test_fixed_confidence_runs_use_exact_count_without_early_stopping(self):
+        settings = resolve_confidence_settings(
+            {
+                "confidence_run_mode": "fixed",
+                "confidence_bootstrap_runs": 8,
+            },
+            gene_count=100,
+        )
+
+        self.assertEqual(settings["confidence_run_mode"], "fixed")
+        self.assertEqual(settings["bootstrap_runs"], 8)
+        self.assertFalse(settings["early_stopping_enabled"])
+
+        self.assertEqual(
+            resolve_confidence_settings(
+                {
+                    "confidence_run_mode": "fixed",
+                    "confidence_bootstrap_runs": 300,
+                },
+                gene_count=100,
+            )["bootstrap_runs"],
+            50,
         )
 
     def test_confidence_runs_are_enabled_by_default(self):
@@ -43,7 +68,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
             settings = resolve_confidence_settings({}, gene_count=100)
 
         self.assertTrue(settings["confidence_enabled"])
-        self.assertEqual(settings["bootstrap_runs"], 15)
+        self.assertEqual(settings["bootstrap_runs"], 50)
         self.assertEqual(settings["min_runs"], 3)
         self.assertEqual(settings["subsample_fraction"], 1.0)
         self.assertTrue(settings["early_stopping_enabled"])
@@ -53,6 +78,36 @@ class ConfidenceSettingsTests(unittest.TestCase):
             "cell_bootstrap_with_replacement_v1",
         )
         self.assertEqual(settings["stop_rho"], 0.95)
+
+    def test_evidence_threshold_replaces_fixed_top_k_recovery(self):
+        self.assertEqual(normalize_confidence_evidence_threshold(80), 0.8)
+        settings = resolve_confidence_settings({}, gene_count=5)
+        self.assertEqual(settings["confidence_evidence_threshold"], 0.8)
+
+        accumulator = {"edges": {}, "node_names": set(), "processed_runs": 0}
+        update_confidence_accumulator(
+            accumulator,
+            [
+                {"source": "A", "target": "T", "score": 4.0},
+                {"source": "B", "target": "T", "score": 3.0},
+                {"source": "C", "target": "T", "score": 2.0},
+                {"source": "D", "target": "T", "score": 1.0},
+            ],
+            evidence_threshold=0.8,
+        )
+        edges, _summary = finalize_confidence_accumulator(
+            accumulator,
+            run_count=1,
+            evidence_threshold=0.8,
+        )
+
+        confidence_by_source = {
+            edge["source"]: edge["confidence"] for edge in edges
+        }
+        self.assertEqual(confidence_by_source["A"], 1.0)
+        self.assertEqual(confidence_by_source["B"], 0.0)
+        self.assertEqual(confidence_by_source["C"], 0.0)
+        self.assertEqual(confidence_by_source["D"], 0.0)
 
     def test_spearman_threshold_is_fixed_at_point_nine_five(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -75,7 +130,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
             )
 
         self.assertTrue(settings["confidence_enabled"])
-        self.assertEqual(settings["bootstrap_runs"], 15)
+        self.assertEqual(settings["bootstrap_runs"], 50)
         self.assertEqual(settings["min_runs"], 3)
 
     def test_remaining_time_range_uses_stability_streak_and_maximum_runs(self):
@@ -90,17 +145,17 @@ class ConfidenceSettingsTests(unittest.TestCase):
         remaining = estimate_remaining_seconds_range_from_run_timings(
             metadata,
             minimum_run_count=3,
-            # A legacy 30-run value must still be capped by the current
-            # confidence ceiling of 15 when calculating the upper ETA.
-            maximum_run_count=30,
+            # A legacy 60-run value must still be capped by the current
+            # automatic confidence ceiling of 50 when calculating the upper ETA.
+            maximum_run_count=60,
             current_streak=1,
             required_streak=2,
             current_run_elapsed_seconds=30,
         )
 
         # Median of the last three completed runs is 105 seconds. The automatic
-        # ceiling is 15 even when an archived caller supplies 30.
-        self.assertEqual(remaining, (75, 1125))
+        # ceiling is 50 even when an archived caller supplies 60.
+        self.assertEqual(remaining, (75, 4800))
 
     def test_remaining_time_range_requires_two_future_checks_after_failed_stability(self):
         metadata = {
@@ -299,23 +354,23 @@ class ConfidenceSettingsTests(unittest.TestCase):
         update_confidence_accumulator(
             accumulator,
             [{"source": "A", "target": "B", "score": 5.0}],
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         update_confidence_accumulator(
             accumulator,
             [],
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         bootstrap_edges, _summary = finalize_confidence_accumulator(
             accumulator,
             run_count=2,
-            stability_top_k=1,
+            evidence_threshold=1.0,
         )
         merged = merge_full_data_with_bootstrap_edges(
             bootstrap_edges,
             [{"source": "A", "target": "B", "score": 7.0}],
             bootstrap_runs=2,
-            selection_top_k=1,
+            evidence_threshold=1.0,
         )
 
         self.assertEqual(len(merged), 1)

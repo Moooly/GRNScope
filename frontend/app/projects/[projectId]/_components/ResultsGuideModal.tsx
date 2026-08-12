@@ -52,9 +52,10 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
             <p className="mt-1 text-sm leading-5 text-slate-600">
               Controls the minimum bootstrap recovery required for an edge to
               appear. New analyses draw the full number of cells with
-              replacement and report how often the edge remains among the
-              strongest regulators for its target. It measures sensitivity to
-              sampled cells, not uncertainty between donors or causality.
+              replacement and report how often the edge&apos;s normalized
+              per-target evidence reaches the configured threshold τ. It
+              measures sensitivity to sampled cells, not uncertainty between
+              donors or causality.
             </p>
           </div>
 

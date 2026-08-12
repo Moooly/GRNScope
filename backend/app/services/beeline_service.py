@@ -46,16 +46,20 @@ from .gene_ordering_service import (
 )
 
 
-# A confidence analysis consists of one full-data fit plus 3–15 genuine
+# A confidence analysis consists of one full-data fit plus 3–50 genuine
 # non-parametric bootstrap replicates. Each replicate draws N cells with
 # replacement from the N uploaded cells. Consecutive aggregate networks are
 # compared with Spearman rank correlation, but no stop decision is made before
 # the third replicate.
 DEFAULT_CONFIDENCE_MIN_RUNS = 3
-DEFAULT_CONFIDENCE_MAX_RUNS = 15
-DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = DEFAULT_CONFIDENCE_MAX_RUNS
+DEFAULT_CONFIDENCE_MAX_RUNS = 50
+DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 15
+CONFIDENCE_RUN_MODE_AUTOMATIC = "automatic"
+CONFIDENCE_RUN_MODE_FIXED = "fixed"
 DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION = 1.0
-DEFAULT_CONFIDENCE_STABILITY_TOP_K = 10
+DEFAULT_CONFIDENCE_EVIDENCE_THRESHOLD = 0.8
+MIN_CONFIDENCE_EVIDENCE_THRESHOLD = 0.01
+MAX_CONFIDENCE_EVIDENCE_THRESHOLD = 1.0
 CONFIDENCE_RESAMPLING_SCHEME = "cell_bootstrap_with_replacement_v1"
 FULL_DATA_RUN_ID = "full-data"
 DEFAULT_CONFIDENCE_STOP_RHO = 0.95
@@ -532,6 +536,43 @@ def parse_positive_int(value: object) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def normalize_confidence_run_mode(value: object) -> str:
+    return (
+        CONFIDENCE_RUN_MODE_FIXED
+        if str(value or "").strip().lower() == CONFIDENCE_RUN_MODE_FIXED
+        else CONFIDENCE_RUN_MODE_AUTOMATIC
+    )
+
+
+def normalize_confidence_bootstrap_runs(value: object, *, mode: str) -> int:
+    parsed = parse_positive_int(value)
+    if parsed is None:
+        parsed = DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
+    return max(
+        DEFAULT_CONFIDENCE_MIN_RUNS,
+        min(parsed, DEFAULT_CONFIDENCE_MAX_RUNS),
+    )
+
+
+def normalize_confidence_evidence_threshold(value: object) -> float:
+    """Normalize the per-target evidence threshold τ to the interval (0, 1]."""
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        parsed = DEFAULT_CONFIDENCE_EVIDENCE_THRESHOLD
+
+    # Accept whole-number percentages as a compatibility convenience for
+    # manifests created by older UI experiments (for example, 80 -> 0.80).
+    if parsed > 1.0 and parsed <= 100.0:
+        parsed /= 100.0
+    if not isfinite(parsed):
+        parsed = DEFAULT_CONFIDENCE_EVIDENCE_THRESHOLD
+    return max(
+        MIN_CONFIDENCE_EVIDENCE_THRESHOLD,
+        min(parsed, MAX_CONFIDENCE_EVIDENCE_THRESHOLD),
+    )
+
+
 def parse_positive_float(value: object) -> float | None:
     if value is None:
         return None
@@ -616,7 +657,7 @@ def resolve_adaptive_max_regulators_per_target(gene_count: int | None) -> int:
 
 
 def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
-    return DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
+    return DEFAULT_CONFIDENCE_MAX_RUNS
 
 
 def resolve_confidence_min_runs() -> int:
@@ -636,24 +677,35 @@ def resolve_confidence_settings(
     *,
     gene_count: int | None = None,
 ) -> dict:
-    # Archived projects may contain a former user-selected run count. Treat it
-    # only as a requested ceiling and clamp every project to the automatic
-    # 3–15 policy.
-    configured_run_count = parse_positive_int(
-        project_manifest.get("confidence_bootstrap_runs")
+    configured_run_mode = project_manifest.get("confidence_run_mode")
+    run_mode = normalize_confidence_run_mode(configured_run_mode)
+    configured_run_count = project_manifest.get("confidence_bootstrap_runs")
+    # Before the run-mode control existed, confidence_bootstrap_runs acted as
+    # an automatic ceiling. Preserve that behavior for archived manifests;
+    # newly created automatic projects always use the fixed 50-run ceiling.
+    legacy_requested_ceiling = (
+        configured_run_mode is None and configured_run_count is not None
     )
-    run_count = (
-        configured_run_count
-        if configured_run_count is not None
-        else resolve_adaptive_confidence_bootstrap_runs(gene_count)
-    )
-    stability_top_k = (
-        parse_positive_int(project_manifest.get("confidence_stability_top_k"))
-        or parse_positive_int(os.environ.get("GRNSCOPE_CONFIDENCE_STABILITY_TOP_K"))
-        or DEFAULT_CONFIDENCE_STABILITY_TOP_K
+    if run_mode == CONFIDENCE_RUN_MODE_FIXED:
+        run_count = normalize_confidence_bootstrap_runs(
+            configured_run_count,
+            mode=run_mode,
+        )
+    elif legacy_requested_ceiling:
+        run_count = normalize_confidence_bootstrap_runs(
+            configured_run_count,
+            mode=run_mode,
+        )
+    else:
+        run_count = resolve_adaptive_confidence_bootstrap_runs(gene_count)
+    evidence_threshold = normalize_confidence_evidence_threshold(
+        project_manifest.get(
+            "confidence_evidence_threshold",
+            DEFAULT_CONFIDENCE_EVIDENCE_THRESHOLD,
+        )
     )
     subsample_fraction = DEFAULT_CONFIDENCE_SUBSAMPLE_FRACTION
-    early_stopping_enabled = True
+    early_stopping_enabled = run_mode == CONFIDENCE_RUN_MODE_AUTOMATIC
     bounded_min_runs = DEFAULT_CONFIDENCE_MIN_RUNS
     bounded_run_count = max(
         bounded_min_runs,
@@ -662,6 +714,7 @@ def resolve_confidence_settings(
 
     return {
         "confidence_enabled": True,
+        "confidence_run_mode": run_mode,
         "bootstrap_runs": bounded_run_count,
         "total_algorithm_runs": bounded_run_count + 1,
         "full_data_run_id": FULL_DATA_RUN_ID,
@@ -669,8 +722,8 @@ def resolve_confidence_settings(
         "sampling_unit": "cell",
         "sampling_with_replacement": True,
         "sample_size_fraction": 1.0,
-        "confidence_definition": "top_k_recovery_frequency",
-        "evidence_definition": "full_data_per_target_percentile",
+        "confidence_definition": "evidence_threshold_recovery_frequency",
+        "evidence_definition": "per_target_rank_normalized_evidence",
         "interval_definition": "percentile_95_bootstrap_evidence",
         "sign_confidence_definition": (
             "agreement_with_displayed_sign_given_signed_recovery"
@@ -679,7 +732,7 @@ def resolve_confidence_settings(
         # Kept as a compatibility alias for old clients. New results always use
         # the complete N-cell sample size.
         "subsample_fraction": subsample_fraction,
-        "stability_top_k": max(1, stability_top_k),
+        "confidence_evidence_threshold": evidence_threshold,
         "early_stopping_enabled": early_stopping_enabled,
         "min_runs": bounded_min_runs,
         "stop_rho": DEFAULT_CONFIDENCE_STOP_RHO,
@@ -3280,7 +3333,7 @@ def update_confidence_accumulator(
     accumulator: dict,
     run_edges: list[dict],
     *,
-    stability_top_k: int,
+    evidence_threshold: float,
 ) -> None:
     edge_accumulator: dict[tuple[str, str], dict] = accumulator["edges"]
     all_node_names: set[str] = accumulator["node_names"]
@@ -3366,7 +3419,7 @@ def update_confidence_accumulator(
                     if current["best_rank"] is None
                     else min(current["best_rank"], rank)
                 )
-                if rank <= stability_top_k:
+                if percentile >= evidence_threshold:
                     current["selected_runs"] += 1
                     if raw_score > 0:
                         current["positive_selected_runs"] += 1
@@ -3382,7 +3435,7 @@ def finalize_confidence_accumulator(
     accumulator: dict,
     *,
     run_count: int,
-    stability_top_k: int,
+    evidence_threshold: float,
 ) -> tuple[list[dict], dict]:
     edge_accumulator: dict[tuple[str, str], dict] = accumulator["edges"]
     all_node_names: set[str] = accumulator["node_names"]
@@ -3501,9 +3554,9 @@ def finalize_confidence_accumulator(
         "confidence_scored": True,
         "bootstrap_runs": run_count,
         "processed_runs": int(accumulator.get("processed_runs", 0)),
-        "stability_top_k": stability_top_k,
+        "confidence_evidence_threshold": evidence_threshold,
         "resampling_scheme": CONFIDENCE_RESAMPLING_SCHEME,
-        "confidence_definition": "top_k_recovery_frequency",
+        "confidence_definition": "evidence_threshold_recovery_frequency",
         "interval_definition": "percentile_95_bootstrap_evidence",
         "sign_confidence_definition": (
             "agreement_with_displayed_sign_given_signed_recovery"
@@ -3516,7 +3569,7 @@ def finalize_confidence_accumulator(
 def full_data_edge_estimates(
     run_edges: list[dict],
     *,
-    selection_top_k: int,
+    evidence_threshold: float,
 ) -> dict[tuple[str, str], dict]:
     estimates: dict[tuple[str, str], dict] = {}
     entries_by_target: dict[str, list[dict]] = {}
@@ -3568,7 +3621,7 @@ def full_data_edge_estimates(
                     "raw_score": float(edge.get("score", 0.0) or 0.0),
                     "evidence": percentile,
                     "rank": rank,
-                    "selected": rank <= selection_top_k,
+                    "selected": percentile >= evidence_threshold,
                 }
             index = tie_end
     return estimates
@@ -3579,7 +3632,7 @@ def merge_full_data_with_bootstrap_edges(
     full_data_edges: list[dict],
     *,
     bootstrap_runs: int,
-    selection_top_k: int,
+    evidence_threshold: float,
 ) -> list[dict]:
     """Attach the original full-data estimate without changing bootstrap support."""
 
@@ -3633,7 +3686,7 @@ def merge_full_data_with_bootstrap_edges(
     }
     full_estimates = full_data_edge_estimates(
         full_data_edges,
-        selection_top_k=selection_top_k,
+        evidence_threshold=evidence_threshold,
     )
     for key, estimate in full_estimates.items():
         edge = merged_by_key.get(key)
@@ -4248,7 +4301,7 @@ def aggregate_confidence_run_outputs(
     *,
     runtime_root: Path,
     max_edges_per_target: int | None = None,
-    stability_top_k: int,
+    evidence_threshold: float,
 ) -> tuple[list[dict], dict, dict[str, str]]:
     accumulator = create_confidence_accumulator()
     ranked_edge_paths: dict[str, str] = {}
@@ -4269,7 +4322,7 @@ def aggregate_confidence_run_outputs(
         update_confidence_accumulator(
             accumulator,
             run_edges,
-            stability_top_k=stability_top_k,
+            evidence_threshold=evidence_threshold,
         )
         ranked_edge_paths[run_id] = str(ranked_edges_path)
         del run_edges
@@ -4277,7 +4330,7 @@ def aggregate_confidence_run_outputs(
     top_edges, network_summary = finalize_confidence_accumulator(
         accumulator,
         run_count=len(run_ids),
-        stability_top_k=stability_top_k,
+        evidence_threshold=evidence_threshold,
     )
     return top_edges, network_summary, ranked_edge_paths
 
@@ -4501,7 +4554,9 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
             algorithm_id,
             runtime_root=runtime_root,
             max_edges_per_target=ranked_edges_per_target_limit,
-            stability_top_k=int(confidence_settings["stability_top_k"]),
+            evidence_threshold=float(
+                confidence_settings["confidence_evidence_threshold"]
+            ),
         )
         full_data_edges, full_data_ranked_path = parse_confidence_run_output(
             output_dir,
@@ -4515,7 +4570,9 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
             top_edges,
             full_data_edges,
             bootstrap_runs=len(bootstrap_run_ids),
-            selection_top_k=int(confidence_settings["stability_top_k"]),
+            evidence_threshold=float(
+                confidence_settings["confidence_evidence_threshold"]
+            ),
         )
         ranked_edge_paths[FULL_DATA_RUN_ID] = str(full_data_ranked_path)
         network_summary["edge_count"] = len(top_edges)
@@ -4988,20 +5045,26 @@ def run_beeline_with_progress(
                     previous_edges, _previous_summary = finalize_confidence_accumulator(
                         confidence_accumulator,
                         run_count=previous_run_count,
-                        stability_top_k=int(confidence_settings["stability_top_k"]),
+                        evidence_threshold=float(
+                            confidence_settings["confidence_evidence_threshold"]
+                        ),
                     )
 
                 update_confidence_accumulator(
                     confidence_accumulator,
                     run_edges,
-                    stability_top_k=int(confidence_settings["stability_top_k"]),
+                    evidence_threshold=float(
+                        confidence_settings["confidence_evidence_threshold"]
+                    ),
                 )
                 current_run_count = int(confidence_accumulator.get("processed_runs", 0))
                 if previous_edges:
                     current_edges, _current_summary = finalize_confidence_accumulator(
                         confidence_accumulator,
                         run_count=current_run_count,
-                        stability_top_k=int(confidence_settings["stability_top_k"]),
+                        evidence_threshold=float(
+                            confidence_settings["confidence_evidence_threshold"]
+                        ),
                     )
                     stability_check = spearman_stability_check(
                         runtime_root=runtime_root,
@@ -5097,13 +5160,17 @@ def run_beeline_with_progress(
         top_edges, network_summary = finalize_confidence_accumulator(
             confidence_accumulator,
             run_count=processed_run_count,
-            stability_top_k=int(confidence_settings["stability_top_k"]),
+            evidence_threshold=float(
+                confidence_settings["confidence_evidence_threshold"]
+            ),
         )
         top_edges = merge_full_data_with_bootstrap_edges(
             top_edges,
             full_data_edges,
             bootstrap_runs=processed_run_count,
-            selection_top_k=int(confidence_settings["stability_top_k"]),
+            evidence_threshold=float(
+                confidence_settings["confidence_evidence_threshold"]
+            ),
         )
         network_summary["edge_count"] = len(top_edges)
         network_summary["node_count"] = len(
