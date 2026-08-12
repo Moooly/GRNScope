@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DragEvent, ReactNode } from "react";
 import type { ProjectAlgorithm } from "../page";
@@ -543,7 +543,7 @@ export default function CreateProjectModal({
       : !matrixState
         ? "This matrix could not be prepared automatically."
         : !datasetSpecies
-          ? "Select a species to continue."
+          ? null
           : isLoadingAlgorithms
             ? "Loading compatible algorithms…"
             : selectedAlgorithms.length === 0
@@ -558,7 +558,7 @@ export default function CreateProjectModal({
         clusterLabelsFileName ? " + labels" : ""
       }`
     : "";
-  const geneSelectionSummary = [
+  const geneSelectionSummaryItems = [
     enabledGeneSelectionStages.includes("detection")
       ? `Detection ≥${detectionThreshold || "—"}%`
       : null,
@@ -569,9 +569,17 @@ export default function CreateProjectModal({
       ? `Top ${hvgGeneCount || "—"} by variance`
       : null,
   ]
-    .filter((label): label is string => label !== null)
-    .join(" · ") || "No gene filtering";
-  const optionalInputsSummary = [
+    .filter((label): label is string => label !== null);
+  const geneSelectionSummary = geneSelectionSummaryItems.length ? (
+    <InlineSummary items={geneSelectionSummaryItems} />
+  ) : (
+    "No gene filtering"
+  );
+  const collapsedGeneSelectionSummary =
+    geneSelectionSummaryItems.length > 1
+      ? `${geneSelectionSummaryItems.length} filters active`
+      : geneSelectionSummaryItems[0] ?? "No filters";
+  const optionalInputsSummaryItems = [
     pseudotimeFileName
       ? "Pseudotime uploaded"
       : estimatePseudotime
@@ -581,24 +589,49 @@ export default function CreateProjectModal({
     hasCellOracleSettingsConfigured
       ? "CellOracle configured"
       : "CellOracle not configured",
-  ].join(" · ");
+  ];
+  const optionalInputsSummary = <InlineSummary items={optionalInputsSummaryItems} />;
   const unavailableAlgorithmCount = Math.max(
     0,
     algorithms.length - compatibleAlgorithms.length,
   );
-  const algorithmSectionSummary = `${selectedAlgorithms.length} selected · ${unavailableAlgorithmCount} unavailable`;
-  const resultSettingsSummary =
-    confidenceRunMode === "fixed"
-      ? `${maxEdgesPerTarget || "—"} edges per target · ${confidenceBootstrapRuns || "—"} confidence runs`
-      : `${maxEdgesPerTarget || "—"} edges per target · Automatic confidence`;
-  const willRunSummary = hasExpressionFile
-    ? [
-        geneSelectionSummary,
-        optionalInputsSummary,
-        algorithmSectionSummary,
-        resultSettingsSummary,
-      ].join(" · ")
-    : "Upload a matrix to configure";
+  const algorithmSectionSummary = (
+    <InlineSummary
+      items={[`${selectedAlgorithms.length} selected`, `${unavailableAlgorithmCount} unavailable`]}
+    />
+  );
+  const resultSettingsSummary = (
+    <InlineSummary
+      items={[
+        `${maxEdgesPerTarget || "—"} edges per target`,
+        confidenceRunMode === "fixed"
+          ? `${confidenceBootstrapRuns || "—"} confidence runs`
+          : "Automatic confidence",
+      ]}
+    />
+  );
+  const willRunSummary = hasExpressionFile ? (
+    <InlineSummary
+      items={[
+        <>
+          <span className="font-semibold text-slate-700">Genes:</span>{" "}
+          {collapsedGeneSelectionSummary}
+        </>,
+        <>
+          <span className="font-semibold text-slate-700">Methods:</span>{" "}
+          {selectedAlgorithms.length} selected
+        </>,
+        <>
+          <span className="font-semibold text-slate-700">Confidence:</span>{" "}
+          {confidenceRunMode === "fixed"
+            ? `${confidenceBootstrapRuns || "—"} runs`
+            : "Automatic"}
+        </>,
+      ]}
+    />
+  ) : (
+    "Upload a matrix to configure"
+  );
 
   return (
     <div
@@ -651,9 +684,7 @@ export default function CreateProjectModal({
                           <span className="font-semibold text-slate-600">
                             {expressionMatrixDimensions}
                           </span>
-                          <span aria-hidden="true" className="text-slate-300">
-                            ·
-                          </span>
+                          <SummaryDivider />
                         </>
                       ) : null}
                       <span className="relative inline-flex">
@@ -688,11 +719,7 @@ export default function CreateProjectModal({
                           to continue to analysis
                         </span>
                       </p>
-                    ) : (
-                      <p className="mt-2 text-[11px] leading-4 text-slate-400">
-                        Auto-detected from your matrix — click a chip to change.
-                      </p>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
@@ -842,9 +869,7 @@ export default function CreateProjectModal({
                   />
                   <span className="mt-1.5 block text-xs text-slate-500">
                     or click to browse
-                    <span className="mx-2 text-slate-300" aria-hidden="true">
-                      ·
-                    </span>
+                    <SummaryDivider />
                     <span className="text-slate-400">
                       Rows = genes; columns = cells
                     </span>
@@ -920,6 +945,8 @@ export default function CreateProjectModal({
                   includeAllTFs={includeAllTFs}
                   geneOrderingSource={geneOrderingSource}
                   geneOrderingFileName={geneOrderingFileName}
+                  pseudotimeFileName={pseudotimeFileName}
+                  estimatePseudotime={estimatePseudotime}
                   trajectoryPValue={trajectoryPValue}
                   trajectoryBonferroni={trajectoryBonferroni}
                   includeSignificantTFs={includeSignificantTFs}
@@ -931,6 +958,10 @@ export default function CreateProjectModal({
                   onGeneOrderingFileChange={(file) => {
                     setGeneOrderingFile(file);
                     setGeneOrderingFileName(file?.name ?? "");
+                  }}
+                  onOpenOptionalInputs={() => {
+                    setIsCustomizeOpen(true);
+                    setOpenAdvancedSection("inputs");
                   }}
                   onTrajectoryPValueChange={setTrajectoryPValue}
                   onTrajectoryBonferroniChange={setTrajectoryBonferroni}
@@ -1268,6 +1299,28 @@ function DisclosureChevron({ open }: { open: boolean }) {
   );
 }
 
+function SummaryDivider() {
+  return (
+    <span
+      className="mx-2 inline-block h-3 w-px align-middle bg-slate-300"
+      aria-hidden="true"
+    />
+  );
+}
+
+function InlineSummary({ items }: { items: ReactNode[] }) {
+  return (
+    <>
+      {items.map((item, index) => (
+        <Fragment key={index}>
+          {index > 0 ? <SummaryDivider /> : null}
+          <span>{item}</span>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 function AdvancedAccordionSection({
   title,
   summary,
@@ -1276,7 +1329,7 @@ function AdvancedAccordionSection({
   children,
 }: {
   title: string;
-  summary: string;
+  summary: ReactNode;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -1699,6 +1752,8 @@ function GeneSelectionPanel({
   includeAllTFs,
   geneOrderingSource,
   geneOrderingFileName,
+  pseudotimeFileName,
+  estimatePseudotime,
   trajectoryPValue,
   trajectoryBonferroni,
   includeSignificantTFs,
@@ -1708,6 +1763,7 @@ function GeneSelectionPanel({
   onIncludeAllTFsChange,
   onGeneOrderingSourceChange,
   onGeneOrderingFileChange,
+  onOpenOptionalInputs,
   onTrajectoryPValueChange,
   onTrajectoryBonferroniChange,
   onIncludeSignificantTFsChange,
@@ -1718,6 +1774,8 @@ function GeneSelectionPanel({
   includeAllTFs: boolean;
   geneOrderingSource: "calculate" | "upload";
   geneOrderingFileName: string;
+  pseudotimeFileName: string;
+  estimatePseudotime: boolean;
   trajectoryPValue: string;
   trajectoryBonferroni: boolean;
   includeSignificantTFs: boolean;
@@ -1727,6 +1785,7 @@ function GeneSelectionPanel({
   onIncludeAllTFsChange: (value: boolean) => void;
   onGeneOrderingSourceChange: (value: "calculate" | "upload") => void;
   onGeneOrderingFileChange: (file: File | null) => void;
+  onOpenOptionalInputs: () => void;
   onTrajectoryPValueChange: (value: string) => void;
   onTrajectoryBonferroniChange: (value: boolean) => void;
   onIncludeSignificantTFsChange: (value: boolean) => void;
@@ -1752,6 +1811,8 @@ function GeneSelectionPanel({
       return current === stage ? null : current;
     });
   };
+
+  const hasPseudotimeSource = Boolean(pseudotimeFileName) || estimatePseudotime;
 
   return (
     <div className="-mx-1">
@@ -1804,7 +1865,14 @@ function GeneSelectionPanel({
           number={2}
           title="Trajectory-aware filtering"
           description="Keep genes associated with progression along pseudotime."
-          summary={`p ≤ ${trajectoryPValue || "—"}${trajectoryBonferroni ? " · corrected" : ""}`}
+          summary={
+            <InlineSummary
+              items={[
+                `p ≤ ${trajectoryPValue || "—"}`,
+                ...(trajectoryBonferroni ? ["corrected"] : []),
+              ]}
+            />
+          }
           enabled={enabledStages.includes("trajectory")}
           expanded={expandedStage === "trajectory"}
           onToggleEnabled={() => toggleStage("trajectory")}
@@ -1819,7 +1887,7 @@ function GeneSelectionPanel({
               id="gene-ordering-source-label"
               className="text-sm font-semibold text-slate-800"
             >
-              Gene ordering source
+              Gene ordering
             </p>
             <div className="mt-3 flex flex-wrap items-start gap-x-7 gap-y-3">
               <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
@@ -1831,7 +1899,7 @@ function GeneSelectionPanel({
                   onChange={() => onGeneOrderingSourceChange("upload")}
                   className="h-4 w-4 accent-[#1b75a6]"
                 />
-                Upload CSV
+                Upload gene-ordering CSV
               </label>
               <label className="flex max-w-md cursor-pointer items-start gap-2 text-slate-700">
                 <input
@@ -1849,16 +1917,52 @@ function GeneSelectionPanel({
                 />
                 <span>
                   <span className="block text-sm font-medium">
-                    Calculate for me
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-500">
-                    No GeneOrdering CSV? We&apos;ll generate it from uploaded
-                    pseudotime, or estimate pseudotime with Slingshot first.
+                    Calculate from pseudotime
                   </span>
                 </span>
               </label>
             </div>
           </div>
+
+          {geneOrderingSource === "calculate" ? (
+            <div
+              className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 ${
+                hasPseudotimeSource
+                  ? "border-emerald-200 bg-emerald-50/70"
+                  : "border-amber-200 bg-amber-50/70"
+              }`}
+            >
+              <div className="min-w-0">
+                <p
+                  className={`text-xs font-bold ${
+                    hasPseudotimeSource ? "text-emerald-800" : "text-amber-800"
+                  }`}
+                >
+                  {hasPseudotimeSource && estimatePseudotime
+                    ? "Will be calculated at start"
+                    : hasPseudotimeSource
+                      ? "Ready to calculate"
+                      : "Pseudotime required"}
+                </p>
+                <p className="mt-0.5 text-xs leading-5 text-slate-600">
+                  {pseudotimeFileName
+                    ? "Uses the uploaded pseudotime file."
+                    : estimatePseudotime
+                      ? "Slingshot will estimate pseudotime when the analysis starts."
+                      : "Upload pseudotime or choose Slingshot in Optional biological inputs."}
+                </p>
+              </div>
+              {!hasPseudotimeSource ? (
+                <button
+                  type="button"
+                  onClick={onOpenOptionalInputs}
+                  className="shrink-0 text-xs font-bold text-[#1b75a6] transition hover:text-[#155f87]"
+                >
+                  Configure pseudotime
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           {geneOrderingSource === "upload" ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
@@ -1912,11 +2016,15 @@ function GeneSelectionPanel({
               </span>
               <span className="flex min-w-0 items-center justify-between gap-3">
                 <span className="truncate text-xs font-semibold text-slate-500">
-                  p ≤ {trajectoryPValue || "—"}
-                  {trajectoryBonferroni ? " · Bonferroni" : ""}
-                  {enabledStages.includes("variance") && includeSignificantTFs
-                    ? " · significant TFs prioritized"
-                    : ""}
+                  <InlineSummary
+                    items={[
+                      `p ≤ ${trajectoryPValue || "—"}`,
+                      ...(trajectoryBonferroni ? ["Bonferroni"] : []),
+                      ...(enabledStages.includes("variance") && includeSignificantTFs
+                        ? ["significant TFs prioritized"]
+                        : []),
+                    ]}
+                  />
                 </span>
                 <span
                   className="shrink-0 text-slate-400"
@@ -1983,9 +2091,14 @@ function GeneSelectionPanel({
           number={3}
           title="Variable-gene selection"
           description="Rank the remaining genes by variance and keep the top set."
-          summary={`Top ${hvgGeneCount || "—"} total${
-            includeAllTFs ? " · known TFs prioritized" : ""
-          }`}
+          summary={
+            <InlineSummary
+              items={[
+                `Top ${hvgGeneCount || "—"} total`,
+                ...(includeAllTFs ? ["known TFs prioritized"] : []),
+              ]}
+            />
+          }
           enabled={enabledStages.includes("variance")}
           expanded={expandedStage === "variance"}
           last
@@ -2047,7 +2160,7 @@ function GeneSelectionStageRow({
   number: number;
   title: string;
   description: string;
-  summary: string;
+  summary: ReactNode;
   enabled: boolean;
   expanded: boolean;
   last?: boolean;
@@ -2279,11 +2392,16 @@ function CellOracleSettingsModal({
                   }`}
                 >
                   {isBuiltInGrn
-                    ? `Built-in · ${
-                        CELLORACLE_SPECIES_OPTIONS.find(
-                          (species) => species.value === cellOracleSpecies,
-                        )?.label ?? "Human"
-                      }`
+                    ? (
+                        <InlineSummary
+                          items={[
+                            "Built-in",
+                            CELLORACLE_SPECIES_OPTIONS.find(
+                              (species) => species.value === cellOracleSpecies,
+                            )?.label ?? "Human",
+                          ]}
+                        />
+                      )
                     : "Custom upload"}
                 </span>
               </div>

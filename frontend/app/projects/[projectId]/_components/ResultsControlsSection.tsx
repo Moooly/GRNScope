@@ -212,7 +212,7 @@ export default function ResultsControlsSection({
   const panelHeader = (
     panel: SettingsPanel,
     title: string,
-    subtitle?: string
+    subtitle?: ReactNode
   ) => {
     const isOpen = openPanel === panel;
 
@@ -570,7 +570,14 @@ export default function ResultsControlsSection({
       {panelHeader(
         "confidence",
         "Confidence",
-        `≥ ${Math.round(safeConfidenceThreshold * 100)}% · Top ${recoveryRankPercent}% recovery`
+        <>
+          <span>≥ {Math.round(safeConfidenceThreshold * 100)}%</span>
+          <span
+            className="mx-2 inline-block h-3 w-px align-middle bg-current opacity-30"
+            aria-hidden="true"
+          />
+          <span>Top {recoveryRankPercent}% recovery</span>
+        </>
       )}
       {openPanel === "confidence" && (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
