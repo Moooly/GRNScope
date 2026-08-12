@@ -51,11 +51,11 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
             <h4 className="text-base font-bold text-slate-950">Confidence level</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
               Controls the minimum bootstrap recovery required for an edge to
-              appear. New analyses draw the full number of cells with
-              replacement and report how often the edge&apos;s normalized
-              per-target evidence reaches the configured threshold τ. It
-              measures sensitivity to sampled cells, not uncertainty between
-              donors or causality.
+              appear. In each with-replacement bootstrap run, an edge is
+              recovered when it ranks within the configured top percentage of
+              retained candidates for its target. Confidence is the share of
+              runs that recover the edge. It measures sensitivity to sampled
+              cells, not uncertainty between donors or causality.
             </p>
           </div>
 

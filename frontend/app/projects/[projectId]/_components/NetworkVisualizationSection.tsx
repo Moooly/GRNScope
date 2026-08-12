@@ -1029,8 +1029,10 @@ export default function NetworkVisualizationSection({
                       <dd>
                         Rank is assigned by bootstrap confidence and then
                         evidence. For one method, confidence is the share of
-                        with-replacement cell-bootstrap samples that recover the
-                        edge; for a consensus it is the median recovery among
+                        with-replacement cell-bootstrap samples in which the
+                        edge ranks within the configured top percentage of
+                        retained candidates for its target. For a consensus it
+                        is the median of those method-level confidences among
                         supporting methods. Legacy scores predate genuine cell
                         bootstrapping and require a rerun.
                       </dd>
@@ -1084,9 +1086,10 @@ export default function NetworkVisualizationSection({
                   <p className="mt-2">
                     With five selected methods, suppose A → B has evidence
                     0.90, 0.80, 0.70, 0, and 0. Consensus evidence is 0.48 and
-                    support is 3/5. If the three supporting methods recover it
-                    in 90%, 80%, and 70% of bootstrap samples, consensus
-                    confidence is the median: 80%.
+                    support is 3/5. If the recovery rank is the top 20% and the
+                    three supporting methods recover it in 90%, 80%, and 70% of
+                    bootstrap samples, consensus confidence is their median:
+                    80%.
                   </p>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
                     If direction-aware evidence is 1.6 forward and 0.4 reverse,

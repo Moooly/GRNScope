@@ -1052,8 +1052,20 @@ export default function NetworkGraph({
               <p className="font-semibold text-slate-900">
                 {edgeTooltip.source} → {edgeTooltip.target}
               </p>
-              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-700">
-                Edge
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                  edgeTooltip.sign > 0
+                    ? "bg-[#e8f5fb] text-[#0072B2]"
+                    : edgeTooltip.sign < 0
+                      ? "bg-[#fff0e8] text-[#D55E00]"
+                      : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {edgeTooltip.sign > 0
+                  ? "Activation"
+                  : edgeTooltip.sign < 0
+                    ? "Repression"
+                    : "Unsigned"}
               </span>
             </div>
 
@@ -1073,22 +1085,16 @@ export default function NetworkGraph({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-[11px]">
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Dir. conf</p>
+                <p className="text-slate-500">Direction confidence</p>
                 <p className="mt-1 font-semibold text-slate-900">
                   {edgeTooltip.directionConfidence === null
                     ? "-"
                     : `${Math.round(edgeTooltip.directionConfidence * 100)}%`}
                 </p>
                 <p className="mt-0.5 text-[10px] text-slate-400">
-                  cov {Math.round(edgeTooltip.directionCoverage * 100)}%
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Sign</p>
-                <p className="mt-1 font-semibold text-slate-900">
-                  {edgeTooltip.sign > 0 ? "+" : edgeTooltip.sign < 0 ? "-" : "-"}
+                  coverage {Math.round(edgeTooltip.directionCoverage * 100)}%
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
@@ -1099,7 +1105,7 @@ export default function NetworkGraph({
                     : `${Math.round(edgeTooltip.signConfidence * 100)}%`}
                 </p>
                 <p className="mt-0.5 text-[10px] text-slate-400">
-                  cov {Math.round(edgeTooltip.signCoverage * 100)}%
+                  coverage {Math.round(edgeTooltip.signCoverage * 100)}%
                 </p>
               </div>
             </div>

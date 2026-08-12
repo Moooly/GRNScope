@@ -1761,7 +1761,9 @@ function ConsensusEdgeExplorerHelpModal({
               <p className="mt-2">
                 The table uses the complete saved ranking from the selected
                 method. Edge evidence is normalized to 0–1, and bootstrap
-                recovery is used as the default sort.
+                confidence is used as the default sort. Confidence counts the
+                archived bootstrap runs in which an edge ranks within the
+                configured recovery rank for its target.
               </p>
             </section>
           )}
@@ -1801,8 +1803,11 @@ function ConsensusEdgeExplorerHelpModal({
                 </dt>
                 <dd>
                   {comparesMethods
-                    ? "The median bootstrap recovery among methods that support the edge."
-                    : "The share of with-replacement cell-bootstrap samples that recovered the edge."}{" "}
+                    ? "The median confidence of the supporting methods. Each method's confidence is the share of archived bootstrap runs in which the edge ranks within the configured recovery rank for its target."
+                    : "The share of archived with-replacement cell-bootstrap runs in which the edge ranks within the configured recovery rank for its target."}{" "}
+                  Recovery rank is the top percentage used to decide whether an
+                  edge counts as recovered. Changing it recalculates confidence
+                  from the saved runs; it does not rerun the algorithms.{" "}
                   A “legacy” label identifies an older subsampling result rather
                   than genuine with-replacement bootstrap confidence; rerun that
                   method to update it.
@@ -1860,7 +1865,8 @@ function ConsensusEdgeExplorerHelpModal({
                 evidence 0.90, 0.80, 0.70, 0, and 0. Its consensus evidence is
                 (0.90 + 0.80 + 0.70) ÷ 5 = 0.48 and its support is 3/5. If those
                 three supporting methods recover it in 90%, 80%, and 70% of
-                bootstrap samples, bootstrap confidence is their median: 80%.
+                bootstrap samples under a top-20% recovery rank, bootstrap
+                confidence is their median: 80%.
               </p>
               <p className="mt-2 text-xs leading-5 text-slate-500">
                 If direction-aware evidence leans forward 1.6 versus reverse

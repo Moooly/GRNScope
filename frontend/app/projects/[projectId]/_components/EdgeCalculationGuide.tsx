@@ -119,7 +119,7 @@ export default function EdgeCalculationGuide() {
             <div className="space-y-2">
               <math
                 display="block"
-                aria-label="I sub m b of e equals one when normalized evidence reaches tau, and zero otherwise"
+                aria-label="I sub m b of e equals one when the edge ranks within the configured top p fraction for its target, and zero otherwise"
               >
                 <mrow>
                   <msub>
@@ -134,11 +134,12 @@ export default function EdgeCalculationGuide() {
                       <mtd><mn>1</mn></mtd>
                       <mtd>
                         <mtext>&nbsp;if&nbsp;</mtext>
-                        <msub>
-                          <mi>E</mi>
-                          <mrow><mi>m</mi><mo>,</mo><mi>b</mi></mrow>
-                        </msub>
-                        <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo><mo>≥</mo><mi>τ</mi>
+                        <msub><mi>r</mi><mrow><mi>m</mi><mo>,</mo><mi>b</mi></mrow></msub>
+                        <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo>
+                        <mo>≤</mo>
+                        <mn>1</mn><mo>+</mo><mi>p</mi><mo>(</mo>
+                        <msub><mi>R</mi><mrow><mi>m</mi><mo>,</mo><mi>b</mi><mo>,</mo><mi>t</mi></mrow></msub>
+                        <mo>−</mo><mn>1</mn><mo>)</mo>
                       </mtd>
                     </mtr>
                     <mtr>
@@ -182,16 +183,19 @@ export default function EdgeCalculationGuide() {
           <p>
             Each bootstrap run samples the original number of cells with
             replacement, reruns the method, and recalculates the per-target
-            evidence. The edge is recovered only when its normalized evidence
-            reaches the configured threshold <em>τ</em>. <em>Bₘ</em> is the
-            completed run count and <em>Nrecovered</em> is the number of
-            recovered runs.
+            ranking. The edge is recovered when it falls within the configured
+            top <em>p</em> fraction of retained candidates for its target in
+            that run; for example, <em>p</em> = 0.20 means the top 20%.
+            An absent edge contributes 0. <em>Bₘ</em> is the completed run count
+            and <em>Nrecovered</em> is the number of recovered runs.
           </p>
           <p className="mt-2">
             The 95% evidence interval is the 2.5th and 97.5th percentiles of
             Eₘᵦ(e) across runs; a run in which the edge is absent contributes
             evidence 0. This interval describes evidence variation, while
-            Cₘ(e) describes threshold-based recovery frequency.
+            Cₘ(e) describes recovery frequency under the configured recovery
+            rank. The confidence-level filter is a separate display threshold
+            applied to the resulting Cₘ(e).
           </p>
         </FormulaCard>
 
@@ -237,8 +241,8 @@ export default function EdgeCalculationGuide() {
             <em>M</em> is every selected method. A method without the edge has
             Eₘ(e) = 0, so consensus evidence rewards both strength and breadth.
             Support is the number of selected methods that report the edge.
-            Consensus confidence is the median finite bootstrap recovery among
-            those supporting methods—not the mean across all methods.
+            Consensus confidence is the median finite bootstrap confidence
+            among those supporting methods—not the mean across all methods.
           </p>
           <p className="mt-2">
             Rows are sorted by descending Ccons, then Econs. Exact ties receive
