@@ -2,6 +2,7 @@ fastapi
 uvicorn
 python-multipart
 pandas
+anndata>=0.10,<1
 scanpy>=1.11,<2
 scipy>=1.11,<2
 scikit-learn>=1.4,<2

@@ -47,13 +47,14 @@ from ..repositories.project_repository import (
     write_project_manifest,
 )
 from ..storage import save_upload_file
+from ..services.anndata_service import convert_h5ad_to_csv, is_h5ad_filename
 from ..schemas import (
     CreateProjectResponse,
     UpdateConfidenceRecoveryRankRequest,
     UpdateNotificationEmailRequest,
     UpdateProjectNameRequest,
 )
-from ..validators import validate_csv_extension
+from ..validators import validate_csv_extension, validate_expression_extension
 from ..services.beeline_service import (
     CONFIDENCE_RUN_MODE_FIXED,
     DEFAULT_CONFIDENCE_MAX_RUNS,
@@ -374,6 +375,7 @@ async def create_pending_project(
     celloracle_base_grn: str = Form("auto"),
     algorithm_parameters: str = Form("{}"),
     expression_filename: str = Form(""),
+    expression_matrix_layer: str = Form("X"),
     pseudotime_filename: str = Form(""),
     ground_truth_filename: str = Form(""),
     cluster_labels_filename: str = Form(""),
@@ -469,6 +471,11 @@ async def create_pending_project(
         "resolved_algorithm_parameters": resolved_algorithm_parameters,
         "ensemble_enabled": ensemble_enabled,
         "expression_path": None,
+        "expression_source_path": None,
+        "expression_matrix_layer": expression_matrix_layer or "X",
+        "expression_format": (
+            "h5ad" if is_h5ad_filename(expression_filename) else "csv"
+        ),
         "pseudotime_path": None,
         "ground_truth_path": None,
         "ground_truth_filename": ground_truth_filename or None,
@@ -505,6 +512,10 @@ async def create_pending_project(
         "project_name": project_name,
         "project_description": project_description,
         "expression_filename": expression_filename or None,
+        "expression_matrix_layer": expression_matrix_layer or "X",
+        "expression_format": (
+            "h5ad" if is_h5ad_filename(expression_filename) else "csv"
+        ),
         "pseudotime_filename": pseudotime_filename or None,
         "ground_truth_filename": ground_truth_filename or None,
         "cluster_labels_filename": cluster_labels_filename or None,
@@ -601,7 +612,11 @@ async def upload_project_dataset_and_start(
             raise RuntimeError("Project is missing its pending job id.")
 
         errors: list[str] = []
-        expression_ext_error = validate_csv_extension(expression_matrix.filename or "")
+        expression_filename = Path(
+            expression_matrix.filename or "expression.csv"
+        ).name
+        expression_is_h5ad = is_h5ad_filename(expression_filename)
+        expression_ext_error = validate_expression_extension(expression_filename)
         if expression_ext_error:
             errors.append(f"Expression matrix: {expression_ext_error}")
         if pseudotime:
@@ -659,11 +674,26 @@ async def upload_project_dataset_and_start(
                 "errors": errors,
             }
 
-        expression_path = (
-            project_dir
-            / f"expression__{Path(expression_matrix.filename or 'expression.csv').name}"
-        )
-        save_upload_file(expression_matrix, expression_path)
+        expression_source_path: Path | None = None
+        if expression_is_h5ad:
+            expression_source_path = project_dir / f"expression__{expression_filename}"
+            expression_path = project_dir / f"expression__{Path(expression_filename).stem}.csv"
+            save_upload_file(expression_matrix, expression_source_path)
+            try:
+                convert_h5ad_to_csv(
+                    source_path=expression_source_path,
+                    destination_path=expression_path,
+                    matrix_key=str(
+                        project_manifest.get("expression_matrix_layer") or "X"
+                    ),
+                )
+            except Exception:
+                expression_source_path.unlink(missing_ok=True)
+                expression_path.unlink(missing_ok=True)
+                raise
+        else:
+            expression_path = project_dir / f"expression__{expression_filename}"
+            save_upload_file(expression_matrix, expression_path)
 
         preprocessing_config = project_manifest.setdefault("preprocessing", {})
         matrix_state_selection = preprocessing_config.setdefault(
@@ -767,6 +797,16 @@ async def upload_project_dataset_and_start(
             project_manifest["known_tf_reference"] = custom_tf_reference
 
         project_manifest["expression_path"] = str(expression_path)
+        if expression_source_path is not None:
+            project_manifest["expression_source_path"] = str(expression_source_path)
+            project_manifest["expression_matrix_layer"] = str(
+                project_manifest.get("expression_matrix_layer") or "X"
+            )
+            project_manifest["expression_format"] = "h5ad"
+        else:
+            project_manifest.pop("expression_source_path", None)
+            project_manifest["expression_matrix_layer"] = "X"
+            project_manifest["expression_format"] = "csv"
         project_manifest["pseudotime_path"] = (
             str(pseudotime_path) if pseudotime_path else None
         )
@@ -808,6 +848,12 @@ async def upload_project_dataset_and_start(
         metadata_manifest.update(
             {
                 "expression_filename": expression_matrix.filename,
+                "expression_matrix_layer": project_manifest.get(
+                    "expression_matrix_layer", "X"
+                ),
+                "expression_format": project_manifest.get(
+                    "expression_format", "csv"
+                ),
                 "pseudotime_filename": pseudotime.filename if pseudotime else None,
                 "ground_truth_filename": (
                     ground_truth.filename if ground_truth else None

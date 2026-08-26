@@ -80,6 +80,13 @@ def validate_csv_extension(filename: str) -> str | None:
     return None
 
 
+def validate_expression_extension(filename: str) -> str | None:
+    normalized_filename = filename.lower()
+    if not normalized_filename.endswith((".csv", ".h5ad")):
+        return "File must be a CSV or AnnData (.h5ad) file."
+    return None
+
+
 def validate_file_size(size_bytes: int) -> str | None:
     if size_bytes > MAX_FILE_SIZE_BYTES:
         return "File size must be 500 MB or smaller."

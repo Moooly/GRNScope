@@ -61,19 +61,26 @@ async def download_expression_file(
         project_manifest = json.loads(project_manifest_path.read_text(encoding="utf-8"))
 
         expression_path = project_manifest.get("expression_path")
+        expression_source_path = project_manifest.get("expression_source_path")
         expression_filename = metadata.get("expression_filename") or "dataset.csv"
 
         if not expression_path:
             raise HTTPException(status_code=404, detail="Expression file path not found.")
 
-        file_path = Path(expression_path)
+        file_path = Path(str(expression_source_path or expression_path))
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Expression file not found.")
+
+        media_type = (
+            "application/x-h5ad"
+            if file_path.suffix.lower() == ".h5ad"
+            else "text/csv"
+        )
 
         return FileResponse(
             path=file_path,
             filename=expression_filename,
-            media_type="text/csv",
+            media_type=media_type,
         )
     except HTTPException:
         raise

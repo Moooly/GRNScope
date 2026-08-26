@@ -13,6 +13,9 @@ import {
 } from "../_lib/pendingProjectUpload";
 import {
   inspectExpressionMatrix,
+  type ExpressionMatrixFormat,
+  type ExpressionMatrixOption,
+  type ExpressionMatrixInspection,
   type MatrixStateDetection,
 } from "../_lib/matrixStateDetection";
 
@@ -68,6 +71,25 @@ type SpeciesInferencePayload = {
   inference?: {
     species?: string;
   } | null;
+};
+
+type H5ADInspectionPayload = {
+  ok?: boolean;
+  errors?: string[];
+  selected_matrix?: string;
+  gene_count?: number;
+  cell_count?: number;
+  gene_names?: string[];
+  detection?: MatrixStateDetection;
+  matrices?: Array<{
+    key: string;
+    label: string;
+    gene_count: number;
+    cell_count: number;
+    gene_names: string[];
+    detection: MatrixStateDetection;
+    default?: boolean;
+  }>;
 };
 
 async function readCreateProjectResponse(response: Response) {
@@ -175,6 +197,12 @@ export default function CreateProjectFlow({
   const [estimatePseudotime, setEstimatePseudotime] = useState(false);
   const [clusterLabelsFile, setClusterLabelsFile] = useState<File | null>(null);
   const [expressionFileName, setExpressionFileName] = useState("");
+  const [expressionMatrixFormat, setExpressionMatrixFormat] =
+    useState<ExpressionMatrixFormat>("csv");
+  const [expressionMatrixLayer, setExpressionMatrixLayer] = useState("X");
+  const [expressionMatrixOptions, setExpressionMatrixOptions] = useState<
+    ExpressionMatrixOption[]
+  >([]);
   const [expressionMatrixDimensions, setExpressionMatrixDimensions] = useState<
     string | null
   >(null);
@@ -184,6 +212,8 @@ export default function CreateProjectFlow({
   const [matrixStateDetection, setMatrixStateDetection] =
     useState<MatrixStateDetection | null>(null);
   const [isMatrixStateDetecting, setIsMatrixStateDetecting] = useState(false);
+  const [isExpressionMatrixInspecting, setIsExpressionMatrixInspecting] =
+    useState(false);
   const [datasetSpecies, setDatasetSpecies] = useState("");
   const [isSpeciesDetecting, setIsSpeciesDetecting] = useState(false);
   const speciesSelectionSourceRef = useRef<
@@ -198,11 +228,15 @@ export default function CreateProjectFlow({
 
     if (!expressionFile) {
       setExpressionMatrixDimensions(null);
+      setExpressionMatrixFormat("csv");
+      setExpressionMatrixLayer("X");
+      setExpressionMatrixOptions([]);
       setGeneCount(null);
       setCellCount(null);
       setMatrixState("");
       setMatrixStateDetection(null);
       setIsMatrixStateDetecting(false);
+      setIsExpressionMatrixInspecting(false);
       setIsSpeciesDetecting(false);
       if (speciesSelectionSourceRef.current === "automatic") {
         speciesSelectionSourceRef.current = null;
@@ -211,7 +245,14 @@ export default function CreateProjectFlow({
       return;
     }
 
-    setExpressionMatrixDimensions("Inspecting matrix…");
+    const isH5AD = expressionFile.name.toLowerCase().endsWith(".h5ad");
+    setExpressionMatrixFormat(isH5AD ? "h5ad" : "csv");
+    setExpressionMatrixLayer("X");
+    setExpressionMatrixOptions([]);
+    setExpressionMatrixDimensions(
+      isH5AD ? "Inspecting AnnData…" : "Inspecting matrix…",
+    );
+    setIsExpressionMatrixInspecting(true);
     setGeneCount(null);
     setCellCount(null);
     setMatrixState("");
@@ -225,11 +266,59 @@ export default function CreateProjectFlow({
       speciesSelectionSourceRef.current = null;
       setDatasetSpecies("");
     }
-    void inspectExpressionMatrix(expressionFile)
+    const inspectUploadedExpression = async (): Promise<ExpressionMatrixInspection> => {
+      if (!isH5AD) return inspectExpressionMatrix(expressionFile);
+
+      const formData = new FormData();
+      formData.append("expression_matrix", expressionFile);
+      const response = await apiFetch(`${API_BASE}/uploads/inspect-expression`, {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json()) as H5ADInspectionPayload;
+      if (!response.ok || !payload.ok) {
+        throw new Error(
+          payload.errors?.length
+            ? payload.errors.join("\n")
+            : "AnnData inspection failed.",
+        );
+      }
+
+      const matrices: ExpressionMatrixOption[] = (payload.matrices ?? []).map(
+        (matrix) => ({
+          key: matrix.key,
+          label: matrix.label,
+          geneCount: matrix.gene_count,
+          cellCount: matrix.cell_count,
+          geneNames: matrix.gene_names,
+          detection: matrix.detection,
+          default: matrix.default,
+        }),
+      );
+      const selectedKey = payload.selected_matrix ?? matrices[0]?.key ?? "X";
+      const selected = matrices.find((matrix) => matrix.key === selectedKey);
+      if (!selected) throw new Error("AnnData did not expose a usable expression matrix.");
+
+      return {
+        label: `${selected.geneCount.toLocaleString()} genes × ${selected.cellCount.toLocaleString()} cells`,
+        format: "h5ad",
+        geneCount: selected.geneCount,
+        cellCount: selected.cellCount,
+        geneNames: selected.geneNames,
+        detection: selected.detection,
+        selectedMatrix: selected.key,
+        matrices,
+      };
+    };
+
+    void inspectUploadedExpression()
       .then(async (inspection) => {
         if (cancelled) return;
 
         setExpressionMatrixDimensions(inspection.label);
+        setExpressionMatrixFormat(inspection.format ?? "csv");
+        setExpressionMatrixLayer(inspection.selectedMatrix ?? "X");
+        setExpressionMatrixOptions(inspection.matrices ?? []);
         setGeneCount(inspection.geneCount);
         setCellCount(inspection.cellCount);
         setMatrixStateDetection(inspection.detection);
@@ -284,13 +373,40 @@ export default function CreateProjectFlow({
         }
       })
       .finally(() => {
-        if (!cancelled) setIsMatrixStateDetecting(false);
+        if (!cancelled) {
+          setIsMatrixStateDetecting(false);
+          setIsExpressionMatrixInspecting(false);
+        }
       });
 
     return () => {
       cancelled = true;
     };
   }, [API_BASE, expressionFile]);
+
+  const handleSelectExpressionMatrixLayer = useCallback(
+    (matrixKey: string) => {
+      const selected = expressionMatrixOptions.find(
+        (matrix) => matrix.key === matrixKey,
+      );
+      if (!selected) return;
+
+      setExpressionMatrixLayer(selected.key);
+      setExpressionMatrixDimensions(
+        `${selected.geneCount.toLocaleString()} genes × ${selected.cellCount.toLocaleString()} cells`,
+      );
+      setGeneCount(selected.geneCount);
+      setCellCount(selected.cellCount);
+      setMatrixStateDetection(selected.detection);
+      setMatrixState(
+        selected.detection.detectedState &&
+          selected.detection.confidence !== "low"
+          ? selected.detection.detectedState
+          : "",
+      );
+    },
+    [expressionMatrixOptions],
+  );
 
   const [includeAllTFs, setIncludeAllTFs] = useState(true);
   const [customTfListFile, setCustomTfListFile] = useState<File | null>(null);
@@ -356,6 +472,9 @@ export default function CreateProjectFlow({
     setEstimatePseudotime(false);
     setClusterLabelsFile(null);
     setExpressionFileName("");
+    setExpressionMatrixFormat("csv");
+    setExpressionMatrixLayer("X");
+    setExpressionMatrixOptions([]);
     setPseudotimeFileName("");
     setGroundTruthFileName("");
     setClusterLabelsFileName("");
@@ -586,7 +705,7 @@ export default function CreateProjectFlow({
       });
       return;
     }
-    const baseName = expressionFileName.replace(/\.csv$/i, "").trim();
+    const baseName = expressionFileName.replace(/\.(csv|h5ad)$/i, "").trim();
     if (!baseName) return;
 
     setProjectName((current) => {
@@ -753,6 +872,7 @@ export default function CreateProjectFlow({
     formData.append("celloracle_species", cellOracleSpecies);
     formData.append("celloracle_base_grn", CELLORACLE_INTERNAL_BASE_GRN);
     formData.append("expression_filename", expressionFileName);
+    formData.append("expression_matrix_layer", expressionMatrixLayer);
     formData.append("pseudotime_filename", pseudotimeFileName);
     formData.append("ground_truth_filename", groundTruthFileName);
     formData.append("cluster_labels_filename", clusterLabelsFileName);
@@ -794,10 +914,18 @@ export default function CreateProjectFlow({
       validationErrors.push("Project name is required.");
     }
     if (!expressionFile) {
-      validationErrors.push("Upload an expression matrix CSV to continue.");
+      validationErrors.push(
+        "Upload an expression matrix CSV or AnnData (.h5ad) file to continue.",
+      );
     } else {
-      if (!expressionFile.name.toLowerCase().endsWith(".csv")) {
-        validationErrors.push("Expression matrix must be a CSV file.");
+      const expressionFileNameLower = expressionFile.name.toLowerCase();
+      if (
+        !expressionFileNameLower.endsWith(".csv") &&
+        !expressionFileNameLower.endsWith(".h5ad")
+      ) {
+        validationErrors.push(
+          "Expression matrix must be a CSV or AnnData (.h5ad) file.",
+        );
       }
       if (expressionFile.size > maxFileSize) {
         validationErrors.push("Expression matrix file size must be 500 MB or smaller.");
@@ -915,7 +1043,9 @@ export default function CreateProjectFlow({
       setErrors([]);
       const data = await createPendingProject(safeSelectedIds);
       if (!expressionFile) {
-        throw new Error("Upload an expression matrix CSV to continue.");
+        throw new Error(
+          "Upload an expression matrix CSV or AnnData (.h5ad) file to continue.",
+        );
       }
 
       // Start the upload before navigation so there is no route-transition gap
@@ -999,7 +1129,14 @@ export default function CreateProjectFlow({
       isCreateClosing={isClosing}
       projectName={projectName}
       expressionFileName={expressionFileName}
+      expressionMatrixFormat={expressionMatrixFormat}
+      expressionMatrixLayer={expressionMatrixLayer}
+      expressionMatrixOptions={expressionMatrixOptions.map((matrix) => ({
+        value: matrix.key,
+        label: matrix.label,
+      }))}
       expressionMatrixDimensions={expressionMatrixDimensions}
+      isExpressionMatrixInspecting={isExpressionMatrixInspecting}
       pseudotimeFileName={pseudotimeFileName}
       groundTruthFileName={groundTruthFileName}
       clusterLabelsFileName={clusterLabelsFileName}
@@ -1061,6 +1198,7 @@ export default function CreateProjectFlow({
       setTrajectoryPValue={setTrajectoryPValue}
       setTrajectoryBonferroni={setTrajectoryBonferroni}
       setIncludeSignificantTFs={setIncludeSignificantTFs}
+      onExpressionMatrixLayerChange={handleSelectExpressionMatrixLayer}
       estimatePseudotime={estimatePseudotime}
       onToggleEstimatePseudotime={handleToggleEstimatePseudotime}
       setExpressionFile={setExpressionFile}

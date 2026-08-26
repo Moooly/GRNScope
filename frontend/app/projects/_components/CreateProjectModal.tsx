@@ -179,7 +179,11 @@ interface CreateProjectModalProps {
   isCreateClosing: boolean;
   projectName: string;
   expressionFileName: string;
+  expressionMatrixFormat: "csv" | "h5ad";
+  expressionMatrixLayer: string;
+  expressionMatrixOptions: ReadonlyArray<{ value: string; label: string }>;
   expressionMatrixDimensions: string | null;
+  isExpressionMatrixInspecting: boolean;
   pseudotimeFileName: string;
   groundTruthFileName: string;
   clusterLabelsFileName: string;
@@ -246,6 +250,7 @@ interface CreateProjectModalProps {
   setTrajectoryPValue: (value: string) => void;
   setTrajectoryBonferroni: (value: boolean) => void;
   setIncludeSignificantTFs: (value: boolean) => void;
+  onExpressionMatrixLayerChange: (value: string) => void;
   setExpressionFile: (file: File | null) => void;
   setExpressionFileName: (value: string) => void;
   setPseudotimeFile: (file: File | null) => void;
@@ -269,7 +274,11 @@ export default function CreateProjectModal({
   isCreateClosing,
   projectName,
   expressionFileName,
+  expressionMatrixFormat,
+  expressionMatrixLayer,
+  expressionMatrixOptions,
   expressionMatrixDimensions,
+  isExpressionMatrixInspecting,
   pseudotimeFileName,
   groundTruthFileName,
   clusterLabelsFileName,
@@ -333,6 +342,7 @@ export default function CreateProjectModal({
   setTrajectoryPValue,
   setTrajectoryBonferroni,
   setIncludeSignificantTFs,
+  onExpressionMatrixLayerChange,
   setExpressionFile,
   setExpressionFileName,
   setPseudotimeFile,
@@ -669,6 +679,7 @@ export default function CreateProjectModal({
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
                       Expression matrix
+                      {expressionMatrixFormat === "h5ad" ? " · AnnData" : ""}
                     </p>
                     <p
                       className="mt-1 truncate text-sm font-semibold text-slate-800"
@@ -712,6 +723,28 @@ export default function CreateProjectModal({
                         detecting={isMatrixStateDetecting && !matrixState}
                       />
                     </div>
+                    {expressionMatrixFormat === "h5ad" &&
+                    expressionMatrixOptions.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+                        <span className="font-semibold text-slate-500">
+                          Matrix source
+                        </span>
+                        {expressionMatrixOptions.length > 1 ? (
+                          <EditableChip
+                            value={expressionMatrixLayer}
+                            options={expressionMatrixOptions}
+                            onChange={onExpressionMatrixLayerChange}
+                            unsetLabel="Choose matrix"
+                            ariaLabel="AnnData matrix source"
+                            detecting={isExpressionMatrixInspecting}
+                          />
+                        ) : (
+                          <span className="font-semibold text-slate-700">
+                            {expressionMatrixOptions[0]?.label}
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                     {!datasetSpecies && !isSpeciesDetecting ? (
                       <p className="mt-2 text-[11px] font-medium leading-4 text-[#1b75a6]">
                         <span>
@@ -726,7 +759,7 @@ export default function CreateProjectModal({
                       Replace
                       <input
                         type="file"
-                        accept=".csv"
+                        accept=".csv,.h5ad,text/csv,application/x-h5ad"
                         className="hidden"
                         onChange={(event) => {
                           const file = event.target.files?.[0] ?? null;
@@ -844,7 +877,7 @@ export default function CreateProjectModal({
               >
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.h5ad,text/csv,application/x-h5ad"
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
@@ -865,7 +898,7 @@ export default function CreateProjectModal({
                 <div>
                   <FileNameDisplay
                     fileName=""
-                    placeholder="Drop expression matrix CSV here"
+                    placeholder="Drop expression matrix CSV or H5AD here"
                   />
                   <span className="mt-1.5 block text-xs text-slate-500">
                     or click to browse

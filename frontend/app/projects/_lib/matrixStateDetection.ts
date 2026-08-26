@@ -1,5 +1,6 @@
 export type MatrixState = "raw" | "normalized" | "log_normalized";
 export type MatrixStateConfidence = "high" | "medium" | "low";
+export type ExpressionMatrixFormat = "csv" | "h5ad";
 
 export type MatrixStateDetection = {
   detectedState: MatrixState | null;
@@ -16,12 +17,25 @@ export type MatrixStateDetection = {
   };
 };
 
-export type ExpressionMatrixInspection = {
+export type ExpressionMatrixOption = {
+  key: string;
   label: string;
   geneCount: number;
   cellCount: number;
   geneNames: string[];
   detection: MatrixStateDetection;
+  default?: boolean;
+};
+
+export type ExpressionMatrixInspection = {
+  label: string;
+  format?: ExpressionMatrixFormat;
+  geneCount: number;
+  cellCount: number;
+  geneNames: string[];
+  detection: MatrixStateDetection;
+  selectedMatrix?: string;
+  matrices?: ExpressionMatrixOption[];
 };
 
 const MAX_SAMPLED_CELLS = 96;
