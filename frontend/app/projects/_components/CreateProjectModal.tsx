@@ -1442,6 +1442,87 @@ function OptionalInputsPanel({
   );
 }
 
+function FileDropZone({
+  fileName,
+  fileLabel,
+  accept,
+  onSelect,
+}: {
+  fileName: string;
+  fileLabel: string;
+  accept: string;
+  onSelect: (file: File | null) => void;
+}) {
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragActive(false);
+    onSelect(event.dataTransfer.files?.[0] ?? null);
+  };
+
+  return (
+    <label
+      className={`flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition ${
+        isDragActive
+          ? "border-[#1b75a6] bg-[#eaf6fc] shadow-sm"
+          : "border-[#1b75a6]/30 bg-white hover:border-[#1b75a6]/55 hover:bg-[#f7fbfd]"
+      }`}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragActive(true);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsDragActive(false);
+        }
+      }}
+      onDrop={handleDrop}
+    >
+      <input
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(event) => {
+          onSelect(event.target.files?.[0] ?? null);
+          event.currentTarget.value = "";
+        }}
+      />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e6f2fa] text-[#1b75a6]">
+        <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+          <path
+            d="M12 15V4m0 0 4 4m-4-4-4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <span className="min-w-0 text-left">
+        <span
+          className={`block truncate text-sm font-semibold ${
+            fileName ? "text-[#178a62]" : "text-slate-700"
+          }`}
+          title={fileName || undefined}
+        >
+          {fileName ? formatFileNameForDisplay(fileName, 42) : `Drop ${fileLabel} here`}
+        </span>
+        <span className="mt-0.5 block text-xs font-medium text-slate-500">
+          {fileName ? "Drop a new file to replace it, or click to browse" : "or click to browse"}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 function GroundTruthInputRow({
   fileName,
   onSelect,
@@ -1492,7 +1573,7 @@ function GroundTruthInputRow({
 
       {open ? (
         <div className="border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div>
             <span>
               <span className="block text-sm font-semibold text-slate-800">
                 Reference edges
@@ -1501,37 +1582,28 @@ function GroundTruthInputRow({
                 CSV with regulator and target columns. Sign or effect is optional.
               </span>
             </span>
-            <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
-              {fileName ? "Replace" : "Choose CSV"}
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(event) => {
-                  onSelect(event.target.files?.[0] ?? null);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
           </div>
 
-          {fileName ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-3">
-              <span
-                className="min-w-0 truncate text-xs font-semibold text-[#178a62]"
-                title={fileName}
-              >
-                {formatFileNameForDisplay(fileName, 46)}
-              </span>
+          <div className="mt-3 flex items-stretch gap-2">
+            <div className="min-w-0 flex-1">
+              <FileDropZone
+                fileName={fileName}
+                fileLabel="reference edges CSV"
+                accept=".csv,text/csv"
+                onSelect={onSelect}
+              />
+            </div>
+            {fileName ? (
               <button
                 type="button"
                 onClick={onClear}
-                className="text-xs font-semibold text-slate-500 transition hover:text-rose-600"
+                className="shrink-0 self-center px-2 text-xs font-semibold text-slate-500 transition hover:text-rose-600"
               >
                 Remove
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
+
         </div>
       ) : null}
     </section>
@@ -2657,41 +2729,30 @@ function PseudotimeInputRow({
           </div>
 
           {source === "upload" ? (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
-              <span
-                className={`min-w-0 truncate text-xs font-medium ${
-                  fileName ? "text-[#178a62]" : "text-slate-400"
-                }`}
-                title={fileName || "No pseudotime CSV selected"}
-              >
-                {fileName ? compactFileName : "No CSV selected"}
-              </span>
-              <span className="flex flex-wrap items-center gap-2">
-                <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
-                  {fileName ? "Replace" : "Upload"}
-                  <input
-                    type="file"
-                    accept=".csv"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
+            <div className="mt-4 border-t border-slate-200/70 pt-4">
+              <div className="flex items-stretch gap-2">
+                <div className="min-w-0 flex-1">
+                  <FileDropZone
+                    fileName={fileName}
+                    fileLabel="pseudotime CSV"
+                    accept=".csv,text/csv"
+                    onSelect={(file) => {
                       setSource("upload");
                       onToggleEstimate(false);
                       onSelect(file);
-                      event.target.value = "";
                     }}
                   />
-                </label>
+                </div>
                 {fileName ? (
                   <button
                     type="button"
                     onClick={onClear}
-                    className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                    className="shrink-0 self-center px-2 text-xs font-semibold text-slate-500 transition hover:text-rose-600"
                   >
                     Remove
                   </button>
                 ) : null}
-              </span>
+              </div>
             </div>
           ) : null}
         </div>
