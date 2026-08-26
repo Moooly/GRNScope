@@ -275,11 +275,6 @@ export default function ResultsControlsSection({
     }
   };
   const matchingEdgesLabel = safeFilteredEdgeCount.toLocaleString();
-  const isDisplayCapped = safeFilteredEdgeCount > safeEdgeDisplayLimit;
-  const hiddenMatchingEdgeCount = Math.max(
-    0,
-    safeFilteredEdgeCount - safeEdgeDisplayLimit
-  );
 
   const inlinePercentControl = (
     value: number,
@@ -514,39 +509,6 @@ export default function ResultsControlsSection({
         {edgeDisplayControl()}
       </div>
 
-      <div
-        className={`mt-3 flex gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold leading-4 ${
-          isDisplayCapped
-            ? "border-[#1b75a6]/20 bg-white text-slate-600"
-            : "border-transparent bg-white/55 text-slate-500"
-        }`}
-        role="status"
-        aria-live="polite"
-      >
-        <span
-          className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-extrabold ${
-            isDisplayCapped
-              ? "bg-[#1b75a6] text-white"
-              : "bg-[#dcebf3] text-[#1b75a6]"
-          }`}
-          aria-hidden="true"
-        >
-          i
-        </span>
-        <p>
-          {isDisplayCapped ? (
-            <>
-              <strong className="text-slate-800">
-                {hiddenMatchingEdgeCount.toLocaleString()} more {hiddenMatchingEdgeCount === 1 ? "edge matches" : "edges match"} your filters, but only the top {safeEdgeDisplayLimit.toLocaleString()} are shown.
-              </strong>
-            </>
-          ) : safeFilteredEdgeCount > 0 ? (
-            "All matching edges are currently displayed."
-          ) : (
-            "No edges currently match the selected filters."
-          )}
-        </p>
-      </div>
     </section>
   );
 
@@ -715,7 +677,7 @@ export default function ResultsControlsSection({
       </div>
 
       {isSettingsMenuOpen && (
-        <div className={`${compact ? "network-settings-menu " : ""}absolute right-0 top-[calc(100%+10px)] z-[70] w-[min(540px,calc(100vw-3rem))] max-h-[calc(100vh-var(--grnscope-header-height)-5rem)] overflow-y-auto rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.42)] sm:p-5`}>
+        <div className={`${compact ? "network-settings-menu " : ""}absolute right-0 top-[calc(100%+10px)] z-[70] w-[min(460px,calc(100vw-3rem))] max-h-[calc(100vh-var(--grnscope-header-height)-5rem)] overflow-y-auto rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.42)] sm:p-5`}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
               Results settings

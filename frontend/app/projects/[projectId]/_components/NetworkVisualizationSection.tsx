@@ -78,7 +78,7 @@ const layoutOptions = [
   { value: "hierarchical", label: "Hierarchical", title: "Arrange regulation in directional layers" },
   { value: "concentric", label: "Hubs", title: "Place high-degree regulators near the center" },
   { value: "circular", label: "Circular", title: "Arrange nodes around a circle" },
-  { value: "circos", label: "Circos", title: "Arrange genes by genomic position" },
+  { value: "circos", label: "Circos", title: "Explore regulatory flow between chromosomes" },
 ] as const;
 
 const NODE_COLOR = "#5c83d8";

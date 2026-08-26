@@ -1,6 +1,11 @@
 "use client";
 
-import { useId, useMemo, type Ref } from "react";
+import {
+  useMemo,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type Ref,
+} from "react";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
 import { isDenseNetwork } from "./networkGraphLayouts";
 
@@ -14,12 +19,6 @@ type CircosNetworkGraphProps = {
   svgRef?: Ref<SVGSVGElement>;
 };
 
-/**
- * GRCh38 / hg38 chromosome lengths in base pairs. These size the chromosome
- * sectors on the outer ring proportionally to the actual genome — a chr1
- * sector is ~4.4× wider than a chr22 sector, just like in a standard
- * genomics Circos plot.
- */
 const HG38_CHROMOSOME_LENGTHS: Record<string, number> = {
   chrM: 16569,
   chr1: 248956422,
@@ -50,35 +49,112 @@ const HG38_CHROMOSOME_LENGTHS: Record<string, number> = {
 
 const CHROMOSOME_ORDER: Record<string, number> = (() => {
   const order: Record<string, number> = {};
-  for (let i = 1; i <= 22; i += 1) order[`chr${i}`] = i;
+  for (let index = 1; index <= 22; index += 1) order[`chr${index}`] = index;
   order.chrX = 23;
   order.chrY = 24;
+  order.chrM = 25;
   return order;
 })();
 
-const WIDTH = 680;
-const HEIGHT = 680;
+const WIDTH = 800;
+const HEIGHT = 760;
 const CENTER_X = WIDTH / 2;
 const CENTER_Y = HEIGHT / 2;
+const CHROMOSOME_INNER_RADIUS = 292;
+const CHROMOSOME_OUTER_RADIUS = 318;
+const CHROMOSOME_LABEL_RADIUS = 305;
+const ACTIVITY_TRACK_INNER_RADIUS = 250;
+const ACTIVITY_TRACK_MAX_RADIUS = 284;
+const ACTIVITY_TRACK_MIN_THICKNESS = 6;
+const RIBBON_RADIUS = 247;
+const GENE_LABEL_RADIUS = 334;
+const CHROMOSOME_GAP_RADIANS = 0.035;
+const SECTOR_INNER_PADDING_RADIANS = 0.012;
+const BUNDLE_ENDPOINT_GAP_RADIANS = 0.0022;
+const DETAIL_ENDPOINT_MAX_HALF_WIDTH = 0.007;
+const TF_MARKER_FILL = "#ffffff";
+const TF_MARKER_STROKE = "#475569";
 
-const CHROMOSOME_INNER_RADIUS = 276;
-const CHROMOSOME_OUTER_RADIUS = 306;
-const CHROMOSOME_LABEL_RADIUS =
-  (CHROMOSOME_INNER_RADIUS + CHROMOSOME_OUTER_RADIUS) / 2;
-const GENE_TICK_INNER_RADIUS = 261;
-const GENE_TICK_OUTER_RADIUS = 276;
-const RIBBON_RADIUS = GENE_TICK_INNER_RADIUS - 4;
-const GENE_LABEL_RADIUS = 316;
-
-const CHROMOSOME_GAP_RADIANS = 0.014; // small gap between adjacent chromosomes
-const RIBBON_HALF_WIDTH = 0.005; // angular half-width of each ribbon endpoint
-
-const CIRCOS_ACTIVATION_COLOR = "#168f98";
-const CIRCOS_REPRESSION_COLOR = "#d66c4d";
-const CIRCOS_UNKNOWN_SIGN_COLOR = "#8290a3";
-const CIRCOS_CHROMOSOME_COLORS = ["#dfeaf1", "#d2e1ea"];
+const CHROMOSOME_PALETTE = [
+  "#4f7fb8",
+  "#36a39a",
+  "#77ad4f",
+  "#d7a038",
+  "#d77655",
+  "#986fc0",
+  "#3f9bc3",
+  "#5eaf7f",
+  "#c95f8b",
+  "#71859f",
+  "#df8b42",
+  "#686fc0",
+];
 const UNMAPPED_CHROMOSOME = "unmapped";
-const UNMAPPED_VISUAL_LENGTH = 90000000;
+const UNMAPPED_COLOR = "#94a3b8";
+const ACTIVE_COLOR = "#d89a28";
+const ACTIVE_STROKE = "#8f6218";
+const REPRESSION_CAP_COLOR = "#334155";
+
+type RelationKind = "activation" | "repression" | "undirected" | "uncertain";
+
+type ChromosomeLayout = {
+  chromosome: string;
+  startAngle: number;
+  endAngle: number;
+  activity: number;
+  geneCount: number;
+  color: string;
+  labelX: number;
+  labelY: number;
+};
+
+type GenePlacement = {
+  id: string;
+  chromosome: string;
+  start: number;
+  end: number;
+  angle: number;
+  segmentStartAngle: number;
+  segmentEndAngle: number;
+  labelX: number;
+  labelY: number;
+  labelAnchor: "start" | "end";
+  labelRotation: number;
+  labelFontSize: number;
+  labelPriority: number;
+  labelVisible: boolean;
+  color: string;
+  isUnmapped: boolean;
+  isTF: boolean;
+  activity: number;
+  inDegree: number;
+  outDegree: number;
+};
+
+type RibbonGeometry = {
+  sourceStart: number;
+  sourceEnd: number;
+  targetStart: number;
+  targetEnd: number;
+};
+
+type ChromosomeBundle = {
+  key: string;
+  sourceChromosome: string;
+  targetChromosome: string;
+  relation: RelationKind;
+  edges: AggregatedEdge[];
+  count: number;
+  averageScore: number;
+  color: string;
+  geometry: RibbonGeometry;
+};
+
+type CircosFocus =
+  | { kind: "chromosome"; chromosome: string }
+  | { kind: "bundle"; bundleKey: string };
+
+type LabelBox = { left: number; right: number; top: number; bottom: number };
 
 function normalizeChromosome(value?: string | null): string {
   if (!value) return "";
@@ -102,59 +178,73 @@ function hasGenomicCoordinate(node?: NodeInfo) {
   );
 }
 
-function getDisplayChromosomeLength(chromosome: string) {
-  return chromosome === UNMAPPED_CHROMOSOME
-    ? UNMAPPED_VISUAL_LENGTH
-    : HG38_CHROMOSOME_LENGTHS[chromosome];
+function getNodeChromosome(node?: NodeInfo) {
+  return hasGenomicCoordinate(node)
+    ? normalizeChromosome(node?.chromosome)
+    : UNMAPPED_CHROMOSOME;
 }
 
 function getChromosomeSortValue(chromosome: string) {
   return chromosome === UNMAPPED_CHROMOSOME
-    ? 25
-    : CHROMOSOME_ORDER[chromosome] ?? 999;
+    ? 999
+    : CHROMOSOME_ORDER[chromosome] ?? 998;
+}
+
+function getChromosomeLabel(chromosome: string) {
+  return chromosome === UNMAPPED_CHROMOSOME
+    ? "Unknown"
+    : chromosome.replace("chr", "");
 }
 
 function getEdgeKey(edge: AggregatedEdge) {
-  return `${edge.source}|||${edge.target}`;
+  return edge.key || `${edge.source}|||${edge.target}`;
 }
 
 function getRawEdgeScore(edge: AggregatedEdge) {
-  const e = edge as AggregatedEdge & {
-    normalizedScore?: number;
-    consensusScore?: number;
-    score?: number;
-    weight?: number;
-  };
   const candidate =
-    typeof e.normalizedScore === "number"
-      ? e.normalizedScore
-      : typeof e.consensusScore === "number"
-        ? e.consensusScore
-        : typeof e.score === "number"
-          ? e.score
-          : typeof e.weight === "number"
-            ? e.weight
-            : 0;
-  return Number.isFinite(candidate) ? Math.max(0, candidate) : 0;
+    typeof edge.score === "number"
+      ? edge.score
+      : typeof edge.confidence === "number"
+        ? edge.confidence
+        : 0;
+  return Number.isFinite(candidate) ? Math.max(0, Math.min(1, candidate)) : 0;
 }
 
-function getConsensusEdgeColor(edge: AggregatedEdge) {
-  if (edge.sign === 0) {
-    return CIRCOS_UNKNOWN_SIGN_COLOR;
-  }
+function getRelationKind(edge: AggregatedEdge): RelationKind {
+  if (edge.direction === 0) return "undirected";
+  if (edge.sign > 0) return "activation";
+  if (edge.sign < 0) return "repression";
+  return "uncertain";
+}
 
-  return edge.sign > 0 ? CIRCOS_ACTIVATION_COLOR : CIRCOS_REPRESSION_COLOR;
+function getRelationLabel(relation: RelationKind) {
+  if (relation === "activation") return "activation";
+  if (relation === "repression") return "repression";
+  if (relation === "undirected") return "undirected";
+  return "uncertain sign";
 }
 
 function getEvidenceOpacity(score: number, denseNetwork: boolean) {
   if (denseNetwork) {
-    if (score >= 0.9) return 0.46;
-    if (score >= 0.75) return 0.28;
-    return 0.16;
+    if (score >= 0.9) return 0.72;
+    if (score >= 0.75) return 0.54;
+    return 0.34;
   }
-  if (score >= 0.9) return 0.92;
-  if (score >= 0.75) return 0.7;
-  return 0.46;
+  if (score >= 0.9) return 0.84;
+  if (score >= 0.75) return 0.66;
+  return 0.44;
+}
+
+function getActivityOuterRadius(outDegree: number, maxOutgoingActivity: number) {
+  const normalizedOutgoing = outDegree / Math.max(1, maxOutgoingActivity);
+  return (
+    ACTIVITY_TRACK_INNER_RADIUS +
+    ACTIVITY_TRACK_MIN_THICKNESS +
+    normalizedOutgoing *
+      (ACTIVITY_TRACK_MAX_RADIUS -
+        ACTIVITY_TRACK_INNER_RADIUS -
+        ACTIVITY_TRACK_MIN_THICKNESS)
+  );
 }
 
 function polarToCartesian(angle: number, radius: number) {
@@ -164,10 +254,6 @@ function polarToCartesian(angle: number, radius: number) {
   };
 }
 
-/**
- * Annular arc band path — a rectangle wrapped around the circle between two
- * radii and two angles. Used to draw each chromosome's coloured ring segment.
- */
 function getAnnularArcPath(
   startAngle: number,
   endAngle: number,
@@ -179,7 +265,6 @@ function getAnnularArcPath(
   const startInner = polarToCartesian(startAngle, innerRadius);
   const endInner = polarToCartesian(endAngle, innerRadius);
   const largeArc = Math.abs(endAngle - startAngle) > Math.PI ? 1 : 0;
-
   return [
     `M ${startOuter.x} ${startOuter.y}`,
     `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${endOuter.x} ${endOuter.y}`,
@@ -189,64 +274,43 @@ function getAnnularArcPath(
   ].join(" ");
 }
 
-function getCenteredArcTextPath(
-  startAngle: number,
-  endAngle: number,
-  radius: number,
-) {
-  const sectorSpan = Math.max(0, endAngle - startAngle);
-  const midpoint = startAngle + sectorSpan / 2;
-  const labelSpan = Math.min(sectorSpan * 0.82, 0.58);
-  const labelStartAngle = midpoint - labelSpan / 2;
-  const labelEndAngle = midpoint + labelSpan / 2;
-  const reverseForReadability = Math.sin(midpoint) > 0;
-  const pathStartAngle = reverseForReadability
-    ? labelEndAngle
-    : labelStartAngle;
-  const pathEndAngle = reverseForReadability ? labelStartAngle : labelEndAngle;
-  const start = polarToCartesian(pathStartAngle, radius);
-  const end = polarToCartesian(pathEndAngle, radius);
-  const largeArc = Math.abs(pathEndAngle - pathStartAngle) > Math.PI ? 1 : 0;
-  const sweep = reverseForReadability ? 0 : 1;
-
-  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} ${sweep} ${end.x} ${end.y}`;
-}
-
-/**
- * Bezier ribbon that connects two arc segments through the center. Standard
- * d3-style chord rendering: the source and target spans become the two arcs
- * along the inner ribbon radius, and Bezier curves bend toward the centre.
- */
-function getRibbonPath(
-  sourceStart: number,
-  sourceEnd: number,
-  targetStart: number,
-  targetEnd: number,
-) {
-  const sStartPt = polarToCartesian(sourceStart, RIBBON_RADIUS);
-  const sEndPt = polarToCartesian(sourceEnd, RIBBON_RADIUS);
-  const tStartPt = polarToCartesian(targetStart, RIBBON_RADIUS);
-  const tEndPt = polarToCartesian(targetEnd, RIBBON_RADIUS);
-
-  // Bezier control points pulled toward the centre give the ribbon its
-  // characteristic chord-diagram curvature.
-  const sControl = polarToCartesian(
-    (sourceStart + sourceEnd) / 2,
-    RIBBON_RADIUS * 0.18,
+function getRibbonPath(geometry: RibbonGeometry, relation: RelationKind) {
+  const sourceStartPoint = polarToCartesian(geometry.sourceStart, RIBBON_RADIUS);
+  const sourceEndPoint = polarToCartesian(geometry.sourceEnd, RIBBON_RADIUS);
+  const targetMidpoint = (geometry.targetStart + geometry.targetEnd) / 2;
+  const targetHalfSpan = (geometry.targetEnd - geometry.targetStart) / 2;
+  const taperedHalfSpan =
+    relation === "activation"
+      ? Math.min(Math.max(targetHalfSpan * 0.1, 0.0008), 0.0022)
+      : targetHalfSpan;
+  const targetStart = targetMidpoint - taperedHalfSpan;
+  const targetEnd = targetMidpoint + taperedHalfSpan;
+  const targetStartPoint = polarToCartesian(targetStart, RIBBON_RADIUS);
+  const targetEndPoint = polarToCartesian(targetEnd, RIBBON_RADIUS);
+  const sourceControl = polarToCartesian(
+    (geometry.sourceStart + geometry.sourceEnd) / 2,
+    RIBBON_RADIUS * 0.16,
   );
-  const tControl = polarToCartesian(
-    (targetStart + targetEnd) / 2,
-    RIBBON_RADIUS * 0.18,
-  );
-
+  const targetControl = polarToCartesian(targetMidpoint, RIBBON_RADIUS * 0.16);
   return [
-    `M ${sStartPt.x} ${sStartPt.y}`,
-    `A ${RIBBON_RADIUS} ${RIBBON_RADIUS} 0 0 1 ${sEndPt.x} ${sEndPt.y}`,
-    `Q ${sControl.x} ${sControl.y} ${tStartPt.x} ${tStartPt.y}`,
-    `A ${RIBBON_RADIUS} ${RIBBON_RADIUS} 0 0 1 ${tEndPt.x} ${tEndPt.y}`,
-    `Q ${tControl.x} ${tControl.y} ${sStartPt.x} ${sStartPt.y}`,
+    `M ${sourceStartPoint.x} ${sourceStartPoint.y}`,
+    `A ${RIBBON_RADIUS} ${RIBBON_RADIUS} 0 0 1 ${sourceEndPoint.x} ${sourceEndPoint.y}`,
+    `Q ${sourceControl.x} ${sourceControl.y} ${targetStartPoint.x} ${targetStartPoint.y}`,
+    `A ${RIBBON_RADIUS} ${RIBBON_RADIUS} 0 0 1 ${targetEndPoint.x} ${targetEndPoint.y}`,
+    `Q ${targetControl.x} ${targetControl.y} ${sourceStartPoint.x} ${sourceStartPoint.y}`,
     "Z",
   ].join(" ");
+}
+
+function getRepressionCapPath(geometry: RibbonGeometry) {
+  const midpoint = (geometry.targetStart + geometry.targetEnd) / 2;
+  const halfSpan = Math.max(
+    (geometry.targetEnd - geometry.targetStart) / 2,
+    0.006,
+  );
+  const start = polarToCartesian(midpoint - halfSpan, RIBBON_RADIUS);
+  const end = polarToCartesian(midpoint + halfSpan, RIBBON_RADIUS);
+  return `M ${start.x} ${start.y} A ${RIBBON_RADIUS} ${RIBBON_RADIUS} 0 0 1 ${end.x} ${end.y}`;
 }
 
 function getReadableLabelRotation(angle: number) {
@@ -254,40 +318,6 @@ function getReadableLabelRotation(angle: number) {
   const normalized = ((degrees % 360) + 360) % 360;
   return normalized > 90 && normalized < 270 ? degrees + 180 : degrees;
 }
-
-type ChromosomeLayout = {
-  chromosome: string;
-  startAngle: number;
-  endAngle: number;
-  length: number;
-  color: string;
-  labelX: number;
-  labelY: number;
-};
-
-type GenePlacement = {
-  id: string;
-  chromosome: string;
-  start: number;
-  end: number;
-  angle: number;
-  labelX: number;
-  labelY: number;
-  labelAnchor: "start" | "end";
-  labelRotation: number;
-  labelFontSize: number;
-  labelPriority: number;
-  labelVisible: boolean;
-  color: string;
-  isUnmapped: boolean;
-};
-
-type LabelBox = {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-};
 
 function getNormalizedAngle(angle: number) {
   return ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
@@ -324,11 +354,9 @@ function getLabelBox(
     x: point.x + x * cos - y * sin,
     y: point.y + x * sin + y * cos,
   }));
-
   const xs = corners.map((corner) => corner.x);
   const ys = corners.map((corner) => corner.y);
   const padding = 4;
-
   return {
     left: Math.min(...xs) - padding,
     right: Math.max(...xs) + padding,
@@ -337,48 +365,44 @@ function getLabelBox(
   };
 }
 
-function getOverlapArea(a: LabelBox, b: LabelBox) {
-  const overlapX = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
-  const overlapY = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+function getOverlapArea(first: LabelBox, second: LabelBox) {
+  const overlapX = Math.max(
+    0,
+    Math.min(first.right, second.right) - Math.max(first.left, second.left),
+  );
+  const overlapY = Math.max(
+    0,
+    Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top),
+  );
   return overlapX * overlapY;
 }
 
 function buildAlternatingOffsets(maxSteps: number) {
   const offsets = [0];
-  for (let step = 1; step <= maxSteps; step += 1) {
-    offsets.push(-step, step);
-  }
+  for (let step = 1; step <= maxSteps; step += 1) offsets.push(-step, step);
   return offsets;
 }
 
 function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) {
-  const genes = Array.from(genePlacements.values()).sort((a, b) => {
-    if (b.labelPriority !== a.labelPriority) {
-      return b.labelPriority - a.labelPriority;
-    }
-
-    return (
-      getNormalizedAngle(a.angle) - getNormalizedAngle(b.angle) ||
-      a.id.localeCompare(b.id)
-    );
-  });
-  const geneCount = genes.length;
-  const labelFontSize = geneCount > 120 ? 8.8 : geneCount > 70 ? 9.6 : 10.8;
-  const angularNudgeStep = geneCount > 120 ? 0.018 : geneCount > 70 ? 0.015 : 0.012;
-  const angularNudgeOffsets = buildAlternatingOffsets(
-    geneCount > 120 ? 8 : geneCount > 70 ? 6 : 4,
-  );
+  const genes = Array.from(genePlacements.values())
+    .filter((gene) => gene.labelVisible)
+    .sort((first, second) => {
+      if (second.labelPriority !== first.labelPriority) {
+        return second.labelPriority - first.labelPriority;
+      }
+      return (
+        getNormalizedAngle(first.angle) - getNormalizedAngle(second.angle) ||
+        first.id.localeCompare(second.id)
+      );
+    });
+  const labelFontSize = genes.length > 24 ? 9 : genes.length > 14 ? 9.8 : 10.6;
+  const angularNudgeStep = genes.length > 24 ? 0.017 : 0.013;
+  const offsets = buildAlternatingOffsets(genes.length > 24 ? 8 : 5);
   const placedBoxes: LabelBox[] = [];
-
   genes.forEach((gene) => {
     gene.labelFontSize = labelFontSize;
     gene.labelVisible = false;
-
-    let bestAngle = gene.angle;
-    let bestBox: LabelBox | null = null;
-    let bestCost = Number.POSITIVE_INFINITY;
-
-    for (const offset of angularNudgeOffsets) {
+    for (const offset of offsets) {
       const candidateAngle = gene.angle + offset * angularNudgeStep;
       const anchor = Math.cos(candidateAngle) >= 0 ? "start" : "end";
       const rotation = getReadableLabelRotation(candidateAngle);
@@ -395,28 +419,34 @@ function resolveGeneLabelCollisions(genePlacements: Map<string, GenePlacement>) 
         0,
       );
       if (overlap > 0) continue;
-
-      const cost = Math.abs(offset);
-
-      if (cost < bestCost) {
-        bestAngle = candidateAngle;
-        bestBox = box;
-        bestCost = cost;
-      }
-
-      if (offset === 0) break;
+      const labelPoint = polarToCartesian(candidateAngle, GENE_LABEL_RADIUS);
+      gene.labelX = labelPoint.x;
+      gene.labelY = labelPoint.y;
+      gene.labelAnchor = anchor;
+      gene.labelRotation = rotation;
+      gene.labelVisible = true;
+      placedBoxes.push(box);
+      break;
     }
-
-    if (!bestBox) return;
-
-    const labelPoint = polarToCartesian(bestAngle, GENE_LABEL_RADIUS);
-    gene.labelX = labelPoint.x;
-    gene.labelY = labelPoint.y;
-    gene.labelAnchor = Math.cos(bestAngle) >= 0 ? "start" : "end";
-    gene.labelRotation = getReadableLabelRotation(bestAngle);
-    gene.labelVisible = true;
-    placedBoxes.push(bestBox);
   });
+}
+
+function handleKeyboardActivation(
+  event: ReactKeyboardEvent<SVGElement>,
+  action: () => void,
+) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  event.stopPropagation();
+  action();
+}
+
+function getBundleKey(
+  sourceChromosome: string,
+  targetChromosome: string,
+  relation: RelationKind,
+) {
+  return `${sourceChromosome}|||${targetChromosome}|||${relation}`;
 }
 
 export default function CircosNetworkGraph({
@@ -429,46 +459,46 @@ export default function CircosNetworkGraph({
   svgRef,
 }: CircosNetworkGraphProps) {
   const denseNetwork = isDenseNetwork(nodes.length, edges.length);
-  const graphHeightClass =
-    denseNetwork
-      ? "h-[clamp(700px,78vh,900px)] min-h-[700px]"
-      : nodes.length <= 18
-      ? "h-[clamp(560px,68vh,700px)] min-h-[560px]"
+  const graphHeightClass = denseNetwork
+    ? "h-[clamp(720px,80vh,940px)] min-h-[720px]"
+    : nodes.length <= 18
+      ? "h-[clamp(600px,72vh,760px)] min-h-[600px]"
       : nodes.length <= 60
-        ? "h-[clamp(640px,74vh,820px)] min-h-[640px]"
-        : "h-[clamp(700px,78vh,920px)] min-h-[700px]";
-  const componentId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const unmappedArcLabelId = `${componentId || "circos"}-unmapped-arc-label`;
+        ? "h-[clamp(680px,76vh,860px)] min-h-[680px]"
+        : "h-[clamp(720px,80vh,940px)] min-h-[720px]";
+  const [focus, setFocus] = useState<CircosFocus | null>(null);
+  const [hoveredGene, setHoveredGene] = useState<string | null>(null);
+  const [hoveredBundleKey, setHoveredBundleKey] = useState<string | null>(null);
+  const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
 
   const layout = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
-
-    // Keep visible edges even when one endpoint has no genome coordinate.
-    // Unmapped endpoints are placed in a dedicated sector instead of causing
-    // the whole component to disappear from Circos.
     const annotatedEdges = edges
       .filter((edge) => {
         const sourceId = String(edge.source);
         const targetId = String(edge.target);
-        if (sourceId === targetId) return false;
-        const sourceNode = nodeMap.get(sourceId);
-        const targetNode = nodeMap.get(targetId);
-        return !!sourceNode && !!targetNode;
+        return sourceId !== targetId && nodeMap.has(sourceId) && nodeMap.has(targetId);
       })
-      .sort((a, b) => getRawEdgeScore(b) - getRawEdgeScore(a));
-
-    // Collect every gene that participates in a kept edge.
+      .sort(
+        (first, second) =>
+          getRawEdgeScore(second) - getRawEdgeScore(first) ||
+          getEdgeKey(first).localeCompare(getEdgeKey(second)),
+      );
     const geneIds = new Set<string>();
-    annotatedEdges.forEach((edge) => {
-      geneIds.add(String(edge.source));
-      geneIds.add(String(edge.target));
-    });
-
     const strongestIncidentEdgeScore = new Map<string, number>();
+    const incidentActivity = new Map<string, number>();
+    const incomingActivity = new Map<string, number>();
+    const outgoingActivity = new Map<string, number>();
+    const chromosomeActivity = new Map<string, number>();
+
     annotatedEdges.forEach((edge) => {
-      const score = getRawEdgeScore(edge);
       const sourceId = String(edge.source);
       const targetId = String(edge.target);
+      const sourceChromosome = getNodeChromosome(nodeMap.get(sourceId));
+      const targetChromosome = getNodeChromosome(nodeMap.get(targetId));
+      const score = getRawEdgeScore(edge);
+      geneIds.add(sourceId);
+      geneIds.add(targetId);
       strongestIncidentEdgeScore.set(
         sourceId,
         Math.max(strongestIncidentEdgeScore.get(sourceId) ?? 0, score),
@@ -477,139 +507,442 @@ export default function CircosNetworkGraph({
         targetId,
         Math.max(strongestIncidentEdgeScore.get(targetId) ?? 0, score),
       );
+      incidentActivity.set(sourceId, (incidentActivity.get(sourceId) ?? 0) + 1);
+      incidentActivity.set(targetId, (incidentActivity.get(targetId) ?? 0) + 1);
+      outgoingActivity.set(sourceId, (outgoingActivity.get(sourceId) ?? 0) + 1);
+      incomingActivity.set(targetId, (incomingActivity.get(targetId) ?? 0) + 1);
+      chromosomeActivity.set(
+        sourceChromosome,
+        (chromosomeActivity.get(sourceChromosome) ?? 0) + 1,
+      );
+      chromosomeActivity.set(
+        targetChromosome,
+        (chromosomeActivity.get(targetChromosome) ?? 0) + 1,
+      );
     });
 
-    // Group genes by chromosome and figure out which chromosomes appear.
-    const chromosomesInUse = new Set<string>();
-    const unmappedGeneIds: string[] = [];
-    geneIds.forEach((id) => {
-      const node = nodeMap.get(id);
-      if (hasGenomicCoordinate(node)) {
-        chromosomesInUse.add(normalizeChromosome(node?.chromosome));
-      } else {
-        unmappedGeneIds.push(id);
-      }
+    const genesByChromosome = new Map<string, string[]>();
+    geneIds.forEach((geneId) => {
+      const chromosome = getNodeChromosome(nodeMap.get(geneId));
+      genesByChromosome.set(chromosome, [
+        ...(genesByChromosome.get(chromosome) ?? []),
+        geneId,
+      ]);
     });
-    if (unmappedGeneIds.length > 0) {
-      chromosomesInUse.add(UNMAPPED_CHROMOSOME);
-    }
-
-    const chromosomeList = [...chromosomesInUse].sort(
-      (a, b) => getChromosomeSortValue(a) - getChromosomeSortValue(b),
+    const chromosomeList = Array.from(genesByChromosome.keys()).sort(
+      (first, second) =>
+        getChromosomeSortValue(first) - getChromosomeSortValue(second),
     );
-
-    const totalLength = chromosomeList.reduce(
-      (sum, chr) => sum + getDisplayChromosomeLength(chr),
+    const chromosomeWeights = new Map(
+      chromosomeList.map((chromosome) => {
+        const activity = chromosomeActivity.get(chromosome) ?? 0;
+        const weight = 1 + Math.sqrt(Math.max(1, activity)) * 1.35;
+        return [
+          chromosome,
+          chromosome === UNMAPPED_CHROMOSOME ? Math.min(weight, 2.4) : weight,
+        ];
+      }),
+    );
+    const totalWeight = Array.from(chromosomeWeights.values()).reduce(
+      (sum, weight) => sum + weight,
       0,
     );
-    const totalGapAngle = chromosomeList.length * CHROMOSOME_GAP_RADIANS;
-    const usableAngle = Math.PI * 2 - totalGapAngle;
-
+    const usableAngle = Math.max(
+      0,
+      Math.PI * 2 - chromosomeList.length * CHROMOSOME_GAP_RADIANS,
+    );
     const chromosomeLayout = new Map<string, ChromosomeLayout>();
-    let cursor = -Math.PI / 2; // start at 12 o'clock
-
-    chromosomeList.forEach((chromosome) => {
-      const length = getDisplayChromosomeLength(chromosome);
-      const sectorAngle = totalLength === 0 ? 0 : (usableAngle * length) / totalLength;
+    let cursor = -Math.PI / 2;
+    chromosomeList.forEach((chromosome, chromosomeIndex) => {
+      const activity = chromosomeActivity.get(chromosome) ?? 0;
+      const weight = chromosomeWeights.get(chromosome) ?? 1;
+      const sectorAngle = totalWeight === 0 ? 0 : (usableAngle * weight) / totalWeight;
       const startAngle = cursor;
       const endAngle = cursor + sectorAngle;
-      const labelAngle = (startAngle + endAngle) / 2;
-      const labelPt = polarToCartesian(labelAngle, CHROMOSOME_LABEL_RADIUS);
-
+      const labelPoint = polarToCartesian(
+        (startAngle + endAngle) / 2,
+        CHROMOSOME_LABEL_RADIUS,
+      );
       chromosomeLayout.set(chromosome, {
         chromosome,
         startAngle,
         endAngle,
-        length,
-        color: CIRCOS_CHROMOSOME_COLORS[
-          ((CHROMOSOME_ORDER[chromosome] ?? 1) - 1) %
-            CIRCOS_CHROMOSOME_COLORS.length
-        ],
-        labelX: labelPt.x,
-        labelY: labelPt.y,
+        activity,
+        geneCount: genesByChromosome.get(chromosome)?.length ?? 0,
+        color:
+          chromosome === UNMAPPED_CHROMOSOME
+            ? UNMAPPED_COLOR
+            : CHROMOSOME_PALETTE[chromosomeIndex % CHROMOSOME_PALETTE.length],
+        labelX: labelPoint.x,
+        labelY: labelPoint.y,
       });
-
       cursor = endAngle + CHROMOSOME_GAP_RADIANS;
     });
 
-    const sortedUnmappedGeneIds = [...unmappedGeneIds].sort((a, b) =>
-      a.localeCompare(b),
-    );
-    const unmappedGeneIndex = new Map(
-      sortedUnmappedGeneIds.map((id, index) => [id, index]),
-    );
-
-    // Place mapped genes at their true genomic position inside their chromosome
-    // sector. Unmapped genes are evenly distributed in the synthetic sector.
     const genePlacements = new Map<string, GenePlacement>();
-    geneIds.forEach((id) => {
-      const node = nodeMap.get(id);
-      if (!node) return;
-      const isUnmapped = !hasGenomicCoordinate(node);
-      const chromosome = isUnmapped
-        ? UNMAPPED_CHROMOSOME
-        : normalizeChromosome(node.chromosome);
-      const chrLayout = chromosomeLayout.get(chromosome);
-      if (!chrLayout) return;
-      const start = typeof node.start === "number" ? node.start : 0;
-      const end = typeof node.end === "number" ? node.end : start;
-      const unmappedIndex = unmappedGeneIndex.get(id) ?? 0;
-      const fraction = isUnmapped
-        ? (unmappedIndex + 1) / (sortedUnmappedGeneIds.length + 1)
-        : chrLayout.length === 0
-          ? 0
-          : Math.min(1, Math.max(0, start / chrLayout.length));
-      const angle =
-        chrLayout.startAngle + fraction * (chrLayout.endAngle - chrLayout.startAngle);
-
-      const labelPt = polarToCartesian(angle, GENE_LABEL_RADIUS);
-      const strongestEdgeScore = strongestIncidentEdgeScore.get(id) ?? 0;
-      const labelPriority =
-        strongestEdgeScore * 10 +
-        node.degree * 0.08 +
-        node.outDegree * 0.05 +
-        node.inDegree * 0.03 +
-        (node.isTF ? 0.35 : 0);
-
-      genePlacements.set(id, {
-        id,
-        chromosome,
-        start,
-        end,
-        angle,
-        labelX: labelPt.x,
-        labelY: labelPt.y,
-        labelAnchor: Math.cos(angle) >= 0 ? "start" : "end",
-        labelRotation: getReadableLabelRotation(angle),
-        labelFontSize: 10.8,
-        labelPriority,
-        labelVisible: true,
-        color: chrLayout.color,
-        isUnmapped,
+    chromosomeList.forEach((chromosome) => {
+      const chromosomeGenes = [...(genesByChromosome.get(chromosome) ?? [])].sort(
+        (firstId, secondId) => {
+          const firstNode = nodeMap.get(firstId);
+          const secondNode = nodeMap.get(secondId);
+          const firstStart =
+            typeof firstNode?.start === "number"
+              ? firstNode.start
+              : Number.POSITIVE_INFINITY;
+          const secondStart =
+            typeof secondNode?.start === "number"
+              ? secondNode.start
+              : Number.POSITIVE_INFINITY;
+          return firstStart - secondStart || firstId.localeCompare(secondId);
+        },
+      );
+      const chromosomeSector = chromosomeLayout.get(chromosome);
+      if (!chromosomeSector || chromosomeGenes.length === 0) return;
+      const sectorSpan = chromosomeSector.endAngle - chromosomeSector.startAngle;
+      const padding = Math.min(SECTOR_INNER_PADDING_RADIANS, sectorSpan * 0.06);
+      const usableStart = chromosomeSector.startAngle + padding;
+      const usableEnd = chromosomeSector.endAngle - padding;
+      const geneSlotSpan = (usableEnd - usableStart) / chromosomeGenes.length;
+      chromosomeGenes.forEach((geneId, geneIndex) => {
+        const node = nodeMap.get(geneId);
+        if (!node) return;
+        const slotStart = usableStart + geneIndex * geneSlotSpan;
+        const slotEnd = slotStart + geneSlotSpan;
+        const segmentPadding = Math.min(0.0025, geneSlotSpan * 0.12);
+        const segmentStartAngle = slotStart + segmentPadding;
+        const segmentEndAngle = slotEnd - segmentPadding;
+        const angle = (segmentStartAngle + segmentEndAngle) / 2;
+        const labelPoint = polarToCartesian(angle, GENE_LABEL_RADIUS);
+        const labelPriority =
+          (strongestIncidentEdgeScore.get(geneId) ?? 0) * 12 +
+          node.outDegree * 0.2 +
+          node.degree * 0.08 +
+          (node.isTF ? 0.8 : 0);
+        genePlacements.set(geneId, {
+          id: geneId,
+          chromosome,
+          start: typeof node.start === "number" ? node.start : 0,
+          end:
+            typeof node.end === "number"
+              ? node.end
+              : typeof node.start === "number"
+                ? node.start
+                : 0,
+          angle,
+          segmentStartAngle,
+          segmentEndAngle,
+          labelX: labelPoint.x,
+          labelY: labelPoint.y,
+          labelAnchor: Math.cos(angle) >= 0 ? "start" : "end",
+          labelRotation: getReadableLabelRotation(angle),
+          labelFontSize: 10.6,
+          labelPriority,
+          labelVisible: false,
+          color: chromosomeSector.color,
+          isUnmapped: chromosome === UNMAPPED_CHROMOSOME,
+          isTF: node.isTF,
+          activity: incidentActivity.get(geneId) ?? 0,
+          inDegree: incomingActivity.get(geneId) ?? 0,
+          outDegree: outgoingActivity.get(geneId) ?? 0,
+        });
       });
     });
+    const overviewLabelLimit = denseNetwork ? 10 : Math.min(16, geneIds.size);
+    Array.from(genePlacements.values())
+      .sort(
+        (first, second) =>
+          second.labelPriority - first.labelPriority || first.id.localeCompare(second.id),
+      )
+      .slice(0, overviewLabelLimit)
+      .forEach((gene) => {
+        gene.labelVisible = true;
+      });
     resolveGeneLabelCollisions(genePlacements);
 
-    // Keep the 0-1 evidence mapping stable when users change filters.
-    const normalizedScores = new Map<string, number>();
+    const bundleDrafts = new Map<
+      string,
+      Omit<ChromosomeBundle, "geometry" | "averageScore" | "count"> & {
+        scoreTotal: number;
+      }
+    >();
     annotatedEdges.forEach((edge) => {
-      normalizedScores.set(
-        getEdgeKey(edge),
-        Math.max(0, Math.min(1, getRawEdgeScore(edge))),
+      const sourceGene = genePlacements.get(String(edge.source));
+      const targetGene = genePlacements.get(String(edge.target));
+      if (!sourceGene || !targetGene) return;
+      const relation = getRelationKind(edge);
+      const key = getBundleKey(
+        sourceGene.chromosome,
+        targetGene.chromosome,
+        relation,
       );
+      const existing = bundleDrafts.get(key);
+      if (existing) {
+        existing.edges.push(edge);
+        existing.scoreTotal += getRawEdgeScore(edge);
+      } else {
+        bundleDrafts.set(key, {
+          key,
+          sourceChromosome: sourceGene.chromosome,
+          targetChromosome: targetGene.chromosome,
+          relation,
+          edges: [edge],
+          scoreTotal: getRawEdgeScore(edge),
+          color: sourceGene.color,
+        });
+      }
     });
-
+    const bundleDraftList = Array.from(bundleDrafts.values()).sort(
+      (first, second) =>
+        getChromosomeSortValue(first.sourceChromosome) -
+          getChromosomeSortValue(second.sourceChromosome) ||
+        getChromosomeSortValue(first.targetChromosome) -
+          getChromosomeSortValue(second.targetChromosome) ||
+        first.relation.localeCompare(second.relation),
+    );
+    const endpointReferences = new Map<
+      string,
+      Array<{ endpointKey: string; weight: number; order: number }>
+    >();
+    bundleDraftList.forEach((bundle) => {
+      endpointReferences.set(bundle.sourceChromosome, [
+        ...(endpointReferences.get(bundle.sourceChromosome) ?? []),
+        {
+          endpointKey: `${bundle.key}|||source`,
+          weight: bundle.edges.length,
+          order: getChromosomeSortValue(bundle.targetChromosome),
+        },
+      ]);
+      endpointReferences.set(bundle.targetChromosome, [
+        ...(endpointReferences.get(bundle.targetChromosome) ?? []),
+        {
+          endpointKey: `${bundle.key}|||target`,
+          weight: bundle.edges.length,
+          order: getChromosomeSortValue(bundle.sourceChromosome),
+        },
+      ]);
+    });
+    const endpointSpans = new Map<string, { start: number; end: number }>();
+    endpointReferences.forEach((references, chromosome) => {
+      const chromosomeSector = chromosomeLayout.get(chromosome);
+      if (!chromosomeSector) return;
+      const sortedReferences = [...references].sort(
+        (first, second) =>
+          first.order - second.order || first.endpointKey.localeCompare(second.endpointKey),
+      );
+      const totalEndpointWeight = sortedReferences.reduce(
+        (sum, reference) => sum + reference.weight,
+        0,
+      );
+      const sectorStart = chromosomeSector.startAngle + SECTOR_INNER_PADDING_RADIANS;
+      const sectorEnd = chromosomeSector.endAngle - SECTOR_INNER_PADDING_RADIANS;
+      const availableSpan = Math.max(0, sectorEnd - sectorStart);
+      let endpointCursor = sectorStart;
+      sortedReferences.forEach((reference) => {
+        const endpointSpan =
+          totalEndpointWeight === 0
+            ? 0
+            : (availableSpan * reference.weight) / totalEndpointWeight;
+        const gap = Math.min(BUNDLE_ENDPOINT_GAP_RADIANS, endpointSpan * 0.18);
+        endpointSpans.set(reference.endpointKey, {
+          start: endpointCursor + gap,
+          end: endpointCursor + endpointSpan - gap,
+        });
+        endpointCursor += endpointSpan;
+      });
+    });
+    const bundles: ChromosomeBundle[] = bundleDraftList
+      .map((bundle) => {
+        const sourceSpan = endpointSpans.get(`${bundle.key}|||source`);
+        const targetSpan = endpointSpans.get(`${bundle.key}|||target`);
+        if (!sourceSpan || !targetSpan) return null;
+        return {
+          key: bundle.key,
+          sourceChromosome: bundle.sourceChromosome,
+          targetChromosome: bundle.targetChromosome,
+          relation: bundle.relation,
+          edges: bundle.edges,
+          count: bundle.edges.length,
+          averageScore: bundle.scoreTotal / bundle.edges.length,
+          color: bundle.color,
+          geometry: {
+            sourceStart: sourceSpan.start,
+            sourceEnd: sourceSpan.end,
+            targetStart: targetSpan.start,
+            targetEnd: targetSpan.end,
+          },
+        };
+      })
+      .filter((bundle): bundle is ChromosomeBundle => bundle !== null)
+      .sort(
+        (first, second) =>
+          second.count - first.count ||
+          second.averageScore - first.averageScore ||
+          first.key.localeCompare(second.key),
+      );
     return {
-      chromosomeList,
-      chromosomeLayout: Array.from(chromosomeLayout.values()),
-      genePlacements,
       annotatedEdges,
-      normalizedScores,
-      totalGenes: geneIds.size,
-      droppedEdges: edges.length - annotatedEdges.length,
-      droppedNodes: nodes.length - geneIds.size,
+      chromosomeLayout,
+      genePlacements,
+      bundles,
+      bundleMap: new Map(bundles.map((bundle) => [bundle.key, bundle])),
+      maxOutgoingActivity: Math.max(1, ...Array.from(outgoingActivity.values())),
     };
-  }, [nodes, edges]);
+  }, [denseNetwork, edges, nodes]);
+
+  const activeFocus = useMemo(() => {
+    if (!focus) return null;
+    if (focus.kind === "bundle") {
+      return layout.bundleMap.has(focus.bundleKey) ? focus : null;
+    }
+    return layout.chromosomeLayout.has(focus.chromosome) ? focus : null;
+  }, [focus, layout.bundleMap, layout.chromosomeLayout]);
+
+  const detailEdges = useMemo(() => {
+    if (activeFocus?.kind === "bundle") {
+      return layout.bundleMap.get(activeFocus.bundleKey)?.edges ?? [];
+    }
+    if (activeFocus?.kind === "chromosome") {
+      return layout.annotatedEdges.filter((edge) => {
+        const sourceGene = layout.genePlacements.get(String(edge.source));
+        const targetGene = layout.genePlacements.get(String(edge.target));
+        return (
+          sourceGene?.chromosome === activeFocus.chromosome ||
+          targetGene?.chromosome === activeFocus.chromosome
+        );
+      });
+    }
+    if (selectedGene) {
+      return layout.annotatedEdges.filter(
+        (edge) =>
+          String(edge.source) === selectedGene || String(edge.target) === selectedGene,
+      );
+    }
+    if (selectedEdgeKey) {
+      const selected = layout.annotatedEdges.find(
+        (edge) => getEdgeKey(edge) === selectedEdgeKey,
+      );
+      return selected ? [selected] : [];
+    }
+    return [];
+  }, [activeFocus, layout, selectedEdgeKey, selectedGene]);
+  const isDetailMode =
+    detailEdges.length > 0 &&
+    Boolean(activeFocus || selectedGene || selectedEdgeKey);
+  const detailGeneIds = useMemo(() => {
+    const geneIds = new Set<string>();
+    detailEdges.forEach((edge) => {
+      geneIds.add(String(edge.source));
+      geneIds.add(String(edge.target));
+    });
+    return geneIds;
+  }, [detailEdges]);
+  const detailChromosomes = useMemo(() => {
+    const chromosomes = new Set<string>();
+    detailGeneIds.forEach((geneId) => {
+      const chromosome = layout.genePlacements.get(geneId)?.chromosome;
+      if (chromosome) chromosomes.add(chromosome);
+    });
+    return chromosomes;
+  }, [detailGeneIds, layout.genePlacements]);
+
+  const detailEdgeGeometry = useMemo(() => {
+    const incidentEdgeKeys = new Map<string, string[]>();
+    detailEdges.forEach((edge) => {
+      const edgeKey = getEdgeKey(edge);
+      for (const geneId of [String(edge.source), String(edge.target)]) {
+        incidentEdgeKeys.set(geneId, [
+          ...(incidentEdgeKeys.get(geneId) ?? []),
+          edgeKey,
+        ]);
+      }
+    });
+    incidentEdgeKeys.forEach((edgeKeys) => edgeKeys.sort());
+    const getEndpointSpan = (geneId: string, edgeKey: string) => {
+      const gene = layout.genePlacements.get(geneId);
+      const edgeKeys = incidentEdgeKeys.get(geneId) ?? [];
+      if (!gene || edgeKeys.length === 0) return null;
+      const segmentSpan = gene.segmentEndAngle - gene.segmentStartAngle;
+      const edgeIndex = Math.max(0, edgeKeys.indexOf(edgeKey));
+      const slotSpan = segmentSpan / edgeKeys.length;
+      const midpoint = gene.segmentStartAngle + slotSpan * (edgeIndex + 0.5);
+      const halfWidth = Math.min(DETAIL_ENDPOINT_MAX_HALF_WIDTH, slotSpan * 0.36);
+      return { start: midpoint - halfWidth, end: midpoint + halfWidth };
+    };
+    const geometries = new Map<string, RibbonGeometry>();
+    detailEdges.forEach((edge) => {
+      const edgeKey = getEdgeKey(edge);
+      const sourceSpan = getEndpointSpan(String(edge.source), edgeKey);
+      const targetSpan = getEndpointSpan(String(edge.target), edgeKey);
+      if (!sourceSpan || !targetSpan) return;
+      geometries.set(edgeKey, {
+        sourceStart: sourceSpan.start,
+        sourceEnd: sourceSpan.end,
+        targetStart: targetSpan.start,
+        targetEnd: targetSpan.end,
+      });
+    });
+    return geometries;
+  }, [detailEdges, layout.genePlacements]);
+
+  const displayGenePlacements = useMemo(() => {
+    const placements = new Map(
+      Array.from(layout.genePlacements.entries()).map(([geneId, gene]) => [
+        geneId,
+        { ...gene, labelVisible: false },
+      ]),
+    );
+    const detailGenes = Array.from(detailGeneIds)
+      .map((geneId) => placements.get(geneId))
+      .filter((gene): gene is GenePlacement => Boolean(gene))
+      .sort(
+        (first, second) =>
+          second.labelPriority - first.labelPriority || first.id.localeCompare(second.id),
+      );
+    const labelIds = new Set<string>();
+    if (isDetailMode) {
+      detailGenes
+        .slice(0, detailGeneIds.size <= 24 ? 24 : 18)
+        .forEach((gene) => labelIds.add(gene.id));
+    } else {
+      Array.from(layout.genePlacements.values())
+        .filter((gene) => gene.labelVisible)
+        .forEach((gene) => labelIds.add(gene.id));
+    }
+    if (selectedGene) labelIds.add(selectedGene);
+    if (hoveredGene) labelIds.add(hoveredGene);
+    labelIds.forEach((geneId) => {
+      const gene = placements.get(geneId);
+      if (gene) gene.labelVisible = true;
+    });
+    resolveGeneLabelCollisions(placements);
+    return placements;
+  }, [detailGeneIds, hoveredGene, isDetailMode, layout, selectedGene]);
+
+  const modeLabel = useMemo(() => {
+    if (activeFocus?.kind === "bundle") {
+      const bundle = layout.bundleMap.get(activeFocus.bundleKey);
+      if (bundle) {
+        return `${getChromosomeLabel(bundle.sourceChromosome)} → ${getChromosomeLabel(bundle.targetChromosome)} · ${getRelationLabel(bundle.relation)}`;
+      }
+    }
+    if (activeFocus?.kind === "chromosome") {
+      return `${getChromosomeLabel(activeFocus.chromosome)} regulatory neighborhood`;
+    }
+    if (selectedGene) return `${selectedGene} regulatory neighborhood`;
+    if (selectedEdgeKey && detailEdges[0]) {
+      return `${detailEdges[0].source} → ${detailEdges[0].target}`;
+    }
+    return "Chromosome flow";
+  }, [activeFocus, detailEdges, layout.bundleMap, selectedEdgeKey, selectedGene]);
+
+  const returnToOverview = () => {
+    setFocus(null);
+    setHoveredGene(null);
+    setHoveredBundleKey(null);
+    setHoveredEdgeKey(null);
+    onSelectGene?.(null);
+    onSelectEdge?.(null);
+  };
 
   if (
     nodes.length === 0 ||
@@ -617,190 +950,356 @@ export default function CircosNetworkGraph({
     layout.annotatedEdges.length === 0
   ) {
     return (
-      <div className={`flex items-center justify-center border border-dashed border-slate-300 bg-[#f7fafc] px-6 text-center text-sm font-medium text-slate-500 ${graphHeightClass}`}>
-        {nodes.length === 0 || edges.length === 0
-          ? "No edges are available for the current filters."
-          : "None of the visible genes have known chromosome coordinates, so the Circos genomic view can't be drawn."}
+      <div
+        className={`flex items-center justify-center border border-dashed border-slate-300 bg-white px-6 text-center text-sm font-medium text-slate-500 ${graphHeightClass}`}
+      >
+        No regulations are available for the current filters.
       </div>
     );
   }
 
   return (
-    <div className={`relative w-full overflow-hidden bg-[#f7fafc] ${graphHeightClass}`}>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_47%,rgba(90,148,185,0.13),transparent_48%),radial-gradient(circle_at_78%_18%,rgba(22,143,152,0.07),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f3f7fa_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(100,116,139,0.2)_0.7px,transparent_0.8px)] bg-[size:28px_28px] opacity-30" />
+    <div className={`relative w-full overflow-hidden bg-white ${graphHeightClass}`}>
+      {isDetailMode ? (
+        <div className="absolute left-4 top-4 z-20 flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-sm backdrop-blur">
+          <button
+            type="button"
+            onClick={returnToOverview}
+            className="inline-flex h-7 items-center gap-1 rounded-full bg-[#eef6fa] px-2.5 text-[11px] font-bold text-[#176f9e] transition hover:bg-[#e2f0f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/30"
+          >
+            <span aria-hidden="true">←</span>
+            Overview
+          </button>
+          <span className="truncate text-[11px] font-bold text-slate-700">
+            {modeLabel}
+          </span>
+          <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+            {`${detailEdges.length} regulation${detailEdges.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+      ) : null}
+
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="relative z-10 h-full w-full"
         role="img"
-        aria-label="Genomic Circos plot of predicted gene regulatory edges"
-        onClick={() => {
-          onSelectGene?.(null);
-          onSelectEdge?.(null);
+        aria-label={
+          isDetailMode
+            ? `Gene-level Circos view for ${modeLabel}`
+            : "Chromosome-level Circos overview of regulatory flow"
+        }
+        onClick={returnToOverview}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && isDetailMode) {
+            event.stopPropagation();
+            returnToOverview();
+          }
         }}
       >
-        {/* Neutral chromosome bands keep edge color reserved for regulation sign. */}
-        {layout.chromosomeLayout.map((chr) => {
-          const isUnmapped = chr.chromosome === UNMAPPED_CHROMOSOME;
-          const sectorAngle = chr.endAngle - chr.startAngle;
-          // Hide the chromosome number when its sector is too narrow for the
-          // glyph to fit cleanly; the colour band still carries the identity.
-          const showLabel =
-            isUnmapped || sectorAngle * CHROMOSOME_LABEL_RADIUS > 14;
+        <title>
+          {isDetailMode
+            ? `Gene-level Circos view for ${modeLabel}`
+            : "Chromosome-level regulatory flow. Select a chromosome or ribbon to inspect individual gene regulations."}
+        </title>
+        <circle
+          cx={CENTER_X}
+          cy={CENTER_Y}
+          r={RIBBON_RADIUS}
+          fill="#fbfdfe"
+          stroke="#e8eef3"
+          strokeWidth="1"
+        />
+
+        {!isDetailMode
+          ? layout.bundles.map((bundle) => {
+              const isHovered = bundle.key === hoveredBundleKey;
+              const isDimmed = Boolean(
+                hoveredBundleKey && hoveredBundleKey !== bundle.key,
+              );
+              const opacity = getEvidenceOpacity(bundle.averageScore, denseNetwork);
+              const activateBundle = () => {
+                setFocus((currentFocus) =>
+                  currentFocus?.kind === "bundle" &&
+                  currentFocus.bundleKey === bundle.key
+                    ? null
+                    : { kind: "bundle", bundleKey: bundle.key },
+                );
+                setHoveredBundleKey(null);
+                onSelectGene?.(null);
+                onSelectEdge?.(null);
+              };
+              return (
+                <g key={`bundle-${bundle.key}`}>
+                  <path
+                    d={getRibbonPath(bundle.geometry, bundle.relation)}
+                    fill={bundle.color}
+                    fillOpacity={isDimmed ? 0.06 : isHovered ? 0.9 : opacity}
+                    stroke={bundle.color}
+                    strokeWidth={isHovered ? 2.2 : 0.8}
+                    strokeOpacity={isDimmed ? 0.08 : isHovered ? 1 : opacity}
+                    className="cursor-pointer transition"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${getChromosomeLabel(bundle.sourceChromosome)} to ${getChromosomeLabel(bundle.targetChromosome)}, ${bundle.count} ${getRelationLabel(bundle.relation)} regulations`}
+                    onMouseEnter={() => setHoveredBundleKey(bundle.key)}
+                    onMouseLeave={() => setHoveredBundleKey(null)}
+                    onFocus={() => setHoveredBundleKey(bundle.key)}
+                    onBlur={() => setHoveredBundleKey(null)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      activateBundle();
+                    }}
+                    onKeyDown={(event) => handleKeyboardActivation(event, activateBundle)}
+                  >
+                    <title>
+                      {`${getChromosomeLabel(bundle.sourceChromosome)} → ${getChromosomeLabel(bundle.targetChromosome)} · ${bundle.count} ${getRelationLabel(bundle.relation)} regulation${bundle.count === 1 ? "" : "s"}`}
+                    </title>
+                  </path>
+                  {bundle.relation === "repression" ? (
+                    <path
+                      d={getRepressionCapPath(bundle.geometry)}
+                      fill="none"
+                      stroke={REPRESSION_CAP_COLOR}
+                      strokeWidth={isHovered ? 3.4 : 2.5}
+                      strokeLinecap="round"
+                      opacity={isDimmed ? 0.08 : Math.min(1, opacity + 0.18)}
+                      className="pointer-events-none"
+                    />
+                  ) : null}
+                </g>
+              );
+            })
+          : detailEdges
+              .slice()
+              .reverse()
+              .map((edge) => {
+                const edgeKey = getEdgeKey(edge);
+                const geometry = detailEdgeGeometry.get(edgeKey);
+                const sourceGene = layout.genePlacements.get(String(edge.source));
+                const targetGene = layout.genePlacements.get(String(edge.target));
+                if (!geometry || !sourceGene || !targetGene) return null;
+                const relation = getRelationKind(edge);
+                const isActive = edgeKey === selectedEdgeKey;
+                const isHovered = edgeKey === hoveredEdgeKey;
+                const isDimmed = Boolean(
+                  selectedGene &&
+                    String(edge.source) !== selectedGene &&
+                    String(edge.target) !== selectedGene,
+                );
+                const opacity = getEvidenceOpacity(getRawEdgeScore(edge), denseNetwork);
+                const activateEdge = () => {
+                  onSelectEdge?.(isActive ? null : edgeKey);
+                };
+                return (
+                  <g key={`edge-${edgeKey}`}>
+                    <path
+                      d={getRibbonPath(geometry, relation)}
+                      fill={isActive ? ACTIVE_COLOR : sourceGene.color}
+                      fillOpacity={
+                        isDimmed
+                          ? 0.05
+                          : isActive
+                            ? 0.92
+                            : isHovered
+                              ? Math.min(1, opacity + 0.18)
+                              : opacity
+                      }
+                      stroke={isActive ? ACTIVE_STROKE : sourceGene.color}
+                      strokeWidth={isActive ? 2.8 : isHovered ? 1.7 : 0.7}
+                      strokeOpacity={isDimmed ? 0.08 : 0.9}
+                      className="cursor-pointer transition"
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isActive}
+                      aria-label={`${edge.source} to ${edge.target}, ${getRelationLabel(relation)} regulation`}
+                      onMouseEnter={() => setHoveredEdgeKey(edgeKey)}
+                      onMouseLeave={() => setHoveredEdgeKey(null)}
+                      onFocus={() => setHoveredEdgeKey(edgeKey)}
+                      onBlur={() => setHoveredEdgeKey(null)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        activateEdge();
+                      }}
+                      onKeyDown={(event) => handleKeyboardActivation(event, activateEdge)}
+                    >
+                      <title>
+                        {`${edge.source} → ${edge.target} · ${getRelationLabel(relation)}`}
+                      </title>
+                    </path>
+                    {relation === "repression" ? (
+                      <path
+                        d={getRepressionCapPath(geometry)}
+                        fill="none"
+                        stroke={isActive ? ACTIVE_STROKE : REPRESSION_CAP_COLOR}
+                        strokeWidth={isActive ? 3.2 : 2.2}
+                        strokeLinecap="round"
+                        opacity={isDimmed ? 0.08 : Math.min(1, opacity + 0.2)}
+                        className="pointer-events-none"
+                      />
+                    ) : null}
+                  </g>
+                );
+              })}
+
+        <circle
+          cx={CENTER_X}
+          cy={CENTER_Y}
+          r={ACTIVITY_TRACK_INNER_RADIUS}
+          fill="none"
+          stroke="#e4ebf1"
+          strokeWidth="1"
+        />
+        {Array.from(layout.genePlacements.values()).map((gene) => {
+          const activityOuterRadius = getActivityOuterRadius(
+            gene.outDegree,
+            layout.maxOutgoingActivity,
+          );
+          const isSelected = gene.id === selectedGene;
+          const isHovered = gene.id === hoveredGene;
+          const isDimmed = isDetailMode && !detailGeneIds.has(gene.id);
+          const activateGene = () => {
+            onSelectGene?.(isSelected ? null : gene.id);
+          };
           return (
-            <g key={`chr-${chr.chromosome}`}>
+            <path
+              key={`activity-${gene.id}`}
+              d={getAnnularArcPath(
+                gene.segmentStartAngle,
+                gene.segmentEndAngle,
+                ACTIVITY_TRACK_INNER_RADIUS,
+                activityOuterRadius,
+              )}
+              fill={isSelected ? ACTIVE_COLOR : gene.color}
+              fillOpacity={
+                isDimmed ? 0.14 : isSelected ? 0.96 : isHovered ? 1 : 0.8
+              }
+              stroke={isSelected ? ACTIVE_STROKE : "white"}
+              strokeWidth={isSelected ? 2.2 : isHovered ? 1.5 : 0.8}
+              className="cursor-pointer transition"
+              role="button"
+              tabIndex={0}
+              aria-pressed={isSelected}
+              aria-label={`${gene.id}, ${gene.isTF ? "transcription factor" : "gene"}, ${gene.outDegree} outgoing regulations`}
+              onMouseEnter={() => setHoveredGene(gene.id)}
+              onMouseLeave={() => setHoveredGene(null)}
+              onFocus={() => setHoveredGene(gene.id)}
+              onBlur={() => setHoveredGene(null)}
+              onClick={(event) => {
+                event.stopPropagation();
+                activateGene();
+              }}
+              onKeyDown={(event) => handleKeyboardActivation(event, activateGene)}
+            >
+              <title>
+                {gene.isUnmapped
+                  ? `${gene.id} · unmapped · ${gene.outDegree} outgoing / ${gene.inDegree} incoming`
+                  : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()} · ${gene.outDegree} outgoing / ${gene.inDegree} incoming`}
+              </title>
+            </path>
+          );
+        })}
+        {Array.from(layout.genePlacements.values())
+          .filter((gene) => gene.isTF)
+          .map((gene) => {
+            const activityOuterRadius = getActivityOuterRadius(
+              gene.outDegree,
+              layout.maxOutgoingActivity,
+            );
+            const markerPoint = polarToCartesian(
+              gene.angle,
+              activityOuterRadius - ACTIVITY_TRACK_MIN_THICKNESS / 2,
+            );
+            const isSelected = gene.id === selectedGene;
+            const isDimmed = isDetailMode && !detailGeneIds.has(gene.id);
+            return (
+              <rect
+                key={`tf-${gene.id}`}
+                x={markerPoint.x - 3.4}
+                y={markerPoint.y - 3.4}
+                width="6.8"
+                height="6.8"
+                rx="0.8"
+                fill={isSelected ? ACTIVE_COLOR : TF_MARKER_FILL}
+                stroke={isSelected ? ACTIVE_STROKE : TF_MARKER_STROKE}
+                strokeWidth="1.5"
+                opacity={isDimmed ? 0.22 : 1}
+                transform={`rotate(45 ${markerPoint.x} ${markerPoint.y})`}
+                className="pointer-events-none"
+              >
+                <title>{`${gene.id} · transcription factor`}</title>
+              </rect>
+            );
+          })}
+        {Array.from(layout.chromosomeLayout.values()).map((chromosome) => {
+          const isFocused =
+            activeFocus?.kind === "chromosome" &&
+            activeFocus.chromosome === chromosome.chromosome;
+          const isDimmed = isDetailMode && !detailChromosomes.has(chromosome.chromosome);
+          const activateChromosome = () => {
+            setFocus((currentFocus) =>
+              currentFocus?.kind === "chromosome" &&
+              currentFocus.chromosome === chromosome.chromosome
+                ? null
+                : { kind: "chromosome", chromosome: chromosome.chromosome },
+            );
+            onSelectGene?.(null);
+            onSelectEdge?.(null);
+          };
+          const showLabel =
+            (chromosome.endAngle - chromosome.startAngle) * CHROMOSOME_LABEL_RADIUS > 18;
+          return (
+            <g key={`chromosome-${chromosome.chromosome}`}>
               <path
                 d={getAnnularArcPath(
-                  chr.startAngle,
-                  chr.endAngle,
+                  chromosome.startAngle,
+                  chromosome.endAngle,
                   CHROMOSOME_INNER_RADIUS,
                   CHROMOSOME_OUTER_RADIUS,
                 )}
-                fill={chr.color}
-                stroke="#9eb2c0"
-                strokeWidth="1.4"
+                fill={isFocused ? ACTIVE_COLOR : chromosome.color}
+                fillOpacity={isDimmed ? 0.18 : 0.96}
+                stroke={isFocused ? ACTIVE_STROKE : "white"}
+                strokeWidth={isFocused ? 3 : 3.6}
+                className="cursor-pointer transition"
+                role="button"
+                tabIndex={0}
+                aria-pressed={isFocused}
+                aria-label={`${getChromosomeLabel(chromosome.chromosome)} chromosome sector, ${chromosome.geneCount} genes and ${chromosome.activity} regulatory endpoints`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  activateChromosome();
+                }}
+                onKeyDown={(event) =>
+                  handleKeyboardActivation(event, activateChromosome)
+                }
               >
                 <title>
-                  {isUnmapped
-                    ? "Unmapped genes without chromosome coordinates"
-                    : `${chr.chromosome} · ${(chr.length / 1e6).toFixed(1)} Mb`}
+                  {`${getChromosomeLabel(chromosome.chromosome)} · ${chromosome.geneCount} gene${chromosome.geneCount === 1 ? "" : "s"} · ${chromosome.activity} regulatory endpoints`}
                 </title>
               </path>
-              {isUnmapped && (
-                <defs>
-                  <path
-                    id={unmappedArcLabelId}
-                    d={getCenteredArcTextPath(
-                      chr.startAngle,
-                      chr.endAngle,
-                      CHROMOSOME_LABEL_RADIUS,
-                    )}
-                  />
-                </defs>
-              )}
-              {isUnmapped ? (
+              {showLabel ? (
                 <text
-                  dominantBaseline="central"
-                  dy="0.25em"
-                  className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
-                >
-                  <textPath
-                    href={`#${unmappedArcLabelId}`}
-                    startOffset="50%"
-                    textAnchor="middle"
-                  >
-                    unmapped
-                  </textPath>
-                </text>
-              ) : showLabel ? (
-                <text
-                  x={chr.labelX}
-                  y={chr.labelY}
+                  x={chromosome.labelX}
+                  y={chromosome.labelY}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  className="pointer-events-none select-none fill-slate-600 text-[12px] font-bold tracking-[0.02em]"
+                  fill="white"
+                  opacity={isDimmed ? 0.38 : 1}
+                  className="pointer-events-none select-none text-[11px] font-extrabold tracking-[0.02em]"
                 >
-                  {chr.chromosome.replace("chr", "")}
+                  {getChromosomeLabel(chromosome.chromosome)}
                 </text>
               ) : null}
             </g>
           );
         })}
-
-        {/* Gene tick marks */}
-        {Array.from(layout.genePlacements.values()).map((gene) => {
-          const tickStart = polarToCartesian(gene.angle, GENE_TICK_INNER_RADIUS);
-          const tickEnd = polarToCartesian(gene.angle, GENE_TICK_OUTER_RADIUS);
-          const isSelected = gene.id === selectedGene;
-          const isDimmed = Boolean(selectedGene && !isSelected);
-
-          return (
-            <line
-              key={`tick-${gene.id}`}
-              x1={tickStart.x}
-              y1={tickStart.y}
-              x2={tickEnd.x}
-              y2={tickEnd.y}
-              stroke={isSelected ? "#b7791f" : "#64748b"}
-              strokeWidth={isSelected ? 4 : 1.2}
-              strokeOpacity={isDimmed ? 0.18 : 1}
-              className="cursor-pointer"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectGene?.(isSelected ? null : gene.id);
-              }}
-            >
-              <title>
-                {gene.isUnmapped
-                  ? `${gene.id} · unmapped`
-                  : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()}`}
-              </title>
-            </line>
-          );
-        })}
-
-        {/* Ribbons (drawn before labels so labels stay on top) */}
-        {layout.annotatedEdges
-          .slice()
-          .reverse()
-          .map((edge) => {
-            const sourceId = String(edge.source);
-            const targetId = String(edge.target);
-            const sourceGene = layout.genePlacements.get(sourceId);
-            const targetGene = layout.genePlacements.get(targetId);
-            if (!sourceGene || !targetGene) return null;
-
-            const edgeKey = getEdgeKey(edge);
-            const isActive = edgeKey === selectedEdgeKey;
-            const isDimmed = Boolean(
-              selectedGene && sourceId !== selectedGene && targetId !== selectedGene,
-            );
-            const score = layout.normalizedScores.get(edgeKey) ?? 0;
-
-            const sourceStart = sourceGene.angle - RIBBON_HALF_WIDTH;
-            const sourceEnd = sourceGene.angle + RIBBON_HALF_WIDTH;
-            const targetStart = targetGene.angle - RIBBON_HALF_WIDTH;
-            const targetEnd = targetGene.angle + RIBBON_HALF_WIDTH;
-
-            const ribbonColor = getConsensusEdgeColor(edge);
-            const ribbonOpacity = getEvidenceOpacity(score, denseNetwork);
-            const sourcePosition = sourceGene.isUnmapped
-              ? "unmapped"
-              : `${sourceGene.chromosome}:${sourceGene.start.toLocaleString()}`;
-            const targetPosition = targetGene.isUnmapped
-              ? "unmapped"
-              : `${targetGene.chromosome}:${targetGene.start.toLocaleString()}`;
-
-            return (
-              <path
-                key={edgeKey}
-                d={getRibbonPath(sourceStart, sourceEnd, targetStart, targetEnd)}
-                fill={isActive ? "#d89a28" : ribbonColor}
-                fillOpacity={isDimmed ? 0.05 : isActive ? 0.88 : ribbonOpacity}
-                stroke={isActive ? "#9a6717" : ribbonColor}
-                strokeWidth={isActive ? 3.2 : denseNetwork ? 0.55 : 0.9}
-                strokeOpacity={isDimmed ? 0.1 : isActive ? 0.95 : ribbonOpacity}
-                className="cursor-pointer transition"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectEdge?.(isActive ? null : edgeKey);
-                }}
-              >
-                <title>
-                  {`${sourceId} (${sourcePosition}) → ${targetId} (${targetPosition})`}
-                </title>
-              </path>
-            );
-          })}
-
-        {/* Gene labels */}
-        {Array.from(layout.genePlacements.values())
-          .filter((gene) => gene.labelVisible || gene.id === selectedGene)
+        {Array.from(displayGenePlacements.values())
+          .filter((gene) => gene.labelVisible)
           .map((gene) => {
             const isSelected = gene.id === selectedGene;
-            const isDimmed = Boolean(selectedGene && !isSelected);
-
+            const isHovered = gene.id === hoveredGene;
+            const isDimmed = isDetailMode && !detailGeneIds.has(gene.id);
             return (
               <text
                 key={`label-${gene.id}`}
@@ -809,23 +1308,20 @@ export default function CircosNetworkGraph({
                 textAnchor={gene.labelAnchor}
                 dominantBaseline="middle"
                 transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
+                fill={
+                  isSelected ? ACTIVE_STROKE : isHovered ? "#0f4f73" : "#334155"
+                }
+                opacity={isDimmed ? 0.22 : 1}
                 className="cursor-pointer select-none font-semibold"
-                fill={isSelected ? "#9a6717" : "#334155"}
                 style={{
                   fontSize: gene.labelFontSize,
-                  fontWeight: isSelected ? 800 : 600,
+                  fontWeight: isSelected || isHovered ? 800 : 650,
                 }}
-                opacity={isDimmed ? 0.3 : 1}
                 onClick={(event) => {
                   event.stopPropagation();
                   onSelectGene?.(isSelected ? null : gene.id);
                 }}
               >
-                <title>
-                  {gene.isUnmapped
-                    ? `${gene.id} · unmapped`
-                    : `${gene.id} · ${gene.chromosome}:${gene.start.toLocaleString()}-${gene.end.toLocaleString()}`}
-                </title>
                 {gene.id}
               </text>
             );

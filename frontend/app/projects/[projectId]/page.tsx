@@ -443,9 +443,9 @@ function appendNetworkExportLegend(
   };
 
   if (variant === "circos") {
-    addLineMeaning(0, firstRowY, "Activation ribbon", "none", "#168f98");
-    addLineMeaning(1, firstRowY, "Repression ribbon", "none", "#d66c4d");
-    addLineMeaning(2, firstRowY, "Uncertain ribbon", "none", "#8290a3", true);
+    addLineMeaning(0, firstRowY, "Source chromosome", "none", "#4f7fb8");
+    addLineMeaning(1, firstRowY, "Activation target", "arrow", "#64748b");
+    addLineMeaning(2, firstRowY, "Repression target", "tee", "#64748b");
     const x = 24;
     appendSvgElement(legend, "line", {
       x1: x,
@@ -453,11 +453,15 @@ function appendNetworkExportLegend(
       y1: secondRowY - 4,
       y2: secondRowY - 4,
       stroke: "#64748b",
-      "stroke-width": 5,
+      "stroke-width": 7,
       "stroke-linecap": "round",
       opacity: 0.78,
     });
-    addText(x + 48, secondRowY, "Ribbon width and opacity indicate stronger evidence");
+    addText(
+      x + 48,
+      secondRowY,
+      "Overview width = regulation count · opacity = evidence",
+    );
   } else {
     addLineMeaning(0, firstRowY, "Activation", "arrow", "#168f98");
     addLineMeaning(1, firstRowY, "Repression", "tee", "#d66c4d");
