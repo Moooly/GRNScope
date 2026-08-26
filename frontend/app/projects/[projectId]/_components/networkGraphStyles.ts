@@ -1,49 +1,70 @@
-export function getNetworkGraphStylesheet() {
+export function getNetworkGraphStylesheet(
+  appearance: "light" | "publication" = "light",
+) {
+  const isPublication = appearance === "publication";
+  const labelColor = "#172033";
+  const labelOutline = isPublication ? "#ffffff" : "#f7fafc";
+  const nodeBorder = isPublication ? "#334155" : "#ffffff";
+
   return [
     {
       selector: "node",
       style: {
         label: "data(label)",
-        color: "#ffffff",
+        color: labelColor,
         "font-family": "Arial, Helvetica, sans-serif",
-        "font-size": 11,
+        "font-size": 11.5,
         "font-weight": 700,
         "text-wrap": "none",
-        "text-max-width": 96,
-        "text-valign": "center",
+        "text-max-width": 118,
+        "text-valign": "bottom",
         "text-halign": "center",
-        "text-outline-width": 0,
-        "text-outline-opacity": 0,
-        "min-zoomed-font-size": 9,
-        width: 62,
-        height: 62,
+        "text-outline-width": 4,
+        "text-outline-color": labelOutline,
+        "text-outline-opacity": isPublication ? 0.98 : 0.94,
+        "min-zoomed-font-size": 7.5,
+        width: "mapData(influence, 0, 1, 28, 48)",
+        height: "mapData(influence, 0, 1, 28, 48)",
         "overlay-opacity": 0,
-        "border-width": 0,
-        "border-opacity": 0,
-        "background-opacity": 0.97,
-        "text-margin-y": 0,
+        "border-width": 1.5,
+        "border-color": nodeBorder,
+        "border-opacity": isPublication ? 0.64 : 0.92,
+        "background-color": "data(componentColor)",
+        "background-opacity": 0.96,
+        "text-margin-y": 12,
+        "underlay-color": "data(componentColor)",
+        "underlay-shape": "ellipse",
+        "underlay-opacity": isPublication ? 0 : 0.12,
+        "underlay-padding": 3,
+        "transition-property": "opacity, border-width, border-color, background-opacity",
+        "transition-duration": "180ms",
       },
     },
     {
       selector: 'node[isTF = 1]',
       style: {
         shape: "diamond",
-        "background-color": "#334155",
+        "border-width": 1.5,
+        "border-color": nodeBorder,
+        "border-opacity": isPublication ? 0.64 : 0.92,
+        "underlay-color": "data(componentColor)",
+        "underlay-opacity": 0,
+        "underlay-padding": 0,
       },
     },
     {
       selector: 'node[isTF = 0]',
       style: {
         shape: "ellipse",
-        "background-color": "#334155",
       },
     },
     {
       selector: "edge",
       style: {
-        width: "mapData(visualScore, 0, 1, 1.4, 4.2)",
+        width: 2.2,
         "line-color": "data(edgeColor)",
-        opacity: "mapData(visualScore, 0, 1, 0.55, 0.82)",
+        "line-style": "solid",
+        opacity: "data(evidenceOpacity)",
         "curve-style": "bezier",
         "source-endpoint": "outside-to-node",
         "source-distance-from-node": "data(sourceDistanceFromNode)",
@@ -56,9 +77,18 @@ export function getNetworkGraphStylesheet() {
         "target-arrow-shape": "data(targetArrowShape)",
         "target-arrow-color": "data(edgeColor)",
         "target-arrow-fill": "data(arrowFill)",
-        "arrow-scale": 0.9,
+        "arrow-scale": 1.02,
         "overlay-opacity": 0,
         "z-index": 1,
+        "transition-property": "opacity, width, line-color",
+        "transition-duration": "160ms",
+      },
+    },
+    {
+      selector: "edge[denseNetwork = 1]",
+      style: {
+        width: 1.1,
+        "arrow-scale": 0.76,
       },
     },
     {
@@ -72,39 +102,51 @@ export function getNetworkGraphStylesheet() {
     {
       selector: "node:selected",
       style: {
-        "background-color": "#334155",
+        label: "data(fullLabel)",
+        "min-zoomed-font-size": 0,
         "background-opacity": 1,
-        "border-width": 3.5,
-        "border-color": "#1b75a6",
+        "border-width": 4.5,
+        "border-color": "#b7791f",
         "border-opacity": 1,
-        "underlay-color": "#1b75a6",
-        "underlay-opacity": 0.18,
-        "underlay-padding": 8,
+        "underlay-color": "#e2a93b",
+        "underlay-opacity": 0.28,
+        "underlay-padding": 10,
         "z-index": 20,
       },
     },
     {
       selector: "node.selected-edge-endpoint:unselected",
       style: {
+        label: "data(fullLabel)",
+        "min-zoomed-font-size": 0,
         "border-width": 3,
-        "border-color": "#1b75a6",
+        "border-color": "#b7791f",
         "border-opacity": 1,
-        "underlay-color": "#1b75a6",
-        "underlay-opacity": 0.12,
+        "underlay-color": "#e2a93b",
+        "underlay-opacity": 0.16,
         "underlay-padding": 6,
         "z-index": 14,
       },
     },
     {
+      selector: "node.hovered-label",
+      style: {
+        label: "data(fullLabel)",
+        "min-zoomed-font-size": 0,
+        "text-opacity": 1,
+        "z-index": 16,
+      },
+    },
+    {
       selector: "edge:selected",
       style: {
-        width: "mapData(visualScore, 0, 1, 3.4, 6.6)",
-        "line-color": "#1b75a6",
+        width: 4.2,
+        "line-color": "#b7791f",
         "source-arrow-shape": "data(sourceArrowShape)",
-        "source-arrow-color": "#1b75a6",
+        "source-arrow-color": "#b7791f",
         "source-arrow-fill": "data(arrowFill)",
         "target-arrow-shape": "data(targetArrowShape)",
-        "target-arrow-color": "#1b75a6",
+        "target-arrow-color": "#b7791f",
         "target-arrow-fill": "data(arrowFill)",
         "mid-target-arrow-shape": "none",
         "mid-target-arrow-color": "rgba(27, 117, 166, 0)",
@@ -112,7 +154,7 @@ export function getNetworkGraphStylesheet() {
         opacity: 1,
         "line-cap": "butt",
         "z-index": 18,
-        "underlay-color": "#9cc8df",
+        "underlay-color": "#e2a93b",
         "underlay-opacity": 0.24,
         "underlay-padding": 4,
       },
@@ -120,7 +162,7 @@ export function getNetworkGraphStylesheet() {
     {
       selector: "edge.hovered:unselected",
       style: {
-        width: "mapData(visualScore, 0, 1, 1.8, 4.8)",
+        width: 3.2,
         "line-color": "data(edgeColor)",
         "source-arrow-shape": "data(sourceArrowShape)",
         "source-arrow-color": "data(edgeColor)",
@@ -134,6 +176,42 @@ export function getNetworkGraphStylesheet() {
         opacity: 1,
         "z-index": 11,
         "underlay-opacity": 0,
+      },
+    },
+    {
+      selector: "node.context-muted",
+      style: {
+        opacity: 0.12,
+        "text-opacity": 0,
+        "background-opacity": 0.32,
+      },
+    },
+    {
+      selector: "edge.context-muted",
+      style: {
+        opacity: 0.06,
+      },
+    },
+    {
+      selector: "node.context-focus",
+      style: {
+        opacity: 1,
+        "text-opacity": 1,
+        "z-index": 12,
+      },
+    },
+    {
+      selector: "edge.context-focus",
+      style: {
+        opacity: 0.96,
+        "z-index": 9,
+      },
+    },
+    {
+      selector: 'node[isTF = 1]',
+      style: {
+        "underlay-opacity": 0,
+        "underlay-padding": 0,
       },
     },
   ];

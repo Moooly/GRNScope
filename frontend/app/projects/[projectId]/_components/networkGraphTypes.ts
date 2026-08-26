@@ -6,6 +6,8 @@ export type NetworkNode = {
   outDegree: number;
   degree: number;
   isTF: boolean;
+  componentIndex?: number;
+  componentColor?: string;
   showLabel?: boolean;
 };
 
@@ -32,6 +34,28 @@ export type NetworkLayoutMode =
   | "concentric"
   | "circular";
 
+export type NetworkGraphExportOptions = {
+  full?: boolean;
+  scale?: number;
+  bg?: string;
+};
+
+export type NetworkGraphHandle = {
+  kind: "cytoscape" | "g6";
+  zoom: () => number;
+  minZoom: () => number;
+  maxZoom: () => number;
+  width: () => number;
+  height: () => number;
+  stop: () => void;
+  setZoom: (level: number) => void;
+  on: (event: "zoom", listener: () => void) => void;
+  off: (event: "zoom", listener: () => void) => void;
+  destroyed: () => boolean;
+  png: (options?: NetworkGraphExportOptions) => string | Promise<string>;
+  svg: (options?: NetworkGraphExportOptions) => string | Promise<string>;
+};
+
 export type NetworkGraphProps = {
   nodes: NetworkNode[];
   edges: NetworkEdge[];
@@ -49,6 +73,7 @@ export type EdgeTooltipState = {
   source: string;
   target: string;
   score: number;
+  confidence: number;
   rank: number;
   supportingAlgorithms: string[];
   directionConfidence: number | null;

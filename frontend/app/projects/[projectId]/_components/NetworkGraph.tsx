@@ -14,6 +14,7 @@ import {
   buildGraphElements,
   buildHierarchicalPositions,
   getLayoutConfig,
+  isDenseNetwork,
 } from "./networkGraphLayouts";
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
 import type {
@@ -62,9 +63,13 @@ function relaxZoomFloorForGraph(cy: Core, padding = 56) {
   );
 }
 
+function getNodeFullDisplayLabel(node: NetworkNode) {
+  return node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
+}
+
 function getNodeDisplayLabel(node: NetworkNode) {
   if (node.showLabel === false) return "";
-  return node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
+  return getNodeFullDisplayLabel(node);
 }
 
 function getConnectedNodeGroups(cy: Core) {
@@ -107,6 +112,40 @@ function getConnectedNodeGroups(cy: Core) {
   return groups.sort((a, b) => b.length - a.length);
 }
 
+const clearContextFocus = (cy: Core) => {
+  cy.elements().removeClass("context-muted context-focus");
+};
+
+const focusCollection = (cy: Core, collection: ReturnType<Core["collection"]>) => {
+  clearContextFocus(cy);
+  cy.elements().addClass("context-muted");
+  collection.removeClass("context-muted").addClass("context-focus");
+};
+
+const applyPersistentFocus = (
+  cy: Core,
+  selectedGene: string | null,
+  selectedEdgeKey: string | null,
+) => {
+  if (selectedGene) {
+    const node = cy.getElementById(selectedGene);
+    if (node.nonempty()) {
+      focusCollection(cy, node.closedNeighborhood());
+      return;
+    }
+  }
+
+  if (selectedEdgeKey) {
+    const edge = cy.getElementById(selectedEdgeKey);
+    if (edge.nonempty()) {
+      focusCollection(cy, edge.union(edge.connectedNodes()));
+      return;
+    }
+  }
+
+  clearContextFocus(cy);
+};
+
 export default function NetworkGraph({
   nodes,
   edges,
@@ -134,6 +173,8 @@ export default function NetworkGraph({
   const onSelectGeneRef = useRef(onSelectGene);
   const onSelectEdgeRef = useRef(onSelectEdge);
   const onGraphReadyRef = useRef(onGraphReady);
+  const selectedGeneRef = useRef(selectedGene);
+  const selectedEdgeKeyRef = useRef(selectedEdgeKey);
 
   const cacheViewportForKey = (cacheKey: string, cy: Core) => {
     layoutViewportCacheRef.current[cacheKey] = {
@@ -142,7 +183,7 @@ export default function NetworkGraph({
     };
   };
 
-  const fitGraphToVisibleCanvas = (cy: Core, animate = true) => {
+  const fitGraphToVisibleCanvas = useCallback((cy: Core, animate = true) => {
     const visibleElements = cy.elements().filter((element) => !element.removed());
 
     if (visibleElements.empty()) {
@@ -150,28 +191,40 @@ export default function NetworkGraph({
     }
 
     cy.resize();
+    const fitPadding = nodes.length <= 8 ? 72 : nodes.length <= 18 ? 48 : 56;
+    const automaticZoomCap =
+      nodes.length <= 8 ? 1.12 : nodes.length <= 18 ? 1.52 : MAX_NETWORK_ZOOM;
+    const previousZoom = cy.zoom();
+    const previousPan = { ...cy.pan() };
+
+    relaxZoomFloorForGraph(cy, fitPadding);
+    cy.fit(visibleElements, fitPadding);
+    const fittedZoom = cy.zoom();
+    const presentationBoost = nodes.length > 8 && nodes.length <= 18 ? 1.23 : 1;
+    const targetZoom = Math.min(automaticZoomCap, fittedZoom * presentationBoost);
+    if (targetZoom !== fittedZoom) {
+      cy.zoom(targetZoom);
+    }
+    cy.center(visibleElements);
 
     if (animate) {
+      const targetZoom = cy.zoom();
+      const targetPan = { ...cy.pan() };
+      cy.zoom(previousZoom);
+      cy.pan(previousPan);
       cy.stop(true, false);
       cy.animate(
         {
-          fit: {
-            eles: visibleElements,
-            padding: 56,
-          },
+          zoom: targetZoom,
+          pan: targetPan,
         },
         {
           duration: 280,
           easing: "ease-out-cubic",
-        }
+        },
       );
-      return;
     }
-
-    relaxZoomFloorForGraph(cy);
-    cy.fit(visibleElements, 56);
-    cy.center(visibleElements);
-  };
+  }, [nodes.length]);
 
   const packDisconnectedComponents = useCallback((cy: Core) => {
     const groups = getConnectedNodeGroups(cy);
@@ -180,9 +233,9 @@ export default function NetworkGraph({
       return;
     }
 
-    const gap = 64;
+    const gap = 36;
     const containerWidth = containerRef.current?.clientWidth ?? 900;
-    const maxRowWidth = Math.max(680, containerWidth * 0.72);
+    const maxRowWidth = Math.max(720, containerWidth * 0.9);
     let cursorX = 0;
     let cursorY = 0;
     let rowHeight = 0;
@@ -194,8 +247,8 @@ export default function NetworkGraph({
       );
 
       const box = collection.boundingBox();
-      const width = Math.max(118, box.w + 16);
-      const height = Math.max(118, box.h + 16);
+      const width = Math.max(96, box.w + 12);
+      const height = Math.max(96, box.h + 12);
 
       if (cursorX > 0 && cursorX + width > maxRowWidth) {
         cursorX = 0;
@@ -419,7 +472,9 @@ export default function NetworkGraph({
     onSelectGeneRef.current = onSelectGene;
     onSelectEdgeRef.current = onSelectEdge;
     onGraphReadyRef.current = onGraphReady;
-  }, [onGraphReady, onSelectEdge, onSelectGene]);
+    selectedGeneRef.current = selectedGene;
+    selectedEdgeKeyRef.current = selectedEdgeKey;
+  }, [onGraphReady, onSelectEdge, onSelectGene, selectedEdgeKey, selectedGene]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -429,6 +484,7 @@ export default function NetworkGraph({
       const graphNode = cy.getElementById(node.id);
       if (graphNode.nonempty()) {
         graphNode.data("label", getNodeDisplayLabel(node));
+        graphNode.data("fullLabel", getNodeFullDisplayLabel(node));
       }
     });
   }, [labelSignature, nodes]);
@@ -520,12 +576,31 @@ export default function NetworkGraph({
 
       graph.on("tap", "node", (event) => {
         const nodeId = event.target.id();
+        setHoveredEdgeKey(null);
+        setEdgeTooltip(null);
         onSelectGeneRef.current(nodeId);
       });
 
       graph.on("tap", "edge", (event) => {
         const edgeId = event.target.id();
+        event.target.removeClass("hovered");
+        setHoveredEdgeKey(null);
+        setEdgeTooltip(null);
         onSelectEdgeRef.current(edgeId);
+      });
+
+      graph.on("mouseover", "node", (event) => {
+        event.target.addClass("hovered-label");
+        focusCollection(graph, event.target.closedNeighborhood());
+      });
+
+      graph.on("mouseout", "node", (event) => {
+        event.target.removeClass("hovered-label");
+        applyPersistentFocus(
+          graph,
+          selectedGeneRef.current,
+          selectedEdgeKeyRef.current,
+        );
       });
 
       graph.on("mouseover", "edge", (event) => {
@@ -534,6 +609,8 @@ export default function NetworkGraph({
 
         graph.edges().removeClass("hovered");
         event.target.addClass("hovered");
+        event.target.connectedNodes().addClass("hovered-label");
+        focusCollection(graph, event.target.union(event.target.connectedNodes()));
         setHoveredEdgeKey(edgeId);
 
         setEdgeTooltip({
@@ -550,6 +627,7 @@ export default function NetworkGraph({
               ""
           ),
           score: Number(event.target.data("score") ?? 0),
+          confidence: Number(event.target.data("confidence") ?? 0),
           rank: Number(event.target.data("rank") ?? 0),
           supportingAlgorithms: Array.isArray(event.target.data("supportingAlgorithms"))
             ? (event.target.data("supportingAlgorithms") as string[])
@@ -585,10 +663,16 @@ export default function NetworkGraph({
 
       graph.on("mouseout", "edge", (event) => {
         event.target.removeClass("hovered");
+        event.target.connectedNodes().removeClass("hovered-label");
         setHoveredEdgeKey((current) =>
           current === event.target.id() ? null : current
         );
         setEdgeTooltip(null);
+        applyPersistentFocus(
+          graph,
+          selectedGeneRef.current,
+          selectedEdgeKeyRef.current,
+        );
       });
 
       graph.on("tap", (event) => {
@@ -596,8 +680,10 @@ export default function NetworkGraph({
           onSelectGeneRef.current(null);
           onSelectEdgeRef.current(null);
           graph.edges().removeClass("hovered");
+          graph.nodes().removeClass("hovered-label");
           setHoveredEdgeKey(null);
           setEdgeTooltip(null);
+          clearContextFocus(graph);
         }
       });
 
@@ -848,7 +934,7 @@ export default function NetworkGraph({
           layout,
           layoutCacheSignature,
           !hasAnyPriorPositions,
-          layout === "force" && (layoutChanged || signatureChanged)
+          layout === "force" && layoutChanged
         ) as unknown as LayoutOptions
       );
 
@@ -949,6 +1035,7 @@ export default function NetworkGraph({
     layout,
     layoutCacheSignature,
     nodes,
+    fitGraphToVisibleCanvas,
     getLayoutOptions,
     packDisconnectedComponents,
   ]);
@@ -957,8 +1044,11 @@ export default function NetworkGraph({
     const cy = cyRef.current;
     if (!cy) return;
 
+    setHoveredEdgeKey(null);
+    setEdgeTooltip(null);
     cy.elements().unselect();
-    cy.nodes().removeClass("selected-edge-endpoint");
+    cy.edges().removeClass("hovered");
+    cy.nodes().removeClass("hovered-label selected-edge-endpoint");
 
     if (selectedGene) {
       const node = cy.getElementById(selectedGene);
@@ -974,6 +1064,8 @@ export default function NetworkGraph({
         edge.connectedNodes().addClass("selected-edge-endpoint");
       }
     }
+
+    applyPersistentFocus(cy, selectedGene, selectedEdgeKey);
   }, [selectedGene, selectedEdgeKey]);
 
   useEffect(() => {
@@ -992,10 +1084,10 @@ export default function NetworkGraph({
 
   const containerWidth = containerRef.current?.clientWidth ?? 0;
   const containerHeight = containerRef.current?.clientHeight ?? 0;
-  const tooltipWidth = 300;
-  const tooltipHeight = 230;
+  const tooltipWidth = 252;
+  const tooltipHeight = 190;
   const tooltipPadding = 16;
-  const tooltipGap = 32;
+  const tooltipGap = 24;
 
   const tooltipShouldFlipLeft = edgeTooltip
     ? edgeTooltip.x + tooltipGap + tooltipWidth > containerWidth - tooltipPadding
@@ -1028,36 +1120,46 @@ export default function NetworkGraph({
       )
     : tooltipPadding;
 
+  const denseNetwork = isDenseNetwork(nodes.length, edges.length);
+  const graphHeightClass =
+    denseNetwork
+      ? "h-[clamp(700px,78vh,900px)] min-h-[700px]"
+      : nodes.length <= 18
+      ? "h-[clamp(560px,68vh,700px)] min-h-[560px]"
+      : nodes.length <= 60
+        ? "h-[clamp(640px,74vh,820px)] min-h-[640px]"
+        : "h-[clamp(700px,78vh,920px)] min-h-[700px]";
+
   return (
-    <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[#f8fbff]">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-45" />
-      <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] ring-1 ring-white/55" />
+    <div className={`relative w-full overflow-hidden bg-[#f7fafc] ${graphHeightClass}`}>
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_46%_42%,rgba(90,148,185,0.13),transparent_46%),radial-gradient(circle_at_80%_18%,rgba(22,143,152,0.07),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f3f7fa_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(100,116,139,0.2)_0.7px,transparent_0.8px)] bg-[size:28px_28px] opacity-30" />
 
       <div
         ref={containerRef}
         className="absolute inset-0 z-10 h-full w-full"
-        style={{ filter: "saturate(0.94) contrast(0.98)" }}
+        style={{ filter: "saturate(0.98) contrast(1.02)" }}
       />
 
       {edgeTooltip && (
         <div
-          className="pointer-events-none absolute z-30 max-w-[300px] rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 text-xs text-slate-700"
+          className="pointer-events-none absolute z-30 w-[252px] rounded-2xl border border-slate-200 bg-white/95 px-3.5 py-3 text-xs text-slate-600 shadow-xl shadow-slate-900/10 backdrop-blur-xl"
           style={{
             left: tooltipLeft,
             top: tooltipTop,
           }}
         >
-          <div className="space-y-2">
+          <div>
             <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold text-slate-900">
+              <p className="min-w-0 truncate font-semibold text-slate-900">
                 {edgeTooltip.source} → {edgeTooltip.target}
               </p>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
                   edgeTooltip.sign > 0
-                    ? "bg-[#e8f5fb] text-[#0072B2]"
+                    ? "bg-[#e7f6f5] text-[#116f76]"
                     : edgeTooltip.sign < 0
-                      ? "bg-[#fff0e8] text-[#D55E00]"
+                      ? "bg-[#fceee9] text-[#b64f35]"
                       : "bg-slate-100 text-slate-600"
                 }`}
               >
@@ -1069,55 +1171,40 @@ export default function NetworkGraph({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Regulation evidence</p>
-                <p className="mt-1 font-semibold text-slate-900">
-                  {edgeTooltip.score.toFixed(3)}
+            <div className="mt-3 grid grid-cols-2 gap-1.5 text-[10px]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-slate-500">Evidence</p>
+                <p className="mt-0.5 font-bold text-slate-900">
+                  {edgeTooltip.score.toFixed(3)} <span className="font-medium text-slate-400">#{edgeTooltip.rank}</span>
                 </p>
               </div>
 
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Rank</p>
-                <p className="mt-1 font-semibold text-slate-900">
-                  {edgeTooltip.rank}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-slate-500">Confidence</p>
+                <p className="mt-0.5 font-bold text-slate-900">
+                  {Math.round(edgeTooltip.confidence * 100)}%
                 </p>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Direction confidence</p>
-                <p className="mt-1 font-semibold text-slate-900">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-slate-500">Direction</p>
+                <p className="mt-0.5 font-bold text-slate-900">
                   {edgeTooltip.directionConfidence === null
                     ? "-"
                     : `${Math.round(edgeTooltip.directionConfidence * 100)}%`}
                 </p>
-                <p className="mt-0.5 text-[10px] text-slate-400">
-                  coverage {Math.round(edgeTooltip.directionCoverage * 100)}%
-                </p>
               </div>
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2">
-                <p className="text-slate-500">Sign stability</p>
-                <p className="mt-1 font-semibold text-slate-900">
-                  {edgeTooltip.signConfidence === null
-                    ? "-"
-                    : `${Math.round(edgeTooltip.signConfidence * 100)}%`}
-                </p>
-                <p className="mt-0.5 text-[10px] text-slate-400">
-                  coverage {Math.round(edgeTooltip.signCoverage * 100)}%
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+                <p className="text-slate-500">Methods</p>
+                <p className="mt-0.5 font-bold text-slate-900">
+                  {edgeTooltip.supportingAlgorithms.length || "-"}
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-2 text-[11px]">
-              <p className="text-slate-500">Supporting algorithms</p>
-              <p className="mt-1 font-medium leading-5 text-slate-900">
-                {edgeTooltip.supportingAlgorithms.length > 0
-                  ? edgeTooltip.supportingAlgorithms.join(", ")
-                  : "-"}
-              </p>
-            </div>
+            <p className="mt-2 text-[10px] font-medium text-slate-400">
+              Click for complete evidence details.
+            </p>
           </div>
         </div>
       )}

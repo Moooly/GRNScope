@@ -2,6 +2,7 @@
 
 import { useId, useMemo, type Ref } from "react";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
+import { isDenseNetwork } from "./networkGraphLayouts";
 
 type CircosNetworkGraphProps = {
   nodes: NodeInfo[];
@@ -55,27 +56,27 @@ const CHROMOSOME_ORDER: Record<string, number> = (() => {
   return order;
 })();
 
-const WIDTH = 780;
-const HEIGHT = 780;
+const WIDTH = 680;
+const HEIGHT = 680;
 const CENTER_X = WIDTH / 2;
 const CENTER_Y = HEIGHT / 2;
 
-const CHROMOSOME_INNER_RADIUS = 248;
-const CHROMOSOME_OUTER_RADIUS = 274;
+const CHROMOSOME_INNER_RADIUS = 276;
+const CHROMOSOME_OUTER_RADIUS = 306;
 const CHROMOSOME_LABEL_RADIUS =
   (CHROMOSOME_INNER_RADIUS + CHROMOSOME_OUTER_RADIUS) / 2;
-const GENE_TICK_INNER_RADIUS = 234;
-const GENE_TICK_OUTER_RADIUS = 248;
+const GENE_TICK_INNER_RADIUS = 261;
+const GENE_TICK_OUTER_RADIUS = 276;
 const RIBBON_RADIUS = GENE_TICK_INNER_RADIUS - 4;
-const GENE_LABEL_RADIUS = 296;
+const GENE_LABEL_RADIUS = 316;
 
 const CHROMOSOME_GAP_RADIANS = 0.014; // small gap between adjacent chromosomes
 const RIBBON_HALF_WIDTH = 0.005; // angular half-width of each ribbon endpoint
 
-const CIRCOS_ACTIVATION_COLOR = "#0072B2";
-const CIRCOS_REPRESSION_COLOR = "#D55E00";
-const CIRCOS_UNKNOWN_SIGN_COLOR = "#94a3b8";
-const CIRCOS_CHROMOSOME_COLORS = ["#f3f5f7", "#e5e9ee"];
+const CIRCOS_ACTIVATION_COLOR = "#168f98";
+const CIRCOS_REPRESSION_COLOR = "#d66c4d";
+const CIRCOS_UNKNOWN_SIGN_COLOR = "#8290a3";
+const CIRCOS_CHROMOSOME_COLORS = ["#dfeaf1", "#d2e1ea"];
 const UNMAPPED_CHROMOSOME = "unmapped";
 const UNMAPPED_VISUAL_LENGTH = 90000000;
 
@@ -138,20 +139,22 @@ function getRawEdgeScore(edge: AggregatedEdge) {
 }
 
 function getConsensusEdgeColor(edge: AggregatedEdge) {
-  if (edge.signConfidence === null || edge.sign === 0 || edge.signCoverage === 0) {
+  if (edge.sign === 0) {
     return CIRCOS_UNKNOWN_SIGN_COLOR;
   }
 
   return edge.sign > 0 ? CIRCOS_ACTIVATION_COLOR : CIRCOS_REPRESSION_COLOR;
 }
 
-function getConsensusEdgeOpacity(edge: AggregatedEdge, score: number) {
-  const signConfidence = edge.signConfidence ?? 0;
-  const signCoverage = edge.signCoverage ?? 0;
-  const confidenceSignal =
-    edge.sign === 0 ? 0.42 : Math.max(0.38, signConfidence * signCoverage);
-
-  return Math.min(0.82, 0.16 + score * 0.4 + confidenceSignal * 0.26);
+function getEvidenceOpacity(score: number, denseNetwork: boolean) {
+  if (denseNetwork) {
+    if (score >= 0.9) return 0.46;
+    if (score >= 0.75) return 0.28;
+    return 0.16;
+  }
+  if (score >= 0.9) return 0.92;
+  if (score >= 0.75) return 0.7;
+  return 0.46;
 }
 
 function polarToCartesian(angle: number, radius: number) {
@@ -425,6 +428,15 @@ export default function CircosNetworkGraph({
   onSelectEdge,
   svgRef,
 }: CircosNetworkGraphProps) {
+  const denseNetwork = isDenseNetwork(nodes.length, edges.length);
+  const graphHeightClass =
+    denseNetwork
+      ? "h-[clamp(700px,78vh,900px)] min-h-[700px]"
+      : nodes.length <= 18
+      ? "h-[clamp(560px,68vh,700px)] min-h-[560px]"
+      : nodes.length <= 60
+        ? "h-[clamp(640px,74vh,820px)] min-h-[640px]"
+        : "h-[clamp(700px,78vh,920px)] min-h-[700px]";
   const componentId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const unmappedArcLabelId = `${componentId || "circos"}-unmapped-arc-label`;
 
@@ -578,16 +590,13 @@ export default function CircosNetworkGraph({
     });
     resolveGeneLabelCollisions(genePlacements);
 
-    // Edge score normalisation drives ribbon opacity / stroke weight.
-    const scores = annotatedEdges.map(getRawEdgeScore);
-    const minScore = scores.length > 0 ? Math.min(...scores) : 0;
-    const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
-    const scoreRange = Math.max(maxScore - minScore, 1e-6);
-
+    // Keep the 0-1 evidence mapping stable when users change filters.
     const normalizedScores = new Map<string, number>();
     annotatedEdges.forEach((edge) => {
-      const normalized = (getRawEdgeScore(edge) - minScore) / scoreRange;
-      normalizedScores.set(getEdgeKey(edge), Math.max(0, Math.min(1, normalized)));
+      normalizedScores.set(
+        getEdgeKey(edge),
+        Math.max(0, Math.min(1, getRawEdgeScore(edge))),
+      );
     });
 
     return {
@@ -608,7 +617,7 @@ export default function CircosNetworkGraph({
     layout.annotatedEdges.length === 0
   ) {
     return (
-      <div className="flex h-[520px] items-center justify-center rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50 px-6 text-center text-sm font-medium text-slate-500">
+      <div className={`flex items-center justify-center border border-dashed border-slate-300 bg-[#f7fafc] px-6 text-center text-sm font-medium text-slate-500 ${graphHeightClass}`}>
         {nodes.length === 0 || edges.length === 0
           ? "No edges are available for the current filters."
           : "None of the visible genes have known chromosome coordinates, so the Circos genomic view can't be drawn."}
@@ -617,9 +626,9 @@ export default function CircosNetworkGraph({
   }
 
   return (
-    <div className="relative h-[680px] w-full overflow-hidden rounded-[1.75rem] border border-slate-200/70 bg-[#f8fbff]">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-45" />
-      <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] ring-1 ring-white/55" />
+    <div className={`relative w-full overflow-hidden bg-[#f7fafc] ${graphHeightClass}`}>
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_47%,rgba(90,148,185,0.13),transparent_48%),radial-gradient(circle_at_78%_18%,rgba(22,143,152,0.07),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f3f7fa_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(100,116,139,0.2)_0.7px,transparent_0.8px)] bg-[size:28px_28px] opacity-30" />
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -649,7 +658,7 @@ export default function CircosNetworkGraph({
                   CHROMOSOME_OUTER_RADIUS,
                 )}
                 fill={chr.color}
-                stroke="#cbd5df"
+                stroke="#9eb2c0"
                 strokeWidth="1.4"
               >
                 <title>
@@ -713,7 +722,7 @@ export default function CircosNetworkGraph({
               y1={tickStart.y}
               x2={tickEnd.x}
               y2={tickEnd.y}
-              stroke={isSelected ? "#0f766e" : "#475569"}
+              stroke={isSelected ? "#b7791f" : "#64748b"}
               strokeWidth={isSelected ? 4 : 1.2}
               strokeOpacity={isDimmed ? 0.18 : 1}
               className="cursor-pointer"
@@ -755,7 +764,7 @@ export default function CircosNetworkGraph({
             const targetEnd = targetGene.angle + RIBBON_HALF_WIDTH;
 
             const ribbonColor = getConsensusEdgeColor(edge);
-            const ribbonOpacity = getConsensusEdgeOpacity(edge, score);
+            const ribbonOpacity = getEvidenceOpacity(score, denseNetwork);
             const sourcePosition = sourceGene.isUnmapped
               ? "unmapped"
               : `${sourceGene.chromosome}:${sourceGene.start.toLocaleString()}`;
@@ -767,11 +776,11 @@ export default function CircosNetworkGraph({
               <path
                 key={edgeKey}
                 d={getRibbonPath(sourceStart, sourceEnd, targetStart, targetEnd)}
-                fill={isActive ? "#0f766e" : ribbonColor}
+                fill={isActive ? "#d89a28" : ribbonColor}
                 fillOpacity={isDimmed ? 0.05 : isActive ? 0.88 : ribbonOpacity}
-                stroke={isActive ? "#5eead4" : ribbonColor}
-                strokeWidth={isActive ? 3.2 : 0.45 + score * 1.05}
-                strokeOpacity={isDimmed ? 0.1 : isActive ? 0.95 : Math.min(0.72, ribbonOpacity + 0.08)}
+                stroke={isActive ? "#9a6717" : ribbonColor}
+                strokeWidth={isActive ? 3.2 : denseNetwork ? 0.55 : 0.9}
+                strokeOpacity={isDimmed ? 0.1 : isActive ? 0.95 : ribbonOpacity}
                 className="cursor-pointer transition"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -801,7 +810,7 @@ export default function CircosNetworkGraph({
                 dominantBaseline="middle"
                 transform={`rotate(${gene.labelRotation} ${gene.labelX} ${gene.labelY})`}
                 className="cursor-pointer select-none font-semibold"
-                fill={isSelected ? "#0f766e" : "#0f172a"}
+                fill={isSelected ? "#9a6717" : "#334155"}
                 style={{
                   fontSize: gene.labelFontSize,
                   fontWeight: isSelected ? 800 : 600,

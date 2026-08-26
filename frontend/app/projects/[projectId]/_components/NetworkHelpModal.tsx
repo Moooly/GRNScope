@@ -26,7 +26,7 @@ export default function NetworkHelpModal({
       aria-modal="true"
       aria-labelledby="network-visual-guide-title"
       aria-describedby="network-visual-guide-summary"
-      className={`flex max-h-[min(800px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-slate-900 shadow-2xl ${
+      className={`network-help-modal flex max-h-[min(800px,calc(100vh-4rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-slate-900 shadow-2xl ${
         isClosing
           ? "animate-modal-panel-out"
           : "animate-modal-panel"
@@ -85,29 +85,29 @@ export default function NetworkHelpModal({
           </h4>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <span className="h-6 w-6 shrink-0 rotate-45 rounded-[4px] bg-slate-700" />
+              <span className="h-6 w-6 shrink-0 rotate-45 rounded-[3px] bg-[#5c83d8] shadow-sm ring-1 ring-white" />
               <span>
                 <strong className="block text-slate-800">
                   Transcription factor
                 </strong>
                 <span className="text-xs text-slate-500">
-                  diamond-shaped regulator
+                  diamond-shaped node
                 </span>
               </span>
             </div>
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <span className="h-7 w-7 shrink-0 rounded-full bg-slate-700" />
+              <span className="h-7 w-7 shrink-0 rounded-full border border-white bg-[#5c83d8] shadow-sm" />
               <span>
                 <strong className="block text-slate-800">Other gene</strong>
                 <span className="text-xs text-slate-500">
-                  circular target or regulator
+                  circular node in the shared gene color
                 </span>
               </span>
             </div>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
               <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                <path d="M2 9H39" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
-                <path d="M39 3L53 9L39 15Z" fill="#64748b" />
+                <path d="M2 9H39" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" />
+                <path d="M39 3L53 9L39 15Z" fill="#168f98" />
               </svg>
               <span>
                 <strong className="block text-slate-800">Activation</strong>
@@ -118,8 +118,8 @@ export default function NetworkHelpModal({
             </div>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
               <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                <path d="M2 9H44" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
-                <path d="M44 3V15" stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
+                <path d="M2 9H44" stroke="#d66c4d" strokeWidth="2.4" strokeLinecap="round" />
+                <path d="M44 3V15" stroke="#d66c4d" strokeWidth="3" strokeLinecap="round" />
               </svg>
               <span>
                 <strong className="block text-slate-800">Repression</strong>
@@ -130,37 +130,41 @@ export default function NetworkHelpModal({
             </div>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
               <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                <path d="M2 9H50" stroke="#64748b" strokeWidth="2.4" strokeLinecap="round" />
+                <path d="M2 9H50" stroke="#8290a3" strokeWidth="2.4" strokeLinecap="round" />
               </svg>
               <span>
                 <strong className="block text-slate-800">
-                  Unannotated line
+                  Undirected relationship
                 </strong>
                 <span className="text-xs text-slate-500">
-                  direction or sign is unavailable
+                  no endpoint when direction is unavailable
                 </span>
               </span>
             </div>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <span className="flex flex-col gap-1.5">
-                <span className="h-px w-12 rounded-full bg-slate-500" />
-                <span className="h-1.5 w-12 rounded-full bg-slate-500" />
-              </span>
+              <svg viewBox="0 0 56 24" aria-hidden="true" className="h-6 w-14">
+                <path d="M2 4H50" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.46" />
+                <path d="M2 12H50" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.7" />
+                <path d="M2 20H50" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.92" />
+              </svg>
               <span>
                 <strong className="block text-slate-800">
-                  Relative evidence
+                  Evidence strength
                 </strong>
                 <span className="text-xs text-slate-500">
-                  thicker means stronger among visible edges
+                  pale, moderate, and full intensity
                 </span>
               </span>
             </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            Thickness is scaled from the lowest to highest evidence in
-            the current visible set; compare the numeric values when
-            switching filters. Reciprocal regulations curve apart, and
-            the selected edge and its endpoints are highlighted blue.
+            Evidence uses three stable intensity levels on the 0–1 scale, so
+            an edge keeps the same appearance while filters change. Bootstrap
+            confidence and exact values appear on hover or in the inspection
+            panel. Larger nodes have more regulatory influence; reciprocal
+            regulations curve apart, and the active selection is highlighted
+            in gold. Dense networks automatically use lighter edges, wider
+            spacing, and fewer persistent labels; hover reveals local detail.
           </p>
         </section>
 
@@ -484,4 +488,3 @@ export default function NetworkHelpModal({
     document.body,
   );
 }
-

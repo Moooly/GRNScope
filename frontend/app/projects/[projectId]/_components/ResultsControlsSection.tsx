@@ -222,7 +222,7 @@ export default function ResultsControlsSection({
         onClick={() => setOpenPanel((currentPanel) => (currentPanel === panel ? null : panel))}
         className={`flex min-h-[54px] w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
           isOpen
-            ? "border-[#1b75a6] bg-[#1b75a6] text-white"
+            ? "network-settings-primary-action border-[#1b75a6] bg-[#1b75a6] text-white"
             : "border-slate-200 bg-[#eef3f7] text-slate-800 hover:border-[#1b75a6]/30 hover:bg-[#e7f2f7]"
         }`}
       >
@@ -275,6 +275,11 @@ export default function ResultsControlsSection({
     }
   };
   const matchingEdgesLabel = safeFilteredEdgeCount.toLocaleString();
+  const isDisplayCapped = safeFilteredEdgeCount > safeEdgeDisplayLimit;
+  const hiddenMatchingEdgeCount = Math.max(
+    0,
+    safeFilteredEdgeCount - safeEdgeDisplayLimit
+  );
 
   const inlinePercentControl = (
     value: number,
@@ -458,12 +463,6 @@ export default function ResultsControlsSection({
     </div>
   );
 
-  const matchingEdgesBadge = (
-    <span className="shrink-0 rounded-full border border-[#1b75a6]/20 bg-white px-2.5 py-1 text-[11px] font-bold tabular-nums text-[#1b75a6]">
-      {matchingEdgesLabel} matching edges
-    </span>
-  );
-
   const compactSelect = (
     label: string,
     value: string,
@@ -492,19 +491,63 @@ export default function ResultsControlsSection({
   );
 
   const edgeDisplayRow = (
-    <div className="mt-3 border-t border-slate-200 pt-3">
-      {sectionLabel(
-        "Display limit",
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-          Network and table
+    <section
+      className="mb-4 rounded-2xl border border-[#1b75a6]/20 bg-[#f2f9fc] p-3"
+      aria-labelledby="edge-display-limit-title"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h3
+              id="edge-display-limit-title"
+              className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]"
+            >
+              Display limit
+            </h3>
+          </div>
+          <p className="mt-1 text-sm font-bold text-slate-800">
+            {safeEdgeDisplayLimit.toLocaleString()} shown
+            <span className="px-1.5 font-medium text-slate-400">·</span>
+            {matchingEdgesLabel} match filters
+          </p>
+        </div>
+        {edgeDisplayControl()}
+      </div>
+
+      <div
+        className={`mt-3 flex gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold leading-4 ${
+          isDisplayCapped
+            ? "border-[#1b75a6]/20 bg-white text-slate-600"
+            : "border-transparent bg-white/55 text-slate-500"
+        }`}
+        role="status"
+        aria-live="polite"
+      >
+        <span
+          className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-extrabold ${
+            isDisplayCapped
+              ? "bg-[#1b75a6] text-white"
+              : "bg-[#dcebf3] text-[#1b75a6]"
+          }`}
+          aria-hidden="true"
+        >
+          i
         </span>
-      )}
-      {inlineRow(
-        "Top-ranked edges",
-        edgeDisplayControl(),
-        `Showing top ${safeEdgeDisplayLimit.toLocaleString()} of ${matchingEdgesLabel} matching edges`
-      )}
-    </div>
+        <p>
+          {isDisplayCapped ? (
+            <>
+              <strong className="text-slate-800">
+                {hiddenMatchingEdgeCount.toLocaleString()} more {hiddenMatchingEdgeCount === 1 ? "edge matches" : "edges match"} your filters, but only the top {safeEdgeDisplayLimit.toLocaleString()} are shown.
+              </strong>
+            </>
+          ) : safeFilteredEdgeCount > 0 ? (
+            "All matching edges are currently displayed."
+          ) : (
+            "No edges currently match the selected filters."
+          )}
+        </p>
+      </div>
+    </section>
   );
 
   const clampRecoveryRankPercent = (value: number) =>
@@ -615,7 +658,7 @@ export default function ResultsControlsSection({
                 type="button"
                 onClick={applyRecoveryRank}
                 disabled={!hasRecoveryRankChange || isApplyingConfidenceRecoveryTopFraction}
-                className="rounded-full bg-[#1b75a6] px-3.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-45"
+                className="network-settings-primary-action rounded-full bg-[#1b75a6] px-3.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {isApplyingConfidenceRecoveryTopFraction
                   ? "Recalculating…"
@@ -642,10 +685,14 @@ export default function ResultsControlsSection({
           type="button"
           onClick={() => setIsSettingsMenuOpen((current) => !current)}
           aria-expanded={isSettingsMenuOpen}
-          className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 ${
-            isSettingsMenuOpen
-              ? "border-[#1b75a6]/40 bg-[#f2f9fc] text-[#1b75a6]"
-              : "border-slate-200 text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+          className={`inline-flex h-10 items-center gap-2 rounded-full border px-5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#66d5d2]/10 ${
+            compact
+              ? isSettingsMenuOpen
+                ? "border-[#1b75a6]/35 bg-[#f2f9fc] text-[#1b75a6]"
+                : "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+              : isSettingsMenuOpen
+                ? "border-[#1b75a6]/40 bg-[#f2f9fc] text-[#1b75a6]"
+                : "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
           }`}
         >
           <span
@@ -657,7 +704,9 @@ export default function ResultsControlsSection({
           <span>Results Settings</span>
           <span
             className={`ml-0.5 text-[11px] leading-none ${
-              isSettingsMenuOpen ? "text-[#1b75a6]" : "text-slate-500"
+              isSettingsMenuOpen
+                ? "text-[#1b75a6]"
+                : "text-slate-500"
             }`}
           >
             {isSettingsMenuOpen ? "▴" : "▾"}
@@ -666,7 +715,7 @@ export default function ResultsControlsSection({
       </div>
 
       {isSettingsMenuOpen && (
-        <div className="absolute right-0 top-[calc(100%+10px)] z-[70] w-[min(540px,calc(100vw-3rem))] max-h-[calc(100vh-var(--grnscope-header-height)-5rem)] overflow-y-auto rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.42)] sm:p-5">
+        <div className={`${compact ? "network-settings-menu " : ""}absolute right-0 top-[calc(100%+10px)] z-[70] w-[min(540px,calc(100vw-3rem))] max-h-[calc(100vh-var(--grnscope-header-height)-5rem)] overflow-y-auto rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.42)] sm:p-5`}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
               Results settings
@@ -682,8 +731,10 @@ export default function ResultsControlsSection({
             </button>
           </div>
 
+          {edgeDisplayRow}
+
           <div className="space-y-1.5">
-            {sectionLabel("Filters", matchingEdgesBadge)}
+            {sectionLabel("Filters")}
             {panelHeader("algorithms", "Algorithms")}
             {openPanel === "algorithms" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
@@ -793,7 +844,6 @@ export default function ResultsControlsSection({
               )
             )}
             {inlineRow("Minimum supporting methods", inlineMethodsControl())}
-            {edgeDisplayRow}
           </div>
         </div>
       )}

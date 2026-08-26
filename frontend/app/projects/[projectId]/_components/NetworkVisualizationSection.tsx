@@ -7,11 +7,8 @@ import NetworkGraph, {
 } from "./NetworkGraph";
 import CircosNetworkGraph from "./CircosNetworkGraph";
 import NetworkHelpModal from "./NetworkHelpModal";
-import {
-  DOWNLOAD_BUTTON_CLASS,
-  DownloadIcon,
-} from "./DownloadMenu";
-import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
+import { DownloadIcon } from "./DownloadMenu";
+import { isDenseNetwork } from "./networkGraphLayouts";
 
 type NodeInfo = {
   id: string;
@@ -77,12 +74,54 @@ type NetworkVisualizationSectionProps = {
 };
 
 const layoutOptions = [
-  { value: "force", label: "Force", title: "Distribute nodes by connectivity" },
-  { value: "hierarchical", label: "Hierarchical", title: "Arrange regulation in layers" },
+  { value: "force", label: "Force", title: "Explore components and regulatory neighborhoods" },
+  { value: "hierarchical", label: "Hierarchical", title: "Arrange regulation in directional layers" },
   { value: "concentric", label: "Hubs", title: "Place high-degree regulators near the center" },
   { value: "circular", label: "Circular", title: "Arrange nodes around a circle" },
   { value: "circos", label: "Circos", title: "Arrange genes by genomic position" },
 ] as const;
+
+const NODE_COLOR = "#5c83d8";
+
+function buildComponentAssignments(
+  nodes: NodeInfo[],
+  edges: AggregatedEdge[],
+) {
+  const adjacency = new Map(nodes.map((node) => [node.id, new Set<string>()]));
+  edges.forEach((edge) => {
+    adjacency.get(edge.source)?.add(edge.target);
+    adjacency.get(edge.target)?.add(edge.source);
+  });
+
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  [...adjacency.keys()].sort().forEach((startId) => {
+    if (visited.has(startId)) return;
+    const component: string[] = [];
+    const stack = [startId];
+    visited.add(startId);
+
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      component.push(currentId);
+      adjacency.get(currentId)?.forEach((nextId) => {
+        if (visited.has(nextId)) return;
+        visited.add(nextId);
+        stack.push(nextId);
+      });
+    }
+
+    components.push(component);
+  });
+
+  components.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]));
+  const assignments = new Map<string, number>();
+  components.forEach((component, componentIndex) => {
+    component.forEach((nodeId) => assignments.set(nodeId, componentIndex));
+  });
+
+  return { assignments, componentCount: components.length };
+}
 
 const NETWORK_ZOOM_FACTOR = 1.2;
 
@@ -147,19 +186,59 @@ export default function NetworkVisualizationSection({
     return networkNodes.filter((node) => visibleNodeIds.has(node.id));
   }, [networkNodes, visualEdges]);
 
+  const componentAssignments = useMemo(
+    () => buildComponentAssignments(visualNodes, visualEdges),
+    [visualEdges, visualNodes],
+  );
+  const isDenseGraph = isDenseNetwork(visualNodes.length, visualEdges.length);
+
   // Memoize the projections passed into NetworkGraph so identity stays stable
   // across renders that don't actually change the graph. NetworkGraph compares
   // these by reference to decide whether to rebuild the Cytoscape instance.
   const graphNodes = useMemo(
-    () =>
-      visualNodes.map((node) => ({
+    () => {
+      const labelPriority = [...visualNodes]
+        .sort(
+          (a, b) =>
+            b.outDegree * 2 + b.degree - (a.outDegree * 2 + a.degree) ||
+            a.id.localeCompare(b.id),
+        );
+      const labeledNodeIds = isDenseGraph
+        ? new Set([
+            ...visualNodes.filter((node) => node.isTF).map((node) => node.id),
+            ...labelPriority
+              .filter((node) => !node.isTF)
+              .slice(0, Math.min(6, visualNodes.length))
+              .map((node) => node.id),
+          ])
+        : new Set(
+            labelPriority
+              .slice(0, Math.min(24, visualNodes.length))
+              .map((node) => node.id)
+          );
+
+      if (selectedGene) labeledNodeIds.add(selectedGene);
+      if (selectedEdge) {
+        labeledNodeIds.add(selectedEdge.source);
+        labeledNodeIds.add(selectedEdge.target);
+      }
+
+      return visualNodes.map((node) => {
+        const componentIndex = componentAssignments.assignments.get(node.id) ?? 0;
+
+        return {
         id: node.id,
         inDegree: node.inDegree,
         outDegree: node.outDegree,
         degree: node.degree,
-        isTF: node.isTF,
-      })),
-    [visualNodes]
+          isTF: node.isTF,
+          componentIndex,
+          componentColor: NODE_COLOR,
+          showLabel: labeledNodeIds.has(node.id),
+        };
+      });
+    },
+    [componentAssignments, isDenseGraph, selectedEdge, selectedGene, visualNodes]
   );
 
   const graphEdges = useMemo(
@@ -300,180 +379,181 @@ export default function NetworkVisualizationSection({
     });
   }, []);
 
+  const inspectorHeightClass =
+    visualNodes.length <= 18
+      ? "xl:max-h-[clamp(560px,68vh,700px)]"
+      : visualNodes.length <= 60
+        ? "xl:max-h-[clamp(640px,74vh,820px)]"
+        : "xl:max-h-[clamp(700px,78vh,920px)]";
+
   return (
-    <section className="text-slate-900">
-      <div className="grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className={RESULT_SECTION_HEADING_CLASS}>Network</h3>
-            <button
-              type="button"
-              onClick={() => {
-                setIsVisualGuideClosing(false);
-                setIsVisualGuideOpen(true);
-              }}
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-              aria-label="Open network visual guide"
-              aria-haspopup="dialog"
-              aria-controls="network-visual-guide-title"
-              title="Open network visual guide"
-            >
-              ?
-            </button>
+    <section className="network-atlas overflow-clip rounded-[2rem] border border-slate-200 bg-white text-slate-900 shadow-[0_30px_76px_-46px_rgba(30,64,89,0.3)]">
+      {resultsControls ? (
+        <div className="pointer-events-none sticky top-[calc(var(--grnscope-header-height)+4px)] z-50 h-0">
+          <div className="flex justify-end px-5 pt-4 sm:px-6">
+            <div className="network-atlas-controls pointer-events-auto">
+              {resultsControls}
+            </div>
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-600 lg:whitespace-nowrap">
-            Click a node or edge to open its inspection panel and explore the network in more detail.
-          </p>
         </div>
-        {resultsControls ? (
-          <div className="sticky top-[calc(var(--grnscope-header-height)+12px)] z-50 w-full self-start lg:w-auto">
-            {resultsControls}
-          </div>
-        ) : null}
+      ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 lg:col-span-2">
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white p-1" aria-label="Network layout">
-          {layoutOptions.map(({ value, label, title }) => {
-            const isActive = networkLayout === value;
-
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setNetworkLayout(value)}
-                title={title}
-                className={`h-8 rounded-full px-3.5 text-xs font-semibold transition ${
-                  isActive
-                    ? "bg-[#1b75a6] text-white"
-                    : "text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {networkLayout !== "circos" && (
-            <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Network zoom">
+      <header className="relative z-40 bg-[linear-gradient(180deg,#ffffff_0%,#ffffff_78%,#fbfdfe_100%)] px-5 py-5 sm:px-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-2xl font-bold tracking-[-0.025em] text-slate-950">
+                Regulatory atlas
+              </h3>
               <button
                 type="button"
-                onClick={() => changeNetworkZoom(1 / NETWORK_ZOOM_FACTOR)}
-                disabled={networkZoom <= networkMinZoom + 0.001}
-                className="inline-flex h-full w-10 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-600"
-                aria-label="Zoom out network"
-                title="Zoom out"
+                onClick={() => {
+                  setIsVisualGuideClosing(false);
+                  setIsVisualGuideOpen(true);
+                }}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+                aria-label="Open network visual guide"
+                aria-haspopup="dialog"
+                aria-controls="network-visual-guide-title"
+                title="Open network visual guide"
               >
-                −
-              </button>
-              <button
-                type="button"
-                onClick={() => changeNetworkZoom(NETWORK_ZOOM_FACTOR)}
-                disabled={networkZoom >= MAX_NETWORK_ZOOM - 0.001}
-                className="inline-flex h-full w-10 items-center justify-center text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-600"
-                aria-label="Zoom in network"
-                title="Zoom in"
-              >
-                +
+                ?
               </button>
             </div>
-          )}
-          <div ref={exportMenuRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setIsExportConfirmOpen((current) => !current)}
-              aria-label="Download current network"
-              aria-expanded={isExportConfirmOpen}
-              aria-haspopup="dialog"
-              title="Download current network"
-              className={DOWNLOAD_BUTTON_CLASS}
-            >
-              <DownloadIcon />
-              Download
-              <svg
-                viewBox="0 0 16 16"
-                className={`h-3.5 w-3.5 transition-transform ${
-                  isExportConfirmOpen ? "rotate-180" : ""
-                }`}
-                fill="none"
-                aria-hidden="true"
-              >
-                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          {isExportConfirmOpen && (
-            <>
-              <div
-                className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(22rem,calc(100vw-3rem))] text-slate-900"
-                role="dialog"
-                aria-modal="false"
+            <p className="mt-2 text-sm leading-6 text-slate-600 xl:whitespace-nowrap">
+              Click a node or edge to inspect it and explore the network in more detail.
+            </p>
+          </div>
+          {resultsControls ? <div className="h-10 w-[488px] shrink-0" aria-hidden="true" /> : null}
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex h-10 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-px" aria-label="Network layout">
+              {layoutOptions.map(({ value, label, title }) => {
+                const isActive = networkLayout === value;
+
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setNetworkLayout(value)}
+                    title={title}
+                    className={`h-full rounded-full px-4 text-xs font-bold transition ${
+                      isActive
+                        ? "bg-[#1b75a6] text-white shadow-sm"
+                        : "text-slate-600 hover:bg-white hover:text-[#1b75a6]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {networkLayout !== "circos" && (
+              <div className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white" aria-label="Network zoom">
+                <button
+                  type="button"
+                  onClick={() => changeNetworkZoom(1 / NETWORK_ZOOM_FACTOR)}
+                  disabled={networkZoom <= networkMinZoom + 0.001}
+                  className="inline-flex h-full w-10 items-center justify-center border-r border-slate-200 text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-default disabled:opacity-30"
+                  aria-label="Zoom out network"
+                  title="Zoom out"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeNetworkZoom(NETWORK_ZOOM_FACTOR)}
+                  disabled={networkZoom >= MAX_NETWORK_ZOOM - 0.001}
+                  className="inline-flex h-full w-10 items-center justify-center text-base font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-default disabled:opacity-30"
+                  aria-label="Zoom in network"
+                  title="Zoom in"
+                >
+                  +
+                </button>
+              </div>
+            )}
+            <div ref={exportMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsExportConfirmOpen((current) => !current)}
                 aria-label="Download current network"
+                aria-expanded={isExportConfirmOpen}
+                aria-haspopup="dialog"
+                title="Download current network"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1b75a6]/10"
               >
-                <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-                  <div className="p-2">
-                    {networkLayout !== "circos" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onExportNetwork("svg");
-                          closeExportConfirm();
-                        }}
-                        className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
-                      >
-                        <span>
-                          <span className="block text-sm font-bold text-slate-950 group-hover:text-[#1b75a6]">
-                            Vector image
-                          </span>
-                          <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                            Scalable network with the current layout and node positions.
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                          SVG
-                        </span>
-                      </button>
-                    )}
+                <DownloadIcon />
+                Download
+                <span className={`text-[10px] transition-transform ${isExportConfirmOpen ? "rotate-180" : ""}`} aria-hidden="true">▾</span>
+              </button>
+              {isExportConfirmOpen && (
+                <div
+                  className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white/98 p-2 text-slate-900 shadow-2xl shadow-slate-900/15 backdrop-blur-xl"
+                  role="dialog"
+                  aria-modal="false"
+                  aria-label="Download current network"
+                >
+                  {networkLayout !== "circos" && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (networkLayout === "circos") {
-                          if (circosSvgRef.current) {
-                            void Promise.resolve(onExportCircosPng(circosSvgRef.current)).catch(
-                              () => undefined
-                            );
-                          }
-                        } else {
-                          onExportNetwork("png");
-                        }
+                        onExportNetwork("svg");
                         closeExportConfirm();
                       }}
                       className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
                     >
                       <span>
-                        <span className="block text-sm font-bold text-slate-950 group-hover:text-[#1b75a6]">
-                          Raster image
-                        </span>
-                        <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                          {networkLayout === "circos"
-                            ? "Current filtered Circos view as a ready-to-use image."
-                            : "Current canvas view, including zoom and any isolated sub-network."}
-                        </span>
+                        <span className="block text-sm font-bold text-slate-900">Publication vector</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-slate-500">Scalable atlas with a self-contained legend.</span>
                       </span>
-                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                        PNG
-                      </span>
+                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-[#087ead]">SVG</span>
                     </button>
-                  </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (networkLayout === "circos") {
+                        if (circosSvgRef.current) {
+                          void Promise.resolve(onExportCircosPng(circosSvgRef.current)).catch(() => undefined);
+                        }
+                      } else {
+                        onExportNetwork("png");
+                      }
+                      closeExportConfirm();
+                    }}
+                    className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc]"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-slate-900">Presentation image</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-slate-500">High-resolution view with the current focus and framing.</span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-[#087ead]">PNG</span>
+                  </button>
                 </div>
-              </div>
-            </>
-          )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="relative -mt-1 lg:col-span-2">
+        {isolatedGene ? (
+          <button
+            type="button"
+            onClick={() => setIsolatedGene(null)}
+            className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#168f98]/20 bg-[#e9f7f7] px-3 py-1.5 text-[11px] font-bold text-[#116f76] transition hover:bg-[#dff2f2]"
+            title="Return to the full network"
+          >
+            Focus: {isolatedGene}
+            <span aria-hidden="true">×</span>
+          </button>
+        ) : null}
+      </header>
+
+      <div className={`grid min-w-0 ${selectedNode || selectedEdge ? "xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1"}`}>
         <div className="relative min-w-0">
           {networkLayout === "circos" ? (
             <CircosNetworkGraph
@@ -509,11 +589,10 @@ export default function NetworkVisualizationSection({
               onGraphReady={handleGraphReady}
             />
           )}
-
         </div>
         {(selectedNode || selectedEdge) && (
           <aside
-            className="animate-inspector-panel absolute inset-x-4 bottom-4 z-30 max-h-[70%] min-w-0 overflow-y-auto rounded-[1.5rem] border border-slate-200 bg-slate-50/95 p-5 shadow-2xl shadow-slate-900/20 backdrop-blur-sm xl:bottom-4 xl:left-auto xl:right-4 xl:top-4 xl:max-h-none xl:w-[25rem]"
+            className={`network-inspector animate-inspector-panel min-w-0 overflow-y-auto border-t border-slate-200 bg-[#f8fafc] p-5 shadow-[-24px_0_70px_-50px_rgba(30,64,89,0.32)] xl:border-l xl:border-t-0 ${inspectorHeightClass}`}
             aria-label={selectedEdge ? "Regulation inspection" : "Node inspection"}
           >
           <div className="flex items-center justify-between gap-3">
@@ -847,7 +926,6 @@ export default function NetworkVisualizationSection({
           ) : null}
           </aside>
         )}
-      </div>
       </div>
       {portalRoot && isVisualGuideOpen ? (
         <NetworkHelpModal

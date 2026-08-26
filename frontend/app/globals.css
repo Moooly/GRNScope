@@ -210,6 +210,174 @@ body {
   }
 }
 
+/* The regulatory atlas uses a quiet paper-like surface that stays consistent
+ * with the surrounding project page while preserving dense metric structure. */
+.network-inspector {
+  color: #475569;
+  scrollbar-color: rgb(100 116 139 / 0.28) transparent;
+}
+
+.network-inspector .bg-white {
+  background-color: #ffffff;
+}
+
+.network-inspector .bg-slate-50,
+.network-inspector .bg-slate-100 {
+  background-color: #f1f5f9;
+}
+
+.network-inspector .border-slate-200,
+.network-inspector .border-slate-300 {
+  border-color: #dce5ed;
+}
+
+.network-inspector .text-slate-950,
+.network-inspector .text-slate-900,
+.network-inspector .text-slate-800 {
+  color: #0f172a;
+}
+
+.network-inspector .text-slate-700,
+.network-inspector .text-slate-600 {
+  color: #475569;
+}
+
+.network-inspector .text-slate-500 {
+  color: #64748b;
+}
+
+.network-inspector .text-slate-400 {
+  color: #94a3b8;
+}
+
+.network-inspector .text-\[\#1b75a6\] {
+  color: #1b75a6;
+}
+
+.network-inspector .bg-\[\#f2f9fc\] {
+  background-color: #f2f9fc;
+}
+
+.network-inspector button:not(:disabled):hover {
+  border-color: rgb(27 117 166 / 0.3);
+}
+
+.network-atlas-controls input[aria-label="Search genes"] {
+  border-color: #dce5ed;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.network-atlas-controls input[aria-label="Search genes"]::placeholder {
+  color: #94a3b8;
+}
+
+.network-atlas-controls input[aria-label="Search genes"]:focus {
+  border-color: rgb(27 117 166 / 0.42);
+  box-shadow: 0 0 0 4px rgb(27 117 166 / 0.1);
+}
+
+.network-help-modal {
+  border-color: #dce5ed;
+  background: #ffffff;
+  color: #475569;
+  scrollbar-color: rgb(100 116 139 / 0.28) transparent;
+}
+
+.network-help-modal header,
+.network-help-modal .border-slate-100,
+.network-help-modal .border-slate-200 {
+  border-color: #e2e8f0;
+}
+
+.network-help-modal .bg-white {
+  background-color: #ffffff;
+}
+
+.network-help-modal .bg-slate-50 {
+  background-color: #f8fafc;
+}
+
+.network-help-modal .text-slate-950,
+.network-help-modal .text-slate-900,
+.network-help-modal .text-slate-800 {
+  color: #0f172a;
+}
+
+.network-help-modal .text-slate-600 {
+  color: #475569;
+}
+
+.network-help-modal .text-slate-500 {
+  color: #64748b;
+}
+
+.network-help-modal details[open] {
+  border-color: rgb(27 117 166 / 0.22);
+  background-color: #f2f9fc;
+}
+
+.network-settings-menu {
+  color-scheme: light;
+  border-color: #dce5ed;
+  background: #ffffff;
+  color: #475569;
+  box-shadow: 0 28px 74px -32px rgb(30 64 89 / 0.38);
+  scrollbar-color: rgb(100 116 139 / 0.28) transparent;
+}
+
+.network-settings-menu .bg-white,
+.network-settings-menu .bg-slate-50,
+.network-settings-menu .bg-slate-50\/80,
+.network-settings-menu .bg-\[\#eef3f7\] {
+  background-color: #f8fafc;
+}
+
+.network-settings-menu .border-slate-200,
+.network-settings-menu .border-slate-300 {
+  border-color: #dce5ed;
+}
+
+.network-settings-menu .text-slate-900,
+.network-settings-menu .text-slate-800,
+.network-settings-menu .text-slate-700,
+.network-settings-menu .text-slate-600 {
+  color: #1e293b;
+}
+
+.network-settings-menu .text-slate-500,
+.network-settings-menu .text-slate-400 {
+  color: #64748b;
+}
+
+.network-settings-menu .text-\[\#1b75a6\] {
+  color: #1b75a6;
+}
+
+.network-settings-menu .bg-\[\#f2f9fc\],
+.network-settings-menu .bg-\[\#e8f5fb\] {
+  background-color: #f2f9fc;
+}
+
+.network-settings-menu input,
+.network-settings-menu select {
+  border-color: #dce5ed;
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.network-settings-menu button:not(:disabled):not(.network-settings-primary-action):hover,
+.network-settings-menu label:hover {
+  border-color: rgb(27 117 166 / 0.28);
+  background-color: #f2f9fc;
+}
+
+.network-settings-menu .network-settings-primary-action:not(:disabled):hover {
+  border-color: #155f87;
+  background-color: #155f87;
+  color: #ffffff;
+}
+
 @media (max-width: 79.999rem) {
   @keyframes inspectorPanelIn {
     from {

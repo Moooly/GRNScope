@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Core } from "cytoscape";
+import type { Core, StylesheetJson } from "cytoscape";
 import ProjectHeader from "./_components/ProjectHeader";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
@@ -22,6 +22,7 @@ import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector, {
   type ResultsHubView,
 } from "./_components/ResultsHubViewSelector";
+import { getNetworkGraphStylesheet } from "./_components/networkGraphStyles";
 import ResultsInsightsSection, {
   type VisualizationContext,
 } from "./_components/ResultsInsightsSection";
@@ -409,6 +410,7 @@ function appendNetworkExportLegend(
     label: string,
     head: "arrow" | "tee" | "none",
     color = "#64748b",
+    dashed = false,
   ) => {
     const x = 24 + column * columnWidth;
     appendSvgElement(legend, "line", {
@@ -419,6 +421,7 @@ function appendNetworkExportLegend(
       stroke: color,
       "stroke-width": 2.5,
       "stroke-linecap": "round",
+      ...(dashed ? { "stroke-dasharray": "6 5" } : {}),
     });
     if (head === "arrow") {
       appendSvgElement(legend, "path", {
@@ -440,9 +443,9 @@ function appendNetworkExportLegend(
   };
 
   if (variant === "circos") {
-    addLineMeaning(0, firstRowY, "Activation ribbon", "none", "#0072B2");
-    addLineMeaning(1, firstRowY, "Repression ribbon", "none", "#D55E00");
-    addLineMeaning(2, firstRowY, "Unsigned ribbon", "none", "#94a3b8");
+    addLineMeaning(0, firstRowY, "Activation ribbon", "none", "#168f98");
+    addLineMeaning(1, firstRowY, "Repression ribbon", "none", "#d66c4d");
+    addLineMeaning(2, firstRowY, "Uncertain ribbon", "none", "#8290a3", true);
     const x = 24;
     appendSvgElement(legend, "line", {
       x1: x,
@@ -456,25 +459,31 @@ function appendNetworkExportLegend(
     });
     addText(x + 48, secondRowY, "Ribbon width and opacity indicate stronger evidence");
   } else {
-    addLineMeaning(0, firstRowY, "Activation", "arrow");
-    addLineMeaning(1, firstRowY, "Repression", "tee");
-    addLineMeaning(2, firstRowY, "Unannotated regulation", "none");
+    addLineMeaning(0, firstRowY, "Activation", "arrow", "#168f98");
+    addLineMeaning(1, firstRowY, "Repression", "tee", "#d66c4d");
+    addLineMeaning(2, firstRowY, "Uncertain regulation", "none", "#8290a3", true);
 
     const firstX = 24;
-    appendSvgElement(legend, "path", {
-      d: `M ${firstX + 8} ${secondRowY - 14} L ${firstX + 17} ${secondRowY - 5} L ${firstX + 8} ${secondRowY + 4} L ${firstX - 1} ${secondRowY - 5} Z`,
-      fill: "#334155",
+    const tfCenterX = firstX + 9;
+    const tfCenterY = secondRowY - 5;
+    appendSvgElement(legend, "polygon", {
+      points: `${tfCenterX},${tfCenterY - 10} ${tfCenterX + 10},${tfCenterY} ${tfCenterX},${tfCenterY + 10} ${tfCenterX - 10},${tfCenterY}`,
+      fill: "#5c83d8",
+      stroke: "#ffffff",
+      "stroke-width": 1.5,
     });
-    addText(firstX + 27, secondRowY, "Transcription factor");
+    addText(firstX + 30, secondRowY, "Transcription factor");
 
     const secondX = 24 + columnWidth;
     appendSvgElement(legend, "circle", {
       cx: secondX + 8,
       cy: secondRowY - 5,
       r: 9,
-      fill: "#334155",
+      fill: "#5c83d8",
+      stroke: "#334155",
+      "stroke-width": 1.5,
     });
-    addText(secondX + 27, secondRowY, "Target gene");
+    addText(secondX + 27, secondRowY, "Other gene");
 
     const thirdX = 24 + columnWidth * 2;
     appendSvgElement(legend, "line", {
@@ -486,7 +495,7 @@ function appendNetworkExportLegend(
       "stroke-width": 5,
       "stroke-linecap": "round",
     });
-    addText(thirdX + 48, secondRowY, "Thicker line = stronger evidence");
+    addText(thirdX + 48, secondRowY, "Width = evidence · opacity = confidence");
   }
 
   return {
@@ -521,16 +530,20 @@ function drawNetworkCanvasLegend(
     column: number,
     label: string,
     head: "arrow" | "tee" | "none",
+    color: string,
+    dashed = false,
   ) => {
     const x = 24 + column * columnWidth;
-    context.strokeStyle = "#64748b";
-    context.fillStyle = "#64748b";
+    context.strokeStyle = color;
+    context.fillStyle = color;
     context.lineWidth = 2.5;
     context.lineCap = "round";
+    context.setLineDash(dashed ? [6, 5] : []);
     context.beginPath();
     context.moveTo(x, firstRowY - 4);
     context.lineTo(x + 34, firstRowY - 4);
     context.stroke();
+    context.setLineDash([]);
     if (head === "arrow") {
       context.beginPath();
       context.moveTo(x + 28, firstRowY - 10);
@@ -549,29 +562,37 @@ function drawNetworkCanvasLegend(
     context.fillText(label, x + 47, firstRowY);
   };
 
-  drawLineMeaning(0, "Activation", "arrow");
-  drawLineMeaning(1, "Repression", "tee");
-  drawLineMeaning(2, "Unannotated regulation", "none");
+  drawLineMeaning(0, "Activation", "arrow", "#168f98");
+  drawLineMeaning(1, "Repression", "tee", "#d66c4d");
+  drawLineMeaning(2, "Uncertain regulation", "none", "#8290a3", true);
 
   const firstX = 24;
-  context.fillStyle = "#334155";
+  context.fillStyle = "#5c83d8";
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 1.5;
+  const tfCenterX = firstX + 9;
+  const tfCenterY = secondRowY - 5;
   context.beginPath();
-  context.moveTo(firstX + 8, secondRowY - 14);
-  context.lineTo(firstX + 17, secondRowY - 5);
-  context.lineTo(firstX + 8, secondRowY + 4);
-  context.lineTo(firstX - 1, secondRowY - 5);
+  context.moveTo(tfCenterX, tfCenterY - 10);
+  context.lineTo(tfCenterX + 10, tfCenterY);
+  context.lineTo(tfCenterX, tfCenterY + 10);
+  context.lineTo(tfCenterX - 10, tfCenterY);
   context.closePath();
   context.fill();
+  context.stroke();
   context.fillStyle = "#475569";
-  context.fillText("Transcription factor", firstX + 27, secondRowY);
+  context.fillText("Transcription factor", firstX + 30, secondRowY);
 
   const secondX = 24 + columnWidth;
-  context.fillStyle = "#334155";
+  context.fillStyle = "#5c83d8";
+  context.strokeStyle = "#334155";
+  context.lineWidth = 1.5;
   context.beginPath();
   context.arc(secondX + 8, secondRowY - 5, 9, 0, Math.PI * 2);
   context.fill();
+  context.stroke();
   context.fillStyle = "#475569";
-  context.fillText("Target gene", secondX + 27, secondRowY);
+  context.fillText("Other gene", secondX + 27, secondRowY);
 
   const thirdX = 24 + columnWidth * 2;
   context.strokeStyle = "#64748b";
@@ -581,7 +602,7 @@ function drawNetworkCanvasLegend(
   context.lineTo(thirdX + 38, secondRowY - 5);
   context.stroke();
   context.fillStyle = "#475569";
-  context.fillText("Thicker line = stronger evidence", thirdX + 48, secondRowY);
+  context.fillText("Width = evidence · opacity = confidence", thirdX + 48, secondRowY);
   context.lineCap = "butt";
 }
 
@@ -2415,7 +2436,7 @@ export default function ProjectDetailPage() {
       background.setAttribute("y", "0");
       background.setAttribute("width", String(exportSize.width));
       background.setAttribute("height", String(exportSize.height));
-      background.setAttribute("fill", "#ffffff");
+      background.setAttribute("fill", "#f7fafc");
       clonedSvg.insertBefore(background, clonedSvg.firstChild);
 
       const serializedSvg = new XMLSerializer().serializeToString(clonedSvg);
@@ -2442,7 +2463,7 @@ export default function ProjectDetailPage() {
         const context = canvas.getContext("2d");
         if (!context) return;
 
-        context.fillStyle = "#ffffff";
+        context.fillStyle = "#f7fafc";
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
@@ -2474,7 +2495,7 @@ export default function ProjectDetailPage() {
         const pngDataUrl = cy.png({
           full: false,
           scale,
-          bg: "#eef4fb",
+          bg: "#f7fafc",
         });
         const image = new Image();
         await new Promise<void>((resolve, reject) => {
@@ -2505,11 +2526,19 @@ export default function ProjectDetailPage() {
         return;
       }
 
-      const rawSvgMarkup = cy.svg({
-        full: false,
-        scale: 1,
-        bg: "#eef4fb",
-      });
+      let rawSvgMarkup = "";
+      try {
+        cy.style(
+          getNetworkGraphStylesheet("publication") as StylesheetJson,
+        );
+        rawSvgMarkup = cy.svg({
+          full: false,
+          scale: 1,
+          bg: "#ffffff",
+        });
+      } finally {
+        cy.style(getNetworkGraphStylesheet("light") as StylesheetJson);
+      }
 
       const parser = new DOMParser();
       const svgDocument = parser.parseFromString(rawSvgMarkup, "image/svg+xml");
@@ -2983,8 +3012,7 @@ useEffect(() => {
                       onTrajectoryGenesChange={setTrajectoryRequestedGenes}
                     />
                   ) : (
-                  <div className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
-                    <div className="space-y-6">
+                  <div className="min-w-0">
                       <NetworkVisualizationSection
                       networkLayout={networkLayout}
                       setNetworkLayout={setNetworkLayout}
@@ -3008,7 +3036,6 @@ useEffect(() => {
                       onOpenPerturbation={handleOpenPerturbation}
                       resultsControls={renderResultsControls()}
                       />
-                    </div>
                   </div>
                 )}
                   </>

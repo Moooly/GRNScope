@@ -17,6 +17,11 @@ function polarPosition(angle: number, radius: number) {
   };
 }
 
+export function isDenseNetwork(nodeCount: number, edgeCount: number) {
+  if (nodeCount <= 0) return false;
+  return edgeCount > 60 || edgeCount / nodeCount > 3;
+}
+
 function edgeEvidence(edge: NetworkEdge) {
   const score = Number(edge.confidence ?? edge.score);
   if (!Number.isFinite(score)) return 0;
@@ -145,6 +150,7 @@ export function buildCircularPositions(
   const { undirected } = buildAdjacency(nodes, edges);
   const weightedUndirected = buildWeightedUndirectedAdjacency(nodes, edges);
   const components = connectedComponents(nodes, undirected);
+  const densityScale = isDenseNetwork(nodes.length, edges.length) ? 1.28 : 1;
 
   // Initial ordering: keep connected components contiguous, then sort inside
   // each component by biological/graph priority. This avoids small detached
@@ -199,7 +205,7 @@ export function buildCircularPositions(
   // regardless of graph size. Each node reserves ~62 px of perimeter
   // (matching the styled node diameter) plus a small gap.
   const componentGapSlots = Math.max(0, components.length - 1) * 0.85;
-  const minPerimeter = (nodes.length + componentGapSlots) * 90;
+  const minPerimeter = (nodes.length + componentGapSlots) * 90 * densityScale;
   const radius = Math.max(190, minPerimeter / (2 * Math.PI));
   const componentBreaks = new Set<string>();
   let offset = 0;
@@ -273,10 +279,11 @@ export function buildConcentricPositions(
   const positions: PositionMap = {};
   if (sorted.length === 0) return positions;
 
-  const nodeSpacing = 92;
-  const coreRadius = 82;
-  const baseRadius = 190;
-  const radiusStep = 118;
+  const densityScale = isDenseNetwork(nodes.length, edges.length) ? 1.28 : 1;
+  const nodeSpacing = 92 * densityScale;
+  const coreRadius = 82 * densityScale;
+  const baseRadius = 190 * densityScale;
+  const radiusStep = 118 * densityScale;
   const radiusFor = (ringIndex: number) =>
     ringIndex === 0 ? coreRadius : baseRadius + (ringIndex - 1) * radiusStep;
   const capacityFor = (ringIndex: number) =>
@@ -486,6 +493,7 @@ export function buildHierarchicalPositions(
   if (nodes.length === 0) return {} as PositionMap;
 
   const { inMap, outMap, undirected } = buildAdjacency(nodes, edges);
+  const densityScale = isDenseNetwork(nodes.length, edges.length) ? 1.18 : 1;
 
   // Layer the condensation of the strongly connected components rather than the
   // raw graph. Longest-path layering on a cyclic graph gives every node its own
@@ -567,17 +575,22 @@ export function buildHierarchicalPositions(
     8,
     Math.min(crowdedLevelColumnCap, adaptiveLevelColumns)
   );
-  const rowGap = Math.max(190, Math.min(270, 168 + Math.sqrt(nodes.length) * 10));
-  const wrappedRowGap = Math.max(
-    134,
-    Math.min(176, 120 + Math.sqrt(nodes.length) * 4)
+  const rowGap = Math.round(
+    Math.max(190, Math.min(270, 168 + Math.sqrt(nodes.length) * 10)) *
+      densityScale
   );
-  const minColumnGap = Math.max(
-    nodes.length > 80 ? 128 : 142,
-    Math.min(
-      nodes.length > 80 ? 168 : 205,
-      122 + Math.sqrt(edges.length + maxLevelWidth) * 9
-    )
+  const wrappedRowGap = Math.round(
+    Math.max(134, Math.min(176, 120 + Math.sqrt(nodes.length) * 4)) *
+      densityScale
+  );
+  const minColumnGap = Math.round(
+    Math.max(
+      nodes.length > 80 ? 128 : 142,
+      Math.min(
+        nodes.length > 80 ? 168 : 205,
+        122 + Math.sqrt(edges.length + maxLevelWidth) * 9
+      )
+    ) * densityScale
   );
   const rowsPerLevel = sortedLevels.map((levelNodes) =>
     Math.max(1, Math.ceil(levelNodes.length / maxColumnsPerLevel))
@@ -845,6 +858,10 @@ export function getLayoutConfig(
     graphCounts.edgeCount <= graphCounts.nodeCount * 1.5;
   const edgesPerNode =
     graphCounts.edgeCount / Math.max(graphCounts.nodeCount, 1);
+  const isDenseGraph = isDenseNetwork(
+    graphCounts.nodeCount,
+    graphCounts.edgeCount
+  );
   const maxDegree = Math.max(...nodes.map((node) => node.degree), 1);
   const hubRatio = maxDegree / Math.max(graphCounts.nodeCount, 1);
   const evidenceValues = edges
@@ -857,10 +874,12 @@ export function getLayoutConfig(
       : 0.8;
   const nodeScale = Math.max(1, Math.min(2.15, Math.sqrt(graphCounts.nodeCount / 18)));
   const hubRepulsionBoost = 1 + Math.min(0.72, hubRatio * 1.9);
-  const densityRepulsionBoost = Math.max(1, Math.min(1.34, edgesPerNode / 2.4));
-  const baseRepulsion = isSparseGraph ? 8600 : 9400;
+  const densityRepulsionBoost = isDenseGraph
+    ? Math.max(1.45, Math.min(1.82, edgesPerNode / 3.8))
+    : Math.max(1, Math.min(1.34, edgesPerNode / 2.4));
+  const baseRepulsion = isSparseGraph ? 8600 : isDenseGraph ? 9800 : 9400;
   const evidenceLengthFactor = meanEvidence >= 0.86 ? 0.94 : 1.08;
-  const componentSpacing = isSparseGraph ? 72 : 96;
+  const componentSpacing = isSparseGraph ? 72 : isDenseGraph ? 118 : 96;
 
   return {
     name: "cose-bilkent",
@@ -876,20 +895,20 @@ export function getLayoutConfig(
       baseRepulsion * nodeScale * hubRepulsionBoost * densityRepulsionBoost
     ),
     idealEdgeLength: Math.round(
-      (isSparseGraph ? 118 : 108) *
+      (isSparseGraph ? 118 : isDenseGraph ? 148 : 108) *
         (1 + Math.min(0.28, hubRatio)) *
         evidenceLengthFactor
     ),
-    edgeElasticity: isSparseGraph ? 0.28 : 0.2,
+    edgeElasticity: isSparseGraph ? 0.28 : isDenseGraph ? 0.12 : 0.2,
     nestingFactor: 0.95,
-    gravity: isSparseGraph ? 0.72 : 0.58,
+    gravity: isSparseGraph ? 0.72 : isDenseGraph ? 0.42 : 0.58,
     gravityRange: isSparseGraph ? 4.8 : 4.2,
     gravityRangeCompound: isSparseGraph ? 3.8 : 3.1,
     componentSpacing,
     tilingPaddingVertical: isSparseGraph ? 26 : 34,
     tilingPaddingHorizontal: isSparseGraph ? 26 : 34,
-    numIter: isSparseGraph ? 3200 : 2800,
-    initialEnergyOnIncremental: 0.38,
+    numIter: isSparseGraph ? 3200 : isDenseGraph ? 3400 : 2800,
+    initialEnergyOnIncremental: isDenseGraph ? 0.22 : 0.38,
     tile: true,
   } as const;
 }
@@ -903,30 +922,45 @@ export function buildGraphElements(
   edges: NetworkEdge[]
 ) {
   const maxSupportCount = Math.max(...edges.map((edge) => edge.count), 1);
-  const edgeScores = edges
-    .map((edge) => Number(edge.score))
-    .filter((score) => Number.isFinite(score));
-  const minEdgeScore = edgeScores.length > 0 ? Math.min(...edgeScores) : 0;
-  const maxEdgeScore = edgeScores.length > 0 ? Math.max(...edgeScores) : 1;
-  const edgeScoreRange = maxEdgeScore - minEdgeScore;
+  const maxInfluence = Math.max(
+    ...nodes.map((node) => node.outDegree * 1.35 + node.degree * 0.35),
+    1,
+  );
+  const denseNetwork = isDenseNetwork(nodes.length, edges.length);
 
   const getVisualScore = (score: number) => {
     const numericScore = Number(score);
     if (!Number.isFinite(numericScore)) return 0;
-    if (edgeScoreRange === 0) return 1;
-    return Math.max(
-      0,
-      Math.min(1, (numericScore - minEdgeScore) / edgeScoreRange)
-    );
+    // Evidence is already a 0-1 measure. Keeping the mapping absolute means an
+    // edge does not appear stronger merely because a filter removed its peers.
+    return Math.max(0, Math.min(1, numericScore));
   };
 
-  const getEdgeColor = () => "#64748b";
+  const getEvidenceOpacity = (score: number) => {
+    const visualScore = getVisualScore(score);
+    if (denseNetwork) {
+      if (visualScore >= 0.9) return 0.46;
+      if (visualScore >= 0.75) return 0.28;
+      return 0.16;
+    }
+    if (visualScore >= 0.9) return 0.92;
+    if (visualScore >= 0.75) return 0.7;
+    return 0.46;
+  };
+
+  const getEdgeColor = (edge: NetworkEdge) => {
+    if (edge.sign === 0) {
+      return "#8290a3";
+    }
+
+    return edge.sign > 0 ? "#168f98" : "#d66c4d";
+  };
 
   const getRelationshipShape = (edge: NetworkEdge) => {
     if (edge.direction === 0 || edge.directionCoverage <= 0) return "none";
     if (edge.directionConfidence === null) return "none";
-    if (edge.signConfidence === null || edge.sign === 0 || edge.signCoverage === 0) {
-      return "none";
+    if (edge.sign === 0) {
+      return "triangle";
     }
 
     return edge.sign > 0 ? "triangle" : "tee";
@@ -954,21 +988,29 @@ export function buildGraphElements(
   };
 
   const elements = [
-    ...nodes.map((node) => ({
-      data: {
+    ...nodes.map((node) => {
+      const fullLabel =
+        node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
+
+      return {
+        data: {
         id: node.id,
-        label:
-          node.showLabel === false
-            ? ""
-            : node.id.length > 10
-              ? `${node.id.slice(0, 9)}…`
-              : node.id,
+        label: node.showLabel === false ? "" : fullLabel,
+        fullLabel,
         degree: node.degree,
         inDegree: node.inDegree,
         outDegree: node.outDegree,
         isTF: node.isTF ? 1 : 0,
-      },
-    })),
+        influence: Math.max(
+          0,
+          Math.min(1, (node.outDegree * 1.35 + node.degree * 0.35) / maxInfluence),
+        ),
+        componentIndex: node.componentIndex ?? 0,
+        componentColor: node.componentColor ?? "#5c83d8",
+        denseNetwork: denseNetwork ? 1 : 0,
+        },
+      };
+    }),
     ...edges.map((edge) => {
       const hasReciprocal = hasReciprocalEdge(edge);
       const effectiveDirection = getEffectiveDirection(edge, hasReciprocal);
@@ -989,8 +1031,9 @@ export function buildGraphElements(
           displayTarget,
           score: edge.score,
           confidence: edge.confidence,
-          visualScore: getVisualScore(edge.score),
-          edgeColor: getEdgeColor(),
+          evidenceOpacity: getEvidenceOpacity(edge.score),
+          denseNetwork: denseNetwork ? 1 : 0,
+          edgeColor: getEdgeColor(edge),
           sourceArrowShape,
           targetArrowShape,
           sourceDistanceFromNode: getEndpointDistance(sourceArrowShape),
@@ -1017,7 +1060,10 @@ export function buildGraphElements(
   // visual encodings even when the visible edge identities stay the same.
   const elementsSignature =
     nodes
-      .map((node) => `${node.id}/${node.isTF ? 1 : 0}`)
+      .map(
+        (node) =>
+          `${node.id}/${node.isTF ? 1 : 0}/${node.componentIndex ?? 0}/${node.componentColor ?? ""}`,
+      )
       .sort()
       .join(",") +
     "|" +
