@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@antv/g-svg": "^2.1.1",
+    "@antv/g6": "^5.1.1",
     "cytoscape": "^3.33.2",
     "cytoscape-cose-bilkent": "^4.1.0",
     "cytoscape-svg": "^0.4.0",

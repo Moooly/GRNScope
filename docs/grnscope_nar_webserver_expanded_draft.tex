@@ -1,0 +1,348 @@
+%% GRNScope expanded manuscript draft for the Nucleic Acids Research Web Server Issue
+%% Based on the Oxford University Press oup-authoring-template.
+%% Replace all [PLACEHOLDER] text and verify every numerical result before submission.
+
+\documentclass[unnumsec,webpdf,modern,large]{oup-authoring-template}%
+
+\graphicspath{{Fig/}}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{url}
+
+\begin{document}
+
+\journaltitle{Nucleic Acids Research}
+\DOI{DOI added during production}
+\copyrightyear{2026}
+\pubyear{2026}
+\vol{XX}
+\issue{X}
+\access{Submitted manuscript}
+\appnotes{Web Server}
+\firstpage{1}
+
+\title[GRNScope web server]{GRNScope: an interactive web server for reproducible, multi-method gene regulatory network inference from single-cell RNA-sequencing data}
+
+\author[1,$\ast$]{[First Author]}
+\author[1]{[Second Author]}
+\author[2]{[Third Author]}
+\author[1]{[Fourth Author]}
+\author[3]{[Fifth Author]}
+
+\address[1]{\orgdiv{[Department]}, \orgname{[Institution]}, \orgaddress{\city{[City]}, \postcode{[Postal Code]}, \country{[Country]}}}
+\address[2]{\orgdiv{[Department]}, \orgname{[Institution]}, \orgaddress{\city{[City]}, \postcode{[Postal Code]}, \country{[Country]}}}
+\address[3]{\orgdiv{[Department]}, \orgname{[Institution]}, \orgaddress{\city{[City]}, \postcode{[Postal Code]}, \country{[Country]}}}
+
+\corresp[$\ast$]{Corresponding author. \href{mailto:[EMAIL]}{[EMAIL]}}
+
+\abstract{Gene regulatory network inference from single-cell RNA-sequencing data can reveal candidate regulatory relationships underlying cellular states and trajectories, but existing workflows often require substantial command-line expertise, complex software environments, and manual comparison of multiple inference algorithms. GRNScope is an interactive web server for uploading single-cell expression matrices, validating and preprocessing data, running multiple gene regulatory network inference methods, and exploring their predictions through consensus, network, trajectory, benchmarking, and perturbation views. The platform integrates methods from the BEELINE benchmarking ecosystem within isolated computational environments and records analysis parameters for reproducibility. Users can provide pseudotime, cluster labels, transcription-factor references, and a ground-truth network when available. GRNScope reports method-specific evidence, bootstrap reproducibility, method support, direction agreement, sign agreement, and comparative performance metrics. The server is freely accessible at \url{https://[SERVER-URL]}. GRNScope is intended to make multi-method regulatory-network analysis accessible to biologists while preserving downloadable outputs, software provenance, and explicit limitations of computationally inferred regulation.}
+
+\keywords{single-cell RNA-seq, gene regulatory networks, web server, computational biology, pseudotime, reproducibility}
+
+\maketitle
+
+\section{Introduction}
+
+Gene regulation is carried out by networks of transcription factors and other molecular regulators whose interactions determine cell identity, developmental progression and responses to perturbation. Single-cell RNA-sequencing (scRNA-seq) provides measurements of gene expression across thousands of individual cells, making it possible to study regulatory programs across heterogeneous populations rather than only at the level of an average sample. Gene regulatory network (GRN) inference methods use these expression patterns to propose candidate relationships between regulator and target genes.
+
+GRN inference from scRNA-seq data is challenging for several reasons. The data are sparse, noisy and affected by differences in library size, cell composition and experimental design. A single experiment may represent a static snapshot of a dynamic process, so methods that use pseudotime or other temporal information can make different assumptions from methods based only on co-expression. In addition, inference algorithms produce scores on different scales and vary in whether they infer direction, activation or repression. Consequently, an edge predicted by one method cannot generally be compared directly with an edge weight produced by another method.
+
+Several software packages and benchmarking resources have made important contributions to this area. The BEELINE framework provides a common environment for evaluating multiple GRN inference algorithms and demonstrated that method performance varies across datasets and evaluation criteria \citep{pratapa2020benchmarking}. Individual methods include information-theoretic approaches such as PIDC \citep{chan2017pidc}, tree-based approaches such as GENIE3 \citep{huynhthu2010genie3}, and gradient-boosting approaches such as GRNBoost2 \citep{moerman2019grnboost2}. These resources are valuable, but their use often requires installing several programming environments, preparing method-specific files, choosing compatible parameters, monitoring long-running jobs and manually combining results.
+
+GRNScope addresses this practical gap through an integrated web server designed for biologists and other researchers who may not routinely work with command-line bioinformatics workflows. The platform provides a single workflow for data validation, matrix-state detection, preprocessing, multi-method execution, reproducibility assessment, consensus analysis, visualization, benchmarking and export. The interface does not hide method disagreement. Instead, it displays individual algorithm outputs together with cross-method evidence, bootstrap stability, direction coverage and sign coverage.
+
+The primary contribution of GRNScope is therefore an accessible and reproducible analysis environment rather than a replacement for any one GRN inference algorithm. The platform adds value by making a heterogeneous collection of methods operationally comparable, by reporting when only a subset of methods can vote on direction or sign, and by connecting ranked-edge outputs to interactive biological interpretation. The system also preserves the settings and intermediate outputs needed to reconstruct an analysis.
+
+In this paper, we describe the design and implementation of GRNScope, its data-processing and consensus framework, and its evaluation using [BENCHMARK DATASETS]. We also present a biological case study involving [BIOLOGICAL SYSTEM] to demonstrate how the platform can be used to generate testable hypotheses. Because computational GRN inference identifies statistical associations or predictive relationships rather than experimentally established regulation, the interface and manuscript explicitly distinguish computational evidence from biological validation.
+
+\section{Materials and Methods}
+
+\subsection{Design objectives and user workflow}
+
+GRNScope was designed around six objectives: (i) reduce the software and configuration burden associated with multi-method GRN inference; (ii) provide early feedback about malformed or unsuitable input data; (iii) make method assumptions and capabilities visible before execution; (iv) separate method-specific evidence from aggregate consensus; (v) preserve analysis provenance; and (vi) support exploratory analysis without requiring users to write code.
+
+The user workflow consists of six stages. First, a user creates a project and uploads an expression matrix. Second, GRNScope validates the file and reports dimensions, possible matrix state and inferred species. Third, the user selects preprocessing options and supplies optional pseudotime, cluster labels, reference-network and prior-network inputs. Fourth, the user selects one or more compatible algorithms and reviews their parameters. Fifth, the backend schedules the selected jobs and reports per-method progress. Finally, the user explores the resulting networks, comparisons, benchmarks, trajectories and perturbations and can download both results and analysis metadata.
+
+\subsection{Software architecture}
+
+The application consists of a browser frontend, an HTTP API and an execution layer. The frontend is implemented using Next.js and React and provides the interactive project and results workspaces. Network visualization is implemented with a graph-rendering library and supports multiple layouts, node inspection, edge inspection, filtering and gene search.
+
+The backend is implemented using FastAPI. It provides endpoints for projects, uploads, jobs, algorithm metadata, results, downloads, pseudotime processing and perturbation analysis. Project manifests, metadata and result payloads are stored in a structured project directory. The execution layer can use local worker processes or a Redis-backed worker configuration. Long-running jobs are asynchronous and expose queued, running, completed, partially completed and failed states.
+
+Each algorithm is run in an isolated container. The container receives a preprocessed expression matrix and any method-specific auxiliary input and returns a ranked edge list. This architecture prevents dependencies from one method from contaminating another and allows methods with different programming languages and runtime requirements to coexist.
+
+\subsection{Input data and validation}
+
+The primary input is a delimited expression matrix with genes in rows and cells in columns. The first row contains cell identifiers and the first column contains gene identifiers. GRNScope checks the file extension, delimiter, header, gene identifiers, cell identifiers and numerical values. It records the number of genes, number of cells and complete gene list before the project is initialized.
+
+The current implementation accepts files up to [500 MB; verify deployment setting]. Optional inputs include a single-column or multi-line pseudotime file, cell-cluster labels, a reference network, a custom transcription-factor list and CellOracle-specific species and prior-network settings. The number and ordering of pseudotime values are checked against the expression matrix. Cluster-specific analyses are performed only for clusters meeting the configured minimum cell count.
+
+GRNScope includes a small sample expression matrix and matching pseudotime file. It also includes a completed demonstration project containing precomputed results, allowing a visitor to inspect the result views before uploading a dataset. The sample workflow is intended to verify input formatting and illustrate the interpretation of the output rather than serve as a biological benchmark.
+
+\subsection{Matrix-state detection and preprocessing}
+
+The distribution of values in an uploaded matrix is examined to distinguish among raw counts, normalized values and log-transformed values. This classification is a diagnostic suggestion rather than an irreversible decision; the user can correct it when prior knowledge about the dataset indicates that the automatic classification is inappropriate.
+
+The preprocessing pipeline supports library-size normalization, logarithmic transformation, detection-based filtering, trajectory-aware filtering and variance-based gene selection. The order and parameters of the active preprocessing stages are recorded in the project metadata. Users can also retain known transcription factors independently of the general variability cutoff. This option reduces the chance that a biologically plausible regulator is removed solely because it has low expression variability.
+
+The interface reports the expected effect of filtering before execution. For example, it may report that an uploaded matrix containing [18,000] genes and [12,400] cells will be reduced to [2,000] genes. Per-algorithm gene caps are available because some methods have quadratic or cubic scaling with the number of genes.
+
+\subsection{Algorithm registry and execution contract}
+
+The current implementation registers 15 methods, of which 13 are enabled in the catalogue. The methods cover information-theoretic, correlation, tree-based, regression, ordinary differential equation, Granger-causality and Bayesian approaches. Their capabilities are declared in a registry containing method names, descriptions, publications, source links, container identifiers, input requirements, directionality, signedness, pseudotime requirements, runtime estimates and parameter definitions.
+
+\begin{table*}[t]
+\centering
+\caption{Inference methods registered in the current GRNScope implementation. A dash indicates that the method does not provide the corresponding property. Methods marked inactive are registered for extensibility but are not selectable in the current release.}
+\label{tab:methods}
+\begin{tabular}{llllll}
+\toprule
+Method & Computational family & Directed & Signed & Pseudotime & Status \\
+\midrule
+PIDC & Partial information decomposition & -- & -- & -- & Enabled \\
+GENIE3 & Random forest & Yes & -- & -- & Enabled \\
+GRNBoost2 & Gradient boosting & Yes & -- & -- & Enabled \\
+CellOracle & Prior-informed regression & Yes & Yes & -- & Enabled \\
+PPCOR & Partial correlation & -- & Yes & -- & Enabled \\
+Pearson & Pairwise correlation baseline & -- & Yes & -- & Enabled \\
+SCODE & Linear ordinary differential equation & Yes & Yes & Yes & Enabled \\
+SINCERITIES & Time-bin regression & Yes & Yes & Yes & Enabled \\
+SCRIBE & Directed information & Yes & -- & Yes & Enabled \\
+SINGE & Kernel Granger causality & Yes & -- & Yes & Enabled \\
+LEAP & Lagged correlation & Yes & -- & Yes & Enabled \\
+GRISLI & ODE with velocity & Yes & -- & Yes & Enabled \\
+GRNVBEM & Bayesian ARMA model & Yes & Yes & Yes & Enabled \\
+JUMP3 & Dynamical model with trees & Yes & -- & Yes & Inactive \\
+SCSGL & Kernelized signed graph learning & -- & Yes & -- & Inactive \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Methods are selected according to their declared requirements. For example, pseudotime-dependent methods are disabled when no compatible pseudotime is available, and CellOracle requires a supported species and prior-network configuration. Parameter values are validated on the server against type and range constraints before a job is launched.
+
+\subsection{Job scheduling, failure handling and persistence}
+
+Selected algorithms are scheduled independently and can execute in parallel. The default scheduling order prioritizes methods with lower expected runtime so that initial results become available while slower methods continue running. Each algorithm has its own status and error message, and one failed container does not prevent the results of other methods from being inspected.
+
+The job-level status is derived from the method-level states. A project can therefore be completed, partially completed or failed depending on how many methods succeeded. Users can stop an individual method or the entire project and can rerun a method without repeating methods that have already completed.
+
+Long-running analyses expose a stable project and result location in the application. The implementation stores the original inputs, processed inputs, method outputs, bootstrap outputs, metadata and derived result payloads under the project directory. The final release will document the retention policy and the conditions under which uploaded data are deleted.
+
+\subsection{Within-method evidence}
+
+Raw edge weights are not averaged across methods because their scales and interpretations differ. For each method and target gene, GRNScope removes duplicate source-target pairs, orders candidate regulators by descending absolute score and assigns ranks. If $r_m(e)$ is the rank of edge $e$ for method $m$ and $R_t$ is the number of ranked candidate regulators for target $t$, the normalized evidence is:
+
+\begin{equation}
+E_m(e)=
+\begin{cases}
+1-\dfrac{r_m(e)-1}{R_t-1}, & R_t>1,\\[1.5ex]
+1, & R_t\leq 1.
+\end{cases}
+\end{equation}
+
+The transformation makes the rank of an edge comparable within a method and target while preserving the ordering produced by the original algorithm. A missing edge contributes zero evidence to aggregate calculations. This convention prevents an edge that appears in only one run or one method from receiving the same aggregate score as an edge that is consistently recovered.
+
+\subsection{Bootstrap reproducibility}
+
+An algorithm run on the complete dataset provides one ranked network but does not indicate how sensitive that ranking is to the particular cells observed. GRNScope therefore supports cell-level bootstrap resampling. For a dataset with $N$ cells, each bootstrap replicate draws $N$ cells with replacement. The deterministic resampling plan is shared across methods within a project so that differences in reproducibility are not caused by different cell draws.
+
+Let $B_m$ be the number of completed bootstrap runs for method $m$. An edge is considered selected in run $b$ when it appears among the top $K$ regulators of its target. Its stability is:
+
+\begin{equation}
+S_m(e)=\frac{1}{B_m}\sum_{b=1}^{B_m}I(r_{m,b}(e)\leq K),
+\end{equation}
+
+where $I(\cdot)$ is an indicator function. The user-facing confidence value is the stability value constrained to the interval [0,1]. The default configuration uses between three and 15 bootstrap runs, with early stopping when the aggregated ranking meets the configured stability criterion. The exact number of completed runs, the value of $K$ and the stopping criterion are included in the analysis metadata.
+
+GRNScope also calculates a 95\% evidence interval from the distribution of per-run evidence values. Runs in which an edge is absent contribute zero to this distribution. The interval therefore captures both rank variation and absence across resamples. Confidence and evidence are reported separately because an edge can be highly ranked in one run but unstable across resamples, or moderately ranked but consistently recovered.
+
+\subsection{Cross-method consensus}
+
+For a selected method set $M$, the consensus evidence for an edge is calculated from the method-specific evidence values:
+
+\begin{equation}
+C_E(e)=\frac{1}{|M|}\sum_{m\in M}E_m(e),
+\end{equation}
+
+unless a weighted configuration is explicitly selected. Method support counts the methods whose evidence exceeds the selected support threshold:
+
+\begin{equation}
+\mathrm{Support}(e)=\sum_{m\in M}I(E_m(e)\geq\tau).
+\end{equation}
+
+The interface reports the number of supporting methods together with the aggregate evidence so that users can distinguish broad but weak support from strong support concentrated in a smaller method set.
+
+Direction and sign are calculated only from methods able to provide those properties. Undirected methods contribute to edge evidence but abstain from direction voting. Unsigned methods contribute to edge support but abstain from activation/repression voting. For directed methods, the evidence-weighted balance between the forward and reverse orientations is used to calculate direction agreement and direction coverage. For signed methods, the corresponding balance between activating and repressing evidence is used to calculate sign agreement and sign coverage.
+
+Coverage is reported because a high agreement value based on only one or two eligible methods can be misleading. Direction coverage is the proportion of aggregate evidence contributed by directed methods, while sign coverage is the proportion contributed by signed methods. Edges with insufficient eligible evidence are labelled accordingly rather than being assigned an unsupported orientation or sign.
+
+\subsection{Interactive network exploration}
+
+The Network view renders genes as nodes and predicted relationships as edges. Transcription factors are displayed using a distinct shape from target genes, and colour encodings are supplemented by labels or shape cues. Edge width reflects evidence, while edge colour can reflect method support or the inferred regulatory sign when sign information is available.
+
+Users can pan and zoom the graph, select nodes and edges, search for genes, isolate local subnetworks and switch between force-directed, hierarchical, concentric, circular and chromosome-aware layouts. Selecting a node displays its predicted regulators, targets, degree and available genomic information. Selecting an edge displays source, target, evidence, confidence, supporting methods, direction information and sign information.
+
+The edge table provides a quantitative alternative to the graph. It supports searching, sorting, filtering, configurable column visibility and cross-linking back to the selected edge in the network. This is important for dense networks in which visual inspection alone cannot expose the full ranked output.
+
+\subsection{Trajectory and perturbation analysis}
+
+When pseudotime is provided or estimated, the Trajectory view displays cells along the selected lineage and plots gene-expression trends across pseudotime. Multiple lineages can be inspected separately, and genes can be compared using smoothed trend curves. The interface identifies whether the displayed ordering was uploaded by the user or estimated by the platform.
+
+For analyses configured with CellOracle, the Perturbation view supports in silico changes to a selected gene. The resulting predicted changes in gene expression and cell-state position are displayed alongside randomized controls when available. These outputs are explicitly labelled as computational predictions and are not treated as experimental perturbation results.
+
+\subsection{Benchmarking and evaluation metrics}
+
+Users can upload a reference network to evaluate predicted edges against known interactions. GRNScope calculates precision-recall and receiver-operating-characteristic curves, area under the precision-recall curve, AUPRC ratios relative to a random predictor, AUROC, early precision and signed early-precision measures where the reference network contains sign information.
+
+The benchmark universe, number of reference interactions, sign split and random baseline are displayed with the metric values. This context is necessary because the same AUPRC can have different interpretations under different class balances. Additional diagnostics include method overlap, motif counts and shortest-path analyses of false positives when the required inputs are available.
+
+The formal evaluation of the released server will use [DATASET NAMES] and will compare GRNScope outputs with [COMPARABLE TOOLS OR BASELINE WORKFLOWS]. Each method will be run using documented parameter settings, and comparisons will use the same input matrices, gene universes and reference networks. Any training or parameter-selection procedure will be separated from the evaluation data to avoid leakage.
+
+\subsection{Export and provenance}
+
+Users can export network figures as PNG or SVG, result tables as CSV, per-method ranked edge lists, per-bootstrap outputs, original inputs and an analysis metadata file. The metadata file records the project identifier, input dimensions, matrix-state classification, preprocessing settings, species, selected methods, resolved algorithm parameters, software versions, bootstrap configuration and consensus settings.
+
+The final public release will include a versioned source-code archive with a permanent DOI, the exact deployment version used in the manuscript, the sample dataset, the completed demonstration project and scripts for reproducing the numerical tables and figures in this article.
+
+\subsection{Privacy and deployment model}
+
+GRNScope is intended to keep user-uploaded data private and to expose only projects belonging to the originating client. The deployment used for publication will be configured behind HTTPS, will not require registration for ordinary non-sensitive data, and will document data retention, deletion and backup policies. The public instance will be tested for unauthorized project access, path traversal, upload abuse, job isolation and accidental exposure of uploaded files.
+
+\section{Results}
+
+\subsection{A complete workflow for single-cell GRN analysis}
+
+The current GRNScope implementation provides an end-to-end workflow from matrix upload to downloadable network results. The landing page presents the purpose of the server, a direct link to the completed demonstration analysis and entry points for project creation and algorithm browsing. The algorithm catalogue describes each method's computational family, input requirements, directionality, signedness, publication, source code and estimated runtime.
+
+In a new project, validation results are shown before the user commits to an analysis. The user can inspect the matrix dimensions, review the matrix-state suggestion, confirm the species and choose the number of genes retained for inference. The interface disables methods whose requirements are not met and exposes method-specific parameters only when they are relevant to the selected configuration.
+
+The bundled sample workflow contains 19 genes and 2,000 cells. In the current local demonstration, recorded runtimes for PEARSON, PPCOR, PIDC, GENIE3 and GRNBoost2 were approximately 6 s, 13 s, 1 min 16 s, 1 min 46 s and 2 min 43 s, respectively. These values are illustrative rather than portable performance claims and must be remeasured on the final publication deployment.
+
+\subsection{Algorithm diversity and method-specific outputs}
+
+GRNScope exposes complementary method families rather than presenting a single score as definitive. Information-theoretic methods identify multivariate statistical dependencies, tree-based methods frame inference as prediction of target genes, correlation methods provide fast baselines, temporal methods use pseudotime or lagged relationships, and prior-informed methods constrain inference using external regulatory information.
+
+The interface retains each method's ranked edge list and displays it alongside the consensus network. This allows users to determine whether a high-ranked consensus edge is supported broadly across methods, driven by a particular algorithm family, or consistently recovered only under a particular data assumption. The current implementation also identifies inactive registered methods so that the catalogue remains extensible without implying that every registered method is available for execution.
+
+\subsection{Preprocessing feedback and reproducibility metadata}
+
+The preprocessing interface makes the consequences of gene selection visible before analysis. Detection filtering removes genes observed in too few cells, trajectory filtering can retain genes with dynamic behaviour along pseudotime and variance filtering prioritizes genes with expression variability. Transcription-factor retention can override the general gene-selection cutoff.
+
+The same project records the settings applied to the matrix and the parameters passed to each algorithm. This metadata supports interpretation of downloaded results and makes it possible to distinguish changes caused by data preprocessing from changes caused by algorithm selection.
+
+\subsection{Bootstrap reproducibility and evidence intervals}
+
+Bootstrap results allow the user to distinguish an edge that is repeatedly recovered from an edge that appears only in a small fraction of resamples. The Comparison view reports per-method run counts, pairwise ranking stability and method agreement. In the final evaluation, we will report the distribution of edge stability, median pairwise Spearman correlation, the number of early-stopped methods and the relationship between bootstrap confidence and reference-network recovery.
+
+The manuscript should replace this paragraph with the measured values from [DATASET NAMES]. In particular, it should report [NUMBER] bootstrap runs per method, the configured top-$K$ threshold, the number of edges evaluated and confidence-stratified precision or recovery rates. These results are needed to demonstrate that the reproducibility view is useful beyond simply repeating the same algorithm.
+
+\subsection{Consensus network exploration}
+
+The consensus edge explorer combines evidence, support, bootstrap confidence, direction confidence and sign confidence in a single ranked table. Users can change the selected method set and thresholds interactively, after which the network and table update together. The interface distinguishes filters, which alter edge eligibility, from display limits, which alter only the number of visible edges.
+
+An edge supported by methods with incompatible capabilities is not assigned an artificial direction or sign. For example, an undirected information-theoretic method may strengthen evidence that two genes are related while contributing no vote about which gene is upstream. Similarly, an unsigned tree-based method may support an edge without indicating whether the relationship is activating or repressive.
+
+\subsection{Benchmark results}
+
+The benchmark analysis will be performed on [DATASET NAMES] using [REFERENCE NETWORK SOURCES]. For each dataset, the manuscript will report the number of genes, cells, candidate directed interactions, reference interactions, positive and negative reference edges, and random-precision baseline.
+
+The primary comparison will report AUPRC ratio, early-precision ratio and AUROC for every method and for the consensus network. Secondary analyses will report signed early precision, method overlap and the relationship between bootstrap confidence and reference-network recovery. Confidence intervals or replicate-level uncertainty will be reported where the benchmark design permits them.
+
+The results should address three questions: (i) whether the interface reproduces the expected performance of the underlying methods; (ii) whether consensus improves or complements the strongest individual method; and (iii) whether bootstrap confidence identifies edges that are more likely to agree with the reference network. The manuscript will avoid claiming that consensus is universally superior because method complementarity and dataset-specific bias can produce different outcomes.
+
+\subsection{Biological case study}
+
+To demonstrate biological utility, GRNScope will be applied to [ORGANISM, TISSUE, DEVELOPMENTAL PROCESS OR DISEASE CONTEXT]. The dataset will contain [NUMBER] cells from [NUMBER] conditions or stages. The analysis will use [SELECTED METHODS], [PSEUDOTIME SOURCE] and [REFERENCE NETWORK, IF AVAILABLE].
+
+The case study will focus on [BIOLOGICAL QUESTION]. GRNScope will be used to identify candidate regulators, compare global and cluster-specific networks, inspect trajectories and, where appropriate, simulate a CellOracle perturbation. A candidate relationship will be considered a computational hypothesis when it is supported by [NUMBER] methods, has consensus evidence above [THRESHOLD], has bootstrap confidence above [THRESHOLD] and is consistent with [INDEPENDENT EVIDENCE].
+
+The final manuscript must replace this section with a complete analysis and at least one independent validation source. Suitable validation may include a held-out perturbation dataset, chromatin-accessibility evidence, a curated interaction database, an orthogonal expression experiment or a targeted laboratory experiment. A literature citation alone should not be presented as experimental validation of the exact inferred edge.
+
+\subsection{Performance, reliability and usability}
+
+The final release will be evaluated using [NUMBER] clean analyses and [NUMBER] negative or malformed-input tests. The reliability evaluation will cover invalid delimiters, missing identifiers, non-numeric values, inconsistent pseudotime lengths, unsupported species settings, algorithm failures, interrupted jobs and partial completion.
+
+The web interface will be tested in [BROWSER NAMES AND VERSIONS] using the sample dataset and at least one realistic dataset. The study will report page-load time, time to first result, total runtime, memory use, maximum tested matrix dimensions and the number of concurrent jobs supported by the deployment. These measurements will be reported as deployment-specific values rather than universal limits.
+
+\section{Discussion}
+
+GRNScope provides an integrated environment for multi-method GRN inference from single-cell expression data. The platform combines operational features that are often separated across command-line packages: input validation, preprocessing, method compatibility checks, containerized execution, asynchronous monitoring, reproducibility analysis, consensus construction, visualization, benchmarking and export.
+
+The platform's main analytical design choice is to keep three types of evidence separate. Within-method evidence describes how highly a method ranks an edge for a target. Bootstrap confidence describes how often the edge is recovered under cell resampling. Cross-method support describes how many selected algorithms provide evidence for the edge. Direction and sign coverage then indicate how much of the aggregate evidence was eligible to vote on those properties. This separation reduces the risk that an aggregate score will be interpreted as a universal probability of biological regulation.
+
+GRNScope may be particularly useful for exploratory analyses in which users need to compare assumptions and identify robust candidate relationships before investing in experimental validation. The interactive network and table views allow users to move from global patterns to individual edges, while the trajectory and perturbation views connect inferred networks to cell-state transitions and intervention hypotheses.
+
+Several limitations require emphasis. First, the output remains dependent on the quality and design of the input data. Dropout, confounding, cell-state composition and batch effects can create or obscure apparent relationships. Second, pseudotime is inferred or supplied externally and may not represent a biological time axis. Temporal methods should therefore be interpreted with the same caution as other observational approaches.
+
+Third, bootstrap confidence measures sensitivity to resampling and is not the probability that an edge is biologically real. A small number of bootstrap replicates provides a coarse reproducibility assessment, and users should consider the reported run count and evidence interval. Fourth, consensus can reinforce shared biases among methods, particularly when several algorithms make similar assumptions or share preprocessing dependencies. Consensus should therefore be compared with individual methods rather than treated as automatically superior.
+
+Fifth, the platform integrates existing third-party algorithms. Its value must be demonstrated through substantial added utility: reliable execution, transparent comparison, reproducible metadata, meaningful biological use cases and evidence that the interface helps users identify and interpret candidate relationships. A publication should not present the platform as a novel inference algorithm unless a separate algorithmic contribution is introduced and independently validated.
+
+Finally, public deployment requires operational safeguards beyond a laboratory prototype. The release should use HTTPS, expose a standard licence, keep uploaded data private, prevent unauthorized project access, enforce resource quotas, document retention and deletion, and provide a maintenance plan of at least five years. The final paper should report the deployment version and permanent software archive so that readers can distinguish the published implementation from later updates.
+
+\section{Conclusion}
+
+GRNScope is a web server for accessible, reproducible and multi-method analysis of gene regulatory networks from single-cell RNA-sequencing data. It combines containerized execution with preprocessing feedback, bootstrap reproducibility, capability-aware consensus, interactive network exploration, reference-network benchmarking and optional perturbation analysis. By exposing method-specific evidence and the limits of direction and sign inference, GRNScope is designed to help researchers generate better-supported and more clearly qualified hypotheses for experimental follow-up.
+
+\section{Data Availability}
+
+The source code corresponding to the analyses in this manuscript will be deposited in [ZENODO OR FIGSHARE] under DOI [DOI]. The deployed web server is available at \url{https://[SERVER-URL]}. Sample data, the completed demonstration project, configuration files, processed outputs and scripts used to generate the manuscript figures and tables will be included in the archived release. Benchmark datasets are available from [REPOSITORY NAMES AND ACCESSION NUMBERS]. If any human-derived data are used, the access restrictions and controlled-access repository will be described here.
+
+\section{Supplementary Data}
+
+Supplementary Data are available at NAR Online. Supplementary materials will include the complete algorithm-parameter table, additional benchmark results, browser and performance-testing details, data-processing examples, the reproducibility checklist and the full description of the biological case-study analysis.
+
+\section{Author contributions statement}
+
+[INITIALS] conceived the project. [INITIALS] designed the system architecture. [INITIALS] developed the frontend. [INITIALS] developed the backend and execution services. [INITIALS] integrated the inference algorithms and benchmarking workflow. [INITIALS] performed the computational evaluation. [INITIALS] performed the biological case study. [INITIALS] prepared the figures and tables. [INITIALS] drafted the manuscript. All authors reviewed and approved the final manuscript.
+
+\section{Funding}
+
+This work was supported by [OFFICIAL FUNDER NAME] [GRANT NUMBER]. [Add all additional funders and the initials of authors supported by each grant. If no funding was received, state: ``None declared.'' ]
+
+\section{Conflicts of interest}
+
+The authors declare no conflicts of interest. [Modify this statement to list all relevant financial and non-financial relationships for every author.]
+
+\section{Acknowledgments}
+
+The authors thank the developers of BEELINE and the individual gene regulatory network inference methods integrated into GRNScope. The authors also thank [COLLABORATORS, DATA PROVIDERS AND TEST USERS] for assistance with [CONTRIBUTION].
+
+\begin{thebibliography}{10}
+
+\bibitem[Pratapa et al.(2020)]{pratapa2020benchmarking}
+A. Pratapa, A.P. Jalihal, J.N. Law, A. Bharadwaj and T.M. Murali.
+\newblock Benchmarking algorithms for gene regulatory network inference from single-cell transcriptomic data.
+\newblock {\em Nature Methods}, 17:147--154, 2020. doi:10.1038/s41592-019-0690-6.
+
+\bibitem[Chan et al.(2017)]{chan2017pidc}
+T.E. Chan, M.P.H. Stumpf and A.C. Babtie.
+\newblock Gene regulatory network inference from single-cell data using multivariate information measures.
+\newblock {\em Cell Systems}, 5:251--267, 2017. doi:10.1016/j.cels.2017.08.014.
+
+\bibitem[Huynh-Thu et al.(2010)]{huynhthu2010genie3}
+V.A. Huynh-Thu, A. Irrthum, L. Wehenkel and P. Geurts.
+\newblock Inferring regulatory networks from gene expression data using tree-based methods.
+\newblock {\em PLoS ONE}, 5:e12776, 2010. doi:10.1371/journal.pone.0012776.
+
+\bibitem[Moerman et al.(2019)]{moerman2019grnboost2}
+T. Moerman, S. Santos, C.B. Gonzalez-Blas, J. Simm, Y. Moreau, J. Aerts and J. Cannoodt.
+\newblock GRNBoost2 and Arboreto: efficient and scalable inference of gene regulatory networks.
+\newblock {\em Bioinformatics}, 35:2159--2161, 2019. doi:10.1093/bioinformatics/bty916.
+
+\bibitem[Street et al.(2018)]{street2018slingshot}
+K. Street, D. Risso, R.B. Fletcher, D. Das, J. Ngai, N.D. Yosef, E. Purdom and S. Dudoit.
+\newblock Slingshot: cell lineage and pseudotime inference for single-cell transcriptomics.
+\newblock {\em BMC Genomics}, 19:477, 2018. doi:10.1186/s13059-018-1444-0.
+
+\bibitem[Kamimoto et al.(2023)]{kamimoto2023celloracle}
+K. Kamimoto, C.M. Hoffmann, M. Tanaka, et al.
+\newblock Dissecting cell identity via network biology.
+\newblock {\em Nature}, 2023. doi:10.1038/s41586-022-05688-9.
+
+\bibitem[ADD et al.(YEAR)]{additionalmethod}
+[Add the complete NAR-formatted references for SINCERITIES, SCRIBE, SINGE, LEAP, GRISLI, GRNVBEM, PPCOR and any other integrated method cited in the final manuscript.]
+
+\end{thebibliography}
+
+\end{document}
