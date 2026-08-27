@@ -100,7 +100,7 @@ export default function ProjectCard({
               {isMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-40 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl shadow-slate-900/15"
+                  className="absolute right-0 top-full z-40 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-[0_6px_18px_rgba(15,23,42,0.06)]"
                 >
                   {onRename ? (
                     <button
