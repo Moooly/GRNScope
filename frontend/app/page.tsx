@@ -509,7 +509,7 @@ export default function HomePage() {
                 className="group/download flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3.5 transition hover:bg-[#f7fbfd] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/15"
               >
                 <span className="text-sm font-medium text-slate-600 transition group-hover/download:text-[#1b75a6]">
-                  Download sample dataset (.zip)
+                  Download sample dataset
                 </span>
                 <span aria-hidden="true" className="shrink-0 text-slate-500 transition group-hover/download:translate-y-0.5 group-hover/download:text-[#1b75a6]">
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">

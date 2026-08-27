@@ -661,14 +661,25 @@ export default function CreateProjectModal({
           <h2 className="text-2xl font-bold tracking-tight text-slate-950">
             Start an analysis
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="-mr-2 -mt-2 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-lg leading-none text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Close create analysis dialog"
+          <a
+            href="/samples/grnscope-sample-dataset.zip"
+            download
+            aria-label="Download sample dataset"
+            title="Download sample dataset"
+            className="-mr-1 -mt-1 inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2.5 text-xs font-semibold text-slate-500 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/20"
           >
-            ×
-          </button>
+            <svg viewBox="0 0 18 18" className="h-4 w-4" fill="none" aria-hidden="true">
+              <path
+                d="M9 2.75v8m0 0L6.25 8M9 10.75 11.75 8M3.5 14.75h11"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="hidden sm:inline">Sample dataset</span>
+            <span className="sm:hidden">Sample</span>
+          </a>
         </div>
 
         <div className="mt-5 min-h-0 flex-1 scroll-pb-6 space-y-5 overflow-y-auto pb-2 pr-4 [scrollbar-gutter:stable]">
