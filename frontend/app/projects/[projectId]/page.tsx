@@ -55,6 +55,14 @@ const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
 const CELLORACLE_SPECIES_ERROR_TYPE = "celloracle_species_mismatch";
 
+function runManifestArchiveFilename(projectName: string | null | undefined) {
+  const safeProjectName = (projectName?.trim() || "GRNScope-project")
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^[ .-]+|[ .-]+$/g, "") || "GRNScope-project";
+  return `${safeProjectName.slice(0, 100)}_run-manifests.zip`;
+}
+
 function markJobTasksStopping(
   job: ProjectJob | null,
   shouldStop: (algorithmId: string) => boolean,
@@ -2765,6 +2773,19 @@ useEffect(() => {
             projectId={projectId}
             projectContext={(
               <AnalysisSetupSection
+                onDownloadRunManifests={
+                  isDemoProject
+                    ? undefined
+                    : () =>
+                        openDownloadModal(
+                          "Analysis package",
+                          `${API_BASE}/projects/${projectId}/download/run-manifests`,
+                          runManifestArchiveFilename(project?.project_name),
+                        )
+                }
+                runManifestDownloadDisabled={!allJobTasks.some((task) =>
+                  ["Completed", "Failed", "Stopped"].includes(task.status),
+                )}
                 status={(
                   projectSetupError ? (
                     <DatasetValidationStatus

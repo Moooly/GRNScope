@@ -19,6 +19,8 @@ export type ProjectTask = {
   latest_attempt_error_message?: string | null;
   latest_attempt_elapsed_seconds?: number | null;
   latest_attempt_completed_at?: string | null;
+  latest_run_manifest_path?: string | null;
+  run_manifest_error?: string | null;
 };
 
 export type MatrixValidationLocation = {

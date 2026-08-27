@@ -171,7 +171,7 @@ def archive_beeline_failure_diagnostics(
         "project_id": project_dir.name,
         "job_id": job_id,
         "algorithm_id": normalized_algorithm_id,
-        "status": "Failed",
+        "status": "Stopped" if error_type == "stopped" else "Failed",
         "error_type": error_type,
         "error_message": error_message,
         "started_at": datetime.fromtimestamp(

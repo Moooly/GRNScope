@@ -58,6 +58,7 @@ from ..services.result_service import (
     prune_algorithm_result_artifacts,
     write_algorithm_result,
 )
+from ..services.run_manifest_service import generate_run_manifest
 
 
 @dataclass
@@ -1015,6 +1016,8 @@ def update_job_state(
     completed_at_timestamp: float | None = None,
     process_pid: int | None = None,
     run_metadata: dict[str, dict] | None = None,
+    run_manifest_path: str | None = None,
+    run_manifest_error: str | None = None,
 ) -> None:
     with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
         jobs_manifest = read_jobs_manifest(project_dir)
@@ -1072,6 +1075,11 @@ def update_job_state(
                         task["completed_at_timestamp"] = completed_at_timestamp
                     if run_metadata is not None:
                         task["run_metadata"] = run_metadata
+                    if run_manifest_path is not None:
+                        task["latest_run_manifest_path"] = run_manifest_path
+                        task.pop("run_manifest_error", None)
+                    if run_manifest_error is not None:
+                        task["run_manifest_error"] = run_manifest_error
                     if process_pid is not None:
                         if process_pid > 0:
                             task["process_pid"] = process_pid
@@ -1081,6 +1089,58 @@ def update_job_state(
 
             write_jobs_manifest(project_dir, jobs_manifest)
             return
+
+
+def generate_task_run_manifest_safely(
+    project_dir: Path,
+    job_id: str,
+    algorithm_id: str,
+    attempt_id: str,
+    *,
+    status: str,
+    started_at_timestamp: float,
+    completed_at_timestamp: float,
+    elapsed_seconds: int,
+    result_path: str | Path | None = None,
+    artifact_dir: str | Path | None = None,
+    diagnostics_path: str | Path | None = None,
+    error_message: str | None = None,
+    error_type: str | None = None,
+) -> str | None:
+    """Keep provenance generation from changing an already-final run status."""
+
+    try:
+        manifest_path = generate_run_manifest(
+            project_dir,
+            job_id,
+            algorithm_id,
+            status=status,
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed_seconds,
+            result_path=result_path,
+            artifact_dir=artifact_dir,
+            diagnostics_path=diagnostics_path,
+            error_message=error_message,
+            error_type=error_type,
+        )
+    except Exception as exc:
+        update_job_state(
+            project_dir,
+            job_id,
+            algorithm_id=algorithm_id,
+            run_manifest_error=str(exc),
+        )
+        return None
+
+    relative_path = str(manifest_path.relative_to(project_dir))
+    update_job_state(
+        project_dir,
+        job_id,
+        algorithm_id=algorithm_id,
+        run_manifest_path=relative_path,
+    )
+    return relative_path
 
 
 def get_task_state(project_dir: Path, job_id: str, algorithm_id: str) -> dict | None:
@@ -1377,6 +1437,7 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
     control = get_or_create_task_control(project_id, job_id, algorithm_id)
     if control.stop_event.is_set():
         completed_at_timestamp = time.time()
+        attempt_id = diagnostic_attempt_name(completed_at_timestamp)
         update_job_state(
             project_dir,
             job_id,
@@ -1389,6 +1450,17 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
+        )
+        generate_task_run_manifest_safely(
+            project_dir,
+            job_id,
+            algorithm_id,
+            attempt_id,
+            status="Stopped",
+            started_at_timestamp=completed_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=0,
+            error_type="stopped_before_start",
         )
         recompute_overall_status(project_dir, job_id)
         clear_task_control(project_id, job_id, algorithm_id)
@@ -1591,6 +1663,24 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             process_pid=0,
         )
         mark_task_attempt_succeeded(project_dir, job_id, algorithm_id)
+        generate_task_run_manifest_safely(
+            project_dir,
+            job_id,
+            algorithm_id,
+            attempt_id,
+            status="Completed",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+            result_path=saved_result_path,
+            artifact_dir=(
+                project_dir
+                / "results"
+                / algorithm_id.upper()
+                / "attempts"
+                / attempt_id
+            ),
+        )
         try:
             prune_algorithm_result_artifacts(
                 project_dir,
@@ -1605,8 +1695,17 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
         completed_at = format_runtime_timestamp(completed_at_timestamp)
-        cleanup_algorithm_runtime(project_id, algorithm_id)
-        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
+        diagnostics_path = archive_task_failure_diagnostics(
+            project_dir,
+            project_id,
+            job_id,
+            algorithm_id,
+            error_message="Algorithm run was stopped.",
+            error_type="stopped",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+        )
         if not restore_preserved_result_after_attempt(
             project_dir,
             job_id,
@@ -1630,16 +1729,49 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
                 completed_at_timestamp=completed_at_timestamp,
                 process_pid=0,
             )
-    except MatrixValidationRuntimeError as exc:
+        generate_task_run_manifest_safely(
+            project_dir,
+            job_id,
+            algorithm_id,
+            attempt_id,
+            status="Stopped",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+            artifact_dir=(
+                project_dir
+                / "results"
+                / algorithm_id.upper()
+                / "attempts"
+                / attempt_id
+            ),
+            diagnostics_path=diagnostics_path,
+            error_message="Algorithm run was stopped.",
+            error_type="stopped",
+        )
         discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
+    except MatrixValidationRuntimeError as exc:
+        completed_at_timestamp = time.time()
+        elapsed = int(completed_at_timestamp - started_at_timestamp)
+        diagnostics_path = archive_task_failure_diagnostics(
+            project_dir,
+            project_id,
+            job_id,
+            algorithm_id,
+            error_message=str(exc),
+            error_type="matrix_validation",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+        )
         if not restore_preserved_result_after_attempt(
             project_dir,
             job_id,
             algorithm_id,
             attempt_status="Failed",
             error_message=str(exc),
-            elapsed_seconds=int(time.time() - started_at_timestamp),
-            completed_at_timestamp=time.time(),
+            elapsed_seconds=elapsed,
+            completed_at_timestamp=completed_at_timestamp,
         ):
             mark_project_setup_failure(
                 project_dir,
@@ -1647,6 +1779,27 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
                 str(exc),
                 error_type="matrix_validation",
             )
+        generate_task_run_manifest_safely(
+            project_dir,
+            job_id,
+            algorithm_id,
+            attempt_id,
+            status="Failed",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+            artifact_dir=(
+                project_dir
+                / "results"
+                / algorithm_id.upper()
+                / "attempts"
+                / attempt_id
+            ),
+            diagnostics_path=diagnostics_path,
+            error_message=str(exc),
+            error_type="matrix_validation",
+        )
+        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
     except Exception as exc:
         completed_at_timestamp = time.time()
         elapsed = int(completed_at_timestamp - started_at_timestamp)
@@ -1666,7 +1819,6 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
             error_message,
             diagnostics_path,
         )
-        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
         if not restore_preserved_result_after_attempt(
             project_dir,
             job_id,
@@ -1692,6 +1844,27 @@ def run_single_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -
                 completed_at_timestamp=completed_at_timestamp,
                 process_pid=0,
             )
+        generate_task_run_manifest_safely(
+            project_dir,
+            job_id,
+            algorithm_id,
+            attempt_id,
+            status="Failed",
+            started_at_timestamp=started_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=elapsed,
+            artifact_dir=(
+                project_dir
+                / "results"
+                / algorithm_id.upper()
+                / "attempts"
+                / attempt_id
+            ),
+            diagnostics_path=diagnostics_path,
+            error_message=error_message,
+            error_type="algorithm",
+        )
+        discard_algorithm_attempt_artifacts(project_dir, algorithm_id, attempt_id)
     finally:
         clear_task_control(project_id, job_id, algorithm_id)
         recompute_overall_status(project_dir, job_id)
@@ -1704,7 +1877,6 @@ def run_algorithm_task_with_slot(project_id: str, job_id: str, algorithm_id: str
         if ALGORITHM_TASK_SEMAPHORE.acquire(timeout=0.5):
             break
     else:
-        run_single_algorithm_task(project_id, job_id, algorithm_id)
         return
 
     try:
@@ -1809,6 +1981,7 @@ def request_algorithm_task_stop(
     # so their unused runtime can still be removed immediately.
     if status == "Queued":
         completed_at_timestamp = time.time()
+        attempt_id = diagnostic_attempt_name(completed_at_timestamp)
         cleanup_algorithm_runtime(project_id, algorithm_id)
         update_job_state(
             project_dir,
@@ -1821,6 +1994,17 @@ def request_algorithm_task_stop(
             completed_at=format_runtime_timestamp(completed_at_timestamp),
             completed_at_timestamp=completed_at_timestamp,
             process_pid=0,
+        )
+        generate_task_run_manifest_safely(
+            project_dir,
+            job_id,
+            algorithm_id,
+            attempt_id,
+            status="Stopped",
+            started_at_timestamp=completed_at_timestamp,
+            completed_at_timestamp=completed_at_timestamp,
+            elapsed_seconds=0,
+            error_type="stopped_before_start",
         )
         recompute_overall_status(project_dir, job_id)
         return get_task_state(project_dir, job_id, algorithm_id) or task, None

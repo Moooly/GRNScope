@@ -76,7 +76,7 @@ export default function FileDownloadMenuModal({
       filename: pseudotimeFileLabel,
     },
     {
-      label: "Analysis metadata",
+      label: "Analysis summary",
       description: "Dataset, preprocessing, algorithms, and current export settings.",
       type: "JSON",
       disabled: !projectId,

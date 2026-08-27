@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grnscope.local/schemas/run-manifest.schema.json",
+  "title": "GRNScope Run Manifest",
+  "description": "Portable provenance and complete run-result inventory for one algorithm result.",
+  "type": "object",
+  "required": [
+    "schema",
+    "identity",
+    "inputs",
+    "matrix_and_preprocessing",
+    "genes",
+    "execution",
+    "pseudotime",
+    "results",
+    "runtime",
+    "warnings",
+    "failure",
+    "support_files"
+  ],
+  "properties": {
+    "schema": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "grnscope.run-manifest" },
+        "version": { "type": "string" }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "required": ["project_id", "project_name", "algorithm_id", "status", "created_at"],
+      "properties": {
+        "project_id": { "type": "string" },
+        "project_name": { "type": "string" },
+        "algorithm_id": { "type": "string" },
+        "status": { "enum": ["Completed", "Failed", "Stopped"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "required": ["checksum_algorithm", "files"],
+      "properties": {
+        "checksum_algorithm": { "const": "sha256" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["role", "original_filename", "project_path", "size_bytes", "sha256"],
+            "properties": {
+              "role": { "type": "string" },
+              "original_filename": { "type": "string" },
+              "project_path": { "type": "string" },
+              "size_bytes": { "type": "integer", "minimum": 0 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        }
+      }
+    },
+    "matrix_and_preprocessing": { "type": "object" },
+    "genes": {
+      "type": "object",
+      "required": ["before_filtering", "after_project_filtering", "after_algorithm_filtering", "project_filter_stages"],
+      "properties": {
+        "before_filtering": { "$ref": "#/$defs/geneSet" },
+        "after_project_filtering": { "$ref": "#/$defs/geneSet" },
+        "after_algorithm_filtering": { "$ref": "#/$defs/geneSet" },
+        "project_filter_stages": { "type": "array" },
+        "algorithm_filter": { "type": "object" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["algorithm", "container", "software_versions", "parameters", "run_settings", "random_seeds"],
+      "properties": {
+        "algorithm": { "type": "object" },
+        "container": {
+          "type": "object",
+          "required": ["image", "digest"],
+          "properties": {
+            "image": { "type": ["string", "null"] },
+            "digest": { "type": ["string", "null"] }
+          }
+        },
+        "software_versions": { "type": "object" },
+        "parameters": { "type": "object" },
+        "run_settings": { "type": "object" },
+        "random_seeds": { "type": "array" }
+      }
+    },
+    "pseudotime": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": { "enum": ["uploaded", "estimated", "not_provided"] }
+      }
+    },
+    "results": {
+      "type": "object",
+      "required": ["all_runs_included", "expected_run_ids", "included_run_ids", "run_result_count", "files"],
+      "properties": {
+        "all_runs_included": { "type": "boolean" },
+        "expected_run_ids": { "type": "array", "items": { "type": "string" } },
+        "included_run_ids": { "type": "array", "items": { "type": "string" } },
+        "run_result_count": { "type": "integer", "minimum": 0 },
+        "files": { "type": "array" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["started_at", "completed_at", "elapsed_seconds", "replicates"],
+      "properties": {
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "elapsed_seconds": { "type": "integer", "minimum": 0 },
+        "replicates": { "type": "object" }
+      }
+    },
+    "warnings": { "type": "array" },
+    "failure": { "type": ["object", "null"] },
+    "support_files": { "type": "array" }
+  },
+  "$defs": {
+    "geneSet": {
+      "type": "object",
+      "required": ["count", "genes"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "genes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

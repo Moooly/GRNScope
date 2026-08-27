@@ -461,15 +461,12 @@ export default function HomePage() {
               </div>
             </div>
 
-            <Link
-              href="/projects/demo"
-              className="group flex w-full flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:shadow-[0_18px_40px_rgba(15,23,42,0.10)]"
-            >
+            <div className="flex w-full flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-[#1b75a6]/30 hover:shadow-[0_18px_40px_rgba(15,23,42,0.10)]">
               <div className="border-b border-slate-100 bg-gradient-to-br from-[#f2f9fc] to-[#e9f6f3] px-5 pb-1 pt-4">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#1b75a6]">
-                  Try the demo
+                  Explore the demo
                 </p>
-                <svg viewBox="0 0 300 140" className="mt-1 w-full" fill="none" aria-hidden="true">
+                <svg viewBox="0 20 300 120" className="mt-1 w-full" fill="none" aria-hidden="true">
                   <defs>
                     <marker id="demoNetArrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
                       <path d="M0 0 L10 5 L0 10 z" fill="#94a3b8" />
@@ -487,11 +484,14 @@ export default function HomePage() {
                   <circle cx="75" cy="118" r="10" fill="#24384a" />
                 </svg>
               </div>
-              <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-                <span className="text-sm font-medium text-slate-600 transition group-hover:text-[#1b75a6]">
+              <Link
+                href="/projects/demo"
+                className="group/demo flex items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-[#f7fbfd] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/15"
+              >
+                <span className="text-sm font-medium text-slate-600 transition group-hover/demo:text-[#1b75a6]">
                   See a completed analysis
                 </span>
-                <span aria-hidden="true" className="shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#1b75a6]">
+                <span aria-hidden="true" className="shrink-0 text-slate-400 transition group-hover/demo:translate-x-0.5 group-hover/demo:text-[#1b75a6]">
                   <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">
                     <path
                       d="M2.5 3.5 12.5 14 2.5 24.5"
@@ -502,8 +502,28 @@ export default function HomePage() {
                     />
                   </svg>
                 </span>
-              </div>
-            </Link>
+              </Link>
+              <a
+                href="/samples/grnscope-sample-dataset.zip"
+                download
+                className="group/download flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3.5 transition hover:bg-[#f7fbfd] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/15"
+              >
+                <span className="text-sm font-medium text-slate-600 transition group-hover/download:text-[#1b75a6]">
+                  Download sample dataset (.zip)
+                </span>
+                <span aria-hidden="true" className="shrink-0 text-slate-500 transition group-hover/download:translate-y-0.5 group-hover/download:text-[#1b75a6]">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
+                    <path
+                      d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              </a>
+            </div>
           </div>
         </div>
       </section>

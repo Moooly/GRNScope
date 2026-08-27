@@ -2,13 +2,17 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 
+import asyncio
 import json
 import csv
+import os
 from pathlib import Path
 from io import StringIO
+import tempfile
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response as FastAPIResponse
 from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 
 from ..algorithm_registry import get_algorithm_by_id, resolve_algorithm_parameters
 from ..config import PROJECTS_ROOT
@@ -20,8 +24,61 @@ from ..services.demo_service import (
     is_demo_project,
     load_demo_manifest,
 )
+from ..services.run_manifest_service import (
+    backfill_terminal_run_manifests,
+    latest_run_manifest_path,
+    list_run_manifest_paths,
+    project_run_manifest_archive_name,
+    write_run_manifest_zip,
+)
 
 router = APIRouter()
+
+
+def _latest_manifest_job_id(project_dir: Path, requested_job_id: str | None) -> str | None:
+    if requested_job_id:
+        return requested_job_id
+    project_manifest_path = project_dir / "project.json"
+    if project_manifest_path.is_file():
+        try:
+            project_manifest = json.loads(
+                project_manifest_path.read_text(encoding="utf-8")
+            )
+            latest_job_id = project_manifest.get("latest_job_id")
+            if latest_job_id:
+                return str(latest_job_id)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return None
+
+
+async def _run_manifest_zip_response(
+    manifest_paths: list[Path],
+    project_dir: Path,
+    filename: str,
+) -> FileResponse:
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix="grnscope-run-manifests-",
+        suffix=".zip",
+    )
+    os.close(file_descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        await asyncio.to_thread(
+            write_run_manifest_zip,
+            manifest_paths,
+            temporary_path,
+            project_dir=project_dir,
+        )
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return FileResponse(
+        path=temporary_path,
+        filename=filename,
+        media_type="application/zip",
+        background=BackgroundTask(temporary_path.unlink, missing_ok=True),
+    )
 
 
 @router.get("/api/projects/{project_id}/download/expression")
@@ -84,6 +141,97 @@ async def download_expression_file(
         )
     except HTTPException:
         raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/download/run-manifest/{algorithm_id}")
+async def download_run_manifest(
+    project_id: str,
+    algorithm_id: str,
+    request: Request,
+    cookie_response: FastAPIResponse,
+    manifest_format: str = Query("zip", alias="format", pattern="^(json|zip)$"),
+    job_id: str | None = Query(default=None),
+):
+    """Download the current provenance record for one algorithm result."""
+
+    owner_id = get_or_create_client_id(request, cookie_response)
+    if is_demo_project(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Run manifests are available for analyses run in your own projects.",
+        )
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    resolved_job_id = _latest_manifest_job_id(project_dir, job_id)
+    try:
+        backfill_terminal_run_manifests(
+            project_dir,
+            job_id=resolved_job_id,
+            algorithm_id=algorithm_id,
+        )
+        manifest_path = latest_run_manifest_path(
+            project_dir,
+            algorithm_id,
+            job_id=resolved_job_id,
+        )
+        normalized_algorithm_id = algorithm_id.upper()
+        filename_root = f"{normalized_algorithm_id}-run-manifest"
+        if manifest_format == "json":
+            return FileResponse(
+                path=manifest_path,
+                filename=f"{filename_root}.json",
+                media_type="application/json",
+            )
+
+        return await _run_manifest_zip_response(
+            [manifest_path],
+            project_dir,
+            f"{filename_root}.zip",
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/download/run-manifests")
+async def download_all_run_manifests(
+    project_id: str,
+    request: Request,
+    cookie_response: FastAPIResponse,
+    job_id: str | None = Query(default=None),
+):
+    """Download the project summary and every current algorithm result."""
+
+    owner_id = get_or_create_client_id(request, cookie_response)
+    if is_demo_project(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Run manifests are available for analyses run in your own projects.",
+        )
+    project_dir = PROJECTS_ROOT / project_id
+    require_project_owner(project_dir, owner_id)
+
+    resolved_job_id = _latest_manifest_job_id(project_dir, job_id)
+    try:
+        backfill_terminal_run_manifests(
+            project_dir,
+            job_id=resolved_job_id,
+        )
+        paths = list_run_manifest_paths(project_dir, job_id=resolved_job_id)
+        archive_name = project_run_manifest_archive_name(project_dir)
+        return await _run_manifest_zip_response(
+            paths,
+            project_dir,
+            f"{archive_name}.zip",
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

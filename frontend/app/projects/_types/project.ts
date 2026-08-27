@@ -17,6 +17,8 @@ export type ProjectTask = {
   run_metadata?: Record<string, Record<string, unknown>> | null;
   latest_attempt_status?: string | null;
   latest_attempt_error_message?: string | null;
+  latest_run_manifest_path?: string | null;
+  run_manifest_error?: string | null;
 };
 
 export type MatrixValidationIssue = {
