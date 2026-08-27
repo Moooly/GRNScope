@@ -56,6 +56,7 @@ async def _run_manifest_zip_response(
     manifest_paths: list[Path],
     project_dir: Path,
     filename: str,
+    timezone_name: str | None = None,
 ) -> FileResponse:
     file_descriptor, temporary_name = tempfile.mkstemp(
         prefix="grnscope-run-manifests-",
@@ -69,6 +70,7 @@ async def _run_manifest_zip_response(
             manifest_paths,
             temporary_path,
             project_dir=project_dir,
+            timezone_name=timezone_name,
         )
     except Exception:
         temporary_path.unlink(missing_ok=True)
@@ -153,6 +155,7 @@ async def download_run_manifest(
     cookie_response: FastAPIResponse,
     manifest_format: str = Query("zip", alias="format", pattern="^(json|zip)$"),
     job_id: str | None = Query(default=None),
+    timezone_name: str | None = Query(default=None, alias="timezone", max_length=128),
 ):
     """Download the current provenance record for one algorithm result."""
 
@@ -190,6 +193,7 @@ async def download_run_manifest(
             [manifest_path],
             project_dir,
             f"{filename_root}.zip",
+            timezone_name,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -205,6 +209,7 @@ async def download_all_run_manifests(
     request: Request,
     cookie_response: FastAPIResponse,
     job_id: str | None = Query(default=None),
+    timezone_name: str | None = Query(default=None, alias="timezone", max_length=128),
 ):
     """Download the project summary and every current algorithm result."""
 
@@ -229,6 +234,7 @@ async def download_all_run_manifests(
             paths,
             project_dir,
             f"{archive_name}.zip",
+            timezone_name,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

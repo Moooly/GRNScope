@@ -237,15 +237,24 @@ class RunManifestServiceTests(unittest.TestCase):
         self.assertNotIn(str(self.project_dir), serialized)
         copied_log = manifest_path.parent / "artifacts" / "logs" / "stderr.log"
         self.assertIn("${PROJECT_DIR}", copied_log.read_text(encoding="utf-8"))
-        portable_result_summary = json.loads(
-            (manifest_path.parent / "results" / "result_summary.json").read_text(
-                encoding="utf-8"
+        self.assertFalse(
+            (manifest_path.parent / "results" / "result_summary.json").exists()
+        )
+        self.assertFalse(
+            any(
+                item.get("role") == "result_summary"
+                for item in manifest["results"]["files"]
             )
         )
-        self.assertNotIn("job_id", portable_result_summary)
-        self.assertNotIn("result_artifact_root", portable_result_summary)
 
-        archive = zipfile.ZipFile(BytesIO(build_run_manifest_zip([manifest_path])))
+        archive = zipfile.ZipFile(
+            BytesIO(
+                build_run_manifest_zip(
+                    [manifest_path],
+                    timezone_name="America/Vancouver",
+                )
+            )
+        )
         self.assertFalse(any("attempt-" in name for name in archive.namelist()))
         self.assertIn(
             "project-123_run-manifests/README.txt",
@@ -283,6 +292,10 @@ class RunManifestServiceTests(unittest.TestCase):
             "project-123_run-manifests/algorithms/GENIE3/results/runs/run-1/rankedEdges.csv",
             archive.namelist(),
         )
+        self.assertNotIn(
+            "project-123_run-manifests/algorithms/GENIE3/results/result_summary.json",
+            archive.namelist(),
+        )
         self.assertIn(
             "project-123_run-manifests/algorithms/GENIE3/artifacts/logs/stderr.log",
             archive.namelist(),
@@ -302,9 +315,24 @@ class RunManifestServiceTests(unittest.TestCase):
                 "project-123_run-manifests/project_manifest.json"
             ).decode("utf-8")
         )
+        archived_run_manifest = json.loads(
+            archive.read(
+                "project-123_run-manifests/algorithms/GENIE3/run_manifest.json"
+            ).decode("utf-8")
+        )
+        self.assertFalse(
+            any(
+                item.get("role") == "result_summary"
+                for item in archived_run_manifest["results"]["files"]
+            )
+        )
         self.assertEqual(
             set(project_summary),
-            {"project", "exported_at", "dataset", "files", "algorithms"},
+            {"project", "created_at", "dataset", "files", "algorithms"},
+        )
+        self.assertRegex(
+            project_summary["created_at"],
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} P[SD]T$",
         )
         self.assertNotIn("id", project_summary["project"])
         self.assertEqual(
@@ -317,13 +345,12 @@ class RunManifestServiceTests(unittest.TestCase):
         self.assertEqual(
             project_summary["dataset"]["gene_count_after_filtering"], 2
         )
-        self.assertEqual(project_summary["files"]["checksum_algorithm"], "sha256")
         self.assertEqual(len(project_summary["files"]["original_uploads"]), 2)
         self.assertGreaterEqual(len(project_summary["files"]["preprocessed"]), 3)
         first_bundled_file = project_summary["files"]["original_uploads"][0]
         self.assertEqual(
             set(first_bundled_file),
-            {"role", "path", "size_bytes", "sha256"},
+            {"role", "path", "size_bytes"},
         )
         self.assertEqual(project_summary["algorithms"][0]["id"], "GENIE3")
         self.assertEqual(project_summary["algorithms"][0]["result_run_count"], 1)

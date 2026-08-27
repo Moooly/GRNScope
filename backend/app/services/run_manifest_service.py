@@ -14,6 +14,7 @@ import subprocess
 import time
 from typing import Any
 import zipfile
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..algorithm_registry import get_algorithm_by_id
 from ..atomic_io import atomic_write_json
@@ -74,31 +75,6 @@ def _sanitize_text(value: str, project_dir: Path) -> str:
         sanitized,
     )
     return sanitized
-
-
-def _portable_result_summary(value: Any, project_dir: Path) -> Any:
-    internal_keys = {
-        "job_id",
-        "attempt_id",
-        "beeline_runtime_root",
-        "result_artifact_root",
-        "runtime_root",
-        "run_diagnostics_root",
-        "ranked_edges_path",
-        "run_ranked_edges_paths",
-        "diagnostics_path",
-    }
-    if isinstance(value, dict):
-        return {
-            str(key): _portable_result_summary(item, project_dir)
-            for key, item in value.items()
-            if str(key) not in internal_keys
-        }
-    if isinstance(value, list):
-        return [_portable_result_summary(item, project_dir) for item in value]
-    if isinstance(value, str):
-        return _sanitize_text(value, project_dir)
-    return value
 
 
 def _sanitize_value(value: Any, project_dir: Path) -> Any:
@@ -501,9 +477,7 @@ def _copy_bundle_files(
 
 def _copy_result_files(
     artifact_dir: Path | None,
-    result_path: Path | None,
     destination_dir: Path,
-    project_dir: Path,
 ) -> list[dict[str, Any]]:
     """Copy the combined network and every individual run result."""
 
@@ -541,31 +515,6 @@ def _copy_result_files(
                 }
             )
 
-    if result_path and result_path.is_file():
-        destination = destination_dir / "result_summary.json"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            raw_result = json.loads(
-                result_path.read_text(encoding="utf-8", errors="replace")
-            )
-            atomic_write_json(
-                destination,
-                _portable_result_summary(raw_result, project_dir),
-            )
-            copied.append(
-                {
-                    "role": "result_summary",
-                    "run_id": None,
-                    "scope_id": "global",
-                    "path": destination.relative_to(
-                        destination_dir.parent
-                    ).as_posix(),
-                    "size_bytes": destination.stat().st_size,
-                    "sha256": sha256_file(destination),
-                }
-            )
-        except (OSError, json.JSONDecodeError):
-            pass
     return copied
 
 
@@ -711,12 +660,9 @@ def generate_run_manifest(
             project_dir,
         )
     )
-    resolved_result_path = Path(str(result_path)) if result_path else None
     result_files = _copy_result_files(
         resolved_artifact_dir,
-        resolved_result_path,
         working_dir / "results",
-        project_dir,
     )
     support_files.extend(result_files)
 
@@ -1131,7 +1077,6 @@ def _project_bundle_files(
                 "path": destination_key,
                 "original_filename": str(filename or source.name),
                 "size_bytes": source.stat().st_size,
-                "sha256": sha256_file(source),
                 "sanitize_metadata": sanitize_metadata,
             }
         )
@@ -1253,7 +1198,6 @@ def _write_project_bundle_files(
     files: list[dict[str, Any]],
 ) -> dict[str, Any]:
     inventory: dict[str, Any] = {
-        "checksum_algorithm": "sha256",
         "original_uploads": [],
         "preprocessed": [],
     }
@@ -1267,16 +1211,13 @@ def _write_project_bundle_files(
             ).encode("utf-8")
             archive.writestr(destination.as_posix(), content)
             bundled_size_bytes = len(content)
-            bundled_sha256 = hashlib.sha256(content).hexdigest()
         else:
             archive.write(source, destination.as_posix())
             bundled_size_bytes = item["size_bytes"]
-            bundled_sha256 = item["sha256"]
         inventory_item: dict[str, Any] = {
             "role": item["role"],
             "path": str(item["path"]),
             "size_bytes": bundled_size_bytes,
-            "sha256": bundled_sha256,
         }
         if item.get("sanitize_metadata"):
             inventory_item["portable_copy"] = True
@@ -1336,10 +1277,21 @@ def _project_dataset_summary(
     }
 
 
+def _project_manifest_created_at(timezone_name: str | None) -> str:
+    local_timezone = timezone.utc
+    if timezone_name:
+        try:
+            local_timezone = ZoneInfo(timezone_name)
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return datetime.now(local_timezone).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
 def _project_bundle_summary(
     project_dir: Path,
     manifests: list[dict[str, Any]],
     bundled_files: dict[str, Any] | None = None,
+    timezone_name: str | None = None,
 ) -> dict[str, Any]:
     project = _read_json(project_dir / "project.json")
     metadata = _read_json(project_dir / "metadata.json")
@@ -1378,10 +1330,9 @@ def _project_bundle_summary(
 
     return {
         "project": project_summary,
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": _project_manifest_created_at(timezone_name),
         "dataset": _project_dataset_summary(project, metadata, first),
         "files": bundled_files or {
-            "checksum_algorithm": "sha256",
             "original_uploads": [],
             "preprocessed": [],
         },
@@ -1389,10 +1340,38 @@ def _project_bundle_summary(
     }
 
 
+def _without_result_summary(manifest: dict[str, Any]) -> dict[str, Any]:
+    def keep_file(item: Any) -> bool:
+        if not isinstance(item, dict):
+            return True
+        path = str(item.get("path") or "").replace("\\", "/")
+        return (
+            item.get("role") != "result_summary"
+            and not path.endswith("/result_summary.json")
+            and path != "result_summary.json"
+        )
+
+    portable_manifest = dict(manifest)
+    results = portable_manifest.get("results")
+    if isinstance(results, dict):
+        portable_results = dict(results)
+        files = portable_results.get("files")
+        if isinstance(files, list):
+            portable_results["files"] = [item for item in files if keep_file(item)]
+        portable_manifest["results"] = portable_results
+    support_files = portable_manifest.get("support_files")
+    if isinstance(support_files, list):
+        portable_manifest["support_files"] = [
+            item for item in support_files if keep_file(item)
+        ]
+    return portable_manifest
+
+
 def _write_run_manifest_archive(
     archive: zipfile.ZipFile,
     manifest_paths: list[Path],
     project_dir: Path,
+    timezone_name: str | None = None,
 ) -> None:
     if not manifest_paths:
         raise FileNotFoundError("No run manifests found.")
@@ -1401,7 +1380,7 @@ def _write_run_manifest_archive(
     manifest_payloads: list[dict[str, Any]] = []
     selected_manifests: list[tuple[Path, dict[str, Any], str]] = []
     for manifest_path in manifest_paths:
-        manifest = _read_json(manifest_path)
+        manifest = _without_result_summary(_read_json(manifest_path))
         algorithm_id = str(
             (manifest.get("identity") or {}).get("algorithm_id")
             or manifest_path.parent.name
@@ -1432,6 +1411,7 @@ def _write_run_manifest_archive(
         project_dir,
         manifest_payloads,
         bundled_files,
+        timezone_name,
     )
     archive.writestr(
         (archive_root / "README.txt").as_posix(),
@@ -1444,19 +1424,22 @@ def _write_run_manifest_archive(
     for manifest_path, _manifest, algorithm_id in selected_manifests:
         algorithm_source_dir = manifest_path.parent
         algorithm_archive_dir = archive_root / "algorithms" / algorithm_id
-        archive.write(
-            manifest_path,
+        archive.writestr(
             (algorithm_archive_dir / "run_manifest.json").as_posix(),
+            json.dumps(_manifest, indent=2),
         )
         for source in sorted(algorithm_source_dir.rglob("*")):
             if source.is_file():
                 if source == manifest_path:
                     continue
+                relative_source = source.relative_to(algorithm_source_dir)
+                if relative_source.as_posix() == "results/result_summary.json":
+                    continue
                 archive.write(
                     source,
                     (
                         algorithm_archive_dir
-                        / source.relative_to(algorithm_source_dir)
+                        / relative_source
                     ).as_posix(),
                 )
 
@@ -1465,6 +1448,7 @@ def build_run_manifest_zip(
     manifest_paths: list[Path],
     *,
     project_dir: Path | None = None,
+    timezone_name: str | None = None,
 ) -> bytes:
     if not manifest_paths:
         raise FileNotFoundError("No run manifests found.")
@@ -1475,6 +1459,7 @@ def build_run_manifest_zip(
             archive,
             manifest_paths,
             resolved_project_dir,
+            timezone_name,
         )
     return output.getvalue()
 
@@ -1484,6 +1469,7 @@ def write_run_manifest_zip(
     destination: Path,
     *,
     project_dir: Path | None = None,
+    timezone_name: str | None = None,
 ) -> Path:
     if not manifest_paths:
         raise FileNotFoundError("No run manifests found.")
@@ -1494,5 +1480,6 @@ def write_run_manifest_zip(
             archive,
             manifest_paths,
             resolved_project_dir,
+            timezone_name,
         )
     return destination

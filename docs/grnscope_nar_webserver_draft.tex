@@ -1,0 +1,215 @@
+%% GRNScope manuscript draft for Nucleic Acids Research Web Server Issue
+%% Based on the Oxford University Press oup-authoring-template.
+%% Replace all [PLACEHOLDER] text before submission.
+
+\documentclass[unnumsec,webpdf,modern,large]{oup-authoring-template}%
+
+\graphicspath{{Fig/}}
+\usepackage{graphicx}
+\usepackage{url}
+
+\begin{document}
+
+\journaltitle{Nucleic Acids Research}
+\DOI{DOI added during production}
+\copyrightyear{2026}
+\pubyear{2026}
+\vol{XX}
+\issue{X}
+\access{Submitted manuscript}
+\appnotes{Web Server}
+\firstpage{1}
+
+\title[GRNScope web server]{GRNScope: an interactive web server for reproducible gene regulatory network inference from single-cell RNA-sequencing data}
+
+\author[1,$\ast$]{[First Author]}
+\author[1]{[Second Author]}
+\author[2]{[Third Author]}
+\author[1]{[Fourth Author]}
+
+\address[1]{\orgdiv{[Department]}, \orgname{[Institution]}, \orgaddress{\city{[City]}, \postcode{[Postal Code]}, \country{[Country]}}}
+\address[2]{\orgdiv{[Department]}, \orgname{[Institution]}, \orgaddress{\city{[City]}, \postcode{[Postal Code]}, \country{[Country]}}}
+
+\corresp[$\ast$]{Corresponding author. \href{mailto:[EMAIL]}{[EMAIL]}}
+
+\abstract{Gene regulatory network inference from single-cell RNA-sequencing data can reveal candidate regulatory relationships underlying cellular states and trajectories, but existing workflows often require substantial command-line expertise, complex software environments, and manual comparison of multiple inference algorithms. GRNScope is an interactive web server for uploading single-cell expression matrices, preprocessing data, running multiple gene regulatory network inference methods, and exploring their predictions through consensus, network, trajectory, benchmarking, and perturbation views. The platform integrates methods from the BEELINE benchmarking ecosystem within isolated computational environments and records analysis parameters for reproducibility. Users can optionally provide pseudotime, cluster labels, transcription-factor references, and a ground-truth network. GRNScope reports method-specific evidence, bootstrap reproducibility, method support, direction and sign agreement, and comparative performance metrics. The server is freely accessible at \url{https://[SERVER-URL]}. GRNScope is intended to make multi-method regulatory-network analysis accessible to biologists while preserving downloadable outputs and computational provenance.}
+
+\keywords{single-cell RNA-seq, gene regulatory networks, web server, computational biology}
+
+\maketitle
+
+\section{Introduction}
+
+Gene regulatory networks describe relationships between transcriptional regulators and their potential target genes. Reconstructing these networks from single-cell RNA-sequencing data is useful for studying differentiation, cell-state transitions, disease-associated programs and perturbational responses. However, network inference methods differ substantially in their mathematical assumptions, computational cost, directionality, and ability to infer regulatory sign.
+
+The BEELINE benchmarking framework established a common evaluation environment for several single-cell gene regulatory network inference methods and demonstrated substantial variation in performance across datasets and metrics \citep{pratapa2020benchmarking}. Although benchmarking resources improve reproducibility, many methods remain difficult for non-specialist users to install, configure, execute and compare. Users may need to manage incompatible Python, R, MATLAB and Julia dependencies; convert input files manually; select method-specific parameters; and interpret multiple incompatible edge-weight scales.
+
+GRNScope addresses this usability and reproducibility gap through a web-based workflow. The platform accepts expression matrices and optional biological inputs, validates and preprocesses the data, executes selected inference methods in isolated containers, and presents outputs through interactive visual and tabular interfaces. Rather than treating any individual method as definitive, GRNScope exposes agreement, disagreement, reproducibility, directionality and sign information across methods.
+
+The main contributions of GRNScope are: (i) an accessible browser-based workflow for single-cell gene regulatory network inference; (ii) integration of multiple inference algorithms through a common execution contract; (iii) bootstrap-based assessment of predicted-edge reproducibility; (iv) consensus analysis that preserves method-specific evidence and direction/sign coverage; (v) interactive network, trajectory, benchmark and perturbation views; and (vi) downloadable analysis metadata and results to support independent reproduction.
+
+\section{Materials and Methods}
+
+\subsection{System overview}
+
+GRNScope is implemented as a browser-based application with a Next.js frontend and a FastAPI backend. The frontend provides project creation, data upload, preprocessing configuration, algorithm selection, job monitoring, result exploration and export functions. The backend validates files, stores project metadata, prepares algorithm inputs, schedules computational jobs and assembles result payloads.
+
+Each selected algorithm is executed in an isolated container using a standardized input/output contract. A container receives a preprocessed expression matrix and, when required, pseudotime or other auxiliary files. It returns a ranked edge list containing source gene, target gene, score and rank. This design isolates method-specific dependencies and allows additional algorithms to be registered without changing the user-facing workflow.
+
+Computational jobs can be executed using local worker processes or a Redis-backed worker configuration. Analysis metadata record the selected algorithms, resolved parameters, preprocessing settings, input dimensions and software versions.
+
+\subsection{Input data and validation}
+
+The primary input is a delimited expression matrix in which rows represent genes and columns represent cells. GRNScope validates the file format, header, gene identifiers, numerical expression values and file size. The platform records the number of genes, number of cells and gene names for downstream processing.
+
+Users may additionally provide pseudotime values, cell-cluster labels, a reference regulatory network, a custom transcription-factor reference, and CellOracle species and prior-network settings. A small sample expression matrix and matching pseudotime file are distributed with the application. A completed demonstration project allows users to inspect result views without first submitting their own data.
+
+\subsection{Preprocessing}
+
+GRNScope estimates whether the uploaded matrix contains raw, normalized or log-transformed values. Users can review or correct this classification before analysis. The preprocessing pipeline supports library-size normalization, log transformation, detection-based gene filtering, trajectory-aware gene selection and variance-based gene selection.
+
+Known transcription factors can be retained even when they fall outside the general variability cutoff. This option is intended to prevent biologically relevant regulators from being removed solely because they have relatively low expression variability.
+
+All preprocessing choices are stored with the project and included in the downloadable analysis metadata. The default maximum file size is 500 MB, and per-method gene caps are available for computationally expensive algorithms.
+
+\subsection{Integrated inference methods}
+
+The current implementation registers 15 inference methods, of which 13 are enabled in the current catalogue. These methods span information-theoretic, correlation-based, tree-based, regression, ordinary differential equation, Granger-causality and Bayesian approaches.
+
+The enabled catalogue includes PIDC, GENIE3, GRNBoost2, CellOracle, PPCOR, Pearson correlation, SCODE, SINCERITIES, SCRIBE, SINGE, LEAP, GRISLI and GRNVBEM. Methods differ in whether they produce directed edges, signed edges or require pseudotime.
+
+Algorithms are scheduled independently and can execute in parallel. Their outputs remain available separately so that users can inspect individual predictions rather than only the aggregated network.
+
+\subsection{Bootstrap reproducibility}
+
+To assess sensitivity to cell sampling, GRNScope can rerun each method on bootstrap resamples of the input cells. Each resample contains the same number of cells as the original dataset and is generated by sampling with replacement. The same deterministic cell draws are shared across methods within an analysis.
+
+For a method $m$, edge stability is defined as the fraction of bootstrap runs in which edge $e$ appears among the top $K$ regulators of its target:
+
+\begin{equation}
+\mathrm{Stability}_m(e)=\frac{1}{B_m}\sum_{b=1}^{B_m} I(r_{m,b}(e)\leq K),
+\end{equation}
+
+where $B_m$ is the number of completed bootstrap runs and $r_{m,b}(e)$ is the edge rank in run $b$. The user-facing confidence value is the stability value constrained to [0,1]. GRNScope also reports an evidence interval based on the distribution of per-run edge evidence.
+
+Bootstrap execution uses a minimum of three and a maximum of 15 resampling runs, with early stopping when the aggregated ranking becomes sufficiently stable. The exact settings used for each analysis are recorded in the project metadata.
+
+\subsection{Consensus analysis}
+
+Because raw scores produced by different algorithms are not directly comparable, GRNScope converts each method's edge scores into within-target percentile evidence. The strongest candidate regulator for a target receives evidence near 1, while weaker or absent predictions receive lower evidence.
+
+For a selected set of methods, consensus evidence is calculated from method-specific evidence values. GRNScope separately reports consensus evidence, the number of supporting methods, bootstrap confidence, direction confidence, direction coverage, sign confidence and sign coverage.
+
+Undirected methods contribute to evidence and support but abstain from direction voting. Unsigned methods contribute to edge support but abstain from activation/repression voting. This separation prevents unsupported direction or sign claims when only a subset of methods can provide that information.
+
+\subsection{Interactive result views}
+
+GRNScope provides five main result views. The Network view displays genes as nodes and predicted relationships as edges. Transcription factors can be distinguished using shape and colour, while edge width and colour represent evidence and method support. Force-directed, hierarchical, concentric, circular and chromosome-aware layouts are available.
+
+The Comparison view displays bootstrap reproducibility, pairwise method agreement and a consensus edge explorer. Users can compare methods using Jaccard similarity, rank-biased overlap and rank correlation.
+
+The Trajectory view displays cells along uploaded or estimated pseudotime and allows users to inspect gene-expression trends across trajectories. The Benchmark view evaluates predictions against an uploaded reference network using precision-recall, receiver-operating-characteristic, early-precision, AUPRC-ratio, AUROC and signed metrics. The Perturbation view uses CellOracle outputs to simulate changes in selected genes and display predicted expression and cell-state responses.
+
+All major tables and networks can be exported. An analysis metadata file records the configuration required to interpret or reproduce the analysis.
+
+\section{Results}
+
+\subsection{Web-server functionality}
+
+GRNScope provides a complete browser workflow from input validation through result export. Users can create a project, upload an expression matrix, review inferred matrix state and species, select preprocessing options, choose compatible algorithms and monitor asynchronous execution.
+
+The demonstration project allows users to inspect completed results without uploading data. The sample dataset contains [NUMBER OF GENES] genes and [NUMBER OF CELLS] cells and completes in approximately [RUNTIME] using the default settings.
+
+\subsection{Comparison with existing approaches}
+
+GRNScope differs from command-line benchmarking frameworks by combining method execution, input validation, preprocessing, job monitoring, consensus analysis, visualization and export in a single interface. It also differs from single-method web servers by exposing predictions from multiple methodological families and by reporting method agreement and disagreement explicitly.
+
+A formal comparison was performed against [COMPARABLE TOOLS]. The comparison included the number and diversity of supported algorithms, input formats, preprocessing requirements, pseudotime and cluster support, reproducibility, visualization, benchmarking and export functions.
+
+\subsection{Benchmark evaluation}
+
+To assess method behaviour, GRNScope was evaluated using [DATASET NAMES], comprising [NUMBER] genes, [NUMBER] cells and [NUMBER] reference interactions. Across these datasets, the best-performing method achieved an AUPRC ratio of [VALUE], an AUROC of [VALUE] and an early-precision ratio of [VALUE].
+
+The consensus network achieved [VALUE] for [METRIC], compared with [VALUE] for the strongest individual method. These results should be interpreted cautiously because agreement across methods does not establish experimental regulatory activity.
+
+\subsection{Biological case study}
+
+As a biological use case, GRNScope was applied to [ORGANISM, TISSUE, DEVELOPMENTAL PROCESS OR DISEASE CONTEXT]. The analysis included [NUMBER] cells and [NUMBER] genes and used [SELECTED ALGORITHMS].
+
+The consensus analysis identified [CANDIDATE REGULATOR] as a high-support regulator of [TARGET OR PATHWAY], supported by [NUMBER] methods with consensus evidence of [VALUE] and bootstrap confidence of [VALUE]. The predicted relationship was [DIRECTION/SIGN INTERPRETATION] and was supported by [INDEPENDENT EVIDENCE, LITERATURE OR VALIDATION EXPERIMENT].
+
+This case study demonstrates how GRNScope can be used to generate biologically testable hypotheses. Predicted edges should not be interpreted as experimentally verified regulatory interactions without independent validation.
+
+\subsection{Performance and usability}
+
+On the demonstration dataset, PEARSON, PPCOR, PIDC, GENIE3 and GRNBoost2 required approximately [RUNTIMES] under the default configuration. Runtime increased with the number of genes, selected methods and bootstrap replicates.
+
+The interface was tested using [BROWSER NAMES AND VERSIONS]. The application successfully completed [NUMBER] test analyses, including successful runs, invalid input files, incomplete pseudotime files, failed algorithm containers and interrupted jobs.
+
+\section{Discussion}
+
+GRNScope makes multi-method gene regulatory network inference more accessible by combining method execution, reproducibility assessment, interactive exploration and benchmarking in one web interface. Its principal analytical contribution is not a replacement for any individual inference algorithm, but a framework for exposing the evidence, reproducibility and limitations associated with each method and their aggregate predictions.
+
+The platform has several limitations. First, the quality of inferred networks depends on the input data, preprocessing choices, pseudotime quality and assumptions of the selected algorithms. Second, bootstrap confidence measures sensitivity to cell resampling and should not be interpreted as the experimental probability that an edge is biologically real. Third, consensus may reinforce shared biases among methods and does not necessarily outperform the best individual method. Fourth, some algorithms impose substantial memory and runtime requirements for large gene sets.
+
+Future work will include [PLANNED FEATURES, ADDITIONAL SPECIES, QUEUE SCALING, ADDITIONAL METHODS, EXPERIMENTAL VALIDATION OR USER STUDIES]. A further priority is to compare consensus strategies across independent datasets and determine when cross-method agreement provides predictive value beyond individual algorithms.
+
+\section{Data Availability}
+
+All source code, configuration files, sample data, documentation and analysis outputs used in this study will be archived at [ZENODO OR FIGSHARE DOI]. The deployed web server is available at \url{https://[SERVER-URL]}. Benchmark datasets are available from [REPOSITORY AND ACCESSION NUMBERS]. The exact analysis configurations and processed outputs used for the results are included in the archived study package.
+
+\section{Supplementary Data}
+
+Supplementary Data are available at NAR Online.
+
+\section{Author contributions statement}
+
+[INITIALS] conceived the project. [INITIALS] developed the frontend and backend implementation. [INITIALS] integrated the inference algorithms and benchmarking workflow. [INITIALS] performed the analyses. [INITIALS] prepared the manuscript. All authors reviewed and approved the final manuscript.
+
+\section{Funding}
+
+This work was supported by [OFFICIAL FUNDER NAME] [GRANT NUMBER].
+
+\section{Conflicts of interest}
+
+The authors declare no conflicts of interest.
+
+\section{Acknowledgments}
+
+The authors thank the developers of BEELINE and the individual gene regulatory network inference methods integrated into GRNScope.
+
+\begin{thebibliography}{10}
+
+\bibitem[Pratapa et al.(2020)]{pratapa2020benchmarking}
+A. Pratapa, A.P. Jalihal, J.N. Law, A. Bharadwaj and T.M. Murali.
+\newblock Benchmarking algorithms for gene regulatory network inference from single-cell transcriptomic data.
+\newblock {\em Nature Methods}, 17:147--154, 2020. doi:10.1038/s41592-019-0690-6.
+
+\bibitem[Chan et al.(2017)]{chan2017pidc}
+T.E. Chan, M.P.H. Stumpf and A.C. Babtie.
+\newblock Gene regulatory network inference from single-cell data using multivariate information measures.
+\newblock {\em Cell Systems}, 5:251--267, 2017. doi:10.1016/j.cels.2017.08.014.
+
+\bibitem[Huynh-Thu et al.(2010)]{huynhthu2010genie3}
+V.A. Huynh-Thu, A. Irrthum, L. Wehenkel and P. Geurts.
+\newblock Inferring regulatory networks from gene expression data using tree-based methods.
+\newblock {\em PLoS ONE}, 5:e12776, 2010. doi:10.1371/journal.pone.0012776.
+
+\bibitem[Moerman et al.(2019)]{moerman2019grnboost2}
+T. Moerman, S. Santos, C.B. Gonzalez-Blas, J. Simm, Y. Moreau, J. Aerts and J. Cannoodt.
+\newblock GRNBoost2 and Arboreto: efficient and scalable inference of gene regulatory networks.
+\newblock {\em Bioinformatics}, 35:2159--2161, 2019. doi:10.1093/bioinformatics/bty916.
+
+\bibitem[Street et al.(2018)]{street2018slingshot}
+K. Street, D. Risso, R.B. Fletcher, D. Das, J. Ngai, N.D. Yosef, E. Purdom and S. Dudoit.
+\newblock Slingshot: cell lineage and pseudotime inference for single-cell transcriptomics.
+\newblock {\em BMC Genomics}, 19:477, 2018. doi:10.1186/s13059-018-1444-0.
+
+\bibitem[Kamimoto et al.(2023)]{kamimoto2023celloracle}
+K. Kamimoto, C.M. Hoffmann, M. Tanaka, et al.
+\newblock Dissecting cell identity via network biology.
+\newblock {\em Nature}, 2023. doi:10.1038/s41586-022-05688-9.
+
+\end{thebibliography}
+
+\end{document}

@@ -63,6 +63,14 @@ function runManifestArchiveFilename(projectName: string | null | undefined) {
   return `${safeProjectName.slice(0, 100)}_run-manifests.zip`;
 }
 
+function runManifestDownloadUrl(projectId: string) {
+  const timezoneName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezoneQuery = timezoneName
+    ? `?timezone=${encodeURIComponent(timezoneName)}`
+    : "";
+  return `${API_BASE}/projects/${projectId}/download/run-manifests${timezoneQuery}`;
+}
+
 function markJobTasksStopping(
   job: ProjectJob | null,
   shouldStop: (algorithmId: string) => boolean,
@@ -2779,7 +2787,7 @@ useEffect(() => {
                     : () =>
                         openDownloadModal(
                           "Analysis package",
-                          `${API_BASE}/projects/${projectId}/download/run-manifests`,
+                          runManifestDownloadUrl(projectId),
                           runManifestArchiveFilename(project?.project_name),
                         )
                 }
