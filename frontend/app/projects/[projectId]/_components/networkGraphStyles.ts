@@ -1,8 +1,10 @@
 import type { StylesheetJson } from "cytoscape";
+import { appearanceStyles, type NetworkAppearance } from "./networkAppearance";
 import { NETWORK_COLORS } from "./networkVisualEncoding";
 
 export function getNetworkGraphStylesheet(
   appearance: "light" | "publication" = "light",
+  preset: NetworkAppearance = "classic",
 ): StylesheetJson {
   return [
     {
@@ -128,5 +130,6 @@ export function getNetworkGraphStylesheet(
         "text-border-opacity": 1,
       },
     },
+    ...appearanceStyles(preset),
   ];
 }

@@ -72,6 +72,7 @@ export type NetworkGraphProps = {
   showEdgeLabels?: boolean;
   focusGene?: string | null;
   neighborhood?: boolean;
+  appearance?: import("./networkAppearance").NetworkAppearance;
 };
 
 export type EdgeTooltipState = {

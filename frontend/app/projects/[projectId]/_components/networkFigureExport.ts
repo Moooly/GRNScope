@@ -1,13 +1,18 @@
 import type { Core } from "cytoscape";
 import {
   METRICS,
-  NETWORK_COLORS,
   metricWidth,
   type NetworkMetric,
 } from "./networkVisualEncoding";
 
+import {
+  NETWORK_APPEARANCES,
+  type NetworkAppearance,
+} from "./networkAppearance";
+
 export type NetworkFigureContext = {
   metric: NetworkMetric;
+  appearance?: NetworkAppearance;
   methodCount: number;
   scope: string;
   geneCount: number;
@@ -28,6 +33,8 @@ export async function exportNetworkFigure(
 ) {
   if (cy.destroyed() || !cy.elements().length)
     throw new Error("There is no network to export.");
+  const appearance = context.appearance ?? "classic";
+  const palette = NETWORK_APPEARANCES[appearance];
   const width = Math.max(900, Math.round(cy.width()));
   const graphHeight = Math.round(cy.height());
   const svg = document.createElementNS(NS, "svg");
@@ -49,6 +56,7 @@ export async function exportNetworkFigure(
     `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
     `Filters: ${context.filters || "None"}${context.focus ? " · Neighborhood: " + context.focus : ""}${context.highlightedMethod ? " · Highlight: " + context.highlightedMethod : ""}`,
     METRICS[context.metric].description,
+    `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
   ].flatMap((line) => {
     const maxChars = Math.floor((width - 48) / 6.5);
     const result: string[] = [];
@@ -67,13 +75,13 @@ export async function exportNetworkFigure(
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  add("rect", { width, height, fill: "#ffffff" });
+  add("rect", { width, height, fill: palette.background });
   add(
     "text",
     {
       x: 24,
       y: 29,
-      fill: "#263e4c",
+      fill: palette.text,
       "font-size": 18,
       "font-weight": 600,
       "font-family": "Arial, sans-serif",
@@ -89,7 +97,7 @@ export async function exportNetworkFigure(
       plugin(cytoscape);
     }
     const parsed = new DOMParser().parseFromString(
-      cy.svg({ full: false, scale: 1, bg: "#fff" }),
+      cy.svg({ full: false, scale: 1, bg: palette.background }),
       "image/svg+xml",
     );
     const graph = parsed.documentElement;
@@ -104,7 +112,7 @@ export async function exportNetworkFigure(
       y: 44,
       width: cy.width(),
       height: graphHeight,
-      href: cy.png({ full: false, scale: 2, bg: "#fff" }),
+      href: cy.png({ full: false, scale: 2, bg: palette.background }),
     });
   }
   const top = graphHeight + 60;
@@ -113,7 +121,7 @@ export async function exportNetworkFigure(
     x: number,
     y: number,
     text: string,
-    color = "#526b79",
+    color: string = palette.text,
     size = 11,
   ) =>
     add(
@@ -127,41 +135,41 @@ export async function exportNetworkFigure(
       },
       text,
     );
-  add("path", { d: `M30 ${top + 18}l6 6-6 6-6-6Z`, fill: NETWORK_COLORS.node });
+  add("path", { d: `M30 ${top + 18}l6 6-6 6-6-6Z`, fill: palette.node });
   label(43, top + 28, "TF");
-  add("circle", { cx: 103, cy: top + 24, r: 5, fill: NETWORK_COLORS.node });
+  add("circle", { cx: 103, cy: top + 24, r: 5, fill: palette.node });
   label(115, top + 28, "Other gene");
   add("path", {
     d: `M225 ${top + 24}h22`,
-    stroke: NETWORK_COLORS.positive,
+    stroke: palette.positive,
     "stroke-width": 1.8,
   });
   add("path", {
     d: `M243 ${top + 19}l8 5-8 5Z`,
-    fill: NETWORK_COLORS.positive,
+    fill: palette.positive,
   });
-  label(259, top + 28, "Activation", NETWORK_COLORS.positive);
+  label(259, top + 28, "Activation", palette.positive);
   add("path", {
     d: `M345 ${top + 24}h25m0-6v12`,
-    stroke: NETWORK_COLORS.negative,
+    stroke: palette.negative,
     "stroke-width": 1.8,
     fill: "none",
   });
-  label(379, top + 28, "Repression", NETWORK_COLORS.negative);
+  label(379, top + 28, "Repression", palette.negative);
   add("path", {
     d: `M470 ${top + 24}h22m0-5 8 5-8 5Z`,
-    stroke: NETWORK_COLORS.unknown,
+    stroke: palette.unknown,
     "stroke-width": 1.5,
     fill: "none",
   });
-  label(508, top + 28, "Unresolved sign", NETWORK_COLORS.unknown);
+  label(508, top + 28, "Unresolved sign", palette.unknown);
   label(665, top + 28, "Tip points to affected gene");
   label(24, top + 53, `Line width: ${METRICS[context.metric].label}`);
   [0, 0.5, 1].forEach((value, index) => {
     const x = 220 + index * 100;
     add("path", {
       d: `M${x} ${top + 49}h35`,
-      stroke: NETWORK_COLORS.node,
+      stroke: palette.node,
       "stroke-width": metricWidth(value),
       "stroke-linecap": "round",
     });
@@ -173,7 +181,7 @@ export async function exportNetworkFigure(
   });
   add("path", {
     d: `M535 ${top + 49}h30`,
-    stroke: NETWORK_COLORS.unknown,
+    stroke: palette.unknown,
     "stroke-width": metricWidth(null),
     "stroke-dasharray": "4 3",
   });
@@ -182,11 +190,11 @@ export async function exportNetworkFigure(
     24,
     top + 76,
     "Fixed absolute scale · No tip: direction unresolved · Gold outline: selection · Support counts reporting methods, not agreement.",
-    "#78909b",
+    palette.text,
     10,
   );
   lines.forEach((line, index) =>
-    label(24, top + 101 + index * 18, line, "#667e8a", 11),
+    label(24, top + 101 + index * 18, line, palette.text, 11),
   );
   const blob = new Blob([new XMLSerializer().serializeToString(svg)], {
     type: "image/svg+xml;charset=utf-8",
@@ -213,7 +221,7 @@ export async function exportNetworkFigure(
     }
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = `${filename}-${context.metric}.${format}`;
+    link.download = `${filename}-${context.metric}-${appearance}.${format}`;
     document.body.appendChild(link);
     link.click();
     link.remove();

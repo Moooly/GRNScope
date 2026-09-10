@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core, type LayoutOptions } from "cytoscape";
+import { updateGalleryCurves } from "./networkAppearance";
 import { frameNetworkSelection } from "./networkCamera";
+import { createBranchLayout } from "./networkBranchLayout";
 import { createAtlasLayout } from "./networkAtlasLayout";
 import {
   buildCircularPositions,
@@ -39,6 +41,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     nodes,
     edges,
     layout,
+    appearance = "classic",
     metric = "confidence",
     methodCount = 1,
     highlightedMethod,
@@ -69,10 +72,11 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     () =>
       JSON.stringify([
         layout,
+        layout === "force" && appearance === "teal" ? "branches" : "atlas",
         nodes.map((n) => [n.id, n.isTF]).sort(),
         edges.map((e) => [e.key, e.source, e.target]).sort(),
       ]),
-    [nodes, edges, layout],
+    [nodes, edges, layout, appearance],
   );
 
   useEffect(() => {
@@ -266,7 +270,9 @@ export default function NetworkGraph(props: NetworkGraphProps) {
         layoutPending.current = true;
         setArranging(true);
         const context = document.createElement("canvas").getContext("2d");
-        cancelLayout.current = createAtlasLayout(
+        const arrange =
+          appearance === "teal" ? createBranchLayout : createAtlasLayout;
+        cancelLayout.current = arrange(
           nodes,
           edges,
           { width: cy.width(), height: cy.height() },
@@ -360,6 +366,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     nodes,
     edges,
     layout,
+    appearance,
     metric,
     methodCount,
     highlightedMethod,
@@ -367,6 +374,26 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     selectedGene,
     selectedEdgeKey,
   ]);
+
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy) return;
+    updateGalleryCurves(cy, appearance);
+    cy.style(getNetworkGraphStylesheet("light", appearance));
+    refreshLabels.current();
+    let frame = 0;
+    const route = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!cy.destroyed()) updateGalleryCurves(cy, appearance);
+      });
+    };
+    cy.on("position layoutstop", route);
+    return () => {
+      cancelAnimationFrame(frame);
+      cy.off("position layoutstop", route);
+    };
+  }, [appearance, elements]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {

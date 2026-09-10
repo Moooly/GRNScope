@@ -1181,3 +1181,25 @@
   .grn-expanded .network-atlas-controls > div { flex-direction: row; gap: 6px; }
   .grn-expanded .network-atlas-controls > div > label { flex: 1; width: auto; min-width: 0; }
 }
+
+/* Gallery presets only affect the network surface; page controls stay familiar. */
+.grn-atlas[data-appearance] .grn-graph-region { background: var(--grn-network-bg); }
+.grn-atlas[data-appearance] .grn-canvas-caption { background: var(--grn-network-bg); }
+.grn-atlas[data-appearance] .grn-canvas-caption > span,
+.grn-atlas[data-appearance] .grn-canvas-caption small { color: var(--grn-network-text); }
+.grn-atlas[data-appearance] .grn-canvas-caption small { opacity: .65; }
+.grn-atlas[data-appearance] > .grn-legend { background: var(--grn-network-bg); border-top-color: #899b9b40; }
+.grn-atlas[data-appearance] > .grn-legend :is(strong, small, p, .grn-legend-items, .grn-scale) { color: var(--grn-network-text); }
+.grn-atlas[data-appearance] > .grn-legend .grn-node-symbol { background: var(--grn-network-node); }
+.grn-atlas[data-appearance] .grn-empty { color: var(--grn-network-text); }
+.grn-style-picker { padding: 0; margin: 0; border: 0; min-width: 0; }
+.grn-style-picker legend { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.grn-style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grn-style-grid button { padding: 5px; border: 1px solid #e2e8f0; border-radius: 9px; text-align: left; min-width: 0; background: white; }
+.grn-style-grid button[aria-pressed="true"] { border-color: #1b75a6; box-shadow: 0 0 0 1px #1b75a6; background: #f1f9fc; }
+.grn-style-grid svg { width: 100%; height: 49px; display: block; }
+.grn-style-grid span { display: block; font-size: 11px; padding: 4px 2px 0; color: #334155; font-weight: 600; }
+.grn-style-picker p { margin: 9px 0 0; font-size: 11px; line-height: 1.5; color: #64748b; }
+.grn-display-options { max-height: min(620px, 70dvh); overflow-y: auto; overscroll-behavior: contain; }
+.grn-atlas[data-appearance] > .grn-legend .grn-legend-items > span,
+.grn-atlas[data-appearance] > .grn-legend .grn-scale > span { color: var(--grn-network-text); }

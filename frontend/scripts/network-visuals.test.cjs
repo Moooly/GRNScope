@@ -297,3 +297,162 @@ test("inspection camera contains endpoints and long annotation after the canvas 
     assert.ok((box.y1 + box.h) * view.zoom + view.pan.y <= size.height - 63.99);
   }
 });
+
+test("gallery presets preserve topology, tips, metric widths and selection semantics", () => {
+  const { NETWORK_APPEARANCES, updateGalleryCurves } = require(
+    base + "networkAppearance.ts",
+  );
+  const elements = buildGraphElements(
+    [node("A", true), node("B"), node("C")],
+    [edge({ sign: -1 }), edge({ key: "A-C", target: "C" })],
+  ).elements;
+  elements
+    .filter((e) => e.data.source)
+    .forEach((e) =>
+      Object.assign(e.data, { metricWidth: 2.1, galleryCurve: [0, 0] }),
+    );
+  const cy = cytoscape({
+    headless: true,
+    styleEnabled: true,
+    elements,
+    layout: { name: "preset" },
+  });
+  cy.$id("A").position({ x: 0, y: 0 });
+  cy.$id("B").position({ x: 160, y: 50 });
+  cy.$id("C").position({ x: 90, y: -100 });
+  const positions = cy.nodes().map((n) => ({ ...n.position() }));
+  for (const preset of Object.keys(NETWORK_APPEARANCES)) {
+    updateGalleryCurves(cy, preset);
+    cy.style(getNetworkGraphStylesheet("light", preset));
+    assert.deepEqual(
+      cy.nodes().map((n) => ({ ...n.position() })),
+      positions,
+    );
+    assert.equal(cy.$id("A").style("shape"), "diamond");
+    assert.equal(cy.$id("B").style("shape"), "ellipse");
+    const e = cy.$id("A-B");
+    assert.equal(e.style("target-arrow-shape"), "tee");
+    assert.equal(cy.$id("A-C").style("target-arrow-shape"), "triangle");
+    assert.notEqual(e.style("line-color"), cy.$id("A-C").style("line-color"));
+    assert.equal(e.style("label"), "");
+    assert.equal(parseFloat(e.style("width")), 2.1);
+    const color = e.style("line-color");
+    e.select();
+    assert.equal(e.style("line-color"), color);
+    e.unselect();
+    if (["silver", "graphite"].includes(preset)) {
+      assert.ok(e.data("galleryCurve").every(Number.isFinite));
+      assert.ok(e.data("galleryCurve").some((v) => v !== 0));
+    }
+    if (["silver", "graphite"].includes(preset))
+      assert.notEqual(cy.$id("B").style("background-fill"), "solid");
+  }
+  cy.destroy();
+});
+
+test("gene and relationship limits grow honestly without fabricating nodes", () => {
+  const { selectNetworkDisplay } = require(base + "networkDisplay.ts");
+  const fixture = require("./network-branch-fixture.cjs");
+  const small = selectNetworkDisplay(fixture.edges, 20, "genes");
+  const large = selectNetworkDisplay(fixture.edges, 100, "genes");
+  assert.equal(small.geneIds.size, 20);
+  assert.equal(large.geneIds.size, 100);
+  assert.ok([...small.geneIds].every((id) => large.geneIds.has(id)));
+  assert.ok(
+    large.edges.every(
+      (e) => large.geneIds.has(e.source) && large.geneIds.has(e.target),
+    ),
+  );
+  assert.equal(
+    selectNetworkDisplay(fixture.edges, 20, "relationships").edges.length,
+    20,
+  );
+  assert.equal(
+    selectNetworkDisplay(fixture.edges, 0, "genes").geneIds.size,
+    146,
+  );
+  const dense = Array.from({ length: 19 }, (_, i) =>
+    Array.from({ length: 18 - i }, (_, j) => ({
+      source: `g${i}`,
+      target: `g${i + j + 1}`,
+    })),
+  ).flat();
+  assert.equal(selectNetworkDisplay(dense, 100, "genes").geneIds.size, 19);
+  assert.equal(
+    selectNetworkDisplay(dense, 100, "relationships").edges.length,
+    100,
+  );
+});
+
+test("branch layout spreads hubs and terminal chains with no lost nodes or full-label overlaps", async () => {
+  const { createBranchLayout, branchStructure } = require(
+    base + "networkBranchLayout.ts",
+  );
+  const { selectNetworkDisplay } = require(base + "networkDisplay.ts");
+  const fixture = require("./network-branch-fixture.cjs");
+  for (const count of [20, 100, 146]) {
+    const display = selectNetworkDisplay(fixture.edges, count, "genes");
+    const nodes = fixture.nodes.filter((n) => display.geneIds.has(n.id));
+    const result = await new Promise((resolve) =>
+      createBranchLayout(
+        nodes,
+        display.edges,
+        { width: 1280, height: 700 },
+        { synchronous: true, onComplete: resolve },
+      ),
+    );
+    assert.equal(Object.keys(result).length, count);
+    for (const p of Object.values(result))
+      assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y));
+    for (let i = 0; i < nodes.length; i++)
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = result[nodes[i].id],
+          b = result[nodes[j].id];
+        const widthA = Math.max(50, nodes[i].id.length * 8 + 12),
+          widthB = Math.max(50, nodes[j].id.length * 8 + 12);
+        assert.ok(
+          Math.abs(a.x - b.x) >= (widthA + widthB) / 2 ||
+            Math.abs(a.y - b.y) >= 64,
+          `overlap: ${nodes[i].id} / ${nodes[j].id}`,
+        );
+      }
+    if (count === 146) {
+      const plan = branchStructure(nodes, display.edges);
+      assert.equal(plan.core.size, 6);
+      assert.equal(plan.parent.get("CHAIN_7"), "CHAIN_6");
+      assert.ok(
+        Math.hypot(
+          result.HUB_1.x - result.HUB_2.x,
+          result.HUB_1.y - result.HUB_2.y,
+        ) > 350,
+      );
+    }
+  }
+});
+
+test("branch routing curves compatible leaf fans and leaves bridges straight", () => {
+  const { updateBranchCurves } = require(base + "networkAppearance.ts");
+  const nodes = ["H", "a", "b", "c", "d", "Q"].map((id) => node(id));
+  const edges = ["a", "b", "c", "d", "Q"].map((target) =>
+    edge({ key: "H-" + target, source: "H", target }),
+  );
+  const cy = cytoscape({
+    headless: true,
+    elements: buildGraphElements(nodes, edges).elements,
+    layout: { name: "preset" },
+  });
+  cy.$id("H").position({ x: 0, y: 0 });
+  ["a", "b", "c", "d"].forEach((id, i) =>
+    cy.$id(id).position({ x: 200, y: 25 + i * 25 }),
+  );
+  cy.$id("Q").position({ x: -200, y: 0 });
+  updateBranchCurves(cy);
+  assert.equal(cy.$id("H-Q").data("galleryRoute"), "straight");
+  assert.ok(
+    cy.edges().some((e) => e.data("galleryRoute") === "unbundled-bezier"),
+  );
+  assert.ok(
+    cy.edges().every((e) => e.data("galleryCurve").every(Number.isFinite)),
+  );
+  cy.destroy();
+});

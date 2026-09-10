@@ -1,19 +1,26 @@
 import {
   METRICS,
-  NETWORK_COLORS,
   metricWidth,
   type NetworkMetric,
 } from "./networkVisualEncoding";
+
+import {
+  NETWORK_APPEARANCES,
+  type NetworkAppearance,
+} from "./networkAppearance";
 
 export default function NetworkLegend({
   metric,
   methodCount,
   circos = false,
+  appearance = "classic",
 }: {
   metric: NetworkMetric;
   methodCount: number;
   circos?: boolean;
+  appearance?: NetworkAppearance;
 }) {
+  const palette = NETWORK_APPEARANCES[appearance];
   if (circos)
     return (
       <footer className="grn-legend" aria-label="Chromosome network legend">
@@ -50,7 +57,10 @@ export default function NetworkLegend({
         <strong>Genes</strong>
         <div className="grn-legend-items">
           <span>
-            <i className="grn-node-symbol grn-diamond" />
+            <i
+              className="grn-node-symbol grn-diamond"
+              style={{ background: palette.tf }}
+            />
             TF
           </span>
           <span>
@@ -58,19 +68,19 @@ export default function NetworkLegend({
             Other gene
           </span>
         </div>
-        <small>Shape identifies gene type</small>
+        <small>
+          {appearance === "teal" || appearance === "pastel"
+            ? "Shape: gene type · Size: displayed connections"
+            : "Shape identifies gene type"}
+        </small>
       </div>
       <div className="grn-legend-group">
         <strong>Predicted sign & direction</strong>
         <div className="grn-legend-items">
           <span>
             <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">
-              <path
-                d="M2 8H23"
-                stroke={NETWORK_COLORS.positive}
-                strokeWidth="1.8"
-              />
-              <path d="M22 3L30 8L22 13Z" fill={NETWORK_COLORS.positive} />
+              <path d="M2 8H23" stroke={palette.positive} strokeWidth="1.8" />
+              <path d="M22 3L30 8L22 13Z" fill={palette.positive} />
             </svg>
             Activation
           </span>
@@ -78,7 +88,7 @@ export default function NetworkLegend({
             <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">
               <path
                 d="M2 8H27M27 2V14"
-                stroke={NETWORK_COLORS.negative}
+                stroke={palette.negative}
                 strokeWidth="1.8"
                 fill="none"
               />
@@ -89,7 +99,7 @@ export default function NetworkLegend({
             <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">
               <path
                 d="M2 8H22M22 3L30 8L22 13Z"
-                stroke={NETWORK_COLORS.unknown}
+                stroke={palette.unknown}
                 strokeWidth="1.5"
                 fill="none"
               />
@@ -109,7 +119,7 @@ export default function NetworkLegend({
               <svg width="43" height="14" aria-hidden="true">
                 <path
                   d="M2 7H41"
-                  stroke="#476477"
+                  stroke={palette.node}
                   strokeWidth={metricWidth(value)}
                   strokeLinecap="round"
                 />
@@ -123,7 +133,7 @@ export default function NetworkLegend({
             <svg width="35" height="14" aria-hidden="true">
               <path
                 d="M2 7H33"
-                stroke="#8b95a0"
+                stroke={palette.unknown}
                 strokeWidth={metricWidth(null)}
                 strokeDasharray="4 3"
               />

@@ -35,6 +35,9 @@ type ResultsControlsSectionProps = {
   edgeDisplayLimit: number;
   onChangeEdgeDisplayLimit: (value: number) => void;
   filteredEdgeCount: number;
+  displayUnit?: "relationships" | "genes";
+  onChangeDisplayUnit?: (unit: "relationships" | "genes") => void;
+  filteredGeneCount?: number;
   compact?: boolean;
   projectId?: string;
   isGuideOpen?: boolean;
@@ -71,6 +74,9 @@ export default function ResultsControlsSection({
   edgeDisplayLimit,
   onChangeEdgeDisplayLimit,
   filteredEdgeCount,
+  displayUnit = "relationships",
+  onChangeDisplayUnit,
+  filteredGeneCount = 0,
   compact = false,
   onOpenGuide,
 }: ResultsControlsSectionProps) {
@@ -241,7 +247,7 @@ export default function ResultsControlsSection({
     );
   };
 
-  const safeFilteredEdgeCount = Math.max(0, filteredEdgeCount);
+  const safeFilteredEdgeCount = Math.max(0, displayUnit === "genes" ? filteredGeneCount : filteredEdgeCount);
   const minEdgeDisplayLimit = 0;
   const safeEdgeDisplayLimit = Math.min(
     safeFilteredEdgeCount,
@@ -400,7 +406,7 @@ export default function ResultsControlsSection({
         onClick={() => adjustEdgeDisplayLimit(-10)}
         disabled={safeEdgeDisplayLimit <= minEdgeDisplayLimit}
         className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
-        aria-label="Decrease shown edges"
+        aria-label={`Decrease shown ${displayUnit}`}
       >
         -
       </button>
@@ -415,14 +421,14 @@ export default function ResultsControlsSection({
         onFocus={() => setEdgeDisplayDraft(String(safeEdgeDisplayLimit))}
         onBlur={() => setEdgeDisplayDraft(null)}
         className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none"
-        aria-label="Shown edges"
+        aria-label={displayUnit === "genes" ? "Shown genes" : "Shown relationships"}
       />
       <button
         type="button"
         onClick={() => adjustEdgeDisplayLimit(10)}
         disabled={safeEdgeDisplayLimit >= safeFilteredEdgeCount}
         className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
-        aria-label="Increase shown edges"
+        aria-label={`Increase shown ${displayUnit}`}
       >
         +
       </button>
@@ -501,14 +507,24 @@ export default function ResultsControlsSection({
             </h3>
           </div>
           <p className="mt-1 text-sm font-bold text-slate-800">
-            {safeEdgeDisplayLimit.toLocaleString()} shown
+            {(safeEdgeDisplayLimit === 0 ? safeFilteredEdgeCount : safeEdgeDisplayLimit).toLocaleString()} {displayUnit} shown
             <span className="px-1.5 font-medium text-slate-400">·</span>
             {matchingEdgesLabel} match filters
           </p>
         </div>
         {edgeDisplayControl()}
       </div>
-
+      {onChangeDisplayUnit && <>
+        <label className="mt-3 flex items-center justify-between gap-3 text-xs font-semibold text-slate-700">
+          Limit by
+          <select aria-label="Display limit counts" value={displayUnit} onChange={e => { setEdgeDisplayDraft(null); onChangeDisplayUnit(e.target.value as "relationships" | "genes"); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <option value="relationships">Relationships</option><option value="genes">Genes</option>
+          </select>
+        </label>
+        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+          {filteredGeneCount} genes available after filters. {displayUnit === "genes" ? "Shows ranked genes and all matching relationships between them." : "More relationships may connect the same genes. Choose Genes to control the node count."} Zero shows all.
+        </p>
+      </>}
     </section>
   );
 

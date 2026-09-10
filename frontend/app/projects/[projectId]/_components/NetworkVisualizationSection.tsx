@@ -17,6 +17,15 @@ import { DownloadIcon } from "./DownloadMenu";
 import { isDenseNetwork } from "./networkGraphLayouts";
 import CircosNetworkGraph from "./CircosNetworkGraph";
 import NetworkHelpModal from "./NetworkHelpModal";
+import {
+  selectNetworkDisplay,
+  type NetworkDisplayUnit,
+} from "./networkDisplay";
+import NetworkStylePicker from "./NetworkStylePicker";
+import {
+  NETWORK_APPEARANCES,
+  type NetworkAppearance,
+} from "./networkAppearance";
 import NetworkLegend from "./NetworkLegend";
 import NetworkInspector from "./NetworkInspector";
 import {
@@ -52,6 +61,7 @@ type Props = {
   isolatedGene: string | null;
   setIsolatedGene: (id: string | null) => void;
   edgeDisplayLimit: number;
+  displayUnit?: NetworkDisplayUnit;
   cellOracleReady: boolean;
   perturbationGenes: string[];
   onOpenPerturbation: (gene: string) => void;
@@ -108,6 +118,9 @@ export default function NetworkVisualizationSection(props: Props) {
     scopeLabel,
     resultsControls,
   } = props;
+  const [appearance, setAppearance] = useState<NetworkAppearance>("teal");
+  const activeAppearance = networkLayout === "circos" ? "classic" : appearance;
+  const palette = NETWORK_APPEARANCES[activeAppearance];
   const [metricChoice, setMetric] = useState<NetworkMetric | null>(null);
   const hasVerifiedConfidence = filteredNetworkEdges.some(
     (edge) =>
@@ -190,16 +203,20 @@ export default function NetworkVisualizationSection(props: Props) {
     });
   }, []);
 
-  const limit =
-    edgeDisplayLimit > 0 ? edgeDisplayLimit : filteredNetworkEdges.length;
-  const edges = useMemo(
-    () => filteredNetworkEdges.slice(0, limit),
-    [filteredNetworkEdges, limit],
+  const display = useMemo(
+    () =>
+      selectNetworkDisplay(
+        filteredNetworkEdges,
+        edgeDisplayLimit,
+        props.displayUnit ?? "relationships",
+      ),
+    [filteredNetworkEdges, edgeDisplayLimit, props.displayUnit],
   );
-  const nodes = useMemo(() => {
-    const ids = new Set(edges.flatMap((e) => [e.source, e.target]));
-    return networkNodes.filter((node) => ids.has(node.id));
-  }, [edges, networkNodes]);
+  const edges = display.edges;
+  const nodes = useMemo(
+    () => networkNodes.filter((node) => display.geneIds.has(node.id)),
+    [display, networkNodes],
+  );
   const selectedEdge =
     edges.find((edge) => edge.key === selectedEdgeKey) ?? null;
   const selectedVisibleNode =
@@ -372,6 +389,7 @@ export default function NetworkVisualizationSection(props: Props) {
       } else
         await props.onExportNetwork(format, {
           metric,
+          appearance,
           methodCount: selectedAlgorithmIds.length,
           scope: scopeLabel,
           geneCount: nodes.length,
@@ -397,6 +415,14 @@ export default function NetworkVisualizationSection(props: Props) {
       <section
         ref={workspaceRef}
         className={`network-atlas grn-atlas${expanded ? " grn-expanded" : ""}`}
+        data-appearance={activeAppearance}
+        style={
+          {
+            "--grn-network-bg": palette.background,
+            "--grn-network-text": palette.text,
+            "--grn-network-node": palette.node,
+          } as import("react").CSSProperties
+        }
         role={expanded ? "dialog" : undefined}
         aria-modal={expanded || undefined}
         aria-label="Regulatory network workspace"
@@ -469,6 +495,10 @@ export default function NetworkVisualizationSection(props: Props) {
                 <div className="grn-display-options">
                   {networkLayout !== "circos" ? (
                     <>
+                      <NetworkStylePicker
+                        value={appearance}
+                        onChange={setAppearance}
+                      />
                       <div className="grn-metric-switch">
                         <span>Line width</span>
                         {(Object.keys(METRICS) as NetworkMetric[]).map(
@@ -678,7 +708,7 @@ export default function NetworkVisualizationSection(props: Props) {
 
         <div className="grn-scope-strip" aria-live="polite">
           <span>
-            <b>{nodes.length}</b> genes ·{" "}
+            <b>{nodes.length}</b> of {display.availableGenes} available genes ·{" "}
             <button
               className="grn-count-button"
               aria-expanded={showList}
@@ -710,7 +740,7 @@ export default function NetworkVisualizationSection(props: Props) {
           className={`grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
         >
           <div className="grn-graph-region">
-            {!edges.length ? (
+            {!nodes.length ? (
               <div className="grn-empty">
                 <span>◎</span>
                 <h3>No relationships in this view</h3>
@@ -741,6 +771,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 nodes={nodes}
                 edges={edges}
                 layout={networkLayout}
+                appearance={appearance}
                 metric={metric}
                 methodCount={selectedAlgorithmIds.length}
                 highlightedMethod={effectiveHighlight}
@@ -761,7 +792,9 @@ export default function NetworkVisualizationSection(props: Props) {
                       : networkLayout === "hierarchical"
                         ? "Regulatory flow"
                         : networkLayout === "force"
-                          ? "Connected neighborhoods"
+                          ? appearance === "teal" && networkLayout === "force"
+                            ? "Branching neighborhoods"
+                            : "Connected neighborhoods"
                           : networkLayout === "concentric"
                             ? "Regulatory hubs"
                             : "Circular network"}
@@ -839,6 +872,7 @@ export default function NetworkVisualizationSection(props: Props) {
           />
         </div>
         <NetworkLegend
+          appearance={activeAppearance}
           metric={metric}
           methodCount={selectedAlgorithmIds.length}
           circos={networkLayout === "circos"}

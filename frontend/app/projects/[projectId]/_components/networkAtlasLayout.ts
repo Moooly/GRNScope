@@ -20,10 +20,10 @@ export function atlasFootprint(
 ) {
   return {
     width: Math.max(
-      node.isTF ? 31 : 25,
+      50, // Reserve room for every appearance, so switching styles keeps positions.
       (measure?.(node.id, node.isTF) ?? node.id.length * 9) + 10,
     ),
-    height: 60,
+    height: 80,
   };
 }
 
