@@ -1,3 +1,4 @@
+import { signColor, hasDirection } from "./networkVisualEncoding";
 import type {
   GraphCounts,
   NetworkEdge,
@@ -949,21 +950,11 @@ export function buildGraphElements(
   };
 
   const getEdgeColor = (edge: NetworkEdge) => {
-    if (edge.sign === 0) {
-      return "#8290a3";
-    }
-
-    return edge.sign > 0 ? "#168f98" : "#d66c4d";
+    return signColor(edge.sign);
   };
 
   const getRelationshipShape = (edge: NetworkEdge) => {
-    if (edge.direction === 0 || edge.directionCoverage <= 0) return "none";
-    if (edge.directionConfidence === null) return "none";
-    if (edge.sign === 0) {
-      return "triangle";
-    }
-
-    return edge.sign > 0 ? "triangle" : "tee";
+    return hasDirection(edge) ? (edge.sign < 0 ? "tee" : "triangle") : "none";
   };
 
   const getEndpointDistance = (shape: string) => {
@@ -979,18 +970,10 @@ export function buildGraphElements(
   const hasReciprocalEdge = (edge: NetworkEdge) =>
     directedPairs.has(`${edge.target}|||${edge.source}`);
 
-  const getEffectiveDirection = (edge: NetworkEdge, hasReciprocal: boolean) => {
-    // If both A->B and B->A survived the filters, show them as true reciprocal
-    // edges instead of letting low-confidence direction inference collapse them
-    // onto the same visual direction.
-    if (hasReciprocal) return 1;
-    return edge.direction;
-  };
 
   const elements = [
     ...nodes.map((node) => {
-      const fullLabel =
-        node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
+      const fullLabel = node.id;
 
       return {
         data: {
@@ -1013,7 +996,7 @@ export function buildGraphElements(
     }),
     ...edges.map((edge) => {
       const hasReciprocal = hasReciprocalEdge(edge);
-      const effectiveDirection = getEffectiveDirection(edge, hasReciprocal);
+      const effectiveDirection = edge.direction;
       const displaySource = effectiveDirection === -1 ? edge.target : edge.source;
       const displayTarget = effectiveDirection === -1 ? edge.source : edge.target;
       const sourceArrowShape =
@@ -1031,6 +1014,7 @@ export function buildGraphElements(
           displayTarget,
           score: edge.score,
           confidence: edge.confidence,
+          bootstrapVerified: edge.bootstrapVerified,
           evidenceOpacity: getEvidenceOpacity(edge.score),
           denseNetwork: denseNetwork ? 1 : 0,
           edgeColor: getEdgeColor(edge),
@@ -1040,7 +1024,7 @@ export function buildGraphElements(
           targetDistanceFromNode: getEndpointDistance(targetArrowShape),
           controlPointDistance: hasReciprocal ? 34 : 0,
           controlPointWeight: 0.5,
-          arrowFill: "filled",
+          arrowFill: edge.sign === 0 ? "hollow" : "filled",
           count: edge.count,
           rank: edge.rank,
           supportRatio:

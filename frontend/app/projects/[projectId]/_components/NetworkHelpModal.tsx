@@ -68,8 +68,8 @@ export default function NetworkHelpModal({
             Results Settings first selects the result scope and methods,
             then applies minimum evidence, bootstrap confidence,
             direction confidence, sign stability, and—when comparing
-            methods—minimum support. Search keeps regulations whose
-            source or target matches the gene name.
+            methods—minimum support. Search genes filters the network to matching relationships.
+            Focus explicitly narrows the graph to its direct neighborhood.
           </p>
           <p className="mt-2">
             The graph draws the first requested number of matching edges
@@ -80,92 +80,10 @@ export default function NetworkHelpModal({
         </section>
 
         <section className="mt-5 border-t border-slate-100 pt-5">
-          <h4 className="font-extrabold text-slate-900">
-            Visual language
-          </h4>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <span className="h-6 w-6 shrink-0 rotate-45 rounded-[3px] bg-[#5c83d8] shadow-sm ring-1 ring-white" />
-              <span>
-                <strong className="block text-slate-800">
-                  Transcription factor
-                </strong>
-                <span className="text-xs text-slate-500">
-                  diamond-shaped node
-                </span>
-              </span>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <span className="h-7 w-7 shrink-0 rounded-full border border-white bg-[#5c83d8] shadow-sm" />
-              <span>
-                <strong className="block text-slate-800">Other gene</strong>
-                <span className="text-xs text-slate-500">
-                  circular node in the shared gene color
-                </span>
-              </span>
-            </div>
-            <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                <path d="M2 9H39" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" />
-                <path d="M39 3L53 9L39 15Z" fill="#168f98" />
-              </svg>
-              <span>
-                <strong className="block text-slate-800">Activation</strong>
-                <span className="text-xs text-slate-500">
-                  arrow points to the regulated gene
-                </span>
-              </span>
-            </div>
-            <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                <path d="M2 9H44" stroke="#d66c4d" strokeWidth="2.4" strokeLinecap="round" />
-                <path d="M44 3V15" stroke="#d66c4d" strokeWidth="3" strokeLinecap="round" />
-              </svg>
-              <span>
-                <strong className="block text-slate-800">Repression</strong>
-                <span className="text-xs text-slate-500">
-                  bar marks inhibitory regulation
-                </span>
-              </span>
-            </div>
-            <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <svg viewBox="0 0 56 18" aria-hidden="true" className="h-5 w-14">
-                <path d="M2 9H50" stroke="#8290a3" strokeWidth="2.4" strokeLinecap="round" />
-              </svg>
-              <span>
-                <strong className="block text-slate-800">
-                  Undirected relationship
-                </strong>
-                <span className="text-xs text-slate-500">
-                  no endpoint when direction is unavailable
-                </span>
-              </span>
-            </div>
-            <div className="grid grid-cols-[4rem_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <svg viewBox="0 0 56 24" aria-hidden="true" className="h-6 w-14">
-                <path d="M2 4H50" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.46" />
-                <path d="M2 12H50" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.7" />
-                <path d="M2 20H50" stroke="#168f98" strokeWidth="2.4" strokeLinecap="round" strokeOpacity="0.92" />
-              </svg>
-              <span>
-                <strong className="block text-slate-800">
-                  Evidence strength
-                </strong>
-                <span className="text-xs text-slate-500">
-                  pale, moderate, and full intensity
-                </span>
-              </span>
-            </div>
-          </div>
-          <p className="mt-3 text-xs leading-5 text-slate-500">
-            Evidence uses three stable intensity levels on the 0–1 scale, so
-            an edge keeps the same appearance while filters change. Bootstrap
-            confidence and exact values appear on hover or in the inspection
-            panel. Larger nodes have more regulatory influence; reciprocal
-            regulations curve apart, and the active selection is highlighted
-            in gold. Dense networks automatically use lighter edges, wider
-            spacing, and fewer persistent labels; hover reveals local detail.
-          </p>
+          <h4 className="font-extrabold text-slate-900">Reading the atlas</h4>
+          <p className="mt-2">The legend is always visible below the canvas. Shape identifies transcription factors and other genes. Blue arrowheads indicate predicted activation; orange perpendicular bar tips indicate predicted repression. Gray open arrowheads indicate known direction with unresolved sign. Tips are placed at the affected gene; when direction is unresolved, the edge retains its sign color but has no tip. Line width shows the metric you choose, on a fixed scale. Dashed edges have no available value for that metric.</p>
+          <p className="mt-2">Switching between confidence, evidence and method support preserves the network layout and relationship set. Highlighting a method only emphasizes its existing relationships; Results Settings changes which methods contribute to the consensus. Connected groups describe topology, not proven biological modules.</p>
+          <p className="mt-2">Use arrow keys while the canvas is focused to browse genes, or click the relationship count to inspect edges with a keyboard. Escape clears the graph selection. Export includes the current view, legend, methods and filter context.</p>
         </section>
 
         <section className="mt-5 border-t border-slate-100 pt-5">

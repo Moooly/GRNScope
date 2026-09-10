@@ -1,1211 +1,465 @@
-// REPLACED BY REQUEST
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import cytoscape, {
-  type Core,
-  type LayoutOptions,
-  type StylesheetJson,
-} from "cytoscape";
-import coseBilkent from "cytoscape-cose-bilkent";
+import { useEffect, useMemo, useRef, useState } from "react";
+import cytoscape, { type Core, type LayoutOptions } from "cytoscape";
+import { frameNetworkSelection } from "./networkCamera";
+import { createAtlasLayout } from "./networkAtlasLayout";
 import {
   buildCircularPositions,
   buildConcentricPositions,
   buildGraphElements,
   buildHierarchicalPositions,
   getLayoutConfig,
-  isDenseNetwork,
 } from "./networkGraphLayouts";
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
+import {
+  edgeAnnotation,
+  edgeMetric,
+  evidenceText,
+  metricWidth,
+  percent,
+  relationshipLabel,
+  signText,
+} from "./networkVisualEncoding";
 import type {
-  EdgeTooltipState,
-  NetworkNode,
+  NetworkEdge,
   NetworkGraphProps,
-  NetworkLayoutMode,
   PositionMap,
 } from "./networkGraphTypes";
 
-const cytoscapePluginRegistry = globalThis as typeof globalThis & {
-  __grnScopeCoseBilkentRegistered?: boolean;
+const registry = globalThis as typeof globalThis & {
   __grnScopeSvgRegistered?: boolean;
 };
-
-if (!cytoscapePluginRegistry.__grnScopeCoseBilkentRegistered) {
-  coseBilkent(cytoscape);
-  cytoscapePluginRegistry.__grnScopeCoseBilkentRegistered = true;
-}
-export const MIN_NETWORK_ZOOM = 0.3;
-export const MAX_NETWORK_ZOOM = 2.4;
-/** Hard floor; the working floor is derived per graph so `fit` can always succeed. */
-export const ABSOLUTE_MIN_NETWORK_ZOOM = 0.02;
-
-/**
- * A fixed 0.3 floor makes tall graphs impossible to frame: a 3026px-tall layout
- * in a 678px viewport needs zoom 0.187, so `fit()` silently clamped and left the
- * graph cut off with no way to zoom out. Lower the floor to whatever this graph
- * actually needs before fitting.
- */
-function relaxZoomFloorForGraph(cy: Core, padding = 56) {
-  const box = cy.elements().boundingBox();
-  const width = cy.width();
-  const height = cy.height();
-  if (!box.w || !box.h || !width || !height) return;
-  const required = Math.min(
-    (width - padding * 2) / box.w,
-    (height - padding * 2) / box.h,
-  );
-  if (!Number.isFinite(required) || required <= 0) return;
-  cy.minZoom(
-    Math.max(
-      ABSOLUTE_MIN_NETWORK_ZOOM,
-      Math.min(MIN_NETWORK_ZOOM, required * 0.95),
-    ),
-  );
-}
-
-function getNodeFullDisplayLabel(node: NetworkNode) {
-  return node.id.length > 10 ? `${node.id.slice(0, 9)}…` : node.id;
-}
-
-function getNodeDisplayLabel(node: NetworkNode) {
-  if (node.showLabel === false) return "";
-  return getNodeFullDisplayLabel(node);
-}
-
-function getConnectedNodeGroups(cy: Core) {
-  const adjacency = new Map<string, Set<string>>();
-
-  cy.nodes().forEach((node) => {
-    adjacency.set(node.id(), new Set());
-  });
-
-  cy.edges().forEach((edge) => {
-    const source = String(edge.data("source") ?? "");
-    const target = String(edge.data("target") ?? "");
-
-    if (!adjacency.has(source) || !adjacency.has(target)) return;
-    adjacency.get(source)!.add(target);
-    adjacency.get(target)!.add(source);
-  });
-
-  const visited = new Set<string>();
-  const groups: string[][] = [];
-  adjacency.forEach((_, startId) => {
-    if (visited.has(startId)) return;
-
-    const group: string[] = [];
-    const stack = [startId];
-    visited.add(startId);
-    while (stack.length > 0) {
-      const currentId = stack.pop()!;
-      group.push(currentId);
-      adjacency.get(currentId)?.forEach((nextId) => {
-        if (!visited.has(nextId)) {
-          visited.add(nextId);
-          stack.push(nextId);
-        }
-      });
-    }
-    groups.push(group);
-  });
-
-  return groups.sort((a, b) => b.length - a.length);
-}
-
-const clearContextFocus = (cy: Core) => {
-  cy.elements().removeClass("context-muted context-focus");
-};
-
-const focusCollection = (cy: Core, collection: ReturnType<Core["collection"]>) => {
-  clearContextFocus(cy);
-  cy.elements().addClass("context-muted");
-  collection.removeClass("context-muted").addClass("context-focus");
-};
-
-const applyPersistentFocus = (
-  cy: Core,
-  selectedGene: string | null,
-  selectedEdgeKey: string | null,
-) => {
-  if (selectedGene) {
-    const node = cy.getElementById(selectedGene);
-    if (node.nonempty()) {
-      focusCollection(cy, node.closedNeighborhood());
-      return;
-    }
-  }
-
-  if (selectedEdgeKey) {
-    const edge = cy.getElementById(selectedEdgeKey);
-    if (edge.nonempty()) {
-      focusCollection(cy, edge.union(edge.connectedNodes()));
-      return;
-    }
-  }
-
-  clearContextFocus(cy);
-};
-
-export default function NetworkGraph({
-  nodes,
-  edges,
-  selectedGene,
-  selectedEdgeKey,
-  layout,
-  onSelectGene,
-  onSelectEdge,
-  onGraphReady,
-}: NetworkGraphProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const cyRef = useRef<Core | null>(null);
-  const activeLayoutRef = useRef<ReturnType<Core["layout"]> | null>(null);
-  const outerRafRef = useRef<number | null>(null);
-  const innerRafRef = useRef<number | null>(null);
-
-  const lastAppliedSignatureRef = useRef<string>("");
-  const lastLayoutRef = useRef<NetworkLayoutMode>(layout);
-  const lastNodePositionsRef = useRef<PositionMap>({});
-  const layoutPositionCacheRef = useRef<Record<string, PositionMap>>({});
-  const layoutViewportCacheRef = useRef<
-    Record<string, { zoom: number; pan: { x: number; y: number } }>
-  >({});
-
-  const onSelectGeneRef = useRef(onSelectGene);
-  const onSelectEdgeRef = useRef(onSelectEdge);
-  const onGraphReadyRef = useRef(onGraphReady);
-  const selectedGeneRef = useRef(selectedGene);
-  const selectedEdgeKeyRef = useRef(selectedEdgeKey);
-
-  const cacheViewportForKey = (cacheKey: string, cy: Core) => {
-    layoutViewportCacheRef.current[cacheKey] = {
-      zoom: cy.zoom(),
-      pan: { ...cy.pan() },
-    };
-  };
-
-  const fitGraphToVisibleCanvas = useCallback((cy: Core, animate = true) => {
-    const visibleElements = cy.elements().filter((element) => !element.removed());
-
-    if (visibleElements.empty()) {
-      return;
-    }
-
-    cy.resize();
-    const fitPadding = nodes.length <= 8 ? 72 : nodes.length <= 18 ? 48 : 56;
-    const automaticZoomCap =
-      nodes.length <= 8 ? 1.12 : nodes.length <= 18 ? 1.52 : MAX_NETWORK_ZOOM;
-    const previousZoom = cy.zoom();
-    const previousPan = { ...cy.pan() };
-
-    relaxZoomFloorForGraph(cy, fitPadding);
-    cy.fit(visibleElements, fitPadding);
-    const fittedZoom = cy.zoom();
-    const presentationBoost = nodes.length > 8 && nodes.length <= 18 ? 1.23 : 1;
-    const targetZoom = Math.min(automaticZoomCap, fittedZoom * presentationBoost);
-    if (targetZoom !== fittedZoom) {
-      cy.zoom(targetZoom);
-    }
-    cy.center(visibleElements);
-
-    if (animate) {
-      const targetZoom = cy.zoom();
-      const targetPan = { ...cy.pan() };
-      cy.zoom(previousZoom);
-      cy.pan(previousPan);
-      cy.stop(true, false);
-      cy.animate(
-        {
-          zoom: targetZoom,
-          pan: targetPan,
-        },
-        {
-          duration: 280,
-          easing: "ease-out-cubic",
-        },
-      );
-    }
-  }, [nodes.length]);
-
-  const packDisconnectedComponents = useCallback((cy: Core) => {
-    const groups = getConnectedNodeGroups(cy);
-
-    if (groups.length <= 1) {
-      return;
-    }
-
-    const gap = 36;
-    const containerWidth = containerRef.current?.clientWidth ?? 900;
-    const maxRowWidth = Math.max(720, containerWidth * 0.9);
-    let cursorX = 0;
-    let cursorY = 0;
-    let rowHeight = 0;
-
-    const placements = groups.map((group) => {
-      const collection = group.reduce(
-        (acc, id) => acc.union(cy.getElementById(id)),
-        cy.collection()
-      );
-
-      const box = collection.boundingBox();
-      const width = Math.max(96, box.w + 12);
-      const height = Math.max(96, box.h + 12);
-
-      if (cursorX > 0 && cursorX + width > maxRowWidth) {
-        cursorX = 0;
-        cursorY += rowHeight + gap;
-        rowHeight = 0;
-      }
-
-      const placement = {
-        group,
-        box,
-        x: cursorX,
-        y: cursorY,
-        width,
-        height,
-      };
-
-      cursorX += width + gap;
-      rowHeight = Math.max(rowHeight, height);
-
-      return placement;
-    });
-
-    const packedWidth = Math.max(
-      ...placements.map((placement) => placement.x + placement.width),
-      0
-    );
-    const packedHeight = Math.max(
-      ...placements.map((placement) => placement.y + placement.height),
-      0
-    );
-
-    placements.forEach((placement) => {
-      const targetLeft = placement.x - packedWidth / 2;
-      const targetTop = placement.y - packedHeight / 2;
-      const dx = targetLeft - placement.box.x1;
-      const dy = targetTop - placement.box.y1;
-
-      placement.group.forEach((id) => {
-        const node = cy.getElementById(id);
-        const current = node.position();
-        node.position({
-          x: current.x + dx,
-          y: current.y + dy,
-        });
-      });
-    });
-  }, []);
-
-  const relaxNodeSpacing = (cy: Core) => {
-    const graphNodes = cy.nodes().toArray();
-    if (graphNodes.length < 2) return;
-
-    const maxDegree = Math.max(
-      ...graphNodes.map((node) => Number(node.data("degree") ?? 0)),
-      1
-    );
-
-    for (let pass = 0; pass < 6; pass += 1) {
-      const shifts = new Map<string, { x: number; y: number }>();
-
-      graphNodes.forEach((node) => {
-        shifts.set(node.id(), { x: 0, y: 0 });
-      });
-
-      for (let i = 0; i < graphNodes.length; i += 1) {
-        for (let j = i + 1; j < graphNodes.length; j += 1) {
-          const a = graphNodes[i];
-          const b = graphNodes[j];
-          const aPosition = a.position();
-          const bPosition = b.position();
-          let dx = bPosition.x - aPosition.x;
-          let dy = bPosition.y - aPosition.y;
-          let distance = Math.hypot(dx, dy);
-
-          if (distance < 0.001) {
-            const seed = a.id().localeCompare(b.id()) <= 0 ? 1 : -1;
-            dx = seed;
-            dy = -seed;
-            distance = Math.SQRT2;
-          }
-
-          const aDegree = Number(a.data("degree") ?? 0);
-          const bDegree = Number(b.data("degree") ?? 0);
-          const hubBoost = Math.max(aDegree, bDegree) / maxDegree;
-          const minDistance = 76 + hubBoost * 22;
-
-          if (distance >= minDistance) continue;
-
-          const push = ((minDistance - distance) / distance) * 0.5;
-          const shiftX = dx * push;
-          const shiftY = dy * push;
-          const aShift = shifts.get(a.id())!;
-          const bShift = shifts.get(b.id())!;
-
-          aShift.x -= shiftX;
-          aShift.y -= shiftY;
-          bShift.x += shiftX;
-          bShift.y += shiftY;
-        }
-      }
-
-      graphNodes.forEach((node) => {
-        const shift = shifts.get(node.id());
-        if (!shift) return;
-        const current = node.position();
-        node.position({
-          x: current.x + shift.x,
-          y: current.y + shift.y,
-        });
-      });
-    }
-  };
-
-  const [edgeTooltip, setEdgeTooltip] = useState<EdgeTooltipState | null>(null);
-  const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
-
-  const { elements, elementsSignature } = useMemo(
-    () => buildGraphElements(nodes, edges),
-    [nodes, edges]
-  );
-
-  const labelSignature = useMemo(
-    () =>
-      nodes
-        .map((node) => `${node.id}:${node.showLabel === false ? 0 : 1}`)
-        .sort()
-        .join("|"),
-    [nodes]
-  );
-
-  const layoutCacheSignature = useMemo(() => {
-    const nodePart = nodes
-      .map((node) => node.id)
-      .sort()
-      .join("|");
-
-    const edgePart = edges
-      .map((edge) => {
-        if (
-          "id" in edge &&
-          typeof edge.id === "string" &&
-          edge.id.length > 0
-        ) {
-          return edge.id;
-        }
-
-        return `${edge.source}->${edge.target}`;
-      })
-      .sort()
-      .join("|");
-
-    return `${nodePart}__${edgePart}`;
-  }, [nodes, edges]);
-
-  const graphCounts = useMemo(
-    () => ({
-      nodeCount: nodes.length,
-      edgeCount: edges.length,
-    }),
-    [nodes.length, edges.length]
-  );
-
-  const hierarchicalPositions = useMemo(
-    () => buildHierarchicalPositions(nodes, edges),
-    [nodes, edges]
-  );
-
-  const concentricPositions = useMemo(
-    () => buildConcentricPositions(nodes, edges),
-    [nodes, edges]
-  );
-
-  const circularPositions = useMemo(
-    () => buildCircularPositions(nodes, edges),
-    [nodes, edges]
-  );
-
-  const getLayoutCacheKey = (layoutMode: NetworkLayoutMode, signature: string) =>
-    `${layoutMode}::${signature}`;
-
-  const getLayoutOptions = useCallback((
-    layoutMode: NetworkLayoutMode,
-    signature: string,
-    allowRandomizeOnFirstForceRun = false,
-    forceFreshLayout = false
-  ) => {
-    const baseConfig = getLayoutConfig(
-      layoutMode,
-      graphCounts,
-      nodes,
-      edges,
-      hierarchicalPositions,
-      concentricPositions,
-      circularPositions
-    ) as Record<string, unknown>;
-
-    if (layoutMode !== "force") {
-      return baseConfig;
-    }
-
-    const hasCachedForcePositions = Boolean(
-      layoutPositionCacheRef.current[getLayoutCacheKey(layoutMode, signature)]
-    );
-
-    return {
-      ...baseConfig,
-      randomize:
-        forceFreshLayout ||
-        (allowRandomizeOnFirstForceRun && !hasCachedForcePositions),
-    };
-  }, [
-    circularPositions,
-    concentricPositions,
+export const MIN_NETWORK_ZOOM = 0.02;
+export const MAX_NETWORK_ZOOM = 3;
+export const ABSOLUTE_MIN_NETWORK_ZOOM = MIN_NETWORK_ZOOM;
+
+export default function NetworkGraph(props: NetworkGraphProps) {
+  const {
+    nodes,
     edges,
-    graphCounts,
-    hierarchicalPositions,
-    nodes,
-  ]);
-
-  useEffect(() => {
-    onSelectGeneRef.current = onSelectGene;
-    onSelectEdgeRef.current = onSelectEdge;
-    onGraphReadyRef.current = onGraphReady;
-    selectedGeneRef.current = selectedGene;
-    selectedEdgeKeyRef.current = selectedEdgeKey;
-  }, [onGraphReady, onSelectEdge, onSelectGene, selectedEdgeKey, selectedGene]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || cy.destroyed()) return;
-
-    nodes.forEach((node) => {
-      const graphNode = cy.getElementById(node.id);
-      if (graphNode.nonempty()) {
-        graphNode.data("label", getNodeDisplayLabel(node));
-        graphNode.data("fullLabel", getNodeFullDisplayLabel(node));
-      }
-    });
-  }, [labelSignature, nodes]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleWheelCapture = (event: WheelEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || !container.contains(target)) return;
-
-      // Trackpad pinch is reported as a ctrl-modified wheel event on desktop
-      // browsers. Let Cytoscape handle that gesture, while keeping ordinary
-      // two-finger vertical movement available for scrolling the page.
-      if (event.ctrlKey) return;
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      const deltaScale =
-        event.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? 16
-          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? window.innerHeight
-            : 1;
-
-      window.scrollBy({
-        top: event.deltaY * deltaScale,
-        behavior: "auto",
-      });
-    };
-
-    window.addEventListener("wheel", handleWheelCapture, {
-      capture: true,
-      passive: false,
-    });
-
-    return () => {
-      window.removeEventListener("wheel", handleWheelCapture, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!containerRef.current || cyRef.current) {
-      return;
-    }
-
-    let isCancelled = false;
-    let cy: Core | null = null;
-
-    const initializeGraph = async () => {
-      if (!cytoscapePluginRegistry.__grnScopeSvgRegistered) {
-        // @ts-expect-error local declaration is provided in frontend/types/cytoscape-svg.d.ts
-        const cytoscapeSvgModule = (await import("cytoscape-svg")) as {
-          default: (cytoscapeInstance: typeof cytoscape) => void;
-        };
-        const cytoscapeSvg = cytoscapeSvgModule.default;
-        const existingSvgExtension = (
-          cytoscape as unknown as (
-            extensionType: string,
-            extensionName: string,
-          ) => unknown
-        )("core", "svg");
-        if (typeof existingSvgExtension !== "function") {
-          cytoscapeSvg(cytoscape);
-        }
-        cytoscapePluginRegistry.__grnScopeSvgRegistered = true;
-      }
-
-      if (isCancelled || !containerRef.current || cyRef.current) {
-        return;
-      }
-
-      const graph = cytoscape({
-        container: containerRef.current,
-        elements,
-        style: getNetworkGraphStylesheet() as StylesheetJson,
-        minZoom: MIN_NETWORK_ZOOM,
-        maxZoom: MAX_NETWORK_ZOOM,
-        boxSelectionEnabled: false,
-        autoungrabify: false,
-        userZoomingEnabled: true,
-        userPanningEnabled: true,
-        textureOnViewport: true,
-      });
-
-      cy = graph;
-
-      graph.on("tap", "node", (event) => {
-        const nodeId = event.target.id();
-        setHoveredEdgeKey(null);
-        setEdgeTooltip(null);
-        onSelectGeneRef.current(nodeId);
-      });
-
-      graph.on("tap", "edge", (event) => {
-        const edgeId = event.target.id();
-        event.target.removeClass("hovered");
-        setHoveredEdgeKey(null);
-        setEdgeTooltip(null);
-        onSelectEdgeRef.current(edgeId);
-      });
-
-      graph.on("mouseover", "node", (event) => {
-        event.target.addClass("hovered-label");
-        focusCollection(graph, event.target.closedNeighborhood());
-      });
-
-      graph.on("mouseout", "node", (event) => {
-        event.target.removeClass("hovered-label");
-        applyPersistentFocus(
-          graph,
-          selectedGeneRef.current,
-          selectedEdgeKeyRef.current,
-        );
-      });
-
-      graph.on("mouseover", "edge", (event) => {
-        const renderedPosition = event.renderedPosition || { x: 0, y: 0 };
-        const edgeId = event.target.id();
-
-        graph.edges().removeClass("hovered");
-        event.target.addClass("hovered");
-        event.target.connectedNodes().addClass("hovered-label");
-        focusCollection(graph, event.target.union(event.target.connectedNodes()));
-        setHoveredEdgeKey(edgeId);
-
-        setEdgeTooltip({
-          x: renderedPosition.x,
-          y: renderedPosition.y,
-          source: String(
-            event.target.data("displaySource") ??
-              event.target.data("source") ??
-              ""
-          ),
-          target: String(
-            event.target.data("displayTarget") ??
-              event.target.data("target") ??
-              ""
-          ),
-          score: Number(event.target.data("score") ?? 0),
-          confidence: Number(event.target.data("confidence") ?? 0),
-          rank: Number(event.target.data("rank") ?? 0),
-          supportingAlgorithms: Array.isArray(event.target.data("supportingAlgorithms"))
-            ? (event.target.data("supportingAlgorithms") as string[])
-            : [],
-          directionConfidence:
-            event.target.data("directionConfidence") === null ||
-            event.target.data("directionConfidence") === undefined
-              ? null
-              : Number(event.target.data("directionConfidence")),
-          directionCoverage: Number(event.target.data("directionCoverage") ?? 0),
-          sign: Number(event.target.data("sign") ?? 0) as -1 | 0 | 1,
-          signConfidence:
-            event.target.data("signConfidence") === null ||
-            event.target.data("signConfidence") === undefined
-              ? null
-              : Number(event.target.data("signConfidence")),
-          signCoverage: Number(event.target.data("signCoverage") ?? 0),
-        });
-      });
-
-      graph.on("mousemove", "edge", (event) => {
-        const renderedPosition = event.renderedPosition || { x: 0, y: 0 };
-        setEdgeTooltip((current) =>
-          current
-            ? {
-                ...current,
-                x: renderedPosition.x,
-                y: renderedPosition.y,
-              }
-            : current
-        );
-      });
-
-      graph.on("mouseout", "edge", (event) => {
-        event.target.removeClass("hovered");
-        event.target.connectedNodes().removeClass("hovered-label");
-        setHoveredEdgeKey((current) =>
-          current === event.target.id() ? null : current
-        );
-        setEdgeTooltip(null);
-        applyPersistentFocus(
-          graph,
-          selectedGeneRef.current,
-          selectedEdgeKeyRef.current,
-        );
-      });
-
-      graph.on("tap", (event) => {
-        if (event.target === graph) {
-          onSelectGeneRef.current(null);
-          onSelectEdgeRef.current(null);
-          graph.edges().removeClass("hovered");
-          graph.nodes().removeClass("hovered-label");
-          setHoveredEdgeKey(null);
-          setEdgeTooltip(null);
-          clearContextFocus(graph);
-        }
-      });
-
-      cyRef.current = graph;
-      onGraphReadyRef.current?.(graph);
-      lastAppliedSignatureRef.current = elementsSignature;
-      lastLayoutRef.current = layout;
-
-      outerRafRef.current = window.requestAnimationFrame(() => {
-        innerRafRef.current = window.requestAnimationFrame(() => {
-          if (!cyRef.current || cyRef.current !== graph || graph.destroyed()) {
-            return;
-          }
-
-          graph.resize();
-
-          const initialLayout = graph.layout({
-            ...getLayoutOptions(layout, layoutCacheSignature, true),
-            fit: true,
-            padding: 56,
-          } as unknown as LayoutOptions);
-
-          activeLayoutRef.current = initialLayout;
-
-          initialLayout.on("layoutstop", () => {
-            if (
-              activeLayoutRef.current !== initialLayout ||
-              !cyRef.current ||
-              graph.destroyed()
-            ) {
-              return;
-            }
-
-            activeLayoutRef.current = null;
-
-            if (layout === "force") {
-              relaxNodeSpacing(graph);
-              packDisconnectedComponents(graph);
-            }
-
-            fitGraphToVisibleCanvas(graph, false);
-
-            const initialPositions: PositionMap = {};
-            graph.nodes().forEach((node) => {
-              initialPositions[node.id()] = { ...node.position() };
-            });
-
-            lastNodePositionsRef.current = {
-              ...lastNodePositionsRef.current,
-              ...initialPositions,
-            };
-
-            const initialCacheKey = getLayoutCacheKey(layout, layoutCacheSignature);
-            layoutPositionCacheRef.current[initialCacheKey] = initialPositions;
-            cacheViewportForKey(initialCacheKey, graph);
-          });
-
-          if (!graph.destroyed()) {
-            initialLayout.run();
-          }
-        });
-      });
-    };
-
-    void initializeGraph();
-
-    return () => {
-      isCancelled = true;
-      setHoveredEdgeKey(null);
-      setEdgeTooltip(null);
-
-      if (outerRafRef.current !== null) {
-        window.cancelAnimationFrame(outerRafRef.current);
-        outerRafRef.current = null;
-      }
-
-      if (innerRafRef.current !== null) {
-        window.cancelAnimationFrame(innerRafRef.current);
-        innerRafRef.current = null;
-      }
-
-      activeLayoutRef.current?.stop();
-      activeLayoutRef.current = null;
-      onGraphReadyRef.current?.(null);
-      cy?.destroy();
-      cyRef.current = null;
-    };
-    // This effect owns the Cytoscape instance for the component lifetime.
-    // Data and layout changes are applied incrementally by the effect below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || typeof ResizeObserver === "undefined") return;
-
-    let pendingFrame: number | null = null;
-
-    const observer = new ResizeObserver(() => {
-      if (pendingFrame !== null) return;
-
-      pendingFrame = window.requestAnimationFrame(() => {
-        pendingFrame = null;
-        const cy = cyRef.current;
-        if (!cy || cy.destroyed()) return;
-        cy.resize();
-      });
-    });
-
-    observer.observe(container);
-
-    return () => {
-      observer.disconnect();
-
-      if (pendingFrame !== null) {
-        window.cancelAnimationFrame(pendingFrame);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    const signatureChanged = lastAppliedSignatureRef.current !== elementsSignature;
-    const layoutChanged = lastLayoutRef.current !== layout;
-
-    if (!signatureChanged && !layoutChanged) {
-      return;
-    }
-
-    const existingViewport = {
-      zoom: cy.zoom(),
-      pan: { ...cy.pan() },
-    };
-
-    activeLayoutRef.current?.stop();
-    activeLayoutRef.current = null;
-
-    const previousPositions: PositionMap = {};
-    cy.nodes().forEach((node) => {
-      previousPositions[node.id()] = { ...node.position() };
-    });
-
-    const previousLayoutCacheKey = getLayoutCacheKey(
-      lastLayoutRef.current,
-      lastAppliedSignatureRef.current || layoutCacheSignature
-    );
-    layoutPositionCacheRef.current[previousLayoutCacheKey] = previousPositions;
-    cacheViewportForKey(previousLayoutCacheKey, cy);
-
-    const preservedPositions = {
-      ...lastNodePositionsRef.current,
-      ...previousPositions,
-    };
-
-    const layoutCacheKey = getLayoutCacheKey(layout, layoutCacheSignature);
-    const cachedPositionsForLayout =
-      layoutPositionCacheRef.current[layoutCacheKey];
-    const cachedViewportForLayout =
-      layoutViewportCacheRef.current[layoutCacheKey];
-
-    const cachedPositionsForSignature = signatureChanged
-      ? preservedPositions
-      : cachedPositionsForLayout ?? preservedPositions;
-
-    const nextNodeIds = nodes.map((node) => node.id);
-    const hasCompleteSavedPositions =
-      nextNodeIds.length > 0 &&
-      nextNodeIds.every((id) => Boolean(cachedPositionsForSignature[id]));
-
-    const canRestoreExactLayout =
-      !signatureChanged && hasCompleteSavedPositions && Boolean(cachedPositionsForLayout);
-
-    const shouldRerunLayout =
-      signatureChanged ||
-      !hasCompleteSavedPositions ||
-      (layoutChanged && !cachedPositionsForLayout);
-
-    const elementsWithPositions = elements.map((element) => {
-      const elementId = typeof element.data?.id === "string" ? element.data.id : undefined;
-
-      if (!elementId || (element.data && "source" in element.data && "target" in element.data)) {
-        return element;
-      }
-
-      const saved = cachedPositionsForSignature[elementId];
-
-      if (!saved) {
-        return element;
-      }
-
-      return {
-        ...element,
-        position: saved,
-      };
-    });
-
-    cy.startBatch();
-    cy.elements().remove();
-    cy.add(elementsWithPositions);
-    cy.style(getNetworkGraphStylesheet() as StylesheetJson);
-    cy.resize();
-
-    if (shouldRerunLayout) {
-      if (layout === "force") {
-        const cachedPositions = cachedPositionsForSignature;
-        const cachedKeys = Object.keys(cachedPositions);
-
-        if (cachedKeys.length > 0) {
-          let cx = 0;
-          let cy2 = 0;
-
-          for (const key of cachedKeys) {
-            cx += cachedPositions[key].x;
-            cy2 += cachedPositions[key].y;
-          }
-
-          cx /= cachedKeys.length;
-          cy2 /= cachedKeys.length;
-
-          cy.nodes().forEach((node) => {
-            const id = node.id();
-
-            if (!cachedPositions[id]) {
-              const seed = id
-                .split("")
-                .reduce((acc, ch) => (acc * 33 + ch.charCodeAt(0)) >>> 0, 17);
-              const angle = (seed % 360) * (Math.PI / 180);
-              const radius = 60;
-
-              node.position({
-                x: cx + Math.cos(angle) * radius,
-                y: cy2 + Math.sin(angle) * radius,
-              });
-            }
-          });
-        }
-      }
-
-      cy.endBatch();
-
-      const hasAnyPriorPositions =
-        Object.keys(lastNodePositionsRef.current).length > 0;
-
-      const rerunLayout = cy.layout(
-        getLayoutOptions(
-          layout,
-          layoutCacheSignature,
-          !hasAnyPriorPositions,
-          layout === "force" && layoutChanged
-        ) as unknown as LayoutOptions
-      );
-
-      activeLayoutRef.current = rerunLayout;
-
-      rerunLayout.on("layoutstop", () => {
-        if (activeLayoutRef.current !== rerunLayout || !cyRef.current) {
-          return;
-        }
-
-        activeLayoutRef.current = null;
-
-        if (layout === "force") {
-          relaxNodeSpacing(cy);
-          packDisconnectedComponents(cy);
-        }
-
-        if (signatureChanged || layoutChanged) {
-          window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
-        } else if (cachedViewportForLayout) {
-          cy.zoom(cachedViewportForLayout.zoom);
-          cy.pan(cachedViewportForLayout.pan);
-        } else {
-          cy.zoom(existingViewport.zoom);
-          cy.pan(existingViewport.pan);
-        }
-
-        const nextPositions: PositionMap = {};
-        cy.nodes().forEach((node) => {
-          nextPositions[node.id()] = { ...node.position() };
-        });
-
-        lastNodePositionsRef.current = {
-          ...lastNodePositionsRef.current,
-          ...nextPositions,
-        };
-
-        layoutPositionCacheRef.current[layoutCacheKey] = nextPositions;
-        cacheViewportForKey(layoutCacheKey, cy);
-        lastAppliedSignatureRef.current = elementsSignature;
-        lastLayoutRef.current = layout;
-      });
-
-      rerunLayout.run();
-      return;
-    }
-
-    if (canRestoreExactLayout) {
-      cy.nodes().forEach((node) => {
-        const saved = cachedPositionsForSignature[node.id()];
-        if (saved) {
-          node.position(saved);
-          node.lock();
-        }
-      });
-    }
-
-    cy.endBatch();
-
-    if (cachedViewportForLayout && canRestoreExactLayout) {
-      cy.zoom(cachedViewportForLayout.zoom);
-      cy.pan(cachedViewportForLayout.pan);
-    } else if (signatureChanged || layoutChanged) {
-      window.requestAnimationFrame(() => fitGraphToVisibleCanvas(cy, true));
-    } else if (cachedViewportForLayout) {
-      cy.zoom(cachedViewportForLayout.zoom);
-      cy.pan(cachedViewportForLayout.pan);
-    } else {
-      cy.zoom(existingViewport.zoom);
-      cy.pan(existingViewport.pan);
-    }
-
-    cy.nodes().forEach((node) => {
-      node.unlock();
-    });
-
-    const nextPositions: PositionMap = {};
-    cy.nodes().forEach((node) => {
-      nextPositions[node.id()] = { ...node.position() };
-    });
-
-    lastNodePositionsRef.current = {
-      ...lastNodePositionsRef.current,
-      ...nextPositions,
-    };
-
-    layoutPositionCacheRef.current[layoutCacheKey] = nextPositions;
-    cacheViewportForKey(layoutCacheKey, cy);
-    lastAppliedSignatureRef.current = elementsSignature;
-    lastLayoutRef.current = layout;
-  }, [
-    circularPositions,
-    concentricPositions,
-    elements,
-    elementsSignature,
-    graphCounts,
-    hierarchicalPositions,
     layout,
-    layoutCacheSignature,
+    metric = "confidence",
+    methodCount = 1,
+    highlightedMethod,
+    showEdgeLabels = false,
+    selectedGene,
+    selectedEdgeKey,
+    focusGene,
+  } = props;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const coreRef = useRef<Core | null>(null);
+  const latest = useRef(props);
+  const topologyRef = useRef("");
+  const cancelLayout = useRef<(() => void) | null>(null);
+  const layoutPending = useRef(false);
+  const [arranging, setArranging] = useState(false);
+  const refreshLabels = useRef<() => void>(() => {});
+  const positionCache = useRef(new Map<string, PositionMap>());
+  const [tooltip, setTooltip] = useState<{
+    edge: NetworkEdge;
+    x: number;
+    y: number;
+  } | null>(null);
+  const elements = useMemo(
+    () => buildGraphElements(nodes, edges).elements,
+    [nodes, edges],
+  );
+  const topology = useMemo(
+    () =>
+      JSON.stringify([
+        layout,
+        nodes.map((n) => [n.id, n.isTF]).sort(),
+        edges.map((e) => [e.key, e.source, e.target]).sort(),
+      ]),
+    [nodes, edges, layout],
+  );
+
+  useEffect(() => {
+    latest.current = props;
+  });
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const cy = cytoscape({
+      container: containerRef.current,
+      elements: [],
+      style: getNetworkGraphStylesheet(),
+      minZoom: MIN_NETWORK_ZOOM,
+      maxZoom: MAX_NETWORK_ZOOM,
+      selectionType: "single",
+      boxSelectionEnabled: false,
+      autounselectify: false,
+      layout: { name: "preset" },
+    });
+    coreRef.current = cy;
+    latest.current.onGraphReady?.(cy);
+    void import("cytoscape-svg").then((module) => {
+      if (!registry.__grnScopeSvgRegistered) {
+        module.default(cytoscape);
+        registry.__grnScopeSvgRegistered = true;
+      }
+    });
+    cy.on("tap", "node", (event) => {
+      latest.current.onSelectEdge(null);
+      latest.current.onSelectGene(event.target.id());
+    });
+    cy.on("tap", "edge", (event) => {
+      latest.current.onSelectGene(null);
+      latest.current.onSelectEdge(event.target.id());
+    });
+    cy.on("tap", (event) => {
+      if (event.target === cy) {
+        latest.current.onSelectGene(null);
+        latest.current.onSelectEdge(null);
+      }
+    });
+    cy.on("mouseover", "node", (event) => event.target.addClass("revealed"));
+    cy.on("mouseout", "node", (event) => event.target.removeClass("revealed"));
+    cy.on("mouseover", "edge", (event) => {
+      const edge = latest.current.edges.find(
+        (item) => item.key === event.target.id(),
+      );
+      if (!edge) return;
+      event.target.addClass("hovered");
+      const point = event.renderedPosition ?? event.target.renderedMidpoint();
+      setTooltip({
+        edge,
+        x: Math.max(8, Math.min(point.x + 16, cy.width() - 292)),
+        y: Math.max(8, Math.min(point.y + 16, cy.height() - 180)),
+      });
+    });
+    cy.on("mouseout", "edge", (event) => {
+      event.target.removeClass("hovered");
+      setTooltip(null);
+    });
+    cy.on("zoom pan", () => setTooltip(null));
+    // Label budget follows actual screen space. Selected endpoints always remain readable.
+    let frame = 0;
+    const updateLabels = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (cy.destroyed() || layoutPending.current) return;
+        const occupied: Array<{ x: number; y: number; w: number }> = [];
+        const ordered = cy
+          .nodes()
+          .toArray()
+          .sort(
+            (a, b) =>
+              Number(b.selected()) - Number(a.selected()) ||
+              b.data("degree") - a.data("degree"),
+          );
+        cy.batch(() =>
+          ordered.forEach((node) => {
+            const p = node.renderedPosition();
+            const text = node.data("fullLabel") as string;
+            const w = Math.max(35, text.length * 7 * Math.min(cy.zoom(), 1.4));
+            const priority = node.selected() || node.hasClass("endpoint");
+            const visible =
+              p.x > 0 && p.x < cy.width() && p.y > 0 && p.y < cy.height();
+            const fits = !occupied.some(
+              (box) =>
+                Math.abs(box.y - p.y) < 25 &&
+                Math.abs(box.x - p.x) < (box.w + w) / 2 + 8,
+            );
+            const label =
+              priority ||
+              (visible &&
+                ((cy.nodes().length <= 40 && cy.zoom() >= 0.65) ||
+                  (fits && (cy.zoom() > 0.55 || occupied.length < 18))))
+                ? text
+                : "";
+            if (node.data("label") !== label) node.data("label", label);
+            if (label) occupied.push({ x: p.x, y: p.y, w });
+          }),
+        );
+      });
+    };
+    refreshLabels.current = updateLabels;
+    cy.on("zoom pan position layoutstop select unselect", updateLabels);
+    let previousWidth = cy.width(),
+      previousHeight = cy.height();
+    const observer = new ResizeObserver(() => {
+      cy.resize();
+      const width = cy.width(),
+        height = cy.height();
+      if (
+        !layoutPending.current &&
+        (Math.abs(width - previousWidth) > 2 ||
+          Math.abs(height - previousHeight) > 2)
+      ) {
+        if (!frameNetworkSelection(cy)) cy.fit(undefined, 40);
+      }
+      previousWidth = width;
+      previousHeight = height;
+      updateLabels();
+    });
+    observer.observe(containerRef.current);
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelLayout.current?.();
+      layoutPending.current = false;
+      observer.disconnect();
+      latest.current.onGraphReady?.(null);
+      cy.destroy();
+      coreRef.current = null;
+      topologyRef.current = "";
+    };
+  }, []);
+
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy) return;
+    const changed = topologyRef.current !== topology;
+    if (changed && topologyRef.current && !layoutPending.current) {
+      const saved: PositionMap = {};
+      cy.nodes().forEach((n) => {
+        saved[n.id()] = { ...n.position() };
+      });
+      positionCache.current.set(topologyRef.current, saved);
+      if (positionCache.current.size > 10)
+        positionCache.current.delete(
+          positionCache.current.keys().next().value!,
+        );
+    }
+    if (changed) {
+      cancelLayout.current?.();
+      cancelLayout.current = null;
+      layoutPending.current = false;
+    }
+    const edgeMap = new Map(edges.map((edge) => [edge.key, edge]));
+    cy.batch(() => {
+      const wanted = new Set(elements.map((element) => element.data.id));
+      cy.elements()
+        .filter((element) => !wanted.has(element.id()))
+        .remove();
+      elements.forEach((element) => {
+        const edge = edgeMap.get(element.data.id!);
+        const value = edge ? edgeMetric(edge, metric, methodCount) : null;
+        const data = {
+          ...element.data,
+          ...(edge
+            ? {
+                metricWidth: metricWidth(value),
+                metricUnavailable: value === null ? 1 : 0,
+                annotation: edgeAnnotation(edge, methodCount),
+              }
+            : {}),
+        };
+        const existing = cy.getElementById(data.id!);
+        if (existing.length) existing.data(data);
+        else cy.add({ ...element, data });
+      });
+    });
+    if (changed) {
+      topologyRef.current = topology;
+      setArranging(false);
+      // Fit using every full label before zoom-dependent label culling.
+      cy.nodes().forEach((node) => {
+        node.data("label", node.data("fullLabel"));
+      });
+      const cached = positionCache.current.get(topology);
+      if (cached) {
+        cy.nodes().positions((n) => cached[n.id()] ?? { x: 0, y: 0 });
+        cy.fit(undefined, 40);
+      } else if (nodes.length && layout === "force") {
+        layoutPending.current = true;
+        setArranging(true);
+        const context = document.createElement("canvas").getContext("2d");
+        cancelLayout.current = createAtlasLayout(
+          nodes,
+          edges,
+          { width: cy.width(), height: cy.height() },
+          {
+            measure: context
+              ? (text, bold) => {
+                  context.font = `${bold ? 700 : 500} 13px Arial`;
+                  return context.measureText(text).width;
+                }
+              : undefined,
+            onComplete: (positions) => {
+              if (cy.destroyed() || topologyRef.current !== topology) return;
+              layoutPending.current = false;
+              cy.batch(() => {
+                cy.nodes().positions((node) => positions[node.id()]);
+                cy.nodes().forEach((node) => {
+                  node.data("label", node.data("fullLabel"));
+                });
+              });
+              if (!frameNetworkSelection(cy)) cy.fit(undefined, 40);
+              setArranging(false);
+              refreshLabels.current();
+            },
+          },
+        );
+      } else if (nodes.length) {
+        const config = getLayoutConfig(
+          layout,
+          { nodeCount: nodes.length, edgeCount: edges.length },
+          nodes,
+          edges,
+          layout === "hierarchical"
+            ? buildHierarchicalPositions(nodes, edges)
+            : undefined,
+          layout === "concentric"
+            ? buildConcentricPositions(nodes, edges)
+            : undefined,
+          layout === "circular"
+            ? buildCircularPositions(nodes, edges)
+            : undefined,
+        );
+        cy.layout({
+          ...config,
+          fit: false,
+        } as LayoutOptions).run();
+        cy.fit(undefined, 40);
+      }
+    }
+    cy.batch(() => {
+      cy.elements()
+        .removeClass("context-muted endpoint annotated local-edge")
+        .unselect();
+      let emphasized = cy.collection();
+      if (highlightedMethod) {
+        const ids = new Set(
+          edges
+            .filter((e) => e.supportingAlgorithms.includes(highlightedMethod))
+            .map((e) => e.key),
+        );
+        emphasized = cy.edges().filter((e) => ids.has(e.id()));
+        emphasized = emphasized.union(emphasized.connectedNodes());
+      }
+      if (selectedGene) {
+        const node = cy.getElementById(selectedGene);
+        node.select();
+        const neighborhood = node.closedNeighborhood();
+        neighborhood.edges().addClass("local-edge");
+        emphasized = highlightedMethod
+          ? emphasized.intersection(neighborhood).union(node)
+          : neighborhood;
+      }
+      if (selectedEdgeKey) {
+        const edge = cy.getElementById(selectedEdgeKey);
+        edge.select().addClass("annotated");
+        edge.connectedNodes().addClass("endpoint");
+        emphasized = highlightedMethod
+          ? emphasized.union(edge).union(edge.connectedNodes())
+          : edge.union(edge.connectedNodes());
+      }
+      if (highlightedMethod || selectedGene || selectedEdgeKey)
+        cy.elements().difference(emphasized).addClass("context-muted");
+      if (showEdgeLabels)
+        cy.edges()
+          .filter((e) => !e.hasClass("context-muted"))
+          .addClass("annotated");
+    });
+    refreshLabels.current();
+  }, [
+    elements,
+    topology,
     nodes,
-    fitGraphToVisibleCanvas,
-    getLayoutOptions,
-    packDisconnectedComponents,
+    edges,
+    layout,
+    metric,
+    methodCount,
+    highlightedMethod,
+    showEdgeLabels,
+    selectedGene,
+    selectedEdgeKey,
   ]);
 
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    setHoveredEdgeKey(null);
-    setEdgeTooltip(null);
-    cy.elements().unselect();
-    cy.edges().removeClass("hovered");
-    cy.nodes().removeClass("hovered-label selected-edge-endpoint");
-
-    if (selectedGene) {
-      const node = cy.getElementById(selectedGene);
-      if (node.nonempty()) {
-        node.select();
-      }
-    }
-
-    if (selectedEdgeKey) {
-      const edge = cy.getElementById(selectedEdgeKey);
-      if (edge.nonempty()) {
-        edge.select();
-        edge.connectedNodes().addClass("selected-edge-endpoint");
-      }
-    }
-
-    applyPersistentFocus(cy, selectedGene, selectedEdgeKey);
+    const frame = requestAnimationFrame(() => {
+      const cy = coreRef.current;
+      if (cy && !layoutPending.current) frameNetworkSelection(cy);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [selectedGene, selectedEdgeKey]);
 
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    cy.edges().removeClass("hovered");
-
-    if (hoveredEdgeKey && hoveredEdgeKey !== selectedEdgeKey) {
-      const edge = cy.getElementById(hoveredEdgeKey);
-      if (edge.nonempty()) {
-        edge.addClass("hovered");
-      }
+    const cy = coreRef.current;
+    if (cy && focusGene) {
+      const node = cy.getElementById(focusGene);
+      if (node.length) cy.center(node);
     }
-  }, [hoveredEdgeKey, selectedEdgeKey]);
-
-  const containerWidth = containerRef.current?.clientWidth ?? 0;
-  const containerHeight = containerRef.current?.clientHeight ?? 0;
-  const tooltipWidth = 252;
-  const tooltipHeight = 190;
-  const tooltipPadding = 16;
-  const tooltipGap = 24;
-
-  const tooltipShouldFlipLeft = edgeTooltip
-    ? edgeTooltip.x + tooltipGap + tooltipWidth > containerWidth - tooltipPadding
-    : false;
-  const tooltipShouldFlipUp = edgeTooltip
-    ? edgeTooltip.y + tooltipGap + tooltipHeight > containerHeight - tooltipPadding
-    : false;
-
-  const tooltipLeft = edgeTooltip
-    ? Math.min(
-        Math.max(
-          tooltipShouldFlipLeft
-            ? edgeTooltip.x - tooltipWidth - tooltipGap
-            : edgeTooltip.x + tooltipGap,
-          tooltipPadding
-        ),
-        Math.max(tooltipPadding, containerWidth - tooltipWidth - tooltipPadding)
-      )
-    : tooltipPadding;
-
-  const tooltipTop = edgeTooltip
-    ? Math.min(
-        Math.max(
-          tooltipShouldFlipUp
-            ? edgeTooltip.y - tooltipHeight - tooltipGap
-            : edgeTooltip.y + tooltipGap,
-          tooltipPadding
-        ),
-        Math.max(tooltipPadding, containerHeight - tooltipHeight - tooltipPadding)
-      )
-    : tooltipPadding;
-
-  const denseNetwork = isDenseNetwork(nodes.length, edges.length);
-  const graphHeightClass =
-    denseNetwork
-      ? "h-[clamp(700px,78vh,900px)] min-h-[700px]"
-      : nodes.length <= 18
-      ? "h-[clamp(560px,68vh,700px)] min-h-[560px]"
-      : nodes.length <= 60
-        ? "h-[clamp(640px,74vh,820px)] min-h-[640px]"
-        : "h-[clamp(700px,78vh,920px)] min-h-[700px]";
+  }, [focusGene]);
 
   return (
-    <div className={`relative w-full overflow-hidden bg-[#f7fafc] ${graphHeightClass}`}>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_46%_42%,rgba(90,148,185,0.13),transparent_46%),radial-gradient(circle_at_80%_18%,rgba(22,143,152,0.07),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f3f7fa_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(100,116,139,0.2)_0.7px,transparent_0.8px)] bg-[size:28px_28px] opacity-30" />
-
+    <div className="grn-canvas-shell">
       <div
         ref={containerRef}
-        className="absolute inset-0 z-10 h-full w-full"
-        style={{ filter: "saturate(0.98) contrast(1.02)" }}
+        className="grn-canvas"
+        style={{ opacity: arranging ? 0 : 1 }}
+        aria-busy={arranging}
+        tabIndex={0}
+        role="group"
+        aria-label="Interactive gene network. Arrow keys select genes; Escape clears selection. Use the relationship list to browse edges."
+        onKeyDown={(event) => {
+          const cy = coreRef.current;
+          if (!cy) return;
+          if (event.key === "Escape") {
+            props.onSelectGene(null);
+            props.onSelectEdge(null);
+          }
+          if (
+            ["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(
+              event.key,
+            )
+          ) {
+            event.preventDefault();
+            const ordered = [...nodes].sort((a, b) => a.id.localeCompare(b.id));
+            if (!ordered.length) return;
+            const current = ordered.findIndex((n) => n.id === selectedGene);
+            const step =
+              event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+            const next =
+              ordered[(current + step + ordered.length) % ordered.length];
+            props.onSelectEdge(null);
+            props.onSelectGene(next.id);
+            cy.center(cy.getElementById(next.id));
+          }
+        }}
       />
-
-      {edgeTooltip && (
+      {arranging && (
+        <div className="grn-layout-status" role="status">
+          Arranging network…
+        </div>
+      )}
+      {tooltip && (
         <div
-          className="pointer-events-none absolute z-30 w-[252px] rounded-2xl border border-slate-200 bg-white/95 px-3.5 py-3 text-xs text-slate-600 shadow-xl shadow-slate-900/10 backdrop-blur-xl"
-          style={{
-            left: tooltipLeft,
-            top: tooltipTop,
-          }}
+          className="grn-tooltip"
+          style={{ left: tooltip.x, top: tooltip.y }}
+          role="tooltip"
         >
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <p className="min-w-0 truncate font-semibold text-slate-900">
-                {edgeTooltip.source} → {edgeTooltip.target}
-              </p>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
-                  edgeTooltip.sign > 0
-                    ? "bg-[#e7f6f5] text-[#116f76]"
-                    : edgeTooltip.sign < 0
-                      ? "bg-[#fceee9] text-[#b64f35]"
-                      : "bg-slate-100 text-slate-600"
-                }`}
-              >
-                {edgeTooltip.sign > 0
-                  ? "Activation"
-                  : edgeTooltip.sign < 0
-                    ? "Repression"
-                    : "Unsigned"}
-              </span>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-1.5 text-[10px]">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
-                <p className="text-slate-500">Evidence</p>
-                <p className="mt-0.5 font-bold text-slate-900">
-                  {edgeTooltip.score.toFixed(3)} <span className="font-medium text-slate-400">#{edgeTooltip.rank}</span>
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
-                <p className="text-slate-500">Confidence</p>
-                <p className="mt-0.5 font-bold text-slate-900">
-                  {Math.round(edgeTooltip.confidence * 100)}%
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
-                <p className="text-slate-500">Direction</p>
-                <p className="mt-0.5 font-bold text-slate-900">
-                  {edgeTooltip.directionConfidence === null
-                    ? "-"
-                    : `${Math.round(edgeTooltip.directionConfidence * 100)}%`}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
-                <p className="text-slate-500">Methods</p>
-                <p className="mt-0.5 font-bold text-slate-900">
-                  {edgeTooltip.supportingAlgorithms.length || "-"}
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-2 text-[10px] font-medium text-slate-400">
-              Click for complete evidence details.
-            </p>
+          <strong>{relationshipLabel(tooltip.edge)}</strong>
+          <span>
+            {signText(tooltip.edge.sign)} ·{" "}
+            {nodes.find((n) => n.id === tooltip.edge.source)?.isTF
+              ? "TF"
+              : "Gene"}{" "}
+            /{" "}
+            {nodes.find((n) => n.id === tooltip.edge.target)?.isTF
+              ? "TF"
+              : "Gene"}
+          </span>
+          <div className="grn-tooltip-metrics">
+            <span>
+              Confidence{" "}
+              <b>
+                {percent(edgeMetric(tooltip.edge, "confidence", methodCount))}
+              </b>
+            </span>
+            <span>
+              Evidence <b>{evidenceText(tooltip.edge.score)}</b>
+            </span>
+            <span>
+              Methods{" "}
+              <b>
+                {tooltip.edge.count}/{methodCount}
+              </b>
+            </span>
           </div>
+          <small>Click to inspect the relationship</small>
         </div>
       )}
     </div>

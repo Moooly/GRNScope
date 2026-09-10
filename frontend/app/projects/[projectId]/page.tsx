@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Core, StylesheetJson } from "cytoscape";
+import type { Core } from "cytoscape";
 import ProjectHeader from "./_components/ProjectHeader";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
@@ -22,7 +22,7 @@ import ResultsHubSection from "./_components/ResultsHubSection";
 import ResultsHubViewSelector, {
   type ResultsHubView,
 } from "./_components/ResultsHubViewSelector";
-import { getNetworkGraphStylesheet } from "./_components/networkGraphStyles";
+import { exportNetworkFigure, type NetworkFigureContext } from "./_components/networkFigureExport";
 import ResultsInsightsSection, {
   type VisualizationContext,
 } from "./_components/ResultsInsightsSection";
@@ -524,107 +524,6 @@ function appendNetworkExportLegend(
   };
 }
 
-function drawNetworkCanvasLegend(
-  context: CanvasRenderingContext2D,
-  width: number,
-  legendTop: number,
-) {
-  context.fillStyle = "#f8fafc";
-  context.fillRect(0, legendTop, width, NETWORK_EXPORT_LEGEND_HEIGHT);
-  context.strokeStyle = "#dbe4ee";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(0, legendTop);
-  context.lineTo(width, legendTop);
-  context.stroke();
-
-  context.fillStyle = "#475569";
-  context.font = `700 12px ${WEBSITE_EXPORT_FONT_FAMILY}`;
-  context.fillText("Legend", 24, legendTop + 24);
-  context.font = `600 11px ${WEBSITE_EXPORT_FONT_FAMILY}`;
-
-  const columnWidth = Math.max(150, (width - 48) / 3);
-  const firstRowY = legendTop + 45;
-  const secondRowY = legendTop + 72;
-  const drawLineMeaning = (
-    column: number,
-    label: string,
-    head: "arrow" | "tee" | "none",
-    color: string,
-    dashed = false,
-  ) => {
-    const x = 24 + column * columnWidth;
-    context.strokeStyle = color;
-    context.fillStyle = color;
-    context.lineWidth = 2.5;
-    context.lineCap = "round";
-    context.setLineDash(dashed ? [6, 5] : []);
-    context.beginPath();
-    context.moveTo(x, firstRowY - 4);
-    context.lineTo(x + 34, firstRowY - 4);
-    context.stroke();
-    context.setLineDash([]);
-    if (head === "arrow") {
-      context.beginPath();
-      context.moveTo(x + 28, firstRowY - 10);
-      context.lineTo(x + 38, firstRowY - 4);
-      context.lineTo(x + 28, firstRowY + 2);
-      context.closePath();
-      context.fill();
-    } else if (head === "tee") {
-      context.lineWidth = 3;
-      context.beginPath();
-      context.moveTo(x + 35, firstRowY - 11);
-      context.lineTo(x + 35, firstRowY + 3);
-      context.stroke();
-    }
-    context.fillStyle = "#475569";
-    context.fillText(label, x + 47, firstRowY);
-  };
-
-  drawLineMeaning(0, "Activation", "arrow", "#168f98");
-  drawLineMeaning(1, "Repression", "tee", "#d66c4d");
-  drawLineMeaning(2, "Uncertain regulation", "none", "#8290a3", true);
-
-  const firstX = 24;
-  context.fillStyle = "#5c83d8";
-  context.strokeStyle = "#ffffff";
-  context.lineWidth = 1.5;
-  const tfCenterX = firstX + 9;
-  const tfCenterY = secondRowY - 5;
-  context.beginPath();
-  context.moveTo(tfCenterX, tfCenterY - 10);
-  context.lineTo(tfCenterX + 10, tfCenterY);
-  context.lineTo(tfCenterX, tfCenterY + 10);
-  context.lineTo(tfCenterX - 10, tfCenterY);
-  context.closePath();
-  context.fill();
-  context.stroke();
-  context.fillStyle = "#475569";
-  context.fillText("Transcription factor", firstX + 30, secondRowY);
-
-  const secondX = 24 + columnWidth;
-  context.fillStyle = "#5c83d8";
-  context.strokeStyle = "#334155";
-  context.lineWidth = 1.5;
-  context.beginPath();
-  context.arc(secondX + 8, secondRowY - 5, 9, 0, Math.PI * 2);
-  context.fill();
-  context.stroke();
-  context.fillStyle = "#475569";
-  context.fillText("Other gene", secondX + 27, secondRowY);
-
-  const thirdX = 24 + columnWidth * 2;
-  context.strokeStyle = "#64748b";
-  context.lineWidth = 5;
-  context.beginPath();
-  context.moveTo(thirdX, secondRowY - 5);
-  context.lineTo(thirdX + 38, secondRowY - 5);
-  context.stroke();
-  context.fillStyle = "#475569";
-  context.fillText("Width = evidence · opacity = confidence", thirdX + 48, secondRowY);
-  context.lineCap = "butt";
-}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
@@ -2501,108 +2400,13 @@ export default function ProjectDetailPage() {
   );
 
   const handleExportNetwork = useCallback(
-    async (format: "png" | "svg") => {
+    async (format: "png" | "svg", context: NetworkFigureContext) => {
       const cy = networkGraphRef.current;
-      if (!cy) return;
-
-      const activeViewLabel =
-        activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "network";
-      const isolatedLabel = isolatedGene ? `isolated-${isolatedGene}` : "full-view";
-      const baseFilename = `${projectId ?? "project"}-${activeViewLabel}-${networkLayout}-${isolatedLabel}`;
-
-      if (format === "png") {
-        const scale = 3;
-        const pngDataUrl = cy.png({
-          full: false,
-          scale,
-          bg: "#f7fafc",
-        });
-        const image = new Image();
-        await new Promise<void>((resolve, reject) => {
-          image.onload = () => resolve();
-          image.onerror = () => reject(new Error("Could not render the network export."));
-          image.src = pngDataUrl;
-        });
-
-        const graphWidth = Math.max(1, Math.round(image.naturalWidth / scale));
-        const graphHeight = Math.max(1, Math.round(image.naturalHeight / scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight + NETWORK_EXPORT_LEGEND_HEIGHT * scale;
-        const context = canvas.getContext("2d");
-        if (!context) return;
-        context.drawImage(image, 0, 0);
-        context.save();
-        context.scale(scale, scale);
-        drawNetworkCanvasLegend(context, graphWidth, graphHeight);
-        context.restore();
-
-        const link = document.createElement("a");
-        link.href = canvas.toDataURL("image/png");
-        link.download = `${baseFilename}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        return;
-      }
-
-      let rawSvgMarkup = "";
-      try {
-        cy.style(
-          getNetworkGraphStylesheet("publication") as StylesheetJson,
-        );
-        rawSvgMarkup = cy.svg({
-          full: false,
-          scale: 1,
-          bg: "#ffffff",
-        });
-      } finally {
-        cy.style(getNetworkGraphStylesheet("light") as StylesheetJson);
-      }
-
-      const parser = new DOMParser();
-      const svgDocument = parser.parseFromString(rawSvgMarkup, "image/svg+xml");
-      const svgElement = svgDocument.documentElement;
-
-      const widthAttr = svgElement.getAttribute("width");
-      const heightAttr = svgElement.getAttribute("height");
-      const fallbackWidth = Math.max(1, Math.round(cy.width()));
-      const fallbackHeight = Math.max(1, Math.round(cy.height()));
-      const numericWidth = widthAttr ? Number.parseFloat(widthAttr) : fallbackWidth;
-      const numericHeight = heightAttr ? Number.parseFloat(heightAttr) : fallbackHeight;
-      const safeWidth =
-        Number.isFinite(numericWidth) && numericWidth > 0 ? numericWidth : fallbackWidth;
-      const safeHeight =
-        Number.isFinite(numericHeight) && numericHeight > 0 ? numericHeight : fallbackHeight;
-
-      if (!svgElement.getAttribute("viewBox")) {
-        svgElement.setAttribute("viewBox", `0 0 ${safeWidth} ${safeHeight}`);
-      }
-
-      svgElement.setAttribute("preserveAspectRatio", "xMidYMid meet");
-      appendNetworkExportLegend(
-        svgElement as unknown as SVGSVGElement,
-        safeWidth,
-        safeHeight,
-        "network",
-      );
-
-      const serializedSvg = new XMLSerializer().serializeToString(svgDocument);
-      const blob = new Blob([serializedSvg], {
-        type: "image/svg+xml;charset=utf-8",
-      });
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = objectUrl;
-      link.download = `${baseFilename}.svg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      if (!cy) throw new Error("The network is still loading. Please try again.");
+      const view = activeAlgorithmIds.length >= 2 ? "consensus" : activeAlgorithmIds[0] ?? "network";
+      await exportNetworkFigure(cy, format, `${projectId ?? "project"}-${view}-${networkLayout}`, context);
     },
-    [activeAlgorithmIds, isolatedGene, networkLayout, projectId]
+    [activeAlgorithmIds, networkLayout, projectId]
   );
 
 useEffect(() => {
@@ -3047,6 +2851,16 @@ useEffect(() => {
                   ) : (
                   <div className="min-w-0">
                       <NetworkVisualizationSection
+                      selectedAlgorithmIds={activeAlgorithmIds}
+                      scopeLabel={availableResultScopes.find(scope => scope.id === selectedResultScopeId)?.label ?? selectedResultScopeId}
+                      filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign stability ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}; display limit ${edgeDisplayLimit || "all"}`}
+                      filterChips={<>
+                        {evidenceThreshold > 0 && <button onClick={() => setEvidenceThreshold(0)}>Evidence ≥ {evidenceThreshold.toFixed(2)} ×</button>}
+                        {confidenceThreshold > 0 && <button onClick={() => setConfidenceThreshold(0)}>Confidence ≥ {Math.round(confidenceThreshold * 100)}% ×</button>}
+                        {directionConfidenceThreshold > 0 && <button onClick={() => setDirectionConfidenceThreshold(0)}>Direction ≥ {Math.round(directionConfidenceThreshold * 100)}% ×</button>}
+                        {signConfidenceThreshold > 0 && <button onClick={() => setSignConfidenceThreshold(0)}>Sign stability ≥ {Math.round(signConfidenceThreshold * 100)}% ×</button>}
+                        {activeAlgorithmIds.length > 1 && consensusThreshold > 1 && <button onClick={() => { setHasTouchedConsensusThreshold(true); setConsensusThreshold(1); }}>Support ≥ {consensusThreshold} ×</button>}
+                      </>}
                       networkLayout={networkLayout}
                       setNetworkLayout={setNetworkLayout}
                       onExportNetwork={handleExportNetwork}

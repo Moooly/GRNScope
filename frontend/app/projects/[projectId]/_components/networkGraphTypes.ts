@@ -17,6 +17,7 @@ export type NetworkEdge = {
   target: string;
   score: number;
   confidence: number;
+  bootstrapVerified?: boolean;
   count: number;
   rank: number;
   supportingAlgorithms: string[];
@@ -65,6 +66,12 @@ export type NetworkGraphProps = {
   onSelectGene: (geneId: string | null) => void;
   onSelectEdge: (edgeKey: string | null) => void;
   onGraphReady?: (cy: Core | null) => void;
+  metric?: import("./networkVisualEncoding").NetworkMetric;
+  methodCount?: number;
+  highlightedMethod?: string | null;
+  showEdgeLabels?: boolean;
+  focusGene?: string | null;
+  neighborhood?: boolean;
 };
 
 export type EdgeTooltipState = {

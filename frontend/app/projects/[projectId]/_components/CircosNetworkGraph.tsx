@@ -983,7 +983,7 @@ export default function CircosNetworkGraph({
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="relative z-10 h-full w-full"
-        role="img"
+        role="group"
         aria-label={
           isDetailMode
             ? `Gene-level Circos view for ${modeLabel}`
