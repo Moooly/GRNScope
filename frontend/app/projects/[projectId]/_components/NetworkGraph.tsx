@@ -15,7 +15,7 @@ import {
   getLayoutConfig,
 } from "./networkGraphLayouts";
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
-import { buildStrandElements } from "./networkBraid";
+import { buildStrandElements, strandPalette } from "./networkBraid";
 import {
   edgeAnnotation,
   edgeMetric,
@@ -25,6 +25,7 @@ import {
   percent,
   relationshipLabel,
   signText,
+  supportWidthPx,
 } from "./networkVisualEncoding";
 import type {
   NetworkEdge,
@@ -80,11 +81,24 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     x: number;
     y: number;
   } | null>(null);
+  // Method colours are assigned over the whole edge set so a method keeps its
+  // hue no matter which relationship is open.
+  const palette = useMemo(() => strandPalette(edges), [edges]);
   const elements = useMemo(() => {
     const base = buildGraphElements(nodes, edges).elements;
-    if (appearance !== "braid") return base;
-    return [...base, ...(buildStrandElements(edges) as unknown as typeof base)];
-  }, [nodes, edges, appearance]);
+    // The braid is a detail on demand, not the resting state: only the selected
+    // relationship is fanned into its per-method threads. Every other
+    // relationship carries its support in the consensus edge's width.
+    const braided =
+      appearance === "braid" && selectedEdgeKey
+        ? edges.find((edge) => edge.key === selectedEdgeKey)
+        : undefined;
+    if (!braided) return base;
+    return [
+      ...base,
+      ...(buildStrandElements(braided, palette) as unknown as typeof base),
+    ];
+  }, [nodes, edges, appearance, selectedEdgeKey, palette]);
   const topology = useMemo(
     () =>
       JSON.stringify([
@@ -172,11 +186,6 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       );
       if (!edge) return;
       event.target.addClass("hovered");
-      // Reveal which methods back this relationship, where colour is readable.
-      const hoveredId = event.target.id();
-      cy.edges(".strand")
-        .filter((strand) => strand.data("parentEdge") === hoveredId)
-        .addClass("strand-lit");
       const point = event.renderedPosition ?? event.target.renderedMidpoint();
       setTooltip({
         edge,
@@ -186,7 +195,6 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     });
     cy.on("mouseout", "edge", (event) => {
       event.target.removeClass("hovered");
-      cy.edges(".strand-lit").removeClass("strand-lit");
       setTooltip(null);
     });
     cy.on("zoom pan", () => setTooltip(null));
@@ -298,6 +306,16 @@ export default function NetworkGraph(props: NetworkGraphProps) {
             ? {
                 metricWidth: metricWidth(value),
                 metricOpacity: metricOpacity(value),
+                // Two dedicated channels on the consensus edge: how many
+                // methods agree (stepped width) and how sure they are
+                // (darkness). Evidence stays in the tooltip and inspector.
+                confidenceOpacity: metricOpacity(
+                  edgeMetric(edge, "confidence", methodCount),
+                ),
+                supportWidth: supportWidthPx(
+                  edge.supportingAlgorithms.length,
+                  methodCount,
+                ),
                 metricUnavailable: value === null ? 1 : 0,
                 annotation: edgeAnnotation(edge, methodCount),
               }
@@ -345,7 +363,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
           uniformNodeDimensions: false,
           nodeSeparation: braid
             ? count < 60
-              ? 200
+              ? 280
               : 120
             : count < 60
               ? 130
@@ -355,7 +373,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
           idealEdgeLength: () =>
             braid
               ? count < 60
-                ? 175
+                ? 240
                 : count > 800
                   ? 90
                   : 125
@@ -365,7 +383,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
                   ? 135
                   : 62,
           nodeRepulsion: () =>
-            braid ? 30000 : count > 800 ? 22000 : 12000,
+            braid ? 55000 : count > 800 ? 22000 : 12000,
           gravity: count > 800 ? 0.08 : 0.28,
           gravityRange: count > 800 ? 2.4 : 3.6,
           numIter: count > 800 ? 1500 : 2600,
@@ -448,7 +466,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     }
     cy.batch(() => {
       cy.elements()
-        .removeClass("context-muted endpoint annotated local-edge strand-lit")
+        .removeClass("context-muted endpoint annotated local-edge")
         .unselect();
       let emphasized = cy.collection();
       if (highlightedMethod) {
@@ -472,13 +490,17 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       if (selectedEdgeKey) {
         const edge = cy.getElementById(selectedEdgeKey);
         edge.select().addClass("annotated");
-        cy.edges(".strand")
-          .filter((strand) => strand.data("parentEdge") === selectedEdgeKey)
-          .addClass("strand-lit");
         edge.connectedNodes().addClass("endpoint");
-        emphasized = highlightedMethod
-          ? emphasized.union(edge).union(edge.connectedNodes())
-          : edge.union(edge.connectedNodes());
+        // The braid belongs to the selection, so it is never dimmed with the
+        // rest of the graph.
+        const threads = cy
+          .edges(".strand")
+          .filter((strand) => strand.data("parentEdge") === selectedEdgeKey);
+        emphasized = (
+          highlightedMethod
+            ? emphasized.union(edge).union(edge.connectedNodes())
+            : edge.union(edge.connectedNodes())
+        ).union(threads);
       }
       if (highlightedMethod || selectedGene || selectedEdgeKey)
         cy.elements().difference(emphasized).addClass("context-muted");

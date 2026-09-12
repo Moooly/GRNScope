@@ -57,6 +57,12 @@ export function metricWidth(value: number | null): number {
 }
 // Opacity channel for edge strength (confidence / evidence / support). A higher
 // floor keeps low-strength links visible while the full range remains legible.
+/** Evidence drives the central line's thickness. Deliberately a narrow range:
+ * support is carried by the thread count, so this only needs to be comparable,
+ * not heavy. */
+export function metricWidthPx(value: number | null): number {
+  return value === null ? 1.4 : 1.2 + value * 1.6;
+}
 export function metricOpacity(value: number | null): number {
   return value === null ? 0.3 : 0.42 + value * 0.58;
 }
@@ -118,4 +124,35 @@ export function edgeAnnotation(edge: NetworkEdge, methodCount: number): string {
         ? "unavailable"
         : percent(edge.confidence);
   return `C ${confidence} · E ${evidenceText(edge.score)} · ${edge.count}/${methodCount} methods`;
+}
+
+/**
+ * Method support as a stepped line width.
+ *
+ * Support is a small integer, so a continuous ramp wastes it: the earlier
+ * design spread twelve levels over ~1.2px and no two were separable. Here the
+ * ramp is quantised into at most SUPPORT_STEPS discrete widths, so adjacent
+ * levels differ by ~0.7px -- enough to rank two edges by eye. The exact count
+ * stays in the tooltip and the inspector.
+ */
+export const SUPPORT_MIN_WIDTH = 1.2;
+export const SUPPORT_MAX_WIDTH = 5.4;
+export const SUPPORT_STEPS = 7;
+
+export function supportLevel(count: number, methodCount: number): number {
+  const total = Math.max(1, methodCount);
+  if (total <= 1) return 0;
+  const supported = Math.max(1, Math.min(total, Math.round(count)));
+  const steps = Math.min(total, SUPPORT_STEPS);
+  return Math.round(((supported - 1) / (total - 1)) * (steps - 1));
+}
+
+export function supportWidthPx(count: number, methodCount: number): number {
+  const steps = Math.min(Math.max(1, methodCount), SUPPORT_STEPS);
+  if (steps <= 1) return SUPPORT_MIN_WIDTH;
+  const level = supportLevel(count, methodCount);
+  return (
+    SUPPORT_MIN_WIDTH +
+    (level / (steps - 1)) * (SUPPORT_MAX_WIDTH - SUPPORT_MIN_WIDTH)
+  );
 }

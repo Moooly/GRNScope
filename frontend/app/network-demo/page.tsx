@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import NetworkGraph from "../projects/[projectId]/_components/NetworkGraph";
+import { strandPalette } from "../projects/[projectId]/_components/networkBraid";
 import { NETWORK_APPEARANCES } from "../projects/[projectId]/_components/networkAppearance";
 import type {
   NetworkEdge,
@@ -166,6 +167,8 @@ export default function NetworkDemoPage() {
   const [size, setSize] = useState(19);
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
+  // The renderer falls back to atlas past 60 genes; reflect what is really shown.
+  const BRAID_LIMIT = 60;
   const [minStrength, setMinStrength] = useState(0);
   const [style, setStyle] = useState<"braid" | "atlas">("braid");
   const base = useMemo(() => generateNetwork(size), [size]);
@@ -184,6 +187,11 @@ export default function NetworkDemoPage() {
     };
   }, [base, minStrength]);
 
+  const effective: "braid" | "atlas" =
+    style === "braid" && nodes.length > BRAID_LIMIT ? "atlas" : style;
+  const methodColors = strandPalette(edges);
+  const selectedEdge = edges.find((e) => e.key === selectedEdgeKey) ?? null;
+
   return (
     <main
       style={{
@@ -194,7 +202,7 @@ export default function NetworkDemoPage() {
       }}
     >
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800 }}>
+        <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
           Regulatory atlas — force network preview
         </h1>
         <p style={{ margin: "0 0 14px", color: "#475569", fontSize: 14 }}>
@@ -250,8 +258,8 @@ export default function NetworkDemoPage() {
                   fontWeight: 700,
                   fontSize: 13,
                   cursor: "pointer",
-                  background: style === option ? "#0f766e" : "#fff",
-                  color: style === option ? "#fff" : "#334155",
+                  background: effective === option ? "#0f766e" : "#fff",
+                  color: effective === option ? "#fff" : "#334155",
                 }}
               >
                 {option === "braid" ? "Consensus braid" : "Atlas"}
@@ -303,17 +311,84 @@ export default function NetworkDemoPage() {
           </label>
         </div>
 
+        {effective === "braid" && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "10px 20px",
+              padding: "10px 14px",
+              marginBottom: 10,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 12,
+              fontSize: 12,
+              color: "#475569",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="34" height="18" aria-hidden="true">
+                <path d="M2 4h30" stroke="#556270" strokeWidth="1.2" />
+                <path d="M2 9h30" stroke="#556270" strokeWidth="2.8" />
+                <path d="M2 14.5h30" stroke="#556270" strokeWidth="5" />
+              </svg>
+              Line thickness = methods that agree
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
+                <path d="M2 8H23" stroke="#2f8f7f" strokeWidth="1.8" />
+                <path d="M22 3L30 8L22 13Z" fill="#2f8f7f" />
+              </svg>
+              Activation
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
+                <path
+                  d="M2 8H27M27 2V14"
+                  stroke="#c4693a"
+                  strokeWidth="1.8"
+                  fill="none"
+                />
+              </svg>
+              Repression
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="30" height="18" aria-hidden="true">
+                <circle cx="9" cy="9" r="7" fill="#3c4a57" stroke="#5fcabd" strokeWidth="2" />
+                <circle cx="24" cy="9" r="5" fill="#555" />
+              </svg>
+              Ringed = transcription factor
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="34" height="16" aria-hidden="true">
+                <path d="M2 5h30" stroke="#2f8f7f" strokeWidth="2.4" opacity="0.42" />
+                <path d="M2 11h30" stroke="#2f8f7f" strokeWidth="2.4" opacity="1" />
+              </svg>
+              Darkness = confidence
+            </span>
+            <span>Node size = regulatory links</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="34" height="18" aria-hidden="true">
+                <path d="M2 4.5h30" stroke="#5a7bc4" strokeWidth="1.9" />
+                <path d="M2 9h30" stroke="#556270" strokeWidth="3.4" />
+                <path d="M2 13.5h30" stroke="#d06f6f" strokeWidth="1.9" />
+              </svg>
+              Click a relationship to fan it into one thread per method
+            </span>
+          </div>
+        )}
         <div
           className="grn-atlas"
-          data-appearance={style}
+          data-appearance={effective}
           style={
             {
               borderRadius: 24,
               overflow: "hidden",
               boxShadow: "0 1px 3px rgba(15,23,42,0.12)",
-              "--grn-network-bg": PALETTES[style].background,
-              "--grn-network-text": PALETTES[style].text,
-              "--grn-network-node": PALETTES[style].node,
+              "--grn-network-bg": PALETTES[effective].background,
+              "--grn-network-text": PALETTES[effective].text,
+              "--grn-network-node": PALETTES[effective].node,
             } as CSSProperties
           }
         >
@@ -324,7 +399,7 @@ export default function NetworkDemoPage() {
               layout="force"
               appearance={style}
               metric="confidence"
-              methodCount={5}
+              methodCount={METHODS.length}
               selectedGene={selectedGene}
               selectedEdgeKey={selectedEdgeKey}
               onSelectGene={(gene) => {
@@ -338,6 +413,97 @@ export default function NetworkDemoPage() {
             />
           </div>
         </div>
+
+        {selectedEdge && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "12px 14px",
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 12,
+              fontSize: 13,
+              color: "#334155",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <strong style={{ fontSize: 15, color: "#0f172a" }}>
+                {selectedEdge.source}{" "}
+                {selectedEdge.sign < 0 ? "⊣" : "→"} {selectedEdge.target}
+              </strong>
+              <span
+                style={{
+                  color: selectedEdge.sign < 0 ? "#c4693a" : "#2f8f7f",
+                  fontWeight: 700,
+                }}
+              >
+                {selectedEdge.sign < 0 ? "Repression" : "Activation"}
+              </span>
+              <span style={{ color: "#64748b" }}>
+                Confidence {Math.round(selectedEdge.confidence * 100)}% ·
+                Evidence {selectedEdge.score.toFixed(2)} · Support{" "}
+                {selectedEdge.supportingAlgorithms.length}/{METHODS.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedEdgeKey(null)}
+                style={{
+                  marginLeft: "auto",
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 8,
+                  padding: "3px 9px",
+                  cursor: "pointer",
+                  color: "#475569",
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginTop: 10,
+              }}
+            >
+              {selectedEdge.supportingAlgorithms.map((method) => (
+                <span
+                  key={method}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "3px 9px",
+                    borderRadius: 999,
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  <i
+                    style={{
+                      width: 14,
+                      height: 3,
+                      borderRadius: 2,
+                      background: methodColors.get(method) ?? "#94a3b1",
+                    }}
+                  />
+                  {method}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

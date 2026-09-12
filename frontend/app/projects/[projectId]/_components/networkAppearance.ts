@@ -89,7 +89,7 @@ export const NETWORK_APPEARANCES = {
   },
   braid: {
     label: "Consensus braid",
-    description: "One thread per method · labels inside nodes",
+    description: "Labels inside nodes · click an edge to see its methods",
     background: "#ffffff",
     node: "#555555",
     tf: "#3c4a57",
@@ -136,8 +136,13 @@ function braidStyles(): StylesheetJson {
   // with connectivity, as in the Cytoscape.js fCoSE gene demo.
   // Size means connectivity and nothing else; the label is fitted to the
   // circle by shrinking type, so a long gene name never inflates a node.
+  // Use the regulatory degree carried in node data: cytoscape's degree() counts
+  // the per-method strands, which would inflate a gene purely from agreement.
   const nodeSize = (n: NodeSingular) =>
-    Math.min(84, Math.max(30, 26 + 7 * Math.sqrt(Math.max(0, n.degree(false)))));
+    Math.min(
+      84,
+      Math.max(30, 26 + 7 * Math.sqrt(Math.max(0, Number(n.data("degree")) || 0))),
+    );
   // A label only sits inside the circle if it fits at a readable size; small
   // genes with long names drop their label below the node instead of shrinking
   // into illegibility (which keeps node size meaning connectivity alone).
@@ -177,61 +182,37 @@ function braidStyles(): StylesheetJson {
     },
     {
       selector: "node[isTF = 1]",
-      style: { shape: "ellipse", "background-color": p.tf },
+      style: {
+        shape: "ellipse",
+        "background-color": p.tf,
+        "border-width": 2.5,
+        "border-color": "#5fcabd",
+      },
     },
-    // The consensus edge: straight through the middle, carries direction+sign.
+    // The consensus edge: one line per relationship, straight through the
+    // middle, carrying direction, sign, support and confidence at once.
     {
       selector: "edge",
       style: {
-        width: 1.6,
+        // Support drives width in discrete steps, confidence drives darkness.
+        // Evidence is deliberately not here: it was the weakest of the three
+        // and sharing width with support made neither readable.
+        width: (e: EdgeSingular) => (e.data("supportWidth") as number) ?? 1.6,
         "line-color": signed,
         "target-arrow-color": signed,
         "source-arrow-color": signed,
         color: signed,
-        opacity: 0.75,
+        opacity: (e: EdgeSingular) =>
+          (e.data("confidenceOpacity") as number) ?? 0.75,
+        // A round cap overshoots the tee bar by half the line width; butt ends
+        // the stroke exactly at the arrow.
+        "line-cap": "butt",
         "curve-style": "unbundled-bezier",
         "control-point-distances": [0],
         "control-point-weights": [0.5],
         "arrow-scale": 0.9,
         "z-index": 10,
         "text-outline-color": p.background,
-      },
-    },
-    // One thread per supporting method, fanned around the consensus edge.
-    {
-      selector: "edge.strand",
-      style: {
-        width: 1.3,
-        // Neutral by default: the count of threads carries the meaning. Method
-        // colour is revealed on demand (see .strand-lit) where it is readable.
-        "line-color": "#94a3b1",
-        opacity: 0.6,
-        "curve-style": "unbundled-bezier",
-        // Two control points at the same offset keep the middle of each thread
-        // parallel to its neighbours, so a bundle reads as a cable, not a lens.
-        "control-point-distances": (e: EdgeSingular) => {
-          const offset = (e.data("strandOffset") as number) ?? 0;
-          return [offset, offset];
-        },
-        "control-point-weights": [0.2, 0.8],
-        "source-arrow-shape": "none",
-        "target-arrow-shape": "none",
-        label: "",
-        events: "no",
-        "z-index": 1,
-      },
-    },
-    { selector: "edge.strand.trace-mute", style: { opacity: 0.03 } },
-    { selector: "edge.strand.context-muted", style: { opacity: 0.03 } },
-    { selector: "edge.strand.trace-on", style: { opacity: 0.75 } },
-    { selector: "edge.strand.local-edge", style: { opacity: 0.75 } },
-    {
-      selector: "edge.strand.strand-lit",
-      style: {
-        "line-color": "data(strandColor)",
-        opacity: 0.95,
-        width: 1.7,
-        "z-index": 6,
       },
     },
     { selector: "node.context-muted", style: { opacity: 0.2, "text-opacity": 0.2 } },
@@ -244,7 +225,16 @@ function braidStyles(): StylesheetJson {
         "z-index": 30,
       },
     },
-    { selector: "edge:selected, edge.hovered", style: { opacity: 1, width: 2.4 } },
+    {
+      // Emphasise without flattening: a fixed selected width would erase the
+      // support step the user is trying to read.
+      selector: "edge:selected, edge.hovered",
+      style: {
+        opacity: 1,
+        width: (e: EdgeSingular) =>
+          ((e.data("supportWidth") as number) ?? 1.6) + 0.9,
+      },
+    },
   ];
 }
 
@@ -309,7 +299,15 @@ function atlasStyles(): StylesheetJson {
         "text-outline-color": p.background,
       },
     },
-    { selector: "edge[denseNetwork = 1]", style: { opacity: 0.16 } },
+    {
+      // Dense views dim edges, but proportionally: flattening every edge to one
+      // value would erase the confidence/evidence the opacity channel carries.
+      selector: "edge[denseNetwork = 1]",
+      style: {
+        opacity: (e: EdgeSingular) =>
+          Math.max(0.18, ((e.data("metricOpacity") as number) ?? 0.5) * 0.62),
+      },
+    },
     {
       selector: "edge.local-edge, edge.hovered, edge:selected",
       style: { opacity: 0.95 },

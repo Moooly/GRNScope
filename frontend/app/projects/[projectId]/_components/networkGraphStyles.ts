@@ -143,5 +143,32 @@ export function getNetworkGraphStylesheet(
       },
     },
     ...appearanceStyles(preset),
+    // The selection braid: one coloured thread per method backing the
+    // relationship the user clicked. These elements exist only while that
+    // relationship is selected, so they are drawn lit rather than waiting for
+    // a highlight class.
+    {
+      selector: "edge.strand",
+      style: {
+        width: 1.9,
+        "line-color": "data(strandColor)",
+        opacity: 0.9,
+        "curve-style": "unbundled-bezier",
+        "control-point-distances": (e: EdgeSingular) => {
+          const offset = (e.data("strandOffset") as number) ?? 0;
+          return [offset, offset];
+        },
+        "control-point-weights": [0.2, 0.8],
+        "source-arrow-shape": "none",
+        "target-arrow-shape": "none",
+        "source-distance-from-node": 10,
+        "target-distance-from-node": 10,
+        // A round cap would overshoot the consensus arrowhead by half the width.
+        "line-cap": "butt",
+        label: "",
+        events: "no",
+        "z-index": 3,
+      },
+    },
   ];
 }
