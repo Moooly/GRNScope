@@ -715,7 +715,7 @@
   grid-template-columns: 0.65fr 1.45fr 1fr;
   gap: 24px;
   padding: 16px 24px;
-  border-top: 1px solid var(--grn-line);
+  border-bottom: 1px solid var(--grn-line);
   background: white;
 }
 .grn-legend strong {
@@ -1086,58 +1086,16 @@
 
 .grn-layout-status { position: absolute; inset: 0; display: grid; place-items: center; color: #627d89; font-size: 14px; pointer-events: none; }
 
-/* Original toolbar arrangement; newer display options share a single menu. */
-.grn-display {
-  position: relative;
-}
-.grn-display > summary {
-  display: flex;
-  align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-  list-style: none;
-}
-.grn-display > summary::-webkit-details-marker { display: none; }
-.grn-display[open] > summary { background: #f2f9fc; color: #1b75a6; }
-.grn-display-options {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 60;
-  width: min(360px, calc(100vw - 64px));
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 16px;
-  padding: 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 16px 36px #263e4c24;
-}
-.grn-display-options .grn-metric-switch { flex-wrap: wrap; }
-.grn-display-options .grn-metric-switch > span { width: 100%; }
-.grn-display-options .grn-method-select { margin: 0; }
-.grn-display-options > button { text-align: left; padding: 8px 10px; border-radius: 6px; }
-.grn-display-options .grn-list-toggle { margin: 0; border: 0; }
-.grn-display-options .grn-filter-chips { justify-content: flex-start; }
 .grn-layout-picker button[aria-pressed="true"]:hover { background: #1b75a6; }
 @media (min-width: 721px) {
   .grn-atlas .grn-graph-region,
   .grn-atlas .grn-inspector { height: clamp(560px, 68vh, 700px); }
 }
 @media (max-width: 720px) {
-  .grn-display-options { left: 0; right: auto; }
   .grn-layout-picker { flex-wrap: wrap; height: auto; border-radius: 16px; }
   .grn-layout-picker button { min-height: 38px; }
 }
 @media (max-width: 1023px) {
-  .grn-display-options { left: 0; right: auto; }
 }
 
 .grn-fit-button { padding: 0 12px; border-left: 1px solid #e2e8f0; font-size: 12px; font-weight: 700; color: #475569; }
@@ -1188,7 +1146,7 @@
 .grn-atlas[data-appearance] .grn-canvas-caption > span,
 .grn-atlas[data-appearance] .grn-canvas-caption small { color: var(--grn-network-text); }
 .grn-atlas[data-appearance] .grn-canvas-caption small { opacity: .65; }
-.grn-atlas[data-appearance] > .grn-legend { background: var(--grn-network-bg); border-top-color: #899b9b40; }
+.grn-atlas[data-appearance] > .grn-legend { background: var(--grn-network-bg); border-bottom-color: #899b9b40; }
 .grn-atlas[data-appearance] > .grn-legend :is(strong, small, p, .grn-legend-items, .grn-scale) { color: var(--grn-network-text); }
 .grn-atlas[data-appearance] > .grn-legend .grn-node-symbol { background: var(--grn-network-node); }
 .grn-atlas[data-appearance] .grn-empty { color: var(--grn-network-text); }
@@ -1200,6 +1158,79 @@
 .grn-style-grid svg { width: 100%; height: 49px; display: block; }
 .grn-style-grid span { display: block; font-size: 11px; padding: 4px 2px 0; color: #334155; font-weight: 600; }
 .grn-style-picker p { margin: 9px 0 0; font-size: 11px; line-height: 1.5; color: #64748b; }
-.grn-display-options { max-height: min(620px, 70dvh); overflow-y: auto; overscroll-behavior: contain; }
 .grn-atlas[data-appearance] > .grn-legend .grn-legend-items > span,
 .grn-atlas[data-appearance] > .grn-legend .grn-scale > span { color: var(--grn-network-text); }
+
+/* Compact single-row network legend */
+.grn-legend.grn-legend-compact {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 15px;
+  padding: 9px 22px;
+}
+.grn-legend-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: #5c727f;
+}
+.grn-legend-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--grn-line);
+  opacity: 0.7;
+}
+.grn-legend-widthkey {
+  gap: 9px;
+}
+.grn-legend-compact .grn-scale {
+  gap: 9px;
+}
+.grn-legend-compact .grn-scale > span {
+  gap: 4px;
+  font-size: 9px;
+}
+.grn-atlas[data-appearance] > .grn-legend .grn-legend-key {
+  color: var(--grn-network-text);
+}
+.grn-atlas[data-appearance] > .grn-legend .grn-legend-sep {
+  background: var(--grn-network-text);
+  opacity: 0.25;
+}
+
+/* Top legend joins the white card chrome (light atlas): merges with the
+   controls toolbar above, single card-colored hairline down to the canvas. */
+.grn-atlas[data-appearance="atlas"] > .grn-legend {
+  background: #ffffff;
+  border-bottom: 1px solid #dfe7e9;
+  padding: 10px 20px;
+}
+
+/* Inline Emphasis metric picker inside the legend */
+.grn-legend-emphasis {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+}
+.grn-legend-emphasis-select {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1b75a6;
+  background: #f2f9fc;
+  border: 1px solid #cfe0ea;
+  border-radius: 6px;
+  padding: 2px 20px 2px 6px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'><path d='M1 1l3 3 3-3' fill='none' stroke='%231b75a6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+.grn-legend-emphasis-select:hover {
+  border-color: #1b75a6;
+}

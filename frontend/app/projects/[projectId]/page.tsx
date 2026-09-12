@@ -555,8 +555,6 @@ export default function ProjectDetailPage() {
   const [consensusThreshold, setConsensusThreshold] = useState(1);
   const [hasTouchedConsensusThreshold, setHasTouchedConsensusThreshold] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
-  const [edgeDisplayLimit, setEdgeDisplayLimit] = useState(20);
-  const [networkDisplayUnit, setNetworkDisplayUnit] = useState<"relationships" | "genes">("relationships");
   const [networkLayout, setNetworkLayout] = useState<"force" | "hierarchical" | "concentric" | "circular" | "circos">("force");
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [perturbationEntryGene, setPerturbationEntryGene] = useState<string | null>(null);
@@ -2510,12 +2508,6 @@ useEffect(() => {
           setConsensusThreshold(value);
         }}
         isConsensusView={activeAlgorithmIds.length >= 2}
-        edgeDisplayLimit={edgeDisplayLimit}
-        onChangeEdgeDisplayLimit={setEdgeDisplayLimit}
-        filteredEdgeCount={filteredNetworkEdges.length}
-        displayUnit={networkDisplayUnit}
-        onChangeDisplayUnit={setNetworkDisplayUnit}
-        filteredGeneCount={networkNodes.length}
         isGuideOpen={isResultsGuideOpen}
         onOpenGuide={() => setIsResultsGuideOpen(true)}
       />
@@ -2732,7 +2724,6 @@ useEffect(() => {
                       directionConfidenceThreshold={directionConfidenceThreshold}
                       signConfidenceThreshold={signConfidenceThreshold}
                       consensusThreshold={consensusThreshold}
-                      edgeDisplayLimit={edgeDisplayLimit}
                       onClose={() => setIsFileDownloadMenuOpen(false)}
                       onOpenDownload={openDownloadModal}
                     />
@@ -2857,7 +2848,7 @@ useEffect(() => {
                       <NetworkVisualizationSection
                       selectedAlgorithmIds={activeAlgorithmIds}
                       scopeLabel={availableResultScopes.find(scope => scope.id === selectedResultScopeId)?.label ?? selectedResultScopeId}
-                      filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign stability ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}; display limit ${edgeDisplayLimit || "all"} ${networkDisplayUnit}`}
+                      filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign stability ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}`}
                       filterChips={<>
                         {evidenceThreshold > 0 && <button onClick={() => setEvidenceThreshold(0)}>Evidence ≥ {evidenceThreshold.toFixed(2)} ×</button>}
                         {confidenceThreshold > 0 && <button onClick={() => setConfidenceThreshold(0)}>Confidence ≥ {Math.round(confidenceThreshold * 100)}% ×</button>}
@@ -2872,7 +2863,6 @@ useEffect(() => {
                       onGraphReady={(cy) => {
                         networkGraphRef.current = cy;
                       }}
-                      displayUnit={networkDisplayUnit}
                       networkNodes={networkNodes}
                       filteredNetworkEdges={filteredNetworkEdges}
                       selectedGene={selectedGene}
@@ -2882,7 +2872,6 @@ useEffect(() => {
                       selectedNode={selectedNode}
                       isolatedGene={isolatedGene}
                       setIsolatedGene={setIsolatedGene}
-                      edgeDisplayLimit={edgeDisplayLimit}
                       cellOracleReady={cellOracleReady}
                       perturbationGenes={perturbationGenes}
                       onOpenPerturbation={handleOpenPerturbation}

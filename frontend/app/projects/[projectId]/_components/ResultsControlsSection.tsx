@@ -32,12 +32,6 @@ type ResultsControlsSectionProps = {
   maxConsensusThreshold: number;
   onChangeConsensusThreshold: (value: number) => void;
   isConsensusView: boolean;
-  edgeDisplayLimit: number;
-  onChangeEdgeDisplayLimit: (value: number) => void;
-  filteredEdgeCount: number;
-  displayUnit?: "relationships" | "genes";
-  onChangeDisplayUnit?: (unit: "relationships" | "genes") => void;
-  filteredGeneCount?: number;
   compact?: boolean;
   projectId?: string;
   isGuideOpen?: boolean;
@@ -71,18 +65,11 @@ export default function ResultsControlsSection({
   consensusThreshold,
   onChangeConsensusThreshold,
   isConsensusView,
-  edgeDisplayLimit,
-  onChangeEdgeDisplayLimit,
-  filteredEdgeCount,
-  displayUnit = "relationships",
-  onChangeDisplayUnit,
-  filteredGeneCount = 0,
   compact = false,
   onOpenGuide,
 }: ResultsControlsSectionProps) {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
-  const [edgeDisplayDraft, setEdgeDisplayDraft] = useState<string | null>(null);
   const [recoveryRankDraft, setRecoveryRankDraft] = useState<string | null>(null);
   const [algorithmDirectionFilter, setAlgorithmDirectionFilter] =
     useState<AlgorithmDirectionFilter>("all");
@@ -247,41 +234,6 @@ export default function ResultsControlsSection({
     );
   };
 
-  const safeFilteredEdgeCount = Math.max(0, displayUnit === "genes" ? filteredGeneCount : filteredEdgeCount);
-  const minEdgeDisplayLimit = 0;
-  const safeEdgeDisplayLimit = Math.min(
-    safeFilteredEdgeCount,
-    Number.isFinite(edgeDisplayLimit) && edgeDisplayLimit >= 0
-      ? Math.floor(edgeDisplayLimit)
-      : 0
-  );
-  const updateEdgeDisplayLimit = (value: number) => {
-    if (!Number.isFinite(value)) return;
-    const nextValue = Math.max(
-      minEdgeDisplayLimit,
-      Math.min(safeFilteredEdgeCount, Math.floor(value))
-    );
-    onChangeEdgeDisplayLimit(nextValue);
-    return nextValue;
-  };
-  const adjustEdgeDisplayLimit = (delta: number) => {
-    setEdgeDisplayDraft(null);
-    updateEdgeDisplayLimit(safeEdgeDisplayLimit + delta);
-  };
-  const handleEdgeDisplayInputChange = (value: string) => {
-    if (value.trim() === "") {
-      setEdgeDisplayDraft("");
-      onChangeEdgeDisplayLimit(0);
-      return;
-    }
-
-    const nextValue = updateEdgeDisplayLimit(Number(value));
-    if (nextValue !== undefined) {
-      setEdgeDisplayDraft(String(nextValue));
-    }
-  };
-  const matchingEdgesLabel = safeFilteredEdgeCount.toLocaleString();
-
   const inlinePercentControl = (
     value: number,
     onChange: (value: number) => void,
@@ -396,45 +348,6 @@ export default function ResultsControlsSection({
     </label>
   );
 
-  const edgeDisplayControl = () => (
-    <div
-      className="grid h-9 w-[128px] shrink-0 grid-cols-[30px_68px_30px] overflow-hidden rounded-lg border border-slate-200 bg-white"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <button
-        type="button"
-        onClick={() => adjustEdgeDisplayLimit(-10)}
-        disabled={safeEdgeDisplayLimit <= minEdgeDisplayLimit}
-        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-35"
-        aria-label={`Decrease shown ${displayUnit}`}
-      >
-        -
-      </button>
-      <input
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        max={safeFilteredEdgeCount}
-        min={minEdgeDisplayLimit}
-        value={edgeDisplayDraft ?? safeEdgeDisplayLimit}
-        onChange={(e) => handleEdgeDisplayInputChange(e.target.value)}
-        onFocus={() => setEdgeDisplayDraft(String(safeEdgeDisplayLimit))}
-        onBlur={() => setEdgeDisplayDraft(null)}
-        className="h-full min-w-0 border-x border-slate-200 bg-white px-0 text-center text-sm font-bold tabular-nums text-slate-900 outline-none"
-        aria-label={displayUnit === "genes" ? "Shown genes" : "Shown relationships"}
-      />
-      <button
-        type="button"
-        onClick={() => adjustEdgeDisplayLimit(10)}
-        disabled={safeEdgeDisplayLimit >= safeFilteredEdgeCount}
-        className="h-full text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-[#1b75a6]"
-        aria-label={`Increase shown ${displayUnit}`}
-      >
-        +
-      </button>
-    </div>
-  );
-
   const inlineRow = (
     title: string,
     control: ReactNode,
@@ -489,43 +402,6 @@ export default function ResultsControlsSection({
         aria-hidden="true"
       />
     </label>
-  );
-
-  const edgeDisplayRow = (
-    <section
-      className="mb-4 rounded-2xl border border-[#1b75a6]/20 bg-[#f2f9fc] p-3"
-      aria-labelledby="edge-display-limit-title"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3
-              id="edge-display-limit-title"
-              className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#1b75a6]"
-            >
-              Display limit
-            </h3>
-          </div>
-          <p className="mt-1 text-sm font-bold text-slate-800">
-            {(safeEdgeDisplayLimit === 0 ? safeFilteredEdgeCount : safeEdgeDisplayLimit).toLocaleString()} {displayUnit} shown
-            <span className="px-1.5 font-medium text-slate-400">·</span>
-            {matchingEdgesLabel} match filters
-          </p>
-        </div>
-        {edgeDisplayControl()}
-      </div>
-      {onChangeDisplayUnit && <>
-        <label className="mt-3 flex items-center justify-between gap-3 text-xs font-semibold text-slate-700">
-          Limit by
-          <select aria-label="Display limit counts" value={displayUnit} onChange={e => { setEdgeDisplayDraft(null); onChangeDisplayUnit(e.target.value as "relationships" | "genes"); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <option value="relationships">Relationships</option><option value="genes">Genes</option>
-          </select>
-        </label>
-        <p className="mt-2 text-xs leading-relaxed text-slate-500">
-          {filteredGeneCount} genes available after filters. {displayUnit === "genes" ? "Shows ranked genes and all matching relationships between them." : "More relationships may connect the same genes. Choose Genes to control the node count."} Zero shows all.
-        </p>
-      </>}
-    </section>
   );
 
   const clampRecoveryRankPercent = (value: number) =>
@@ -708,8 +584,6 @@ export default function ResultsControlsSection({
               ?
             </button>
           </div>
-
-          {edgeDisplayRow}
 
           <div className="space-y-1.5">
             {sectionLabel("Filters")}

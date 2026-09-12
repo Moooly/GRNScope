@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -92,6 +93,39 @@ function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function downloadSvg(filename: string, svg: string) {
+  const url = URL.createObjectURL(
+    new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function downloadSvgElement(element: SVGSVGElement, filename: string) {
+  const clone = element.cloneNode(true) as SVGSVGElement;
+  const viewBox = clone.viewBox.baseVal;
+  const width = viewBox.width || Math.ceil(element.getBoundingClientRect().width);
+  const height = viewBox.height || Math.ceil(element.getBoundingClientRect().height);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(width));
+  clone.setAttribute("height", String(height));
+  clone.setAttribute("font-family", WEBSITE_FONT_FAMILY);
+  const background = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect",
+  );
+  background.setAttribute("width", "100%");
+  background.setAttribute("height", "100%");
+  background.setAttribute("fill", "#ffffff");
+  clone.insertBefore(background, clone.firstChild);
+  downloadSvg(filename, new XMLSerializer().serializeToString(clone));
 }
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {
@@ -356,8 +390,15 @@ function RepeatRunStabilityHelpModal({
 
 type ComparisonMode = "topology" | "direction" | "sign";
 type AgreementMetric = "jaccard" | "rbo" | "spearman";
+type AgreementDisplay = "matrix" | "overlap";
 type PairDetailGroup = "shared" | "first" | "second";
 type EdgeExplorerSort = "confidence" | "evidence" | "support" | "edge";
+
+type SetIntersection = {
+  key: string;
+  members: string[];
+  edges: string[];
+};
 
 const AGREEMENT_METRIC_LABELS: Record<AgreementMetric, string> = {
   jaccard: "Jaccard overlap",
@@ -380,6 +421,589 @@ const COMPARISON_MODE_LABELS: Record<ComparisonMode, string> = {
 const METHOD_AGREEMENT_ROW_LIMIT = 6;
 const METHOD_AGREEMENT_LABEL_WIDTH = 154;
 const METHOD_AGREEMENT_COLUMN_WIDTH = 128;
+const SET_INTERSECTION_SEPARATOR = "\u0000";
+const UPSET_INTERSECTION_LIMIT = 10;
+
+function setIntersectionKey(members: string[]) {
+  return members.join(SET_INTERSECTION_SEPARATOR);
+}
+
+function buildSetIntersections(
+  algorithmIds: string[],
+  rankedKeys: Map<string, string[]>,
+) {
+  const sets = new Map(
+    algorithmIds.map((algorithmId) => [
+      algorithmId,
+      new Set(rankedKeys.get(algorithmId) ?? []),
+    ]),
+  );
+  const allEdges = new Set(
+    algorithmIds.flatMap((algorithmId) => rankedKeys.get(algorithmId) ?? []),
+  );
+  const groups = new Map<string, SetIntersection>();
+
+  allEdges.forEach((edge) => {
+    const members = algorithmIds.filter((algorithmId) =>
+      sets.get(algorithmId)?.has(edge),
+    );
+    const key = setIntersectionKey(members);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.edges.push(edge);
+    } else {
+      groups.set(key, { key, members, edges: [edge] });
+    }
+  });
+
+  return [...groups.values()].sort(
+    (first, second) =>
+      second.edges.length - first.edges.length ||
+      second.members.length - first.members.length ||
+      first.members.join(" ").localeCompare(second.members.join(" ")),
+  );
+}
+
+const VENN_COLORS = ["#087ead", "#0f9f8f", "#7c5ce7"];
+const UPSET_METHOD_COLORS = [
+  "#22c55e",
+  "#3b82f6",
+  "#f59e0b",
+  "#ef4444",
+  "#a855f7",
+  "#14b8a6",
+  "#f97316",
+  "#ec4899",
+  "#84cc16",
+  "#06b6d4",
+  "#eab308",
+  "#8b5cf6",
+  "#10b981",
+  "#f43f5e",
+  "#6366f1",
+  "#65a30d",
+];
+
+function getUpSetMethodColor(index: number) {
+  if (index < UPSET_METHOD_COLORS.length) {
+    return UPSET_METHOD_COLORS[index];
+  }
+  const hue = (index * 137.508) % 360;
+  return `hsl(${hue} 72% 52%)`;
+}
+
+function escapeSvgText(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function createUpSetDownloadSvg(
+  algorithmIds: string[],
+  intersections: SetIntersection[],
+) {
+  const padding = 28;
+  const gap = 28;
+  const setPanelWidth = 340;
+  const columnWidth = 72;
+  const rowHeight = 52;
+  const matrixWidth = Math.max(intersections.length * columnWidth, 420);
+  const rightX = padding + setPanelWidth + gap;
+  const rightWidth = matrixWidth + 40;
+  const barBaseline = 220;
+  const membershipTitleY = 276;
+  const matrixTop = 304;
+  const width = rightX + rightWidth + padding;
+  const height = matrixTop + algorithmIds.length * rowHeight + 36;
+  const maxIntersectionSize = Math.max(
+    1,
+    ...intersections.map((intersection) => intersection.edges.length),
+  );
+  const setSummaries = algorithmIds.map((algorithmId) => ({
+    algorithmId,
+    count: intersections
+      .filter((intersection) => intersection.members.includes(algorithmId))
+      .reduce((total, intersection) => total + intersection.edges.length, 0),
+  }));
+  const maxSetSize = Math.max(
+    1,
+    ...setSummaries.map((summary) => summary.count),
+  );
+  const colorFor = (algorithmId: string) =>
+    getUpSetMethodColor(Math.max(0, algorithmIds.indexOf(algorithmId)));
+
+  const setRows = setSummaries
+    .map((summary, rowIndex) => {
+      const rowTop = matrixTop + rowIndex * rowHeight;
+      const centerY = rowTop + rowHeight / 2;
+      const barWidth = (summary.count / maxSetSize) * 126;
+      return `${
+        rowIndex % 2 === 1
+          ? `<rect x="${padding + 12}" y="${rowTop}" width="${setPanelWidth - 24}" height="${rowHeight}" rx="8" fill="#ffffff"/>`
+          : ""
+      }<text x="${padding + 54}" y="${centerY + 4}" text-anchor="end" fill="#475569" font-size="12" font-weight="700">${summary.count.toLocaleString()}</text><rect x="${padding + 70}" y="${centerY - 8}" width="126" height="16" rx="8" fill="#e2e8f0"/><rect x="${padding + 70}" y="${centerY - 8}" width="${barWidth}" height="16" rx="8" fill="${colorFor(summary.algorithmId)}"/><text x="${padding + 212}" y="${centerY + 5}" fill="#334155" font-size="14" font-weight="700">${escapeSvgText(summary.algorithmId)}</text>`;
+    })
+    .join("");
+
+  const matrixRows = algorithmIds
+    .map((algorithmId, rowIndex) => {
+      const rowTop = matrixTop + rowIndex * rowHeight;
+      return rowIndex % 2 === 1
+        ? `<rect x="${rightX + 12}" y="${rowTop}" width="${rightWidth - 24}" height="${rowHeight}" rx="8" fill="#ffffff"/>`
+        : "";
+    })
+    .join("");
+
+  const connectors = intersections
+    .map((intersection, columnIndex) => {
+      const includedIndexes = algorithmIds
+        .map((algorithmId, index) =>
+          intersection.members.includes(algorithmId) ? index : -1,
+        )
+        .filter((index) => index >= 0);
+      if (includedIndexes.length < 2) return "";
+      const x = rightX + 20 + columnIndex * columnWidth + columnWidth / 2;
+      const top = matrixTop + includedIndexes[0] * rowHeight + rowHeight / 2;
+      const bottom =
+        matrixTop +
+        includedIndexes[includedIndexes.length - 1] * rowHeight +
+        rowHeight / 2;
+      return `<line x1="${x}" x2="${x}" y1="${top}" y2="${bottom}" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>`;
+    })
+    .join("");
+
+  const columns = intersections
+    .map((intersection, columnIndex) => {
+      const x = rightX + 20 + columnIndex * columnWidth + columnWidth / 2;
+      const barHeight = Math.max(
+        8,
+        (intersection.edges.length / maxIntersectionSize) * 112,
+      );
+      const circles = algorithmIds
+        .map((algorithmId, rowIndex) => {
+          const y = matrixTop + rowIndex * rowHeight + rowHeight / 2;
+          const included = intersection.members.includes(algorithmId);
+          return `<line x1="${x - 20}" x2="${x + 20}" y1="${y}" y2="${y}" stroke="#e2e8f0" stroke-width="2"/><circle cx="${x}" cy="${y}" r="18" fill="${included ? colorFor(algorithmId) : "#e2e8f0"}" stroke="${included ? colorFor(algorithmId) : "#d6dee8"}" stroke-width="1"/>`;
+        })
+        .join("");
+      return `<text x="${x}" y="${barBaseline - barHeight - 10}" text-anchor="middle" fill="#1e293b" font-size="12" font-weight="800">${intersection.edges.length.toLocaleString()}</text><rect x="${x - 22}" y="${barBaseline - barHeight}" width="44" height="${barHeight}" rx="10" fill="url(#intersection-bar)"/>${circles}`;
+    })
+    .join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeSvgText(WEBSITE_FONT_FAMILY)}"><defs><linearGradient id="intersection-bar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0f9f8f"/><stop offset="1" stop-color="#67d7e8"/></linearGradient></defs><rect width="100%" height="100%" fill="#ffffff"/><rect x="${padding}" y="${membershipTitleY - 30}" width="${setPanelWidth}" height="${height - membershipTitleY + 2}" rx="18" fill="#f8fafc" stroke="#e2e8f0"/><rect x="${rightX}" y="${padding}" width="${rightWidth}" height="${height - padding * 2}" rx="18" fill="#f8fafc" stroke="#e2e8f0"/><text x="${padding + 20}" y="${membershipTitleY}" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1.8">SET SIZE</text><text x="${rightX + 20}" y="56" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1.8">INTERSECTION SIZE</text><line x1="${rightX + 20}" x2="${rightX + 20 + matrixWidth}" y1="${barBaseline}" y2="${barBaseline}" stroke="#cbd5e1"/><line x1="${rightX + 20}" x2="${rightX + 20 + matrixWidth}" y1="${membershipTitleY - 24}" y2="${membershipTitleY - 24}" stroke="#e2e8f0"/><text x="${rightX + 20}" y="${membershipTitleY}" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1.8">MEMBERSHIP</text>${setRows}${matrixRows}${connectors}${columns}</svg>`;
+}
+
+function VennDiagram({
+  algorithmIds,
+  intersections,
+  diagramRef,
+}: {
+  algorithmIds: string[];
+  intersections: SetIntersection[];
+  diagramRef: RefObject<HTMLDivElement | null>;
+}) {
+  const countFor = (...members: string[]) =>
+    intersections.find(
+      (intersection) =>
+        intersection.key === setIntersectionKey(members),
+    )?.edges.length ?? 0;
+
+  if (algorithmIds.length === 2) {
+    const [first, second] = algorithmIds;
+    const firstOnly = countFor(first);
+    const secondOnly = countFor(second);
+    const shared = countFor(first, second);
+    return (
+      <div>
+        <div
+          ref={diagramRef}
+          className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5"
+        >
+          <svg
+            viewBox="0 0 640 360"
+            className="mx-auto block h-auto w-full max-w-[42rem]"
+            role="img"
+            aria-labelledby="method-venn-title method-venn-description"
+          >
+            <title id="method-venn-title">Exact edge overlap between two methods</title>
+            <desc id="method-venn-description">
+              Two overlapping circles show edges unique to each method and edges
+              shared by both methods.
+            </desc>
+            <circle cx="250" cy="180" r="110" fill={VENN_COLORS[0]} fillOpacity="0.2" stroke={VENN_COLORS[0]} strokeOpacity="0.6" strokeWidth="3" />
+            <circle cx="390" cy="180" r="110" fill={VENN_COLORS[1]} fillOpacity="0.2" stroke={VENN_COLORS[1]} strokeOpacity="0.6" strokeWidth="3" />
+            <text x="210" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{first}</text>
+            <text x="430" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{second}</text>
+            {firstOnly > 0 ? <text x="205" y="188" textAnchor="middle" fill="#075f83" fontSize="26" fontWeight="700">{firstOnly.toLocaleString()}</text> : null}
+            {shared > 0 ? <text x="320" y="188" textAnchor="middle" fill="#0f172a" fontSize="26" fontWeight="800">{shared.toLocaleString()}</text> : null}
+            {secondOnly > 0 ? <text x="435" y="188" textAnchor="middle" fill="#087c70" fontSize="26" fontWeight="700">{secondOnly.toLocaleString()}</text> : null}
+          </svg>
+        </div>
+        <p className="mt-1 text-center text-xs leading-5 text-slate-500">
+          Circle areas are illustrative; labels show exact edge counts.
+        </p>
+      </div>
+    );
+  }
+
+  const [first, second, third] = algorithmIds;
+  const firstOnly = countFor(first);
+  const secondOnly = countFor(second);
+  const thirdOnly = countFor(third);
+  const firstSecond = countFor(first, second);
+  const firstThird = countFor(first, third);
+  const secondThird = countFor(second, third);
+  const allThree = countFor(first, second, third);
+  return (
+    <div>
+      <div
+        ref={diagramRef}
+        className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5"
+      >
+        <svg
+          viewBox="0 0 700 470"
+          className="mx-auto block h-auto w-full max-w-[44rem]"
+          role="img"
+          aria-labelledby="method-venn-title method-venn-description"
+        >
+          <title id="method-venn-title">Exact edge overlap among three methods</title>
+          <desc id="method-venn-description">
+            Three overlapping circles show every exact combination of shared and
+            method-specific edges.
+          </desc>
+          <circle cx="290" cy="185" r="122" fill={VENN_COLORS[0]} fillOpacity="0.2" stroke={VENN_COLORS[0]} strokeOpacity="0.6" strokeWidth="3" />
+          <circle cx="410" cy="185" r="122" fill={VENN_COLORS[1]} fillOpacity="0.2" stroke={VENN_COLORS[1]} strokeOpacity="0.6" strokeWidth="3" />
+          <circle cx="350" cy="290" r="122" fill={VENN_COLORS[2]} fillOpacity="0.18" stroke={VENN_COLORS[2]} strokeOpacity="0.55" strokeWidth="3" />
+          <text x="235" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{first}</text>
+          <text x="465" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{second}</text>
+          <text x="350" y="446" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{third}</text>
+          {firstOnly > 0 ? <text x="238" y="172" textAnchor="middle" fill="#075f83" fontSize="24" fontWeight="700">{firstOnly.toLocaleString()}</text> : null}
+          {secondOnly > 0 ? <text x="462" y="172" textAnchor="middle" fill="#087c70" fontSize="24" fontWeight="700">{secondOnly.toLocaleString()}</text> : null}
+          {thirdOnly > 0 ? <text x="350" y="346" textAnchor="middle" fill="#6842c2" fontSize="24" fontWeight="700">{thirdOnly.toLocaleString()}</text> : null}
+          {firstSecond > 0 ? <text x="350" y="146" textAnchor="middle" fill="#0f172a" fontSize="22" fontWeight="700">{firstSecond.toLocaleString()}</text> : null}
+          {firstThird > 0 ? <text x="286" y="266" textAnchor="middle" fill="#0f172a" fontSize="22" fontWeight="700">{firstThird.toLocaleString()}</text> : null}
+          {secondThird > 0 ? <text x="414" y="266" textAnchor="middle" fill="#0f172a" fontSize="22" fontWeight="700">{secondThird.toLocaleString()}</text> : null}
+          {allThree > 0 ? <text x="350" y="230" textAnchor="middle" fill="#0f172a" fontSize="24" fontWeight="800">{allThree.toLocaleString()}</text> : null}
+        </svg>
+      </div>
+      <p className="mt-1 text-center text-xs leading-5 text-slate-500">
+        Counts are exclusive to each region. Circle areas are illustrative.
+      </p>
+    </div>
+  );
+}
+
+function UpSetDiagram({
+  algorithmIds,
+  intersections,
+  diagramRef,
+  visibleCount,
+  onVisibleCountChange,
+}: {
+  algorithmIds: string[];
+  intersections: SetIntersection[];
+  diagramRef: RefObject<HTMLDivElement | null>;
+  visibleCount: number;
+  onVisibleCountChange: (value: number) => void;
+}) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const visibleIntersections = intersections.slice(0, visibleCount);
+  const selectedIntersection =
+    intersections.find((intersection) => intersection.key === selectedKey) ??
+    null;
+  const methodColors = new Map(
+    algorithmIds.map((algorithmId, index) => [
+      algorithmId,
+      getUpSetMethodColor(index),
+    ]),
+  );
+  const setSummaries = algorithmIds.map((algorithmId) => ({
+    algorithmId,
+    count: intersections
+      .filter((intersection) => intersection.members.includes(algorithmId))
+      .reduce((total, intersection) => total + intersection.edges.length, 0),
+  }));
+  const maxSetSize = Math.max(
+    1,
+    ...setSummaries.map((summary) => summary.count),
+  );
+  const columnWidth = 72;
+  const rowHeight = 52;
+  const setPanelWidth = 340;
+  const matrixWidth = Math.max(
+    visibleIntersections.length * columnWidth,
+    420,
+  );
+  const barAreaHeight = 164;
+  const maxCount = Math.max(
+    1,
+    ...visibleIntersections.map((intersection) => intersection.edges.length),
+  );
+
+  const intersectionLabel = (intersection: SetIntersection) => {
+    if (intersection.members.length === algorithmIds.length) {
+      return `All ${algorithmIds.length} methods`;
+    }
+    if (intersection.members.length === 1) {
+      return `${intersection.members[0]} only`;
+    }
+    return intersection.members.join(" + ");
+  };
+
+  const selectIntersection = (key: string) => {
+    setSelectedKey((current) => (current === key ? null : key));
+  };
+
+  return (
+    <div>
+      <div ref={diagramRef} className="overflow-x-auto bg-white pb-2">
+        <div
+          className="mx-auto grid w-max items-end gap-6"
+          style={{
+            gridTemplateColumns: `${setPanelWidth}px ${matrixWidth + 40}px`,
+          }}
+        >
+          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+              Set size
+            </p>
+            <div className="mt-4">
+              {setSummaries.map((summary, rowIndex) => {
+                const color = methodColors.get(summary.algorithmId);
+                return (
+                  <div
+                    key={summary.algorithmId}
+                    className={`grid items-center gap-4 rounded-lg pr-2 ${
+                      rowIndex % 2 === 1 ? "bg-white" : "bg-transparent"
+                    }`}
+                    style={{
+                      gridTemplateColumns: "48px minmax(0, 1fr) 112px",
+                      height: `${rowHeight}px`,
+                    }}
+                  >
+                    <span className="text-right text-xs font-bold tabular-nums text-slate-600">
+                      {summary.count.toLocaleString()}
+                    </span>
+                    <span className="h-4 overflow-hidden rounded-full bg-slate-200/80">
+                      <span
+                        className="block h-full rounded-full"
+                        style={{
+                          width: `${(summary.count / maxSetSize) * 100}%`,
+                          background: color,
+                        }}
+                      />
+                    </span>
+                    <span
+                      className="truncate text-sm font-bold text-slate-700"
+                      title={summary.algorithmId}
+                    >
+                      {summary.algorithmId}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+              Intersection size
+            </p>
+            <div
+              className="mt-4 grid items-end border-b border-slate-300"
+              style={{
+                gridTemplateColumns: `repeat(${visibleIntersections.length}, ${columnWidth}px)`,
+                height: `${barAreaHeight}px`,
+                width: `${matrixWidth}px`,
+              }}
+            >
+              {visibleIntersections.map((intersection) => {
+                const isSelected = selectedIntersection?.key === intersection.key;
+                const isHovered = hoveredKey === intersection.key;
+                const barHeight = Math.max(
+                  8,
+                  (intersection.edges.length / maxCount) * 112,
+                );
+                return (
+                  <button
+                    key={`bar-${intersection.key}`}
+                    type="button"
+                    aria-pressed={isSelected}
+                    aria-label={`${intersectionLabel(intersection)}, ${plural(
+                      intersection.edges.length,
+                      "edge",
+                    )}`}
+                    onMouseEnter={() => setHoveredKey(intersection.key)}
+                    onMouseLeave={() => setHoveredKey(null)}
+                    onFocus={() => setHoveredKey(intersection.key)}
+                    onBlur={() => setHoveredKey(null)}
+                    onClick={() => selectIntersection(intersection.key)}
+                    className="flex h-full flex-col items-center justify-end gap-2 rounded-t-xl outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087ead]/40"
+                  >
+                    <span className="text-xs font-extrabold tabular-nums text-slate-800">
+                      {intersection.edges.length.toLocaleString()}
+                    </span>
+                    <span
+                      className={`w-11 rounded-t-[0.8rem] transition ${
+                        isSelected || isHovered ? "opacity-100" : "opacity-85"
+                      }`}
+                      style={{
+                        height: `${barHeight}px`,
+                        background:
+                          "linear-gradient(to top, #0f9f8f, #67d7e8)",
+                        boxShadow: isSelected
+                          ? "0 0 0 3px rgba(8,126,173,0.18)"
+                          : "inset 0 0 0 1px rgba(8,126,173,0.12)",
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                Membership
+              </p>
+              <div className="relative mt-4" style={{ width: `${matrixWidth}px` }}>
+                {visibleIntersections.map((intersection, columnIndex) => {
+                  const includedIndexes = algorithmIds
+                    .map((algorithmId, index) =>
+                      intersection.members.includes(algorithmId) ? index : -1,
+                    )
+                    .filter((index) => index >= 0);
+                  if (includedIndexes.length < 2) return null;
+                  const top = includedIndexes[0] * rowHeight + rowHeight / 2;
+                  const bottom =
+                    includedIndexes[includedIndexes.length - 1] * rowHeight +
+                    rowHeight / 2;
+                  return (
+                    <span
+                      key={`connector-${intersection.key}`}
+                      className="pointer-events-none absolute z-0 w-1 rounded-full bg-slate-400/70"
+                      style={{
+                        left: `${columnIndex * columnWidth + columnWidth / 2 - 2}px`,
+                        top: `${top}px`,
+                        height: `${bottom - top}px`,
+                      }}
+                    />
+                  );
+                })}
+
+                {algorithmIds.map((algorithmId, rowIndex) => {
+                  const color = methodColors.get(algorithmId);
+                  return (
+                    <div
+                      key={algorithmId}
+                      className={`grid items-center rounded-lg ${
+                        rowIndex % 2 === 1 ? "bg-white" : "bg-transparent"
+                      }`}
+                      style={{
+                        gridTemplateColumns: `repeat(${visibleIntersections.length}, ${columnWidth}px)`,
+                        height: `${rowHeight}px`,
+                      }}
+                    >
+                      {visibleIntersections.map((intersection) => {
+                        const included = intersection.members.includes(algorithmId);
+                        const isSelected =
+                          selectedIntersection?.key === intersection.key;
+                        const isHovered = hoveredKey === intersection.key;
+                        return (
+                          <button
+                            key={`${algorithmId}-${intersection.key}`}
+                            type="button"
+                            aria-label={`${algorithmId} is ${
+                              included ? "included in" : "not included in"
+                            } ${intersectionLabel(intersection)}`}
+                            onMouseEnter={() => setHoveredKey(intersection.key)}
+                            onMouseLeave={() => setHoveredKey(null)}
+                            onFocus={() => setHoveredKey(intersection.key)}
+                            onBlur={() => setHoveredKey(null)}
+                            onClick={() => selectIntersection(intersection.key)}
+                            className="relative z-10 flex h-full items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087ead]/40"
+                          >
+                            <span className="absolute left-1/2 top-1/2 h-0.5 w-10 -translate-x-1/2 -translate-y-1/2 bg-slate-200" />
+                            <span
+                              className="relative h-9 w-9 rounded-full border transition"
+                              style={{
+                                background: included ? color : "#e2e8f0",
+                                borderColor: included ? color : "#d6dee8",
+                                boxShadow:
+                                  isSelected || isHovered
+                                    ? "0 0 0 3px rgba(8,126,173,0.16)"
+                                    : included
+                                      ? `inset 0 0 0 1px ${color}33`
+                                      : "none",
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs leading-5 text-slate-500">
+        <p>Select a column to inspect its exact intersection.</p>
+        {intersections.length > UPSET_INTERSECTION_LIMIT ? (
+          <button
+            type="button"
+            onClick={() =>
+              onVisibleCountChange(
+                visibleCount >= intersections.length
+                  ? UPSET_INTERSECTION_LIMIT
+                  : Math.min(intersections.length, visibleCount + 10),
+              )
+            }
+            className="font-bold text-[#087ead] transition hover:text-[#06688f] focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+          >
+            {visibleCount >= intersections.length
+              ? `Show top ${UPSET_INTERSECTION_LIMIT}`
+              : `Show ${Math.min(10, intersections.length - visibleCount)} more`}
+          </button>
+        ) : null}
+      </div>
+      {selectedIntersection ? (
+        <section
+          aria-live="polite"
+          className="mt-3 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] px-4 py-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h5 className="text-sm font-extrabold text-slate-900">
+              {intersectionLabel(selectedIntersection)}
+            </h5>
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold tabular-nums text-[#087ead]">
+              {plural(selectedIntersection.edges.length, "edge")}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {selectedIntersection.edges.slice(0, 8).map((edge) => (
+              <span
+                key={edge}
+                className="max-w-60 truncate rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
+                title={edge}
+              >
+                {edge}
+              </span>
+            ))}
+            {selectedIntersection.edges.length > 8 ? (
+              <span className="px-1 py-1 text-xs font-semibold text-slate-500">
+                +{selectedIntersection.edges.length - 8} more
+              </span>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
 
 function MethodAgreementHelpModal({ onClose }: { onClose: () => void }) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -445,9 +1069,9 @@ function MethodAgreementHelpModal({ onClose }: { onClose: () => void }) {
 
         <div className="overflow-y-auto px-6 py-5 text-sm leading-6 text-slate-600">
           <section>
-            <h4 className="font-extrabold text-slate-900">How to read the matrix</h4>
+            <h4 className="font-extrabold text-slate-900">How to read the views</h4>
             <p className="mt-2">
-              Each row and column is an algorithm. Select a scored cell to
+              In Matrix, each row and column is an algorithm. Select a scored cell to
               inspect shared and method-specific edges. Only the lower half is
               filled because every comparison is symmetric; the pale diagonal
               represents a method compared with itself.
@@ -458,6 +1082,12 @@ function MethodAgreementHelpModal({ onClose }: { onClose: () => void }) {
               the numbers—not color alone—when comparing different settings.
               Similar methods are placed near one another; this ordering does
               not change their scores.
+            </p>
+            <p className="mt-2">
+              The overlap view changes automatically with the comparison: Venn
+              is used for two or three methods, and UpSet is used for four or
+              more. Venn labels and UpSet bars report exact edge counts, so an
+              edge belongs to only one displayed intersection.
             </p>
           </section>
 
@@ -555,6 +1185,7 @@ function ComparisonSettingsMenu({
   topK,
   metric,
   mode,
+  showMetric = true,
   onTopKChange,
   onMetricChange,
   onModeChange,
@@ -562,6 +1193,7 @@ function ComparisonSettingsMenu({
   topK: number;
   metric: AgreementMetric;
   mode: ComparisonMode;
+  showMetric?: boolean;
   onTopKChange: (value: number) => void;
   onMetricChange: (value: AgreementMetric) => void;
   onModeChange: (value: ComparisonMode) => void;
@@ -570,9 +1202,11 @@ function ComparisonSettingsMenu({
   const ref = useRef<HTMLDivElement | null>(null);
   const isDefault =
     topK === 100 && metric === "jaccard" && mode === "topology";
-  const settingsSummary = `Top ${topK.toLocaleString()} · ${
-    AGREEMENT_METRIC_LABELS[metric]
-  } · ${COMPARISON_MODE_LABELS[mode]}`;
+  const settingsSummary = [
+    `Top ${topK.toLocaleString()}`,
+    ...(showMetric ? [AGREEMENT_METRIC_LABELS[metric]] : []),
+    COMPARISON_MODE_LABELS[mode],
+  ].join(" · ");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -621,7 +1255,8 @@ function ComparisonSettingsMenu({
           <circle cx="8.5" cy="14" r="1.5" stroke="currentColor" strokeWidth="1.5" />
         </svg>
         <span className="whitespace-nowrap">
-          Top {topK.toLocaleString()} · {AGREEMENT_METRIC_SHORT_LABELS[metric]} ·{" "}
+          Top {topK.toLocaleString()} ·{" "}
+          {showMetric ? `${AGREEMENT_METRIC_SHORT_LABELS[metric]} · ` : ""}
           {COMPARISON_MODE_LABELS[mode]}
         </span>
         <svg
@@ -657,16 +1292,18 @@ function ComparisonSettingsMenu({
               }))}
               onChange={(value) => onTopKChange(Number(value))}
             />
-            <SettingsSegmentGroup
-              label="Agreement metric"
-              value={metric}
-              options={[
-                { value: "jaccard", label: "Jaccard" },
-                { value: "rbo", label: "Top-rank" },
-                { value: "spearman", label: "Spearman" },
-              ]}
-              onChange={(value) => onMetricChange(value as AgreementMetric)}
-            />
+            {showMetric ? (
+              <SettingsSegmentGroup
+                label="Agreement metric"
+                value={metric}
+                options={[
+                  { value: "jaccard", label: "Jaccard" },
+                  { value: "rbo", label: "Top-rank" },
+                  { value: "spearman", label: "Spearman" },
+                ]}
+                onChange={(value) => onMetricChange(value as AgreementMetric)}
+              />
+            ) : null}
             <SettingsSegmentGroup
               label="Edge identity"
               value={mode}
@@ -2517,7 +3154,13 @@ function AgreementView({
   const [topK, setTopK] = useState(100);
   const [metric, setMetric] = useState<AgreementMetric>("jaccard");
   const [mode, setMode] = useState<ComparisonMode>("topology");
+  const [agreementDisplay, setAgreementDisplay] =
+    useState<AgreementDisplay>("matrix");
   const [isAgreementHelpOpen, setIsAgreementHelpOpen] = useState(false);
+  const overlapDiagramRef = useRef<HTMLDivElement | null>(null);
+  const [upsetVisibleCount, setUpSetVisibleCount] = useState(
+    UPSET_INTERSECTION_LIMIT,
+  );
   const [requestedPair, setRequestedPair] = useState<[string, string] | null>(null);
   const [pairDetailGroup, setPairDetailGroup] =
     useState<PairDetailGroup>("shared");
@@ -2545,6 +3188,11 @@ function AgreementView({
     });
     return values;
   }, [algorithmEdgeRows, eligibleAlgorithmIds, mode, topK]);
+  const setIntersections = useMemo(
+    () => buildSetIntersections(eligibleAlgorithmIds, rankedKeys),
+    [eligibleAlgorithmIds, rankedKeys],
+  );
+  const overlapLabel = eligibleAlgorithmIds.length <= 3 ? "Venn" : "UpSet";
 
   const similarity = (firstId: string, secondId: string) => {
     const first = rankedKeys.get(firstId) ?? [];
@@ -2590,6 +3238,21 @@ function AgreementView({
     () => seriateBySimilarity(eligibleAlgorithmIds, pairSimilarity),
     [eligibleAlgorithmIds, pairSimilarity],
   );
+  const handleDownloadOverlapSvg = () => {
+    const filename = `method-overlap-${overlapLabel.toLowerCase()}-${mode}-top-${topK}.svg`;
+    if (eligibleAlgorithmIds.length <= 3) {
+      const svg = overlapDiagramRef.current?.querySelector("svg");
+      if (svg) downloadSvgElement(svg, filename);
+      return;
+    }
+    downloadSvg(
+      filename,
+      createUpSetDownloadSvg(
+        orderedAlgorithmIds,
+        setIntersections.slice(0, upsetVisibleCount),
+      ),
+    );
+  };
   const [showAllAgreementRows, setShowAllAgreementRows] = useState(false);
   const shouldCollapseAgreementRows =
     orderedAlgorithmIds.length > METHOD_AGREEMENT_ROW_LIMIT;
@@ -2906,50 +3569,132 @@ function AgreementView({
             ?
           </button>
         }
-        description="Compare top-ranked networks across methods; select a cell for details."
+        description="Compare pairwise agreement and exact overlap among top-ranked networks."
         aside={
           <div className="flex flex-wrap items-center gap-2">
             <ComparisonSettingsMenu
               topK={topK}
               metric={metric}
               mode={mode}
+              showMetric={agreementDisplay === "matrix"}
               onTopKChange={setTopK}
               onMetricChange={setMetric}
               onModeChange={setMode}
             />
             <DownloadMenu
-              ariaLabel="Download method-agreement matrix"
-              items={[
-                {
-                  label: "Matrix image",
-                  format: "PNG",
-                  description: "Current matrix, settings, and color scale.",
-                  onSelect: handleDownloadAgreementPng,
-                },
-                {
-                  label: "Complete matrix",
-                  format: "CSV",
-                  description: "Current methods, metric, mode, and top-edge limit.",
-                  onSelect: () =>
-                    downloadCsv(`method-agreement-${metric}-${mode}-top-${topK}.csv`, [
-                      ["algorithm", ...orderedAlgorithmIds],
-                      ...orderedAlgorithmIds.map((rowId) => [
-                        rowId,
-                        ...orderedAlgorithmIds.map((columnId) =>
-                          rowId === columnId
-                            ? 1
-                            : pairSimilarity(rowId, columnId).toFixed(6),
-                        ),
-                      ]),
-                    ]),
-                },
-              ]}
+              ariaLabel={`Download method-agreement ${agreementDisplay}`}
+              items={
+                agreementDisplay === "matrix"
+                  ? [
+                      {
+                        label: "Matrix image",
+                        format: "PNG",
+                        description: "Current matrix, settings, and color scale.",
+                        onSelect: handleDownloadAgreementPng,
+                      },
+                      {
+                        label: "Complete matrix",
+                        format: "CSV",
+                        description:
+                          "Current methods, metric, mode, and top-edge limit.",
+                        onSelect: () =>
+                          downloadCsv(
+                            `method-agreement-${metric}-${mode}-top-${topK}.csv`,
+                            [
+                              ["algorithm", ...orderedAlgorithmIds],
+                              ...orderedAlgorithmIds.map((rowId) => [
+                                rowId,
+                                ...orderedAlgorithmIds.map((columnId) =>
+                                  rowId === columnId
+                                    ? 1
+                                    : pairSimilarity(rowId, columnId).toFixed(6),
+                                ),
+                              ]),
+                            ],
+                          ),
+                      },
+                    ]
+                  : [
+                      {
+                        label: `${overlapLabel} diagram`,
+                        format: "SVG",
+                        description:
+                          "Current diagram, intersection sizes, and method membership.",
+                        onSelect: handleDownloadOverlapSvg,
+                      },
+                      {
+                        label: "Intersection data",
+                        format: "CSV",
+                        description:
+                          "Exact method combinations and their top-ranked edges.",
+                        onSelect: () =>
+                          downloadCsv(
+                            `method-overlap-${mode}-top-${topK}.csv`,
+                            [
+                              ["intersection", "method_count", "edge_count", "edge"],
+                              ...setIntersections.flatMap((intersection) =>
+                                intersection.edges.map((edge) => [
+                                  intersection.members.join(" + "),
+                                  intersection.members.length,
+                                  intersection.edges.length,
+                                  edge,
+                                ]),
+                              ),
+                            ],
+                          ),
+                      },
+                    ]
+              }
             />
           </div>
         }
       >
         {eligibleAlgorithmIds.length >= 2 ? (
           <>
+            <div className="mb-5 flex items-end justify-between gap-4 border-b border-slate-200">
+              <div
+                className="flex items-center gap-6"
+                role="tablist"
+                aria-label="Method agreement view"
+              >
+                {(
+                  [
+                    { value: "matrix", label: "Matrix" },
+                    { value: "overlap", label: overlapLabel },
+                  ] as Array<{ value: AgreementDisplay; label: string }>
+                ).map((option) => {
+                  const isActive = agreementDisplay === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls="method-agreement-view"
+                      title={
+                        option.value === "overlap"
+                          ? "Venn is used for two or three methods; UpSet is used for four or more."
+                          : undefined
+                      }
+                      onClick={() => setAgreementDisplay(option.value)}
+                      className={`relative -mb-px min-h-10 border-b-2 px-0.5 pb-2 text-sm font-bold transition focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30 ${
+                        isActive
+                          ? "border-[#087ead] text-[#087ead]"
+                          : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="hidden pb-2 text-xs font-semibold text-slate-400 sm:block">
+                {plural(eligibleAlgorithmIds.length, "method")}
+              </p>
+            </div>
+            <div id="method-agreement-view" role="tabpanel">
+            {agreementDisplay === "matrix" ? (
+              <>
             <div className="overflow-x-auto">
               <table
                 className="w-full border-separate border-spacing-1.5"
@@ -3262,6 +4007,45 @@ function AgreementView({
                 </div>
               </section>
             ) : null}
+              </>
+            ) : (
+              <section
+                role="tabpanel"
+                aria-label={`${overlapLabel} overlap view`}
+              >
+                {setIntersections.length ? (
+                  eligibleAlgorithmIds.length <= 3 ? (
+                    <VennDiagram
+                      algorithmIds={eligibleAlgorithmIds}
+                      intersections={setIntersections}
+                      diagramRef={overlapDiagramRef}
+                    />
+                  ) : (
+                    <UpSetDiagram
+                      algorithmIds={orderedAlgorithmIds}
+                      intersections={setIntersections}
+                      diagramRef={overlapDiagramRef}
+                      visibleCount={upsetVisibleCount}
+                      onVisibleCountChange={setUpSetVisibleCount}
+                    />
+                  )
+                ) : (
+                  <EmptyState
+                    title="No top-ranked edges to compare"
+                    detail="Choose a different edge identity mode or include results with ranked edges."
+                  />
+                )}
+                {omittedAlgorithmIds.length ? (
+                  <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                    Not included in this mode: {omittedAlgorithmIds.join(", ")}.{" "}
+                    {mode === "sign"
+                      ? "These methods do not report edge signs."
+                      : "These methods do not report direction."}
+                  </p>
+                ) : null}
+              </section>
+            )}
+            </div>
           </>
         ) : (
           <EmptyState

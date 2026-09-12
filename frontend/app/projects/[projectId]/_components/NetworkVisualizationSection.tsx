@@ -14,14 +14,8 @@ import NetworkGraph, {
   MAX_NETWORK_ZOOM,
 } from "./NetworkGraph";
 import { DownloadIcon } from "./DownloadMenu";
-import { isDenseNetwork } from "./networkGraphLayouts";
 import CircosNetworkGraph from "./CircosNetworkGraph";
 import NetworkHelpModal from "./NetworkHelpModal";
-import {
-  selectNetworkDisplay,
-  type NetworkDisplayUnit,
-} from "./networkDisplay";
-import NetworkStylePicker from "./NetworkStylePicker";
 import {
   NETWORK_APPEARANCES,
   type NetworkAppearance,
@@ -29,12 +23,7 @@ import {
 import NetworkLegend from "./NetworkLegend";
 import NetworkInspector from "./NetworkInspector";
 import {
-  METRICS,
   edgeMetric,
-  evidenceText,
-  percent,
-  relationshipLabel,
-  signColor,
   type NetworkMetric,
 } from "./networkVisualEncoding";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
@@ -60,8 +49,6 @@ type Props = {
   selectedNode: NodeInfo | null;
   isolatedGene: string | null;
   setIsolatedGene: (id: string | null) => void;
-  edgeDisplayLimit: number;
-  displayUnit?: NetworkDisplayUnit;
   cellOracleReady: boolean;
   perturbationGenes: string[];
   onOpenPerturbation: (gene: string) => void;
@@ -113,12 +100,20 @@ export default function NetworkVisualizationSection(props: Props) {
     selectedNode,
     isolatedGene,
     setIsolatedGene,
-    edgeDisplayLimit,
     selectedAlgorithmIds,
     scopeLabel,
     resultsControls,
   } = props;
+  // Default style, with an opt-in `?style=` override for evaluating alternates
+  // (e.g. ?style=braid) without adding chrome to the toolbar.
   const [appearance, setAppearance] = useState<NetworkAppearance>("teal");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const requested = new URLSearchParams(window.location.search).get("style");
+    if (requested && requested in NETWORK_APPEARANCES) {
+      setAppearance(requested as NetworkAppearance);
+    }
+  }, []);
   const activeAppearance = networkLayout === "circos" ? "classic" : appearance;
   const palette = NETWORK_APPEARANCES[activeAppearance];
   const [metricChoice, setMetric] = useState<NetworkMetric | null>(null);
@@ -135,17 +130,10 @@ export default function NetworkVisualizationSection(props: Props) {
   );
   const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-  const displayMenuRef = useRef<HTMLDetailsElement>(null);
   const [networkZoom, setNetworkZoom] = useState(1);
   const [networkMinZoom, setNetworkMinZoom] = useState(MIN_NETWORK_ZOOM);
   const graphZoomHandlerRef = useRef<(() => void) | null>(null);
-  const [showList, setShowList] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [workspaceHeight, setWorkspaceHeight] = useState(0);
-  const workspaceRef = useRef<HTMLElement>(null);
-  const expandButtonRef = useRef<HTMLButtonElement>(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [showEdgeLabels, setShowEdgeLabels] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const coreRef = useRef<Core | null>(null);
@@ -203,19 +191,13 @@ export default function NetworkVisualizationSection(props: Props) {
     });
   }, []);
 
-  const display = useMemo(
-    () =>
-      selectNetworkDisplay(
-        filteredNetworkEdges,
-        edgeDisplayLimit,
-        props.displayUnit ?? "relationships",
-      ),
-    [filteredNetworkEdges, edgeDisplayLimit, props.displayUnit],
-  );
-  const edges = display.edges;
+  // Every relationship that passes Results Settings is rendered.
+  const edges = filteredNetworkEdges;
   const nodes = useMemo(
-    () => networkNodes.filter((node) => display.geneIds.has(node.id)),
-    [display, networkNodes],
+    () => networkNodes.filter((node) =>
+      edges.some((edge) => edge.source === node.id || edge.target === node.id),
+    ),
+    [edges, networkNodes],
   );
   const selectedEdge =
     edges.find((edge) => edge.key === selectedEdgeKey) ?? null;
@@ -227,36 +209,11 @@ export default function NetworkVisualizationSection(props: Props) {
     highlightedMethod && selectedAlgorithmIds.includes(highlightedMethod)
       ? highlightedMethod
       : null;
-  const componentCount = useMemo(() => {
-    const neighbors = new Map(nodes.map((n) => [n.id, [] as string[]]));
-    edges.forEach((e) => {
-      neighbors.get(e.source)?.push(e.target);
-      neighbors.get(e.target)?.push(e.source);
-    });
-    const visited = new Set<string>();
-    let count = 0;
-    nodes.forEach((n) => {
-      if (visited.has(n.id)) return;
-      count++;
-      const stack = [n.id];
-      while (stack.length) {
-        const id = stack.pop()!;
-        if (visited.has(id)) continue;
-        visited.add(id);
-        stack.push(
-          ...(neighbors.get(id) ?? []).filter((next) => !visited.has(next)),
-        );
-      }
-    });
-    return count;
-  }, [nodes, edges]);
   const selectGene = (id: string | null) => {
-    if (id) setShowList(false);
     props.setSelectedGene(id);
     props.setSelectedEdgeKey(null);
   };
   const selectEdge = (id: string | null) => {
-    if (id) setShowList(false);
     props.setSelectedEdgeKey(id);
     props.setSelectedGene(null);
   };
@@ -269,92 +226,6 @@ export default function NetworkVisualizationSection(props: Props) {
     props.setSelectedGene(null);
     props.setSelectedEdgeKey(null);
   };
-  useEffect(() => {
-    const closeDisplay = (event: PointerEvent | KeyboardEvent) => {
-      const menu = displayMenuRef.current;
-      if (!menu?.open) return;
-      if (
-        (event instanceof KeyboardEvent && event.key === "Escape") ||
-        (event instanceof PointerEvent &&
-          event.target instanceof Node &&
-          !menu.contains(event.target))
-      )
-        menu.open = false;
-    };
-    document.addEventListener("pointerdown", closeDisplay);
-    document.addEventListener("keydown", closeDisplay);
-    return () => {
-      document.removeEventListener("pointerdown", closeDisplay);
-      document.removeEventListener("keydown", closeDisplay);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!expanded || !workspaceRef.current) return;
-    const workspace = workspaceRef.current;
-    const expandButton = expandButtonRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    // Keep background controls out of the modal's keyboard navigation without
-    // moving/remounting the graph or losing its settled positions.
-    const background: Array<{ element: HTMLElement; inert: boolean }> = [];
-    let branch: HTMLElement = workspace;
-    while (branch.parentElement && branch !== document.body) {
-      for (const sibling of Array.from(branch.parentElement.children)) {
-        if (
-          sibling !== branch &&
-          sibling instanceof HTMLElement &&
-          !sibling.contains(
-            document.querySelector(
-              '[role="dialog"][aria-modal="true"]:not(.grn-expanded)',
-            ),
-          )
-        ) {
-          background.push({ element: sibling, inert: sibling.inert });
-          sibling.inert = true;
-        }
-      }
-      branch = branch.parentElement;
-    }
-    const onKey = (event: KeyboardEvent) => {
-      const externalDialog = Array.from(
-        document.querySelectorAll('[aria-modal="true"]'),
-      ).some((el) => el !== workspace && !workspace.contains(el));
-      if (externalDialog) return;
-      if (event.key === "Escape") {
-        if (workspace.querySelector('details[open], [role="dialog"]')) return;
-        event.preventDefault();
-        setExpanded(false);
-      }
-      if (event.key === "Tab") {
-        const items = Array.from(
-          workspace.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href], [tabindex="0"]',
-          ),
-        ).filter((el) => el.getClientRects().length && !el.closest("[inert]"));
-        const first = items[0],
-          last = items[items.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    expandButton?.focus({ preventScroll: true });
-    return () => {
-      document.removeEventListener("keydown", onKey, true);
-      document.body.style.overflow = previousOverflow;
-      background.forEach(({ element, inert }) => {
-        element.inert = inert;
-      });
-      expandButton?.focus({ preventScroll: true });
-    };
-  }, [expanded]);
-
   const closeExportConfirm = () => {
     setIsExportConfirmOpen(false);
   };
@@ -411,10 +282,9 @@ export default function NetworkVisualizationSection(props: Props) {
     }
   };
   return (
-    <div style={expanded ? { height: workspaceHeight } : undefined}>
+    <div>
       <section
-        ref={workspaceRef}
-        className={`network-atlas grn-atlas${expanded ? " grn-expanded" : ""}`}
+        className="network-atlas grn-atlas"
         data-appearance={activeAppearance}
         style={
           {
@@ -423,8 +293,6 @@ export default function NetworkVisualizationSection(props: Props) {
             "--grn-network-node": palette.node,
           } as import("react").CSSProperties
         }
-        role={expanded ? "dialog" : undefined}
-        aria-modal={expanded || undefined}
         aria-label="Regulatory network workspace"
       >
         <header className="relative z-40 bg-[linear-gradient(180deg,#ffffff_0%,#ffffff_78%,#fbfdfe_100%)] px-5 py-5 sm:px-6">
@@ -490,80 +358,6 @@ export default function NetworkVisualizationSection(props: Props) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <details className="grn-display" ref={displayMenuRef}>
-                <summary>Display ▾</summary>{" "}
-                <div className="grn-display-options">
-                  {networkLayout !== "circos" ? (
-                    <>
-                      <NetworkStylePicker
-                        value={appearance}
-                        onChange={setAppearance}
-                      />
-                      <div className="grn-metric-switch">
-                        <span>Line width</span>
-                        {(Object.keys(METRICS) as NetworkMetric[]).map(
-                          (key) => (
-                            <button
-                              key={key}
-                              aria-pressed={metric === key}
-                              disabled={
-                                key === "confidence" && !hasVerifiedConfidence
-                              }
-                              aria-describedby={
-                                key === "confidence" && !hasVerifiedConfidence
-                                  ? "network-confidence-availability"
-                                  : undefined
-                              }
-                              title={
-                                key === "confidence" && !hasVerifiedConfidence
-                                  ? "Verified bootstrap confidence unavailable for this result"
-                                  : METRICS[key].description
-                              }
-                              onClick={() => setMetric(key)}
-                            >
-                              {METRICS[key].label}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                      {!hasVerifiedConfidence && (
-                        <p
-                          id="network-confidence-availability"
-                          className="grn-confidence-notice"
-                        >
-                          Verified bootstrap confidence is unavailable for this
-                          result. Use Evidence or Method support. Legacy
-                          resampling scores are available in the inspector.
-                        </p>
-                      )}
-                      <label className="grn-method-select">
-                        <span>Highlight</span>
-                        <select
-                          aria-label="Highlight an algorithm"
-                          value={effectiveHighlight ?? ""}
-                          onChange={(event) =>
-                            setHighlightedMethod(event.target.value || null)
-                          }
-                        >
-                          <option value="">All methods</option>
-                          {selectedAlgorithmIds.map((id) => (
-                            <option key={id}>{id}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </>
-                  ) : (
-                    <p>Chromosome relationships · select a ribbon to explore</p>
-                  )}
-                  <button
-                    aria-pressed={showEdgeLabels}
-                    onClick={() => setShowEdgeLabels(!showEdgeLabels)}
-                    disabled={networkLayout === "circos"}
-                  >
-                    Show edge values
-                  </button>
-                </div>
-              </details>
               {networkLayout !== "circos" && (
                 <div
                   className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"
@@ -589,34 +383,8 @@ export default function NetworkVisualizationSection(props: Props) {
                   >
                     +
                   </button>
-                  <button
-                    type="button"
-                    className="grn-fit-button"
-                    onClick={() => coreRef.current?.fit(undefined, 40)}
-                    aria-label="Fit network to view"
-                  >
-                    Fit
-                  </button>
                 </div>
               )}
-              <button
-                ref={expandButtonRef}
-                type="button"
-                className="grn-expand-button"
-                onClick={() => {
-                  if (!expanded)
-                    setWorkspaceHeight(
-                      workspaceRef.current?.getBoundingClientRect().height ?? 0,
-                    );
-                  setExpanded(!expanded);
-                }}
-                aria-label={
-                  expanded ? "Exit expanded network" : "Expand network"
-                }
-                aria-expanded={expanded}
-              >
-                {expanded ? "↙ Exit expanded" : "⤢ Expand"}
-              </button>
               <div ref={exportMenuRef} className="relative">
                 <button
                   type="button"
@@ -706,36 +474,19 @@ export default function NetworkVisualizationSection(props: Props) {
           ) : null}
         </header>
 
-        <div className="grn-scope-strip" aria-live="polite">
-          <span>
-            <b>{nodes.length}</b> of {display.availableGenes} available genes ·{" "}
-            <button
-              className="grn-count-button"
-              aria-expanded={showList}
-              aria-label={`Browse ${edges.length} displayed relationships`}
-              onClick={() => {
-                clearSelection();
-                setShowList(!showList);
-              }}
-            >
-              <b>{edges.length}</b> of {filteredNetworkEdges.length} matching
-              relationships
-            </button>{" "}
-            · {componentCount} connected{" "}
-            {componentCount === 1 ? "group" : "groups"}
-          </span>
-          <span>
-            {scopeLabel} ·{" "}
-            {selectedAlgorithmIds.length > 1
-              ? "Consensus network"
-              : (selectedAlgorithmIds[0] ?? "Select a method")}
-          </span>
-        </div>
         {exportError && (
           <p className="grn-error" role="alert">
             {exportError}
           </p>
         )}
+        <NetworkLegend
+          appearance={activeAppearance}
+          metric={metric}
+          methodCount={selectedAlgorithmIds.length}
+          circos={networkLayout === "circos"}
+          onChangeMetric={setMetric}
+          confidenceDisabled={!hasVerifiedConfidence}
+        />
         <div
           className={`grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
         >
@@ -775,80 +526,12 @@ export default function NetworkVisualizationSection(props: Props) {
                 metric={metric}
                 methodCount={selectedAlgorithmIds.length}
                 highlightedMethod={effectiveHighlight}
-                showEdgeLabels={showEdgeLabels}
                 selectedGene={selectedVisibleNode?.id ?? null}
                 selectedEdgeKey={selectedEdge?.key ?? null}
                 onSelectGene={selectGene}
                 onSelectEdge={selectEdge}
                 onGraphReady={graphReady}
               />
-            )}
-            {edges.length > 0 && networkLayout !== "circos" && (
-              <>
-                <div className="grn-canvas-caption">
-                  <span>
-                    {isolatedGene
-                      ? `${isolatedGene} neighborhood`
-                      : networkLayout === "hierarchical"
-                        ? "Regulatory flow"
-                        : networkLayout === "force"
-                          ? appearance === "teal" && networkLayout === "force"
-                            ? "Branching neighborhoods"
-                            : "Connected neighborhoods"
-                          : networkLayout === "concentric"
-                            ? "Regulatory hubs"
-                            : "Circular network"}
-                  </span>
-                  <small>
-                    {effectiveHighlight
-                      ? `${effectiveHighlight} highlighted · consensus unchanged`
-                      : isDenseNetwork(nodes.length, edges.length)
-                        ? "Dense view · Select a gene to reveal signs & relationships"
-                        : "Drag to explore · Scroll to zoom · Select to inspect"}
-                  </small>
-                </div>
-              </>
-            )}
-            {showList && (
-              <div className="grn-browse-panel">
-                <header>
-                  <strong>
-                    Relationships <span>{edges.length}</span>
-                  </strong>
-                  <button
-                    aria-label="Close relationship list"
-                    onClick={() => setShowList(false)}
-                  >
-                    ×
-                  </button>
-                </header>
-                <div className="grn-relationship-list">
-                  {edges.map((edge) => (
-                    <button
-                      key={edge.key}
-                      aria-pressed={edge.key === selectedEdgeKey}
-                      onClick={() => selectEdge(edge.key)}
-                    >
-                      <strong>
-                        <i style={{ background: signColor(edge.sign) }} />
-                        {relationshipLabel(edge)}
-                      </strong>
-                      <small>
-                        C{" "}
-                        {percent(
-                          edgeMetric(
-                            edge,
-                            "confidence",
-                            selectedAlgorithmIds.length,
-                          ),
-                        )}{" "}
-                        · E {evidenceText(edge.score)} · {edge.count}/
-                        {selectedAlgorithmIds.length} methods
-                      </small>
-                    </button>
-                  ))}
-                </div>
-              </div>
             )}
           </div>
           <NetworkInspector
@@ -870,22 +553,6 @@ export default function NetworkVisualizationSection(props: Props) {
             }
             onPerturb={props.onOpenPerturbation}
           />
-        </div>
-        <NetworkLegend
-          appearance={activeAppearance}
-          metric={metric}
-          methodCount={selectedAlgorithmIds.length}
-          circos={networkLayout === "circos"}
-        />
-        <div className="grn-atlas-note">
-          <span>
-            {networkLayout === "circos"
-              ? "Chromosome overview"
-              : `${!hasVerifiedConfidence && edges.length ? "Verified bootstrap confidence unavailable in this result. " : ""}${METRICS[metric].description}`}
-          </span>
-          <span>
-            Connected groups describe topology, not biological modules.
-          </span>
         </div>
         {showHelp && (
           <NetworkHelpModal

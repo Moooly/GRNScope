@@ -1,4 +1,4 @@
-import type { StylesheetJson } from "cytoscape";
+import type { StylesheetJson, EdgeSingular } from "cytoscape";
 import { appearanceStyles, type NetworkAppearance } from "./networkAppearance";
 import { NETWORK_COLORS } from "./networkVisualEncoding";
 
@@ -36,9 +36,10 @@ export function getNetworkGraphStylesheet(
     {
       selector: "edge",
       style: {
-        width: "data(metricWidth)",
+        width: 1.7,
         "line-color": "data(edgeColor)",
-        opacity: 0.68,
+        opacity: (edge: EdgeSingular) =>
+          (edge.data("metricOpacity") as number) ?? 0.5,
         "curve-style": "bezier",
         "line-cap": "round",
         "arrow-scale": 0.7,
@@ -128,6 +129,17 @@ export function getNetworkGraphStylesheet(
         "text-border-width": 1,
         "text-border-color": "#e0e7e9",
         "text-border-opacity": 1,
+      },
+    },
+    { selector: "node.trace-mute", style: { opacity: 0.15, "text-opacity": 0 } },
+    { selector: "edge.trace-mute", style: { opacity: 0.05, "text-opacity": 0 } },
+    { selector: "edge.trace-on", style: { opacity: 0.95 } },
+    {
+      selector: "node.trace-focus",
+      style: {
+        label: "data(fullLabel)",
+        "min-zoomed-font-size": 0,
+        "z-index": 30,
       },
     },
     ...appearanceStyles(preset),

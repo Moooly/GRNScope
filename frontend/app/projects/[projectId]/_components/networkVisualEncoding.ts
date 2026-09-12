@@ -55,6 +55,11 @@ export function edgeMetric(
 export function metricWidth(value: number | null): number {
   return value === null ? 1 : 0.8 + value * 2;
 }
+// Opacity channel for edge strength (confidence / evidence / support). A higher
+// floor keeps low-strength links visible while the full range remains legible.
+export function metricOpacity(value: number | null): number {
+  return value === null ? 0.3 : 0.42 + value * 0.58;
+}
 export function percent(value: number | null | undefined): string {
   const number = numericMetric(value);
   return number === null

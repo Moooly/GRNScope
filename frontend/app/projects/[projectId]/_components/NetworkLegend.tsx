@@ -1,6 +1,6 @@
 import {
   METRICS,
-  metricWidth,
+  metricOpacity,
   type NetworkMetric,
 } from "./networkVisualEncoding";
 
@@ -14,11 +14,15 @@ export default function NetworkLegend({
   methodCount,
   circos = false,
   appearance = "classic",
+  onChangeMetric,
+  confidenceDisabled = false,
 }: {
   metric: NetworkMetric;
   methodCount: number;
   circos?: boolean;
   appearance?: NetworkAppearance;
+  onChangeMetric?: (metric: NetworkMetric) => void;
+  confidenceDisabled?: boolean;
 }) {
   const palette = NETWORK_APPEARANCES[appearance];
   if (circos)
@@ -52,75 +56,81 @@ export default function NetworkLegend({
       </footer>
     );
   return (
-    <footer className="grn-legend" aria-label="Network legend">
-      <div className="grn-legend-group">
-        <strong>Genes</strong>
-        <div className="grn-legend-items">
-          <span>
-            <i
-              className="grn-node-symbol grn-diamond"
-              style={{ background: palette.tf }}
-            />
-            TF
-          </span>
-          <span>
-            <i className="grn-node-symbol" />
-            Other gene
-          </span>
-        </div>
-        <small>
-          {appearance === "teal" || appearance === "pastel"
-            ? "Shape: gene type · Size: displayed connections"
-            : "Shape identifies gene type"}
-        </small>
-      </div>
-      <div className="grn-legend-group">
-        <strong>Predicted sign & direction</strong>
-        <div className="grn-legend-items">
-          <span>
-            <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">
-              <path d="M2 8H23" stroke={palette.positive} strokeWidth="1.8" />
-              <path d="M22 3L30 8L22 13Z" fill={palette.positive} />
-            </svg>
-            Activation
-          </span>
-          <span>
-            <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">
-              <path
-                d="M2 8H27M27 2V14"
-                stroke={palette.negative}
-                strokeWidth="1.8"
-                fill="none"
-              />
-            </svg>
-            Repression
-          </span>
-          <span>
-            <svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">
-              <path
-                d="M2 8H22M22 3L30 8L22 13Z"
-                stroke={palette.unknown}
-                strokeWidth="1.5"
-                fill="none"
-              />
-            </svg>
-            Unresolved sign
-          </span>
-        </div>
-        <small>
-          Tip points to the affected gene · No tip: direction unresolved
-        </small>
-      </div>
-      <div className="grn-legend-group grn-legend-scale">
-        <strong>Line width · {METRICS[metric].label}</strong>
-        <div className="grn-scale">
+    <footer
+      className="grn-legend grn-legend-compact"
+      aria-label="Network legend"
+    >
+      <span className="grn-legend-key">
+        <i
+          className="grn-node-symbol grn-diamond"
+          style={{ background: palette.tf }}
+        />
+        TF
+      </span>
+      <span className="grn-legend-key">
+        <i className="grn-node-symbol" />
+        Gene
+      </span>
+      {(appearance === "atlas" ||
+        appearance === "teal" ||
+        appearance === "pastel") && (
+        <span className="grn-legend-key">Size = connections</span>
+      )}
+      <span className="grn-legend-sep" aria-hidden="true" />
+      <span className="grn-legend-key">
+        <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
+          <path d="M2 8H23" stroke={palette.positive} strokeWidth="1.8" />
+          <path d="M22 3L30 8L22 13Z" fill={palette.positive} />
+        </svg>
+        Activation
+      </span>
+      <span className="grn-legend-key">
+        <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
+          <path
+            d="M2 8H27M27 2V14"
+            stroke={palette.negative}
+            strokeWidth="1.8"
+            fill="none"
+          />
+        </svg>
+        Repression
+      </span>
+      <span className="grn-legend-sep" aria-hidden="true" />
+      <span className="grn-legend-key grn-legend-widthkey">
+        <span className="grn-legend-emphasis">
+          Emphasis
+          {onChangeMetric ? (
+            <select
+              className="grn-legend-emphasis-select"
+              value={metric}
+              onChange={(event) =>
+                onChangeMetric(event.target.value as NetworkMetric)
+              }
+              aria-label="Emphasis metric"
+            >
+              {(Object.keys(METRICS) as NetworkMetric[]).map((key) => (
+                <option
+                  key={key}
+                  value={key}
+                  disabled={key === "confidence" && confidenceDisabled}
+                >
+                  {METRICS[key].label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <> = {METRICS[metric].label}</>
+          )}
+        </span>
+        <span className="grn-scale">
           {[0, 0.5, 1].map((value) => (
             <span key={value}>
-              <svg width="43" height="14" aria-hidden="true">
+              <svg width="30" height="12" aria-hidden="true">
                 <path
-                  d="M2 7H41"
+                  d="M2 6H28"
                   stroke={palette.node}
-                  strokeWidth={metricWidth(value)}
+                  strokeWidth={2.4}
+                  strokeOpacity={metricOpacity(value)}
                   strokeLinecap="round"
                 />
               </svg>
@@ -129,24 +139,8 @@ export default function NetworkLegend({
                 : Math.round(value * 100) + "%"}
             </span>
           ))}
-          <span>
-            <svg width="35" height="14" aria-hidden="true">
-              <path
-                d="M2 7H33"
-                stroke={palette.unknown}
-                strokeWidth={metricWidth(null)}
-                strokeDasharray="4 3"
-              />
-            </svg>
-            Unavailable
-          </span>
-        </div>
-        <small>
-          {metric === "support"
-            ? `Support = reporting methods ÷ ${methodCount} selected methods`
-            : "Fixed scale · Gold outline marks your selection"}
-        </small>
-      </div>
+        </span>
+      </span>
     </footer>
   );
 }

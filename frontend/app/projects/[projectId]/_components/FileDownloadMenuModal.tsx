@@ -16,7 +16,6 @@ type FileDownloadMenuModalProps = {
   directionConfidenceThreshold: number;
   signConfidenceThreshold: number;
   consensusThreshold: number;
-  edgeDisplayLimit: number;
   onClose: () => void;
   onOpenDownload: (label: string, href: string, filename: string) => void;
 };
@@ -35,7 +34,6 @@ export default function FileDownloadMenuModal({
   directionConfidenceThreshold,
   signConfidenceThreshold,
   consensusThreshold,
-  edgeDisplayLimit,
   onClose,
   onOpenDownload,
 }: FileDownloadMenuModalProps) {
@@ -55,7 +53,6 @@ export default function FileDownloadMenuModal({
     direction_confidence_threshold: String(directionConfidenceThreshold),
     sign_confidence_threshold: String(signConfidenceThreshold),
     consensus_threshold: String(consensusThreshold),
-    edge_display_limit: String(edgeDisplayLimit),
     selected_algorithms: activeAlgorithmIds.join(","),
   });
   const files = [

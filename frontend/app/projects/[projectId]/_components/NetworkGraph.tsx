@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core, type LayoutOptions } from "cytoscape";
+import fcose from "cytoscape-fcose";
 import { updateGalleryCurves } from "./networkAppearance";
 import { frameNetworkSelection } from "./networkCamera";
 import { createBranchLayout } from "./networkBranchLayout";
@@ -14,10 +15,12 @@ import {
   getLayoutConfig,
 } from "./networkGraphLayouts";
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
+import { buildStrandElements } from "./networkBraid";
 import {
   edgeAnnotation,
   edgeMetric,
   evidenceText,
+  metricOpacity,
   metricWidth,
   percent,
   relationshipLabel,
@@ -31,17 +34,24 @@ import type {
 
 const registry = globalThis as typeof globalThis & {
   __grnScopeSvgRegistered?: boolean;
+  __grnScopeFcoseRegistered?: boolean;
 };
+if (typeof window !== "undefined" && !registry.__grnScopeFcoseRegistered) {
+  cytoscape.use(fcose);
+  registry.__grnScopeFcoseRegistered = true;
+}
 export const MIN_NETWORK_ZOOM = 0.02;
 export const MAX_NETWORK_ZOOM = 3;
 export const ABSOLUTE_MIN_NETWORK_ZOOM = MIN_NETWORK_ZOOM;
+/** Above this the braid stops being legible; the atlas style takes over. */
+export const BRAID_MAX_NODES = 60;
 
 export default function NetworkGraph(props: NetworkGraphProps) {
   const {
     nodes,
     edges,
     layout,
-    appearance = "classic",
+    appearance: requestedAppearance = "classic",
     metric = "confidence",
     methodCount = 1,
     highlightedMethod,
@@ -50,6 +60,12 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     selectedEdgeKey,
     focusGene,
   } = props;
+  // The braid is a focused view: its labelled nodes and per-method threads stop
+  // reading past a few dozen genes, so larger networks fall back to the atlas.
+  const appearance =
+    requestedAppearance === "braid" && nodes.length > BRAID_MAX_NODES
+      ? "atlas"
+      : requestedAppearance;
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<Core | null>(null);
   const latest = useRef(props);
@@ -64,15 +80,24 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     x: number;
     y: number;
   } | null>(null);
-  const elements = useMemo(
-    () => buildGraphElements(nodes, edges).elements,
-    [nodes, edges],
-  );
+  const elements = useMemo(() => {
+    const base = buildGraphElements(nodes, edges).elements;
+    if (appearance !== "braid") return base;
+    return [...base, ...(buildStrandElements(edges) as unknown as typeof base)];
+  }, [nodes, edges, appearance]);
   const topology = useMemo(
     () =>
       JSON.stringify([
         layout,
-        layout === "force" && appearance === "teal" ? "branches" : "atlas",
+        layout === "force"
+          ? appearance === "teal"
+            ? "branches"
+            : appearance === "atlas"
+              ? "fcose"
+              : appearance === "braid"
+                ? "fcose-braid"
+                : "atlas"
+          : "static",
         nodes.map((n) => [n.id, n.isTF]).sort(),
         edges.map((e) => [e.key, e.source, e.target]).sort(),
       ]),
@@ -97,6 +122,10 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       layout: { name: "preset" },
     });
     coreRef.current = cy;
+    // Dev aid: lets the running graph be inspected from the console.
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __grnCy?: Core }).__grnCy = cy;
+    }
     latest.current.onGraphReady?.(cy);
     void import("cytoscape-svg").then((module) => {
       if (!registry.__grnScopeSvgRegistered) {
@@ -118,14 +147,36 @@ export default function NetworkGraph(props: NetworkGraphProps) {
         latest.current.onSelectEdge(null);
       }
     });
-    cy.on("mouseover", "node", (event) => event.target.addClass("revealed"));
-    cy.on("mouseout", "node", (event) => event.target.removeClass("revealed"));
+    cy.on("mouseover", "node", (event) => {
+      const node = event.target;
+      node.addClass("revealed");
+      // Trace a regulator's neighbourhood on hover, but never fight an active
+      // click-selection (which owns the context-muted / local-edge classes).
+      if (latest.current.selectedGene || latest.current.selectedEdgeKey) return;
+      const hood = node.closedNeighborhood();
+      cy.batch(() => {
+        cy.elements().difference(hood).addClass("trace-mute");
+        hood.nodes().addClass("trace-focus");
+        hood.edges().addClass("trace-on");
+      });
+    });
+    cy.on("mouseout", "node", (event) => {
+      event.target.removeClass("revealed");
+      cy.batch(() => {
+        cy.elements().removeClass("trace-mute trace-on trace-focus");
+      });
+    });
     cy.on("mouseover", "edge", (event) => {
       const edge = latest.current.edges.find(
         (item) => item.key === event.target.id(),
       );
       if (!edge) return;
       event.target.addClass("hovered");
+      // Reveal which methods back this relationship, where colour is readable.
+      const hoveredId = event.target.id();
+      cy.edges(".strand")
+        .filter((strand) => strand.data("parentEdge") === hoveredId)
+        .addClass("strand-lit");
       const point = event.renderedPosition ?? event.target.renderedMidpoint();
       setTooltip({
         edge,
@@ -135,6 +186,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     });
     cy.on("mouseout", "edge", (event) => {
       event.target.removeClass("hovered");
+      cy.edges(".strand-lit").removeClass("strand-lit");
       setTooltip(null);
     });
     cy.on("zoom pan", () => setTooltip(null));
@@ -245,6 +297,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
           ...(edge
             ? {
                 metricWidth: metricWidth(value),
+                metricOpacity: metricOpacity(value),
                 metricUnavailable: value === null ? 1 : 0,
                 annotation: edgeAnnotation(edge, methodCount),
               }
@@ -266,6 +319,78 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       if (cached) {
         cy.nodes().positions((n) => cached[n.id()] ?? { x: 0, y: 0 });
         cy.fit(undefined, 40);
+      } else if (
+        nodes.length &&
+        layout === "force" &&
+        (appearance === "atlas" || appearance === "braid")
+      ) {
+        // Screenshot-style organic layout: fast, clustered, scales to thousands.
+        layoutPending.current = true;
+        setArranging(true);
+        cy.nodes().forEach((node) => {
+          node.data("label", node.data("fullLabel"));
+        });
+        const count = nodes.length;
+        // Braid nodes carry their label inside, so they are far larger than
+        // atlas beads and need proportionally more room (plus space for the fan).
+        const braid = appearance === "braid";
+        const fcoseOptions = {
+          name: "fcose",
+          quality: count > 800 ? "draft" : "default",
+          animate: false,
+          randomize: true,
+          fit: false,
+          packComponents: true,
+          tile: true,
+          uniformNodeDimensions: false,
+          nodeSeparation: braid
+            ? count < 60
+              ? 200
+              : 120
+            : count < 60
+              ? 130
+              : count > 800
+                ? 45
+                : 78,
+          idealEdgeLength: () =>
+            braid
+              ? count < 60
+                ? 175
+                : count > 800
+                  ? 90
+                  : 125
+              : count < 60
+                ? 95
+                : count > 800
+                  ? 135
+                  : 62,
+          nodeRepulsion: () =>
+            braid ? 30000 : count > 800 ? 22000 : 12000,
+          gravity: count > 800 ? 0.08 : 0.28,
+          gravityRange: count > 800 ? 2.4 : 3.6,
+          numIter: count > 800 ? 1500 : 2600,
+        } as unknown as LayoutOptions;
+        const layoutRun = cy.layout(fcoseOptions);
+        layoutRun.one("layoutstop", () => {
+          if (cy.destroyed() || topologyRef.current !== topology) return;
+          layoutPending.current = false;
+          cy.batch(() =>
+            cy.nodes().forEach((node) => {
+              node.data("label", node.data("fullLabel"));
+            }),
+          );
+          if (!frameNetworkSelection(cy)) cy.fit(undefined, 40);
+          setArranging(false);
+          refreshLabels.current();
+        });
+        cancelLayout.current = () => {
+          try {
+            layoutRun.stop();
+          } catch {
+            // layout already settled
+          }
+        };
+        layoutRun.run();
       } else if (nodes.length && layout === "force") {
         layoutPending.current = true;
         setArranging(true);
@@ -323,7 +448,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     }
     cy.batch(() => {
       cy.elements()
-        .removeClass("context-muted endpoint annotated local-edge")
+        .removeClass("context-muted endpoint annotated local-edge strand-lit")
         .unselect();
       let emphasized = cy.collection();
       if (highlightedMethod) {
@@ -347,6 +472,9 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       if (selectedEdgeKey) {
         const edge = cy.getElementById(selectedEdgeKey);
         edge.select().addClass("annotated");
+        cy.edges(".strand")
+          .filter((strand) => strand.data("parentEdge") === selectedEdgeKey)
+          .addClass("strand-lit");
         edge.connectedNodes().addClass("endpoint");
         emphasized = highlightedMethod
           ? emphasized.union(edge).union(edge.connectedNodes())
