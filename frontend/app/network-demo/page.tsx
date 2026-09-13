@@ -11,6 +11,73 @@ import "../projects/[projectId]/_components/networkWorkspace.css";
 
 const PALETTES = NETWORK_APPEARANCES;
 
+
+const INK = "#4a5b6b";
+const TF_FILL = "#1b75a6";
+const TF_RING = "#61d0c4";
+const GENE_FILL = "#dfeaf2";
+const GENE_EDGE = "#a8c3d5";
+
+/** A labelled cluster of legend keys, so the reader scans three groups rather
+ * than eight equal-weight phrases. */
+function LegendGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "#9aa8b6",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {title}
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Icon carries the encoding, the word names the metric, and the long
+ * explanation waits in the tooltip instead of crowding the bar. */
+function LegendItem({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      title={hint}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        whiteSpace: "nowrap",
+        cursor: "help",
+      }}
+    >
+      {children}
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: "#334155" }}>
+        {label}
+      </span>
+    </span>
+  );
+}
+
 // Deterministic PRNG so a given size always renders the same network.
 function mulberry32(seed: number) {
   let a = seed;
@@ -315,74 +382,114 @@ export default function NetworkDemoPage() {
               display: "flex",
               flexWrap: "wrap",
               alignItems: "center",
-              gap: "10px 20px",
-              padding: "10px 14px",
+              gap: "10px 26px",
+              padding: "10px 16px",
               marginBottom: 10,
               background: "#fff",
               border: "1px solid #e2e8f0",
               borderRadius: 12,
-              fontSize: 12,
               color: "#475569",
             }}
           >
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="42" height="20" aria-hidden="true">
-                <path d="M2 5h18" stroke="#556270" strokeWidth="1.6" />
-                <path d="M20 2.2L26 5L20 7.8Z" fill="#556270" />
-                <path d="M2 15h18" stroke="#556270" strokeWidth="1.6" />
-                <path d="M20 9.5L34 15L20 20.5Z" fill="#556270" />
-              </svg>
-              Arrowhead size = methods that agree
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
-                <path d="M2 8H23" stroke="#2f8f7f" strokeWidth="1.8" />
-                <path d="M22 3L30 8L22 13Z" fill="#2f8f7f" />
-              </svg>
-              Activation
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
-                <path
-                  d="M2 8H27M27 2V14"
-                  stroke="#c4693a"
-                  strokeWidth="1.8"
-                  fill="none"
-                />
-              </svg>
-              Repression
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="30" height="18" aria-hidden="true">
-                <circle cx="9" cy="9" r="7" fill="#1b75a6" stroke="#61d0c4" strokeWidth="2" />
-                <circle cx="24" cy="9" r="5" fill="#dfeaf2" stroke="#a8c3d5" strokeWidth="1.5" />
-              </svg>
-              Blue = transcription factor
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="46" height="24" aria-hidden="true">
-                <path d="M2 6h16" stroke="#556270" strokeWidth="1.6" />
-                <path d="M18 1L31 6L18 11Z" fill="#556270" />
-                <path d="M2 18h16" stroke="#556270" strokeWidth="1.6" />
-                <path
-                  d="M18 13L31 18L18 23Z"
-                  fill="#fff"
-                  stroke="#556270"
-                  strokeWidth="1.6"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Solid head = stronger evidence · hollow = weaker
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="34" height="16" aria-hidden="true">
-                <path d="M2 5h30" stroke="#2f8f7f" strokeWidth="2.4" opacity="0.42" />
-                <path d="M2 11h30" stroke="#2f8f7f" strokeWidth="2.4" opacity="1" />
-              </svg>
-              Darkness = confidence
-            </span>
-            <span>Node size = regulatory links</span>
+            <LegendGroup title="Link">
+              <LegendItem
+                label="Activates"
+                hint="The regulator increases its target's expression"
+              >
+                <svg width="30" height="12" aria-hidden="true">
+                  <path d="M1 6h17" stroke={PALETTES.braid.positive} strokeWidth="2" />
+                  <path d="M17 1.5L28 6L17 10.5Z" fill={PALETTES.braid.positive} />
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Represses"
+                hint="The regulator decreases its target's expression"
+              >
+                <svg width="30" height="12" aria-hidden="true">
+                  <path d="M1 6h23" stroke={PALETTES.braid.negative} strokeWidth="2" />
+                  <path d="M25 1v10" stroke={PALETTES.braid.negative} strokeWidth="2.6" />
+                </svg>
+              </LegendItem>
+            </LegendGroup>
 
+            <LegendGroup title="Strength">
+              <LegendItem
+                label="Agreement"
+                hint="Arrowhead size — how many inference methods called this relationship"
+              >
+                {/* Size varies, fill held constant. */}
+                <svg width="36" height="14" aria-hidden="true">
+                  <path d="M1 7h10" stroke={INK} strokeWidth="1.5" />
+                  <path d="M10 5L14 7L10 9Z" fill={INK} />
+                  <path d="M19 7h5" stroke={INK} strokeWidth="1.5" />
+                  <path d="M24 1L35 7L24 13Z" fill={INK} />
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Evidence"
+                hint="Arrowhead fill — solid means this regulator is among the stronger explanations for its target"
+              >
+                {/* Fill varies, size held constant. */}
+                <svg width="36" height="14" aria-hidden="true">
+                  <path d="M1 7h8" stroke={INK} strokeWidth="1.6" />
+                  <path
+                    d="M9 2.6L16 7L9 11.4Z"
+                    fill="#fff"
+                    stroke={INK}
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M21 7h8" stroke={INK} strokeWidth="1.6" />
+                  <path d="M29 2.6L36 7L29 11.4Z" fill={INK} />
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Confidence"
+                hint="Line darkness — bootstrap confidence in the relationship"
+              >
+                <svg width="34" height="14" aria-hidden="true">
+                  <defs>
+                    {/* userSpaceOnUse: a horizontal stroke has a zero-height
+                        bounding box, which makes the default objectBoundingBox
+                        units degenerate and the gradient render as nothing. */}
+                    <linearGradient
+                      id="grnConfidenceRamp"
+                      gradientUnits="userSpaceOnUse"
+                      x1="1"
+                      y1="0"
+                      x2="33"
+                      y2="0"
+                    >
+                      <stop offset="0%" stopColor={INK} stopOpacity="0.16" />
+                      <stop offset="100%" stopColor={INK} stopOpacity="1" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M1 7h32" stroke="url(#grnConfidenceRamp)" strokeWidth="3" />
+                </svg>
+              </LegendItem>
+            </LegendGroup>
+
+            <LegendGroup title="Gene">
+              <LegendItem label="TF" hint="Transcription factor">
+                <svg width="18" height="18" aria-hidden="true">
+                  <circle cx="9" cy="9" r="6.5" fill={TF_FILL} stroke={TF_RING} strokeWidth="2" />
+                </svg>
+              </LegendItem>
+              <LegendItem label="Target" hint="Regulated gene">
+                <svg width="18" height="18" aria-hidden="true">
+                  <circle cx="9" cy="9" r="6" fill={GENE_FILL} stroke={GENE_EDGE} strokeWidth="1.5" />
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Connections"
+                hint="Node size — number of regulatory links the gene takes part in"
+              >
+                <svg width="34" height="18" aria-hidden="true">
+                  <circle cx="6" cy="9" r="3.5" fill={GENE_FILL} stroke={GENE_EDGE} strokeWidth="1.3" />
+                  <circle cx="22" cy="9" r="7.5" fill={GENE_FILL} stroke={GENE_EDGE} strokeWidth="1.3" />
+                </svg>
+              </LegendItem>
+            </LegendGroup>
           </div>
         )}
         <div
