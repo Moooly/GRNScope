@@ -224,7 +224,7 @@ function braidStyles(): StylesheetJson {
         // every crossing maximally visible.
         "control-point-distances": (e: EdgeSingular) =>
           (e.data("galleryCurve") as number[]) ?? [0, 0],
-        "control-point-weights": [0.25, 0.72],
+        "control-point-weights": [0.25, 0.75],
         // Arrowhead size = methods that agree, in discrete steps.
         "arrow-scale": (e: EdgeSingular) =>
           (e.data("supportArrow") as number) ?? 1,
@@ -313,8 +313,8 @@ function atlasStyles(): StylesheetJson {
         opacity: (e: EdgeSingular) => (e.data("metricOpacity") as number) ?? 0.4,
         "curve-style": "unbundled-bezier",
         "control-point-distances": (e: EdgeSingular) =>
-          e.data("galleryCurve") ?? [10, 6],
-        "control-point-weights": [0.25, 0.72],
+          e.data("galleryCurve") ?? [10, 10],
+        "control-point-weights": [0.25, 0.75],
         "arrow-scale": 0.85,
         "text-outline-color": p.background,
       },
@@ -483,7 +483,7 @@ export function updateGalleryCurves(cy: Core, appearance: NetworkAppearance) {
     return;
   }
   const strength =
-    appearance === "graphite" ? 0.8 : appearance === "braid" ? 0.2 : 0.42;
+    appearance === "graphite" ? 0.7 : appearance === "braid" ? 0.24 : 0.36;
   // Cache each source's neighbour centroid once per update, including during dragging.
   const centers = new Map<string, { x: number; y: number }>();
   cy.batch(() =>
@@ -523,7 +523,14 @@ export function updateGalleryCurves(cy: Core, appearance: NetworkAppearance) {
           ? Math.min(34, length * 0.12)
           : Math.min(75, length * 0.24);
       const bend = Math.max(-limit, Math.min(limit, perpendicular * strength));
-      edge.data("galleryCurve", [bend, bend * 0.45]);
+      // Both control points get the SAME offset, placed symmetrically about the
+      // midpoint. Cytoscape renders multiple control points as a chain of
+      // quadratic segments, and the joins are only smooth where the points are
+      // symmetric -- the old [bend, bend * 0.45] pair made every edge bend hard
+      // out of its source and then visibly flatten, which is the kink that read
+      // as "not smooth". Equal offsets give a near-circular arc with uniform
+      // curvature instead.
+      edge.data("galleryCurve", [bend, bend]);
     }),
   );
 }
