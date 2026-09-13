@@ -233,9 +233,9 @@ function braidStyles(): StylesheetJson {
         // unsigned" convention; in this view an unsigned relationship is still
         // distinguishable by its grey hue.
         "target-arrow-fill": (e: EdgeSingular) =>
-          (e.data("evidenceFill") as string) ?? "filled",
+          (e.data("evidenceFill") as "filled" | "hollow") ?? "filled",
         "source-arrow-fill": (e: EdgeSingular) =>
-          (e.data("evidenceFill") as string) ?? "filled",
+          (e.data("evidenceFill") as "filled" | "hollow") ?? "filled",
         "z-index": 10,
         "text-outline-color": p.background,
       },

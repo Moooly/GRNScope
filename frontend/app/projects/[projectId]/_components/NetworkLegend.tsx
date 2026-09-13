@@ -331,9 +331,8 @@ export default function NetworkLegend({
         <i className="grn-node-symbol" />
         Gene
       </span>
-      {(appearance === "atlas" ||
-        appearance === "teal" ||
-        appearance === "pastel") && (
+      {/* atlas and braid return earlier, so only these two reach here. */}
+      {(appearance === "teal" || appearance === "pastel") && (
         <span className="grn-legend-key">Size = connections</span>
       )}
       <span className="grn-legend-sep" aria-hidden="true" />
