@@ -2,7 +2,11 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import NetworkGraph from "../projects/[projectId]/_components/NetworkGraph";
-import { NETWORK_APPEARANCES } from "../projects/[projectId]/_components/networkAppearance";
+import {
+  BRAID_MAX_NODES,
+  NETWORK_APPEARANCES,
+  resolveNetworkAppearance,
+} from "../projects/[projectId]/_components/networkAppearance";
 import {
   MODULE_COLORS,
   MODULE_NEUTRAL,
@@ -238,7 +242,6 @@ export default function NetworkDemoPage() {
   const [selectedGene, setSelectedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   // The renderer falls back to atlas past 60 genes; reflect what is really shown.
-  const BRAID_LIMIT = 60;
   const [minStrength, setMinStrength] = useState(0);
   const [style, setStyle] = useState<"braid" | "atlas">("braid");
   const base = useMemo(() => generateNetwork(size), [size]);
@@ -258,7 +261,7 @@ export default function NetworkDemoPage() {
   }, [base, minStrength]);
 
   const effective: "braid" | "atlas" =
-    style === "braid" && nodes.length > BRAID_LIMIT ? "atlas" : style;
+    resolveNetworkAppearance(style, nodes.length) as "braid" | "atlas";
   const selectedEdge = edges.find((e) => e.key === selectedEdgeKey) ?? null;
 
   return (
@@ -335,7 +338,7 @@ export default function NetworkDemoPage() {
               </button>
             ))}
           </div>
-          {style === "braid" && nodes.length > 60 && (
+          {style === "braid" && nodes.length > BRAID_MAX_NODES && (
             <span
               style={{
                 color: "#92400e",
@@ -347,7 +350,7 @@ export default function NetworkDemoPage() {
                 fontWeight: 600,
               }}
             >
-              Focused view (≤60 genes) — showing Atlas at this scale
+              {`Focused view (≤${BRAID_MAX_NODES} genes) — showing Atlas at this scale`}
             </span>
           )}
           <span style={{ color: "#64748b", fontSize: 13 }}>

@@ -8,7 +8,10 @@ import cytoscape, {
   type NodeSingular,
 } from "cytoscape";
 import fcose from "cytoscape-fcose";
-import { updateGalleryCurves } from "./networkAppearance";
+import {
+  resolveNetworkAppearance,
+  updateGalleryCurves,
+} from "./networkAppearance";
 import { frameNetworkSelection } from "./networkCamera";
 import { createBranchLayout } from "./networkBranchLayout";
 import { createAtlasLayout } from "./networkAtlasLayout";
@@ -55,8 +58,6 @@ if (typeof window !== "undefined" && !registry.__grnScopeFcoseRegistered) {
 export const MIN_NETWORK_ZOOM = 0.02;
 export const MAX_NETWORK_ZOOM = 3;
 export const ABSOLUTE_MIN_NETWORK_ZOOM = MIN_NETWORK_ZOOM;
-/** Above this the focused style stops being legible; the atlas takes over. */
-export const BRAID_MAX_NODES = 60;
 /** Zoom at which a dense network stops being a map of territories and starts
  * being readable relationships, so edges swap module colour back for sign. */
 export const DETAIL_ZOOM = 0.55;
@@ -75,12 +76,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     selectedEdgeKey,
     focusGene,
   } = props;
-  // A focused view: its labelled nodes stop reading past a few dozen genes, so
-  // larger networks fall back to the atlas.
-  const appearance =
-    requestedAppearance === "braid" && nodes.length > BRAID_MAX_NODES
-      ? "atlas"
-      : requestedAppearance;
+  const appearance = resolveNetworkAppearance(requestedAppearance, nodes.length);
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<Core | null>(null);
   const latest = useRef(props);

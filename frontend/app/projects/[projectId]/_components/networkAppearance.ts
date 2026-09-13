@@ -409,6 +409,27 @@ function atlasStyles(): StylesheetJson {
   ];
 }
 
+/** Above this the focused style stops being legible; the atlas takes over. */
+export const BRAID_MAX_NODES = 60;
+
+/**
+ * The style actually rendered for a network of this size.
+ *
+ * The focused view only holds for a few dozen genes, so bigger networks fall
+ * back to the atlas. Canvas, legend and figure export must all resolve through
+ * this: when only the canvas did, the legend went on describing the focused
+ * view -- circles for TFs, arrowhead size for agreement -- while the user was
+ * looking at an atlas full of diamonds and module colours.
+ */
+export function resolveNetworkAppearance(
+  requested: NetworkAppearance,
+  nodeCount: number,
+): NetworkAppearance {
+  return requested === "braid" && nodeCount > BRAID_MAX_NODES
+    ? "atlas"
+    : requested;
+}
+
 export function appearanceStyles(
   appearance: NetworkAppearance,
 ): StylesheetJson {

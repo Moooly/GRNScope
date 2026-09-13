@@ -18,6 +18,7 @@ import CircosNetworkGraph from "./CircosNetworkGraph";
 import NetworkHelpModal from "./NetworkHelpModal";
 import {
   NETWORK_APPEARANCES,
+  resolveNetworkAppearance,
   type NetworkAppearance,
 } from "./networkAppearance";
 import NetworkLegend from "./NetworkLegend";
@@ -116,7 +117,12 @@ export default function NetworkVisualizationSection(props: Props) {
       setAppearance(requested as NetworkAppearance);
     }
   }, []);
-  const activeAppearance = networkLayout === "circos" ? "classic" : appearance;
+  // Resolve exactly as the canvas does, so the legend never describes a view
+  // the user is not looking at.
+  const activeAppearance =
+    networkLayout === "circos"
+      ? "classic"
+      : resolveNetworkAppearance(appearance, networkNodes.length);
   const palette = NETWORK_APPEARANCES[activeAppearance];
   const [metricChoice, setMetric] = useState<NetworkMetric | null>(null);
   const hasVerifiedConfidence = filteredNetworkEdges.some(
@@ -262,7 +268,9 @@ export default function NetworkVisualizationSection(props: Props) {
       } else
         await props.onExportNetwork(format, {
           metric,
-          appearance,
+          // Resolved, not requested: an exported figure of a 100-gene network
+          // is an atlas, and its legend has to say so.
+          appearance: activeAppearance,
           methodCount: selectedAlgorithmIds.length,
           scope: scopeLabel,
           geneCount: nodes.length,
