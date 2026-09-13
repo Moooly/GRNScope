@@ -49,8 +49,7 @@ export function buildNetworkStylesheet({
         shape: "ellipse",
         "background-color": T.node,
         "background-fill": "solid",
-        "border-width": 1,
-        "border-color": T.nodeRim,
+        "border-width": 0,
         label: "data(label)",
         color: T.label,
         "font-size": (n: NodeSingular) =>
@@ -63,7 +62,9 @@ export function buildNetworkStylesheet({
         "text-halign": "center",
         "text-margin-y": px(3),
         "text-outline-color": T.labelHalo,
-        "text-outline-width": px(1.5),
+        // A little more halo than on a light ground: white type crossing a
+        // teal hairline needs the ground reasserted behind it.
+        "text-outline-width": px(2),
         // The one label control. Cytoscape drops labels below this rendered
         // size on its own, so zooming out thins the names instead of turning
         // them into grit.
@@ -85,13 +86,13 @@ export function buildNetworkStylesheet({
       selector: "node[isTF = 1]",
       style: {
         shape: "diamond",
+        "border-width": 0,
         width: (n: NodeSingular) =>
           nodeDiameterModel(Number(n.data("degree")) || 0, maxDegree, minDegree) *
           1.32,
         height: (n: NodeSingular) =>
           nodeDiameterModel(Number(n.data("degree")) || 0, maxDegree, minDegree) *
           1.32,
-        "border-color": T.regulatorRing,
       },
     },
     {
@@ -183,7 +184,6 @@ export function buildNetworkStylesheet({
       selector: "node.traced",
       style: {
         "background-color": T.accent,
-        "border-color": T.accent,
         color: T.label,
         "font-weight": 700,
         label: "data(fullLabel)",
@@ -195,7 +195,6 @@ export function buildNetworkStylesheet({
       selector: "node.traced-neighbour",
       style: {
         "background-color": T.accentSoft,
-        "border-color": T.accent,
         label: "data(fullLabel)",
         "min-zoomed-font-size": 0,
         "z-index": 25,
@@ -220,7 +219,6 @@ export function buildNetworkStylesheet({
       selector: "node.muted",
       style: {
         "background-color": T.nodeMuted,
-        "border-color": T.nodeMuted,
         "text-opacity": 0.25,
         "z-index": 2,
       },
@@ -237,7 +235,7 @@ export function buildNetworkStylesheet({
     },
     {
       selector: "node.hovered",
-      style: { "border-color": T.accent, "border-width": 2.6 },
+      style: { "background-color": T.accent },
     },
     {
       selector: "edge.hovered",

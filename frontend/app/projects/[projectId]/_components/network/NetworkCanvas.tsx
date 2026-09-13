@@ -17,6 +17,13 @@ import type {
 import { NETWORK_SCALE, NETWORK_THEME } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { forceLayoutOptions } from "./layout";
+import {
+  coreLayoutOptions,
+  placeCoronas,
+  planCorona,
+  reserveCoronaSpace,
+} from "./coronaLayout";
+import { NETWORK_SCALE as SCALE } from "./theme";
 import { applyLabelBudget } from "./labels";
 import { settleView, syncBundling } from "./camera";
 
@@ -221,11 +228,52 @@ export default function NetworkCanvas({
 
     if (layout === "force") {
       layingOutRef.current = true;
-      const run = cy.layout(
-        forceLayoutOptions(nodes.length, { width: cy.width(), height: cy.height() }, () => {
+
+      // Two passes. The core -- everything with more than one connection --
+      // is genuinely relational and goes to the force solver. The leaves are
+      // placed by construction on arcs around their hubs, because a solver
+      // cannot produce the one property that makes those figures readable:
+      // every leaf of a hub at the same radius, on the same side.
+      const plan = planCorona(cy);
+      const coreNodes = plan.core.nodes();
+
+      if (coreNodes.length < 3) {
+        const run = cy.layout(
+          forceLayoutOptions(
+            nodes.length,
+            { width: cy.width(), height: cy.height() },
+            () => {
+              layingOutRef.current = false;
+              if (!cy.destroyed()) settleView(cy);
+            },
+          ),
+        );
+        stopLayoutRef.current = () => {
+          try {
+            run.stop();
+          } catch {
+            // already settled
+          }
           layingOutRef.current = false;
-          if (!cy.destroyed()) settleView(cy);
-        }),
+        };
+        run.run();
+        return;
+      }
+
+      const leafDiameter = SCALE.nodeMinModel;
+      const restore = reserveCoronaSpace(plan, leafDiameter);
+      const run = plan.core.layout(
+        coreLayoutOptions(
+          coreNodes.length,
+          { width: cy.width(), height: cy.height() },
+          () => {
+            restore();
+            layingOutRef.current = false;
+            if (cy.destroyed()) return;
+            placeCoronas(cy, plan, leafDiameter);
+            settleView(cy);
+          },
+        ),
       );
       stopLayoutRef.current = () => {
         try {
@@ -233,6 +281,7 @@ export default function NetworkCanvas({
         } catch {
           // already settled
         }
+        restore();
         layingOutRef.current = false;
       };
       run.run();

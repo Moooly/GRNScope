@@ -14,34 +14,31 @@
  */
 
 export const NETWORK_THEME = {
-  /** Flat, barely off-white. A gradient behind a graph competes with it. */
-  ground: "#f7f9fa",
-  /** Every gene, at rest. One colour, no gradient, no per-category variation. */
-  node: "#8fadbd",
-  /** Just enough rim to keep two touching discs apart on a light ground. */
-  nodeRim: "#61879b",
-  /** Genes pushed to the background while something else is traced. */
-  nodeMuted: "#dbe3e8",
-  /** A regulator is marked by a ring, not by its own colour or shape: the
-   *  distinction has to survive being one of a hundred, and it has to cost
-   *  nothing when every gene in the upload happens to be a regulator. */
-  regulatorRing: "#3f6b85",
-  /** Links at rest. Hairline, and lighter than the nodes so the graph reads as
-   *  discs connected by threads rather than a mesh with dots caught in it. */
-  link: "#c7d3db",
-  linkMuted: "#e8edf0",
-  /** Gene names. Subordinate to the nodes: dark enough to read, never black. */
-  label: "#3a4a57",
-  labelHalo: "#f7f9fa",
-  /** The one accent. Selection, the neighbourhood it reaches, and nothing
-   *  else -- no category ever gets to use it. */
-  accent: "#0f7f72",
-  accentSoft: "#bfe3dc",
-  /** Reserved for the inspector and legend, never painted on the canvas at
-   *  rest: activation and repression are read one relationship at a time. */
-  activates: "#1f8f80",
-  represses: "#c06a3c",
-  unknown: "#8a97a2",
+  /** Warm charcoal, not black. Black makes thin teal lines glare and crushes
+   *  the low end of the edge-opacity range; a lifted grey keeps hairlines
+   *  readable and lets the white nodes be the brightest thing on the canvas. */
+  ground: "#3b3b3b",
+  /** Every gene: near-white, flat, and -- deliberately -- no border. A rim on
+   *  a five-pixel disc doubles its visual weight and the leaves stop reading
+   *  as small. The contrast against the ground is the whole outline. */
+  node: "#f2f5f5",
+  nodeRim: "#f2f5f5",
+  nodeMuted: "#565656",
+  regulatorRing: "#f2f5f5",
+  /** Links carry sign, and both hues are picked to sit on charcoal: the teal
+   *  is the reference figure's own, the clay is its warm counterpart at
+   *  matched lightness so neither dominates. */
+  link: "#6f8f8b",
+  linkMuted: "#4a4a4a",
+  label: "#e7ecec",
+  labelHalo: "#3b3b3b",
+  /** Selection is the one colour that is neither teal nor clay, so it can
+   *  never be mistaken for a sign. */
+  accent: "#ff7a5c",
+  accentSoft: "#7d4536",
+  activates: "#4f9d94",
+  represses: "#c07d55",
+  unknown: "#8a8a8a",
 } as const;
 
 /**

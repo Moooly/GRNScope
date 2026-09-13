@@ -149,8 +149,8 @@ export function linkWidthPx(evidence: number, edgeCount: number) {
   const strength = clamp(Number.isFinite(evidence) ? evidence : 0.5, 0, 1);
   // Busy views get a slightly finer pen so the extra weight does not close the
   // gaps between links, but never so fine that the range stops being visible.
-  const ceiling = edgeCount >= 300 ? 2.6 : edgeCount >= 120 ? 3.1 : 3.6;
-  return 1.3 + (ceiling - 1.3) * strength;
+  const ceiling = edgeCount >= 300 ? 2 : edgeCount >= 120 ? 2.4 : 2.9;
+  return 0.8 + (ceiling - 0.8) * strength;
 }
 
 /**
