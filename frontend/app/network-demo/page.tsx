@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import NetworkGraph from "../projects/[projectId]/_components/NetworkGraph";
-import { strandPalette } from "../projects/[projectId]/_components/networkBraid";
 import { NETWORK_APPEARANCES } from "../projects/[projectId]/_components/networkAppearance";
 import type {
   NetworkEdge,
@@ -189,7 +188,6 @@ export default function NetworkDemoPage() {
 
   const effective: "braid" | "atlas" =
     style === "braid" && nodes.length > BRAID_LIMIT ? "atlas" : style;
-  const methodColors = strandPalette(edges);
   const selectedEdge = edges.find((e) => e.key === selectedEdgeKey) ?? null;
 
   return (
@@ -262,7 +260,7 @@ export default function NetworkDemoPage() {
                   color: effective === option ? "#fff" : "#334155",
                 }}
               >
-                {option === "braid" ? "Consensus braid" : "Atlas"}
+                {option === "braid" ? "Focused consensus" : "Atlas"}
               </button>
             ))}
           </div>
@@ -278,7 +276,7 @@ export default function NetworkDemoPage() {
                 fontWeight: 600,
               }}
             >
-              Braid is a focused view (≤60 genes) — showing Atlas at this scale
+              Focused view (≤60 genes) — showing Atlas at this scale
             </span>
           )}
           <span style={{ color: "#64748b", fontSize: 13 }}>
@@ -328,12 +326,13 @@ export default function NetworkDemoPage() {
             }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="34" height="18" aria-hidden="true">
-                <path d="M2 4h30" stroke="#556270" strokeWidth="1.2" />
-                <path d="M2 9h30" stroke="#556270" strokeWidth="2.8" />
-                <path d="M2 14.5h30" stroke="#556270" strokeWidth="5" />
+              <svg width="42" height="20" aria-hidden="true">
+                <path d="M2 5h18" stroke="#556270" strokeWidth="1.6" />
+                <path d="M20 2.2L26 5L20 7.8Z" fill="#556270" />
+                <path d="M2 15h18" stroke="#556270" strokeWidth="1.6" />
+                <path d="M20 9.5L34 15L20 20.5Z" fill="#556270" />
               </svg>
-              Line thickness = methods that agree
+              Arrowhead size = methods that agree
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <svg width="30" height="14" viewBox="0 0 32 16" aria-hidden="true">
@@ -361,6 +360,21 @@ export default function NetworkDemoPage() {
               Blue = transcription factor
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="46" height="24" aria-hidden="true">
+                <path d="M2 6h16" stroke="#556270" strokeWidth="1.6" />
+                <path d="M18 1L31 6L18 11Z" fill="#556270" />
+                <path d="M2 18h16" stroke="#556270" strokeWidth="1.6" />
+                <path
+                  d="M18 13L31 18L18 23Z"
+                  fill="#fff"
+                  stroke="#556270"
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Solid head = stronger evidence · hollow = weaker
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <svg width="34" height="16" aria-hidden="true">
                 <path d="M2 5h30" stroke="#2f8f7f" strokeWidth="2.4" opacity="0.42" />
                 <path d="M2 11h30" stroke="#2f8f7f" strokeWidth="2.4" opacity="1" />
@@ -368,14 +382,7 @@ export default function NetworkDemoPage() {
               Darkness = confidence
             </span>
             <span>Node size = regulatory links</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="34" height="18" aria-hidden="true">
-                <path d="M2 4.5h30" stroke="#5a7bc4" strokeWidth="1.9" />
-                <path d="M2 9h30" stroke="#556270" strokeWidth="3.4" />
-                <path d="M2 13.5h30" stroke="#d06f6f" strokeWidth="1.9" />
-              </svg>
-              Click a relationship to fan it into one thread per method
-            </span>
+
           </div>
         )}
         <div
@@ -490,14 +497,6 @@ export default function NetworkDemoPage() {
                     fontWeight: 600,
                   }}
                 >
-                  <i
-                    style={{
-                      width: 14,
-                      height: 3,
-                      borderRadius: 2,
-                      background: methodColors.get(method) ?? "#94a3b1",
-                    }}
-                  />
                   {method}
                 </span>
               ))}

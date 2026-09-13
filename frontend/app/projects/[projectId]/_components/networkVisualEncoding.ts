@@ -127,16 +127,19 @@ export function edgeAnnotation(edge: NetworkEdge, methodCount: number): string {
 }
 
 /**
- * Method support as a stepped line width.
+ * Method support as a stepped arrowhead size.
  *
- * Support is a small integer, so a continuous ramp wastes it: the earlier
- * design spread twelve levels over ~1.2px and no two were separable. Here the
- * ramp is quantised into at most SUPPORT_STEPS discrete widths, so adjacent
- * levels differ by ~0.7px -- enough to rank two edges by eye. The exact count
- * stays in the tooltip and the inspector.
+ * Support used to drive line width, which made the picture messy: a thick
+ * stroke carries its weight along the entire edge, so well-supported
+ * relationships read as overlapping ribbons and crowd everything near a hub.
+ * The arrowhead carries the same ramp in a single glyph at the tip, so the
+ * lines stay uniform and thin while agreement is still visible at a glance.
+ *
+ * Support is a small integer, so the ramp is quantised into at most
+ * SUPPORT_STEPS discrete sizes rather than spread continuously.
  */
-export const SUPPORT_MIN_WIDTH = 1.2;
-export const SUPPORT_MAX_WIDTH = 5.4;
+export const SUPPORT_MIN_ARROW = 0.8;
+export const SUPPORT_MAX_ARROW = 2.1;
 export const SUPPORT_STEPS = 7;
 
 export function supportLevel(count: number, methodCount: number): number {
@@ -147,12 +150,28 @@ export function supportLevel(count: number, methodCount: number): number {
   return Math.round(((supported - 1) / (total - 1)) * (steps - 1));
 }
 
-export function supportWidthPx(count: number, methodCount: number): number {
+export function supportArrowScale(count: number, methodCount: number): number {
   const steps = Math.min(Math.max(1, methodCount), SUPPORT_STEPS);
-  if (steps <= 1) return SUPPORT_MIN_WIDTH;
+  if (steps <= 1) return SUPPORT_MIN_ARROW;
   const level = supportLevel(count, methodCount);
   return (
-    SUPPORT_MIN_WIDTH +
-    (level / (steps - 1)) * (SUPPORT_MAX_WIDTH - SUPPORT_MIN_WIDTH)
+    SUPPORT_MIN_ARROW +
+    (level / (steps - 1)) * (SUPPORT_MAX_ARROW - SUPPORT_MIN_ARROW)
   );
+}
+
+/**
+ * Evidence as arrowhead fill.
+ *
+ * Cytoscape only offers filled or hollow, so this is deliberately two tiers --
+ * "this regulator is among the stronger explanations for its target" or not.
+ * It rides on a glyph that is already on screen, costs no extra space, and
+ * unlike a dash pattern it scales with the arrow so it stays legible at the
+ * zoom the network first opens at.
+ */
+export const EVIDENCE_SOLID_THRESHOLD = 0.5;
+
+export function evidenceArrowFill(value: number | null): "filled" | "hollow" {
+  if (value === null) return "hollow";
+  return value >= EVIDENCE_SOLID_THRESHOLD ? "filled" : "hollow";
 }

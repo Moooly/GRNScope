@@ -88,8 +88,8 @@ export const NETWORK_APPEARANCES = {
     dark: false,
   },
   braid: {
-    label: "Consensus braid",
-    description: "Labels inside nodes · click an edge to see its methods",
+    label: "Focused consensus",
+    description: "Labels inside nodes · sized hubs · best under 60 genes",
     background: "#ffffff",
     node: "#dfeaf2",
     tf: "#1b75a6",
@@ -136,8 +136,8 @@ function braidStyles(): StylesheetJson {
   // with connectivity, as in the Cytoscape.js fCoSE gene demo.
   // Size means connectivity and nothing else; the label is fitted to the
   // circle by shrinking type, so a long gene name never inflates a node.
-  // Use the regulatory degree carried in node data: cytoscape's degree() counts
-  // the per-method strands, which would inflate a gene purely from agreement.
+  // Use the regulatory degree carried in node data rather than cytoscape's
+  // degree(), so size means connectivity in the network and nothing else.
   // A wide ramp on purpose. At 26 + 7*sqrt(d) a degree-14 hub came out 52px
   // against a degree-1 leaf at 33px -- a 14x difference in connectivity
   // rendered as 1.5x in diameter, so the genes organising the network did not
@@ -204,10 +204,11 @@ function braidStyles(): StylesheetJson {
     {
       selector: "edge",
       style: {
-        // Support drives width in discrete steps, confidence drives darkness.
-        // Evidence is deliberately not here: it was the weakest of the three
-        // and sharing width with support made neither readable.
-        width: (e: EdgeSingular) => (e.data("supportWidth") as number) ?? 1.6,
+        // Uniform, thin lines. Weight along the stroke is what made dense
+        // neighbourhoods read as overlapping ribbons, so all three edge
+        // metrics live off the line itself: darkness for confidence, and the
+        // arrowhead's size and fill for support and evidence.
+        width: 1.8,
         "line-color": signed,
         "target-arrow-color": signed,
         "source-arrow-color": signed,
@@ -224,7 +225,16 @@ function braidStyles(): StylesheetJson {
         "control-point-distances": (e: EdgeSingular) =>
           (e.data("galleryCurve") as number[]) ?? [0, 0],
         "control-point-weights": [0.25, 0.72],
-        "arrow-scale": 0.9,
+        // Arrowhead size = methods that agree, in discrete steps.
+        "arrow-scale": (e: EdgeSingular) =>
+          (e.data("supportArrow") as number) ?? 1,
+        // Arrowhead fill = evidence. This overrides the shared "hollow means
+        // unsigned" convention; in this view an unsigned relationship is still
+        // distinguishable by its grey hue.
+        "target-arrow-fill": (e: EdgeSingular) =>
+          (e.data("evidenceFill") as string) ?? "filled",
+        "source-arrow-fill": (e: EdgeSingular) =>
+          (e.data("evidenceFill") as string) ?? "filled",
         "z-index": 10,
         "text-outline-color": p.background,
       },
@@ -240,14 +250,10 @@ function braidStyles(): StylesheetJson {
       },
     },
     {
-      // Emphasise without flattening: a fixed selected width would erase the
-      // support step the user is trying to read.
+      // Support and evidence now live in the arrowhead, so the selected edge
+      // can thicken freely without overwriting either.
       selector: "edge:selected, edge.hovered",
-      style: {
-        opacity: 1,
-        width: (e: EdgeSingular) =>
-          ((e.data("supportWidth") as number) ?? 1.6) + 0.9,
-      },
+      style: { opacity: 1, width: 3 },
     },
   ];
 }
@@ -509,7 +515,7 @@ export function updateGalleryCurves(cy: Core, appearance: NetworkAppearance) {
       }
       const perpendicular =
         ((center.x - a.x) * -dy + (center.y - a.y) * dx) / length;
-      // The braid draws far fewer, longer edges than the atlas, so the same
+      // This view draws far fewer, longer edges than the atlas, so the same
       // bend that reads as organic there swings into a swoop here and bundles
       // neighbouring spokes together. Keep it to a subtle bow.
       const limit =
@@ -517,13 +523,7 @@ export function updateGalleryCurves(cy: Core, appearance: NetworkAppearance) {
           ? Math.min(34, length * 0.12)
           : Math.min(75, length * 0.24);
       const bend = Math.max(-limit, Math.min(limit, perpendicular * strength));
-      // A selection thread shares its endpoints with the consensus edge, so it
-      // gets the same bend plus its own perpendicular offset -- otherwise the
-      // braid would run straight while the edge it annotates curves away.
-      const offset = edge.hasClass("strand")
-        ? ((edge.data("strandOffset") as number) ?? 0)
-        : 0;
-      edge.data("galleryCurve", [bend + offset, bend * 0.45 + offset]);
+      edge.data("galleryCurve", [bend, bend * 0.45]);
     }),
   );
 }

@@ -25,7 +25,6 @@ import {
   LAYOUT_RESTART_MAX_NODES,
   runLayoutBestOfRestarts,
 } from "./networkLayoutQuality";
-import { buildStrandElements, strandPalette } from "./networkBraid";
 import {
   edgeAnnotation,
   edgeMetric,
@@ -35,7 +34,8 @@ import {
   percent,
   relationshipLabel,
   signText,
-  supportWidthPx,
+  evidenceArrowFill,
+  supportArrowScale,
 } from "./networkVisualEncoding";
 import type {
   NetworkEdge,
@@ -54,7 +54,7 @@ if (typeof window !== "undefined" && !registry.__grnScopeFcoseRegistered) {
 export const MIN_NETWORK_ZOOM = 0.02;
 export const MAX_NETWORK_ZOOM = 3;
 export const ABSOLUTE_MIN_NETWORK_ZOOM = MIN_NETWORK_ZOOM;
-/** Above this the braid stops being legible; the atlas style takes over. */
+/** Above this the focused style stops being legible; the atlas takes over. */
 export const BRAID_MAX_NODES = 60;
 
 export default function NetworkGraph(props: NetworkGraphProps) {
@@ -71,8 +71,8 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     selectedEdgeKey,
     focusGene,
   } = props;
-  // The braid is a focused view: its labelled nodes and per-method threads stop
-  // reading past a few dozen genes, so larger networks fall back to the atlas.
+  // A focused view: its labelled nodes stop reading past a few dozen genes, so
+  // larger networks fall back to the atlas.
   const appearance =
     requestedAppearance === "braid" && nodes.length > BRAID_MAX_NODES
       ? "atlas"
@@ -91,24 +91,10 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     x: number;
     y: number;
   } | null>(null);
-  // Method colours are assigned over the whole edge set so a method keeps its
-  // hue no matter which relationship is open.
-  const palette = useMemo(() => strandPalette(edges), [edges]);
-  const elements = useMemo(() => {
-    const base = buildGraphElements(nodes, edges).elements;
-    // The braid is a detail on demand, not the resting state: only the selected
-    // relationship is fanned into its per-method threads. Every other
-    // relationship carries its support in the consensus edge's width.
-    const braided =
-      appearance === "braid" && selectedEdgeKey
-        ? edges.find((edge) => edge.key === selectedEdgeKey)
-        : undefined;
-    if (!braided) return base;
-    return [
-      ...base,
-      ...(buildStrandElements(braided, palette) as unknown as typeof base),
-    ];
-  }, [nodes, edges, appearance, selectedEdgeKey, palette]);
+  const elements = useMemo(
+    () => buildGraphElements(nodes, edges).elements,
+    [nodes, edges],
+  );
   const topology = useMemo(
     () =>
       JSON.stringify([
@@ -316,15 +302,18 @@ export default function NetworkGraph(props: NetworkGraphProps) {
             ? {
                 metricWidth: metricWidth(value),
                 metricOpacity: metricOpacity(value),
-                // Two dedicated channels on the consensus edge: how many
-                // methods agree (stepped width) and how sure they are
-                // (darkness). Evidence stays in the tooltip and inspector.
+                // Three channels on one uniform-width line: darkness for
+                // confidence, arrowhead size for how many methods agree, and
+                // arrowhead fill for evidence.
                 confidenceOpacity: metricOpacity(
                   edgeMetric(edge, "confidence", methodCount),
                 ),
-                supportWidth: supportWidthPx(
+                supportArrow: supportArrowScale(
                   edge.supportingAlgorithms.length,
                   methodCount,
+                ),
+                evidenceFill: evidenceArrowFill(
+                  edgeMetric(edge, "evidence", methodCount),
                 ),
                 metricUnavailable: value === null ? 1 : 0,
                 annotation: edgeAnnotation(edge, methodCount),
@@ -544,16 +533,9 @@ export default function NetworkGraph(props: NetworkGraphProps) {
         const edge = cy.getElementById(selectedEdgeKey);
         edge.select().addClass("annotated");
         edge.connectedNodes().addClass("endpoint");
-        // The braid belongs to the selection, so it is never dimmed with the
-        // rest of the graph.
-        const threads = cy
-          .edges(".strand")
-          .filter((strand) => strand.data("parentEdge") === selectedEdgeKey);
-        emphasized = (
-          highlightedMethod
-            ? emphasized.union(edge).union(edge.connectedNodes())
-            : edge.union(edge.connectedNodes())
-        ).union(threads);
+        emphasized = highlightedMethod
+          ? emphasized.union(edge).union(edge.connectedNodes())
+          : edge.union(edge.connectedNodes());
       }
       if (highlightedMethod || selectedGene || selectedEdgeKey)
         cy.elements().difference(emphasized).addClass("context-muted");

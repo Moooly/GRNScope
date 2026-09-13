@@ -8,21 +8,18 @@ import type { Core, LayoutOptions } from "cytoscape";
  * whole scoring pass costs well under a millisecond.
  */
 export function countEdgeCrossings(cy: Core): number {
-  const segments = cy
-    .edges()
-    .not(".strand")
-    .map((edge) => {
-      const a = edge.source().position();
-      const b = edge.target().position();
-      return {
-        ax: a.x,
-        ay: a.y,
-        bx: b.x,
-        by: b.y,
-        source: edge.source().id(),
-        target: edge.target().id(),
-      };
-    });
+  const segments = cy.edges().map((edge) => {
+    const a = edge.source().position();
+    const b = edge.target().position();
+    return {
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+      source: edge.source().id(),
+      target: edge.target().id(),
+    };
+  });
   const turns = (
     ax: number,
     ay: number,
