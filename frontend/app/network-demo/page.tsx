@@ -355,10 +355,10 @@ export default function NetworkDemoPage() {
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <svg width="30" height="18" aria-hidden="true">
-                <circle cx="9" cy="9" r="7" fill="#3c4a57" stroke="#5fcabd" strokeWidth="2" />
-                <circle cx="24" cy="9" r="5" fill="#555" />
+                <circle cx="9" cy="9" r="7" fill="#1b75a6" stroke="#61d0c4" strokeWidth="2" />
+                <circle cx="24" cy="9" r="5" fill="#dfeaf2" stroke="#a8c3d5" strokeWidth="1.5" />
               </svg>
-              Ringed = transcription factor
+              Blue = transcription factor
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <svg width="34" height="16" aria-hidden="true">

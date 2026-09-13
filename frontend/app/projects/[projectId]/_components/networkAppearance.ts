@@ -91,8 +91,8 @@ export const NETWORK_APPEARANCES = {
     label: "Consensus braid",
     description: "Labels inside nodes · click an edge to see its methods",
     background: "#ffffff",
-    node: "#555555",
-    tf: "#3c4a57",
+    node: "#dfeaf2",
+    tf: "#1b75a6",
     text: "#22384a",
     positive: "#2f8f7f",
     negative: "#c4693a",
@@ -138,10 +138,14 @@ function braidStyles(): StylesheetJson {
   // circle by shrinking type, so a long gene name never inflates a node.
   // Use the regulatory degree carried in node data: cytoscape's degree() counts
   // the per-method strands, which would inflate a gene purely from agreement.
+  // A wide ramp on purpose. At 26 + 7*sqrt(d) a degree-14 hub came out 52px
+  // against a degree-1 leaf at 33px -- a 14x difference in connectivity
+  // rendered as 1.5x in diameter, so the genes organising the network did not
+  // announce themselves. This spreads the same range over 34px to 72px.
   const nodeSize = (n: NodeSingular) =>
     Math.min(
-      84,
-      Math.max(30, 26 + 7 * Math.sqrt(Math.max(0, Number(n.data("degree")) || 0))),
+      96,
+      Math.max(32, 20 + 14 * Math.sqrt(Math.max(0, Number(n.data("degree")) || 0))),
     );
   // A label only sits inside the circle if it fits at a readable size; small
   // genes with long names drop their label below the node instead of shrinking
@@ -166,9 +170,11 @@ function braidStyles(): StylesheetJson {
         shape: "ellipse",
         "background-color": p.node,
         "background-fill": "solid",
-        "border-width": 0,
+        // Pale target genes need an edge of their own to sit on white.
+        "border-width": 1.5,
+        "border-color": "#a8c3d5",
         label: "data(label)",
-        color: (n: NodeSingular) => (labelFits(n) ? "#ffffff" : "#22384a"),
+        color: p.text,
         "text-valign": (n: NodeSingular) =>
           (labelFits(n) ? "center" : "bottom") as "center" | "bottom",
         "text-halign": "center",
@@ -181,12 +187,16 @@ function braidStyles(): StylesheetJson {
       },
     },
     {
+      // Transcription factors are solid brand blue against pale targets, so the
+      // distinction survives without relying on a thin ring: the two node
+      // classes previously differed only as #555555 against #3c4a57.
       selector: "node[isTF = 1]",
       style: {
         shape: "ellipse",
         "background-color": p.tf,
         "border-width": 2.5,
-        "border-color": "#5fcabd",
+        "border-color": "#61d0c4",
+        color: (n: NodeSingular) => (labelFits(n) ? "#ffffff" : p.text),
       },
     },
     // The consensus edge: one line per relationship, straight through the
@@ -208,8 +218,12 @@ function braidStyles(): StylesheetJson {
         // the stroke exactly at the arrow.
         "line-cap": "butt",
         "curve-style": "unbundled-bezier",
-        "control-point-distances": [0],
-        "control-point-weights": [0.5],
+        // Bow each spoke away from its hub's neighbour centroid so a fan splays
+        // apart instead of converging into a hard star. Straight lines made
+        // every crossing maximally visible.
+        "control-point-distances": (e: EdgeSingular) =>
+          (e.data("galleryCurve") as number[]) ?? [0, 0],
+        "control-point-weights": [0.25, 0.72],
         "arrow-scale": 0.9,
         "z-index": 10,
         "text-outline-color": p.background,
@@ -457,13 +471,13 @@ export function appearanceStyles(
 // Fan each hub's edges toward its neighbours' mean position. The paths remain
 // individually traceable; this is curved routing, not an edge-bundling algorithm.
 export function updateGalleryCurves(cy: Core, appearance: NetworkAppearance) {
-  if (appearance === "classic" || appearance === "pastel" || appearance === "braid")
-    return;
+  if (appearance === "classic" || appearance === "pastel") return;
   if (appearance === "teal") {
     updateBranchCurves(cy);
     return;
   }
-  const strength = appearance === "graphite" ? 0.8 : 0.42;
+  const strength =
+    appearance === "graphite" ? 0.8 : appearance === "braid" ? 0.2 : 0.42;
   // Cache each source's neighbour centroid once per update, including during dragging.
   const centers = new Map<string, { x: number; y: number }>();
   cy.batch(() =>
@@ -495,9 +509,21 @@ export function updateGalleryCurves(cy: Core, appearance: NetworkAppearance) {
       }
       const perpendicular =
         ((center.x - a.x) * -dy + (center.y - a.y) * dx) / length;
-      const limit = Math.min(75, length * 0.24);
+      // The braid draws far fewer, longer edges than the atlas, so the same
+      // bend that reads as organic there swings into a swoop here and bundles
+      // neighbouring spokes together. Keep it to a subtle bow.
+      const limit =
+        appearance === "braid"
+          ? Math.min(34, length * 0.12)
+          : Math.min(75, length * 0.24);
       const bend = Math.max(-limit, Math.min(limit, perpendicular * strength));
-      edge.data("galleryCurve", [bend, bend * 0.45]);
+      // A selection thread shares its endpoints with the consensus edge, so it
+      // gets the same bend plus its own perpendicular offset -- otherwise the
+      // braid would run straight while the edge it annotates curves away.
+      const offset = edge.hasClass("strand")
+        ? ((edge.data("strandOffset") as number) ?? 0)
+        : 0;
+      edge.data("galleryCurve", [bend + offset, bend * 0.45 + offset]);
     }),
   );
 }

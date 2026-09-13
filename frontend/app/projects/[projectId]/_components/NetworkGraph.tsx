@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import cytoscape, { type Core, type LayoutOptions } from "cytoscape";
+import cytoscape, {
+  type Core,
+  type EdgeSingular,
+  type LayoutOptions,
+  type NodeSingular,
+} from "cytoscape";
 import fcose from "cytoscape-fcose";
 import { updateGalleryCurves } from "./networkAppearance";
 import { frameNetworkSelection } from "./networkCamera";
@@ -15,6 +20,11 @@ import {
   getLayoutConfig,
 } from "./networkGraphLayouts";
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
+import {
+  LAYOUT_RESTARTS,
+  LAYOUT_RESTART_MAX_NODES,
+  runLayoutBestOfRestarts,
+} from "./networkLayoutQuality";
 import { buildStrandElements, strandPalette } from "./networkBraid";
 import {
   edgeAnnotation,
@@ -352,44 +362,76 @@ export default function NetworkGraph(props: NetworkGraphProps) {
         // Braid nodes carry their label inside, so they are far larger than
         // atlas beads and need proportionally more room (plus space for the fan).
         const braid = appearance === "braid";
+        const baseLength = braid
+          ? count < 60
+            ? 240
+            : count > 800
+              ? 90
+              : 125
+          : count < 60
+            ? 95
+            : count > 800
+              ? 135
+              : 62;
+        const baseSeparation = braid
+          ? count < 60
+            ? 280
+            : 120
+          : count < 60
+            ? 130
+            : count > 800
+              ? 45
+              : 78;
+        // Small focused views get per-edge shaping and restart-and-score. A
+        // uniform edge length draws a two-hub network as a starburst whose
+        // spokes interleave; pulling leaves in tight and pushing hub-to-hub
+        // links out lets each hub own an angular sector instead.
+        const focused = count <= LAYOUT_RESTART_MAX_NODES;
+        const nodeDegree = (node: NodeSingular) =>
+          Math.max(0, Number(node.data("degree")) || 0);
+        // The lower degree of the two endpoints: 1 means a leaf hanging off a
+        // hub, high means a link between two hubs.
+        const span = (edge: EdgeSingular) =>
+          Math.min(nodeDegree(edge.source()), nodeDegree(edge.target()));
+        const HUB_DEGREE = 8;
         const fcoseOptions = {
           name: "fcose",
-          quality: count > 800 ? "draft" : "default",
+          quality: focused ? "proof" : count > 800 ? "draft" : "default",
           animate: false,
           randomize: true,
           fit: false,
           packComponents: true,
           tile: true,
           uniformNodeDimensions: false,
-          nodeSeparation: braid
-            ? count < 60
-              ? 280
-              : 120
-            : count < 60
-              ? 130
-              : count > 800
-                ? 45
-                : 78,
-          idealEdgeLength: () =>
-            braid
-              ? count < 60
-                ? 240
-                : count > 800
-                  ? 90
-                  : 125
-              : count < 60
-                ? 95
-                : count > 800
-                  ? 135
-                  : 62,
+          nodeSeparation: focused ? baseSeparation * 0.72 : baseSeparation,
+          idealEdgeLength: focused
+            ? (edge: EdgeSingular) => {
+                const shared = span(edge);
+                if (shared <= 1) return baseLength * 0.5;
+                if (shared >= HUB_DEGREE) return baseLength * 2.17;
+                return baseLength * 1.08;
+              }
+            : () => baseLength,
+          // Spread, never set to undefined: fcose merges options over its
+          // defaults with Object.assign, so an explicit undefined replaces the
+          // default elasticity and feeds NaN into the force simulation.
+          ...(focused
+            ? {
+                edgeElasticity: (edge: EdgeSingular) => {
+                  const shared = span(edge);
+                  if (shared <= 1) return 0.9;
+                  if (shared >= HUB_DEGREE) return 0.08;
+                  return 0.45;
+                },
+              }
+            : {}),
           nodeRepulsion: () =>
             braid ? 55000 : count > 800 ? 22000 : 12000,
-          gravity: count > 800 ? 0.08 : 0.28,
-          gravityRange: count > 800 ? 2.4 : 3.6,
-          numIter: count > 800 ? 1500 : 2600,
+          gravity: focused ? 0.2 : count > 800 ? 0.08 : 0.28,
+          gravityRange: focused ? 4.5 : count > 800 ? 2.4 : 3.6,
+          numIter: focused ? 4000 : count > 800 ? 1500 : 2600,
         } as unknown as LayoutOptions;
-        const layoutRun = cy.layout(fcoseOptions);
-        layoutRun.one("layoutstop", () => {
+        const settle = () => {
           if (cy.destroyed() || topologyRef.current !== topology) return;
           layoutPending.current = false;
           cy.batch(() =>
@@ -400,15 +442,26 @@ export default function NetworkGraph(props: NetworkGraphProps) {
           if (!frameNetworkSelection(cy)) cy.fit(undefined, 40);
           setArranging(false);
           refreshLabels.current();
-        });
-        cancelLayout.current = () => {
-          try {
-            layoutRun.stop();
-          } catch {
-            // layout already settled
-          }
         };
-        layoutRun.run();
+        if (focused) {
+          cancelLayout.current = runLayoutBestOfRestarts(
+            cy,
+            fcoseOptions,
+            LAYOUT_RESTARTS,
+            settle,
+          );
+        } else {
+          const layoutRun = cy.layout(fcoseOptions);
+          layoutRun.one("layoutstop", settle);
+          cancelLayout.current = () => {
+            try {
+              layoutRun.stop();
+            } catch {
+              // layout already settled
+            }
+          };
+          layoutRun.run();
+        }
       } else if (nodes.length && layout === "force") {
         layoutPending.current = true;
         setArranging(true);
