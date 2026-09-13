@@ -4,6 +4,7 @@ import type {
   NodeSingular,
   EdgeSingular,
 } from "cytoscape";
+import { MODULE_BRIDGE, shade } from "./networkModules";
 import { NETWORK_COLORS } from "./networkVisualEncoding";
 
 export type NetworkAppearance =
@@ -265,6 +266,14 @@ function atlasStyles(): StylesheetJson {
   const tfSize = (n: NodeSingular) => 1.15 * nodeSize(n);
   const signColor = (e: EdgeSingular) =>
     appearanceSignColor(e.data("sign"), "atlas");
+  const sameModule = (e: EdgeSingular) => {
+    const source = e.source().data("moduleColor") as string | undefined;
+    return !!source && source === (e.target().data("moduleColor") as string);
+  };
+  const moduleTint = (e: EdgeSingular) =>
+    sameModule(e)
+      ? (e.source().data("moduleColor") as string)
+      : MODULE_BRIDGE;
   return [
     {
       selector: "node",
@@ -272,9 +281,16 @@ function atlasStyles(): StylesheetJson {
         width: nodeSize,
         height: nodeSize,
         shape: "ellipse",
-        "background-color": p.node,
+        // Tinted by regulatory module, so the eye reads territories at a
+        // glance. Genes outside the largest modules stay neutral, which keeps
+        // a 2000-gene network from turning into confetti.
+        "background-color": (n: NodeSingular) =>
+          (n.data("moduleColor") as string) ?? p.node,
         "background-fill": "radial-gradient",
-        "background-gradient-stop-colors": ["#7ba0b6", p.node, "#264a5e"],
+        "background-gradient-stop-colors": (n: NodeSingular) => {
+          const base = (n.data("moduleColor") as string) ?? p.node;
+          return [shade(base, 0.42), base, shade(base, -0.34)];
+        },
         "background-gradient-stop-positions": ["0%", "46%", "100%"],
         "border-width": 0,
         color: p.text,
@@ -298,6 +314,9 @@ function atlasStyles(): StylesheetJson {
           Math.min(30, 3 + 3.4 * Math.sqrt(Math.max(0, n.degree(false)))),
         height: (n: NodeSingular) =>
           Math.min(30, 3 + 3.4 * Math.sqrt(Math.max(0, n.degree(false)))),
+        // A radial gradient washes the hue out of a bead only a couple of
+        // pixels across, so dense views take the module colour flat.
+        "background-fill": "solid",
         "min-zoomed-font-size": 18,
         "text-outline-width": 2,
       },
@@ -320,12 +339,39 @@ function atlasStyles(): StylesheetJson {
       },
     },
     {
-      // Dense views dim edges, but proportionally: flattening every edge to one
-      // value would erase the confidence/evidence the opacity channel carries.
+      // At this scale edges are the picture: they cover far more pixels than
+      // the two-pixel beads, so the module colouring has to live on them to be
+      // seen at all. Links inside a module take its hue, links between modules
+      // stay neutral and read as bridges.
+      //
+      // This displaces sign colour at overview zoom, which is the right trade:
+      // with a thousand faded hairlines, teal-vs-orange is texture rather than
+      // information. Zooming past DETAIL_ZOOM restores it (see edge.sign-detail).
       selector: "edge[denseNetwork = 1]",
       style: {
-        opacity: (e: EdgeSingular) =>
-          Math.max(0.18, ((e.data("metricOpacity") as number) ?? 0.5) * 0.62),
+        "line-color": moduleTint,
+        "target-arrow-color": moduleTint,
+        "source-arrow-color": moduleTint,
+        // Dense views dim edges, but proportionally: flattening every edge to
+        // one value would erase the confidence the opacity channel carries.
+        opacity: (e: EdgeSingular) => {
+          const base = Math.max(
+            0.18,
+            ((e.data("metricOpacity") as number) ?? 0.5) * 0.62,
+          );
+          return sameModule(e) ? base : base * 0.55;
+        },
+      },
+    },
+    {
+      // Zoomed in far enough to read individual relationships: hand the edges
+      // back to sign, which is what matters once you are looking at mechanism
+      // rather than territory.
+      selector: "edge.sign-detail",
+      style: {
+        "line-color": signColor,
+        "target-arrow-color": signColor,
+        "source-arrow-color": signColor,
       },
     },
     {

@@ -20,6 +20,7 @@ import {
   getLayoutConfig,
 } from "./networkGraphLayouts";
 import { getNetworkGraphStylesheet } from "./networkGraphStyles";
+import { detectModules } from "./networkModules";
 import {
   LAYOUT_RESTARTS,
   LAYOUT_RESTART_MAX_NODES,
@@ -56,6 +57,9 @@ export const MAX_NETWORK_ZOOM = 3;
 export const ABSOLUTE_MIN_NETWORK_ZOOM = MIN_NETWORK_ZOOM;
 /** Above this the focused style stops being legible; the atlas takes over. */
 export const BRAID_MAX_NODES = 60;
+/** Zoom at which a dense network stops being a map of territories and starts
+ * being readable relationships, so edges swap module colour back for sign. */
+export const DETAIL_ZOOM = 0.55;
 
 export default function NetworkGraph(props: NetworkGraphProps) {
   const {
@@ -95,6 +99,10 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     () => buildGraphElements(nodes, edges).elements,
     [nodes, edges],
   );
+  // Regulatory modules, so a large network reads as territories rather than an
+  // undifferentiated field. Only the atlas styles consume this; the focused
+  // view keeps colour for the TF/target distinction.
+  const modules = useMemo(() => detectModules(nodes, edges), [nodes, edges]);
   const topology = useMemo(
     () =>
       JSON.stringify([
@@ -236,6 +244,23 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       });
     };
     refreshLabels.current = updateLabels;
+    // Semantic zoom. At overview scale a dense network's edges carry module
+    // colour; once you are close enough to read individual relationships they
+    // hand themselves back to sign. Toggled by class on the threshold crossing
+    // only, never per zoom event, so panning around stays cheap.
+    let detailed: boolean | null = null;
+    const updateDetail = () => {
+      if (cy.destroyed()) return;
+      const next = cy.zoom() >= DETAIL_ZOOM;
+      if (next === detailed) return;
+      detailed = next;
+      cy.batch(() => {
+        if (next) cy.edges().addClass("sign-detail");
+        else cy.edges().removeClass("sign-detail");
+      });
+    };
+    updateDetail();
+    cy.on("zoom", updateDetail);
     cy.on("zoom pan position layoutstop select unselect", updateLabels);
     let previousWidth = cy.width(),
       previousHeight = cy.height();
@@ -296,7 +321,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
       elements.forEach((element) => {
         const edge = edgeMap.get(element.data.id!);
         const value = edge ? edgeMetric(edge, metric, methodCount) : null;
-        const data = {
+        const data: Record<string, unknown> & { id?: string } = {
           ...element.data,
           ...(edge
             ? {
@@ -320,6 +345,10 @@ export default function NetworkGraph(props: NetworkGraphProps) {
               }
             : {}),
         };
+        if (!edge) {
+          const moduleColor = modules.get(String(element.data.id));
+          if (moduleColor) data.moduleColor = moduleColor;
+        }
         const existing = cy.getElementById(data.id!);
         if (existing.length) existing.data(data);
         else cy.add({ ...element, data });
@@ -563,6 +592,7 @@ export default function NetworkGraph(props: NetworkGraphProps) {
     showEdgeLabels,
     selectedGene,
     selectedEdgeKey,
+    modules,
   ]);
 
   useEffect(() => {

@@ -3,6 +3,10 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import NetworkGraph from "../projects/[projectId]/_components/NetworkGraph";
 import { NETWORK_APPEARANCES } from "../projects/[projectId]/_components/networkAppearance";
+import {
+  MODULE_COLORS,
+  MODULE_NEUTRAL,
+} from "../projects/[projectId]/_components/networkModules";
 import type {
   NetworkEdge,
   NetworkNode,
@@ -490,6 +494,83 @@ export default function NetworkDemoPage() {
                 </svg>
               </LegendItem>
             </LegendGroup>
+          </div>
+        )}
+        {effective === "atlas" && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "10px 26px",
+              padding: "10px 16px",
+              marginBottom: 10,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 12,
+              color: "#475569",
+            }}
+          >
+            <LegendGroup title="Colour">
+              <LegendItem
+                label="Regulatory module"
+                hint="Genes reached by the same master regulator before any other one"
+              >
+                <svg width="46" height="14" aria-hidden="true">
+                  {MODULE_COLORS.slice(0, 6).map((color, index) => (
+                    <circle
+                      key={color}
+                      cx={5 + index * 7.6}
+                      cy={7}
+                      r={3.4}
+                      fill={color}
+                    />
+                  ))}
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Outside"
+                hint="Genes more than four steps from any of the main hubs"
+              >
+                <svg width="16" height="14" aria-hidden="true">
+                  <circle cx="7" cy="7" r="3.4" fill={MODULE_NEUTRAL} />
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Bridge"
+                hint="A relationship linking two different modules"
+              >
+                <svg width="26" height="14" aria-hidden="true">
+                  <path d="M1 7h24" stroke="#b9c6d1" strokeWidth="2" />
+                </svg>
+              </LegendItem>
+            </LegendGroup>
+
+            <LegendGroup title="Shape">
+              <LegendItem label="TF" hint="Transcription factor">
+                <svg width="18" height="16" aria-hidden="true">
+                  <rect x="4" y="2" width="10" height="10" fill="#3e6d88" transform="rotate(45 9 7)" />
+                </svg>
+              </LegendItem>
+              <LegendItem label="Target" hint="Regulated gene">
+                <svg width="16" height="16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="5" fill="#3e6d88" />
+                </svg>
+              </LegendItem>
+              <LegendItem
+                label="Size = connections"
+                hint="Node size grows with the number of regulatory links"
+              >
+                <svg width="30" height="16" aria-hidden="true">
+                  <circle cx="5" cy="8" r="2.6" fill="#7a9bb0" />
+                  <circle cx="19" cy="8" r="6" fill="#7a9bb0" />
+                </svg>
+              </LegendItem>
+            </LegendGroup>
+
+            <span style={{ fontSize: 12, color: "#8496a6", fontStyle: "italic" }}>
+              Zoom in to see activation and repression
+            </span>
           </div>
         )}
         <div
