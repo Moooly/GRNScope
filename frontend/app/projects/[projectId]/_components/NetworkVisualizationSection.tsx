@@ -104,9 +104,11 @@ export default function NetworkVisualizationSection(props: Props) {
     scopeLabel,
     resultsControls,
   } = props;
-  // Default style, with an opt-in `?style=` override for evaluating alternates
-  // (e.g. ?style=braid) without adding chrome to the toolbar.
-  const [appearance, setAppearance] = useState<NetworkAppearance>("teal");
+  // Focused consensus is the default: it shows sign, method agreement,
+  // evidence and connectivity at once, and NetworkGraph hands networks larger
+  // than BRAID_MAX_NODES to the atlas automatically. `?style=` still overrides
+  // it for evaluating the older styles without adding chrome to the toolbar.
+  const [appearance, setAppearance] = useState<NetworkAppearance>("braid");
   useEffect(() => {
     if (typeof window === "undefined") return;
     const requested = new URLSearchParams(window.location.search).get("style");
