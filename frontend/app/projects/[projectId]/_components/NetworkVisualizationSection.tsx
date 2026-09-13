@@ -22,6 +22,10 @@ import {
   type NetworkAppearance,
 } from "./networkAppearance";
 import NetworkLegend from "./NetworkLegend";
+import { selectOpeningEdges } from "./networkOpeningView";
+import NetworkCanvas from "./network/NetworkCanvas";
+import NetworkLegendBar from "./network/Legend";
+import NetworkInspectorPanel from "./network/Inspector";
 import NetworkInspector from "./NetworkInspector";
 import {
   edgeMetric,
@@ -199,8 +203,32 @@ export default function NetworkVisualizationSection(props: Props) {
     });
   }, []);
 
-  // Every relationship that passes Results Settings is rendered.
-  const edges = filteredNetworkEdges;
+  // Results Settings decides which relationships are credible; the opening
+  // view also decides how many can be read at once. Everything is one click
+  // away, and the count below the legend says so rather than hiding the cut.
+  const [showAllEdges, setShowAllEdges] = useState(false);
+  // The rebuilt canvas is what the project page shows. The previous renderer
+  // is still here, reachable with ?canvas=legacy, because the inspector,
+  // Circos, figure export and the trajectory and perturbation views all reach
+  // into it -- it comes out in one piece once nothing depends on it, not by
+  // being deleted underneath them.
+  const [useNewCanvas, setUseNewCanvas] = useState(true);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setUseNewCanvas(
+      new URLSearchParams(window.location.search).get("canvas") !== "legacy",
+    );
+  }, []);
+  const opening = useMemo(
+    () =>
+      selectOpeningEdges(
+        filteredNetworkEdges,
+        networkNodes.length,
+        showAllEdges,
+      ),
+    [filteredNetworkEdges, networkNodes.length, showAllEdges],
+  );
+  const edges = opening.edges;
   const nodes = useMemo(
     () => networkNodes.filter((node) =>
       edges.some((edge) => edge.source === node.id || edge.target === node.id),
@@ -489,6 +517,17 @@ export default function NetworkVisualizationSection(props: Props) {
             {exportError}
           </p>
         )}
+        {useNewCanvas ? (
+          <NetworkLegendBar
+            regulatorShare={
+              nodes.length
+                ? nodes.filter((n) => n.isTF).length / nodes.length
+                : 0
+            }
+            hasSign={edges.some((e) => e.sign !== 0)}
+            hasSelection={!!(selectedGene || selectedEdgeKey)}
+          />
+        ) : (
         <NetworkLegend
           appearance={activeAppearance}
           metric={metric}
@@ -497,6 +536,21 @@ export default function NetworkVisualizationSection(props: Props) {
           onChangeMetric={setMetric}
           confidenceDisabled={!hasVerifiedConfidence}
         />
+        )}
+        {(opening.trimmed || showAllEdges) && (
+          <p className="grn-view-provenance">
+            {showAllEdges
+              ? `Showing all ${opening.total.toLocaleString()} relationships.`
+              : `Showing the ${opening.shown.toLocaleString()} strongest of ${opening.total.toLocaleString()} relationships \u2014 ranked by method agreement, then confidence.`}{" "}
+            <button
+              type="button"
+              className="grn-view-provenance-action"
+              onClick={() => setShowAllEdges(!showAllEdges)}
+            >
+              {showAllEdges ? "Show the strongest" : "Show all"}
+            </button>
+          </p>
+        )}
         <div
           className={`grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
         >
@@ -527,6 +581,17 @@ export default function NetworkVisualizationSection(props: Props) {
                   svgRef={svgRef}
                 />
               </div>
+            ) : useNewCanvas ? (
+              <NetworkCanvas
+                nodes={nodes}
+                edges={edges}
+                selectedGene={selectedGene}
+                selectedEdgeKey={selectedEdgeKey}
+                layout={networkLayout}
+                onSelectGene={selectGene}
+                onSelectEdge={selectEdge}
+                onGraphReady={graphReady}
+              />
             ) : (
               <NetworkGraph
                 nodes={nodes}
@@ -544,6 +609,14 @@ export default function NetworkVisualizationSection(props: Props) {
               />
             )}
           </div>
+          {useNewCanvas ? (
+            <NetworkInspectorPanel
+              node={selectedVisibleNode}
+              edge={selectedEdge}
+              methodCount={selectedAlgorithmIds.length}
+              onClose={clearSelection}
+            />
+          ) : (
           <NetworkInspector
             edge={selectedEdge}
             node={selectedVisibleNode}
@@ -563,6 +636,7 @@ export default function NetworkVisualizationSection(props: Props) {
             }
             onPerturb={props.onOpenPerturbation}
           />
+          )}
         </div>
         {showHelp && (
           <NetworkHelpModal
