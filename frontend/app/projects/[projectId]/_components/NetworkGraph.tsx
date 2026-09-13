@@ -385,7 +385,12 @@ export default function NetworkGraph(props: NetworkGraphProps) {
         const HUB_DEGREE = 8;
         const fcoseOptions = {
           name: "fcose",
-          quality: focused ? "proof" : count > 800 ? "draft" : "default",
+          // Never "draft" at scale: it runs only fcose's spectral phase, which
+          // collapses low-degree nodes onto near-identical coordinates -- at
+          // 2000 genes it produced 321 distinct positions in a 555x529 box,
+          // i.e. ~1700 genes stacked on top of each other. The incremental
+          // refinement is what separates them, and costs ~1.5s there.
+          quality: focused ? "proof" : "default",
           animate: false,
           randomize: true,
           fit: false,
