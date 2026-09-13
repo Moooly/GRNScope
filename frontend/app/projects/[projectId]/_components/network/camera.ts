@@ -3,6 +3,7 @@ import { NETWORK_SCALE } from "./theme";
 import { clampFitZoom } from "./encoding";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyLabelBudget } from "./labels";
+import { applyEdgeBundling, clearEdgeBundling, shouldBundle } from "./bundling";
 
 /**
  * Spread a squarish layout across a wide panel.
@@ -105,5 +106,20 @@ export function settleView(cy: Core, framed?: () => boolean) {
   // is what made the earlier two-pass version pile every disc on its
   // neighbours.
   restyle(cy);
+  syncBundling(cy);
   applyLabelBudget(cy);
+}
+
+/**
+ * Bundle or release, whichever the current view calls for. Cheap enough to run
+ * on a zoom threshold crossing, and idempotent, so callers do not have to
+ * track which state the edges are in.
+ */
+export function syncBundling(cy: Core) {
+  if (cy.destroyed()) return;
+  const wanted = shouldBundle(cy);
+  const bundled = cy.edges().some((e) => e.data("bundleDistances") !== undefined);
+  if (wanted === bundled) return;
+  if (wanted) applyEdgeBundling(cy);
+  else clearEdgeBundling(cy);
 }

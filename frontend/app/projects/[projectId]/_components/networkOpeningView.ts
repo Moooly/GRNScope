@@ -12,9 +12,14 @@ import type { NetworkEdge } from "./networkGraphTypes";
  * click away rather than silently gone.
  */
 
-/** Relationships per gene. Past roughly this, individual links stop being
- *  followable and the picture reads as texture. */
-export const EDGES_PER_GENE = 1.15;
+/** Relationships per gene.
+ *
+ * Pushed down to 1.15 once, chasing the near-tree statistics of the reference
+ * figures, and the result was spindly: a hub with two leaves is not a corona,
+ * it is a twig. Those figures are sparse *overall* while being locally dense
+ * -- a few hubs carrying twenty or thirty leaves each -- and starving the
+ * whole graph does not reproduce that, it just thins the hubs too. */
+export const EDGES_PER_GENE = 2.0;
 /** An absolute ceiling, so a 5000-gene upload cannot ask for 11,000 edges. */
 export const MAX_OPENING_EDGES = 400;
 

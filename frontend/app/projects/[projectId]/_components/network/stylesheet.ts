@@ -97,7 +97,15 @@ export function buildNetworkStylesheet({
     {
       selector: "edge",
       style: {
-        "curve-style": "bezier",
+        // A bundled edge carries its own route; everything else takes the
+        // default bow. Reading it off the element rather than a global flag
+        // means the two can coexist while bundling is being released.
+        "curve-style": (e: EdgeSingular) =>
+          e.data("bundleDistances") ? "unbundled-bezier" : "bezier",
+        "control-point-distances": (e: EdgeSingular) =>
+          (e.data("bundleDistances") as number[]) ?? [0],
+        "control-point-weights": (e: EdgeSingular) =>
+          (e.data("bundleWeights") as number[]) ?? [0.5],
         "control-point-step-size": 18,
         // Evidence as weight, sign as hue. Two channels that do not collide:
         // you can see that a link is strong without knowing which way it acts,

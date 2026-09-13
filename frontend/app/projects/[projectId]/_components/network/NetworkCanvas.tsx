@@ -18,7 +18,7 @@ import { NETWORK_SCALE, NETWORK_THEME } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { forceLayoutOptions } from "./layout";
 import { applyLabelBudget } from "./labels";
-import { settleView } from "./camera";
+import { settleView, syncBundling } from "./camera";
 
 const registry = globalThis as typeof globalThis & {
   __grnFcose?: boolean;
@@ -180,7 +180,9 @@ export default function NetworkCanvas({
     const onView = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        if (!cy.destroyed() && !layingOutRef.current) applyLabelBudget(cy);
+        if (cy.destroyed() || layingOutRef.current) return;
+        syncBundling(cy);
+        applyLabelBudget(cy);
       });
     };
     cy.on("zoom pan", onView);
@@ -278,6 +280,9 @@ export default function NetworkCanvas({
           .addClass("muted");
       }
     });
+    // Tracing something means following its actual links, so the trunks let
+    // go for as long as a selection is live.
+    syncBundling(cy);
     applyLabelBudget(cy);
   }, [selectedGene, selectedEdgeKey, topology]);
 
