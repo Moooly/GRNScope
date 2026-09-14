@@ -37,6 +37,8 @@ export async function exportNetworkFigure(
   filename: string,
   context: NetworkFigureContext,
 ) {
+  if (cy.scratch("galaxyBusy"))
+    throw new Error("The network is still arranging. Please wait before exporting the updated view.");
   if (cy.destroyed() || !cy.elements().length)
     throw new Error("There is no network to export.");
   const appearance = context.appearance ?? "classic";
@@ -67,7 +69,7 @@ export async function exportNetworkFigure(
     `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
     `Filters: ${context.filters || "None"}${context.focus ? " · Neighborhood: " + context.focus : ""}${context.highlightedMethod ? " · Highlight: " + context.highlightedMethod : ""}`,
     galaxy
-      ? "Node size: displayed relationships. Teal: activation or unresolved effect. Clay: repression. Width: evidence."
+      ? "Node size: displayed relationships (compressed for density). Teal: activation or unresolved effect. Clay: repression. Width: evidence."
       : appearance === "braid"
       ? "Arrowhead size counts the methods that agree; a solid head marks stronger evidence; line darkness is bootstrap confidence."
       : appearance === "atlas"
@@ -75,6 +77,7 @@ export async function exportNetworkFigure(
         : METRICS[context.metric].description,
     galaxy ? "A thin ring marks transcription factors. Curves share drawing routes; they do not add genes or relationships. Direction tips appear on selected or zoomed-in relationships."
       : `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
+    ...(galaxy && Number(cy.scratch("galaxyNeighborhoods")) > 1 ? [`${cy.scratch("galaxyNeighborhoods")} layout neighborhoods, not inferred biological communities. Cross-neighborhood links are quieter in overview; no relationships are removed.`] : []),
   ].flatMap((line) => {
     const maxChars = Math.floor((width - 48) / 6.5);
     const result: string[] = [];

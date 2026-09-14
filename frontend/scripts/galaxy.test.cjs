@@ -9,6 +9,10 @@ const base = "../app/projects/[projectId]/_components/network/";
 const { buildGalaxy, galaxyStructure, routeGalaxy } = require(base + "galaxyGeometry.ts");
 const { galaxyElements, galaxySignature, galaxyInput } = require(base + "model.ts");
 const { buildNetworkStylesheet } = require(base + "stylesheet.ts");
+const { nodeDiameter, applyPresentation } = require(base + "presentation.ts");
+const { exportNetworkFigure } = require(base + "../networkFigureExport.ts");
+const { planLabels, labelsOverlap } = require(base + "labels.ts");
+const { partitionSkeleton } = require(base + "neighborhoods.ts");
 const fixture = require("./network-branch-fixture.cjs");
 function inputFor(nodes, edges) {
   const cy = cytoscape({ headless: true, styleEnabled: true, elements: galaxyElements(nodes, edges), style: buildNetworkStylesheet(), layout: { name: "preset" } });
@@ -145,4 +149,79 @@ test("Irf8-like spokes use one smooth arc without local elbows, joins or backtra
       assert.ok(Math.abs(cross-curvature)<1e-7,"no local curvature-sign changes");
     }
   }
+});
+
+test("density-aware sizes stay bounded, monotonic, and smaller in dense cores", () => {
+  for (const [n,e] of [[19,67],[100,1738],[1193,7104]]) {
+    const sizes=[1,3,10,50,723].map(d => nodeDiameter(d,n,e));
+    assert.ok(sizes.every((s,i) => s>=7 && s<=34 && (!i || s>=sizes[i-1])));
+  }
+  assert.ok(nodeDiameter(34,100,1738)<nodeDiameter(34,100,200));
+});
+
+test("a selected 723-neighbour hub never bypasses name or disc collisions", () => {
+  const candidates=Array.from({length:724},(_,i) => ({ id:`Gene${i}`,x: i ? 600+Math.cos(i*2.399963)*(60+Math.sqrt(i)*9) : 600,
+    y: i ? 350+Math.sin(i*2.399963)*(60+Math.sqrt(i)*9) : 350, radius: i?4:15, width:60, height:17, priority:i?2:4, degree:i?1:723 }));
+  const labels=planLabels(candidates,1200,700,90);
+  assert.ok(labels.has("Gene0")); assert.ok(labels.size<90 && labels.size>5);
+  const entries=[...labels.entries()];
+  entries.forEach(([id,{rect:r}],i) => {
+    entries.slice(i+1).forEach(([,p])=>assert.ok(!labelsOverlap(r,p.rect)));
+    candidates.filter(n=>n.id!==id).forEach(n=>assert.ok(Math.hypot(Math.max(r.x1,Math.min(r.x2,n.x))-n.x,Math.max(r.y1,Math.min(r.y2,n.y))-n.y)>=n.radius+3));
+  });
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:[{data:{id:"A",label:"",fullLabel:"A",diameter:10,labelSize:12,labelHalign:"center",labelValign:"bottom",labelOffsetX:0,labelOffsetY:4}}],style:buildNetworkStylesheet()});
+  try { for(const state of ["traced","traced-neighbour","hovered"]) { cy.$id("A").classes(state); assert.equal(cy.$id("A").style("label"),""); } } finally {cy.destroy();}
+});
+
+test("dense 100- and 1193-node views retain every record and form bounded layout regions", () => {
+  for (const count of [100,1193]) {
+    const nodes=Array.from({length:count},(_,i)=>({id:`n${i}`,diameter:10,labelWidth:32}));
+    const edges=[],pairs=new Set();
+    const add=(a,b)=>{ const id=[a,b].sort((x,y)=>x-y).join(":"); if(a===b||pairs.has(id))return; pairs.add(id);edges.push({id,source:`n${a}`,target:`n${b}`,sign:1,direction:0}); };
+    for(let i=0;i<count;i++) { for(let k=1;k<=6;k++) add(i,(Math.floor(i/30)*30+(i+k)%30)%count); if(i%7===0)add(i,(i+31)%count); }
+    const input={nodes,edges,width:1200,height:700}, original=structuredClone(input), start=performance.now();
+    const result=buildGalaxy(input);
+    verify(input,result);assert.deepEqual(input,original);
+    assert.equal(Object.keys(result.routes).length,edges.length);
+    assert.equal(Object.keys(result.neighborhoods).length,count);
+    assert.ok(new Set(Object.values(result.neighborhoods)).size>=3);
+    const structure=galaxyStructure(input), partition=partitionSkeleton([...structure.core],structure.neighbors);
+    assert.deepEqual(partition,partitionSkeleton([...structure.core].reverse(),structure.neighbors));
+    assert.ok(partition.every(g=>g.length<=72));
+    assert.ok(performance.now()-start<15000,"bounded solves should not stall for large dense graphs");
+  }
+});
+
+test("a giant satellite fan fills an area instead of forcing a thousand-node ring", () => {
+  const nodes=Array.from({length:724},(_,i)=>({id:`n${i}`,diameter:i?7:30,labelWidth:30}));
+  const edges=nodes.slice(1).map(n=>({id:n.id,source:"n0",target:n.id,sign:1,direction:0}));
+  const input={nodes,edges,width:1200,height:700},result=buildGalaxy(input);
+  verify(input,result);
+  const p=result.positions.n0,distances=nodes.slice(1).map(n=>Math.hypot(result.positions[n.id].x-p.x,result.positions[n.id].y-p.y));
+  assert.ok(Math.max(...distances)<2000);
+  assert.ok(Math.min(...distances)<Math.max(...distances)*0.6);
+});
+
+test("zoom keeps cross-neighborhood ink restrained and emphasis preserves every edge", () => {
+  const nodes=fixture.nodes.slice(0,3),edges=fixture.edges.slice(0,1);
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet()});
+  try {
+    cy.scratch("galaxyFitZoom",1); cy.edges().data("crossNeighborhood",true);
+    applyPresentation(cy); const count=cy.edges().length;
+    assert.equal(cy.edges()[0].data("inkOpacity"),0.045);
+    cy.zoom(2); applyPresentation(cy); assert.equal(cy.edges()[0].data("inkOpacity"),0.075);
+    cy.scratch("galaxyEmphasize",true); applyPresentation(cy); assert.equal(cy.edges()[0].data("inkOpacity"),0.6);
+    assert.equal(cy.edges().length,count);
+  } finally {cy.destroy();}
+  const reserved={x1:0,x2:300,y1:0,y2:100};
+  const labels=planLabels([{id:"A",x:100,y:40,radius:5,width:40,height:15,priority:4,degree:10}],1200,700,20,[reserved]);
+  assert.equal(labels.size,0,"captions and controls reserve their own space");
+});
+
+test("an updating graph cannot be exported with new filters but old geometry", async () => {
+  const cy=cytoscape({headless:true});
+  try {
+    cy.scratch("galaxyBusy",true);
+    await assert.rejects(exportNetworkFigure(cy,"svg","test",{}),/still arranging/);
+  } finally {cy.destroy();}
 });

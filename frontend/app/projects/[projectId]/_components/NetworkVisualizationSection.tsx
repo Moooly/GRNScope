@@ -615,6 +615,7 @@ export default function NetworkVisualizationSection(props: Props) {
               edge={selectedEdge}
               methodCount={selectedAlgorithmIds.length}
               onClose={clearSelection}
+              onFocus={id => { focus(id); clearSelection(); }}
             />
           ) : (
           <NetworkInspector

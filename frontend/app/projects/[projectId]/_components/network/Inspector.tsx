@@ -24,6 +24,7 @@ type Props = {
   edge: NetworkEdge | null;
   methodCount: number;
   onClose: () => void;
+  onFocus?: (id: string) => void;
 };
 
 const LABEL: React.CSSProperties = {
@@ -68,6 +69,7 @@ export default function NetworkInspectorPanel({
   edge,
   methodCount,
   onClose,
+  onFocus,
 }: Props) {
   if (!node && !edge) return null;
 
@@ -158,6 +160,7 @@ export default function NetworkInspectorPanel({
             label="Regulates / regulated by"
             value={`${node?.outDegree ?? 0} out · ${node?.inDegree ?? 0} in`}
           />
+          {node && onFocus && <button type="button" className="grn-btn" onClick={() => onFocus(node.id)}>Focus neighborhood</button>}
         </>
       )}
     </aside>

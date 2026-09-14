@@ -2,6 +2,7 @@ import type { Core, ElementDefinition } from "cytoscape";
 import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { hasDirection, edgeMetric } from "../networkVisualEncoding";
 import type { GalaxyInput } from "./galaxyGeometry";
+import { nodeDiameter } from "./presentation";
 
 export function galaxySignature(nodes: NetworkNode[], edges: NetworkEdge[], layout: string) {
   return JSON.stringify([layout, nodes.map(n => [n.id, n.isTF]).sort(), edges.map(e => [e.key, e.source, e.target, e.sign, hasDirection(e) ? e.direction : 0]).sort()]);
@@ -14,8 +15,9 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[]): Elem
     ...nodes.map(n => {
       const d = degree.get(n.id) ?? 0;
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d, isTF: n.isTF ? 1 : 0,
-        diameter: Math.min(64, 10 + 9 * (Math.sqrt(Math.max(1, d)) - 1)),
+        diameter: nodeDiameter(d, nodes.length, edges.length),
         labelSize: Math.min(15, 9 + Math.sqrt(d) * 0.65),
+        labelHalign: "center", labelValign: "bottom", labelOffsetX: 0, labelOffsetY: 4,
       } };
     }),
     ...edges.map(e => {
@@ -29,9 +31,18 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[]): Elem
         evidence: edgeMetric(e, "evidence", 1) ?? 0,
         confidence: edgeMetric(e, "confidence", 1),
         width: 0.65 + (edgeMetric(e, "evidence", 1) ?? 0) * 0.85,
+        inkOpacity: 0.3,
       } };
     }),
   ];
+}
+
+export function galaxyInputFromElements(elements: ElementDefinition[], width: number, height: number): GalaxyInput {
+  return {
+    nodes: elements.filter(e => e.data.source === undefined).map(({ data: d }) => ({ id: String(d.id), diameter: Number(d.diameter), labelWidth: Math.min(150, String(d.fullLabel).length * 6.5) })),
+    edges: elements.filter(e => e.data.source !== undefined).map(({ data: d }) => ({ id: String(d.id), source: String(d.source), target: String(d.target), sign: Number(d.sign), direction: Number(d.direction) })),
+    width, height,
+  };
 }
 
 export function galaxyInput(cy: Core): GalaxyInput {

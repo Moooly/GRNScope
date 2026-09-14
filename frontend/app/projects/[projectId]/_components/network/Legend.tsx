@@ -94,7 +94,7 @@ export default function NetworkLegendBar({
 
       <span style={DIVIDER} />
 
-      <span style={ROW} title="Node size — relationships this gene takes part in">
+      <span style={ROW} title="Node size — displayed relationships, with a compressed size range in dense networks">
         <svg width="34" height="16" aria-hidden="true">
           <circle cx="6" cy="8" r="3" fill={T.node} stroke={T.nodeRim} strokeWidth="1" />
           <circle cx="22" cy="8" r="7" fill={T.node} stroke={T.nodeRim} strokeWidth="1" />

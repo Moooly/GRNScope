@@ -1,5 +1,6 @@
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
+import { layoutNeighborhoods, partitionSkeleton } from "./neighborhoods";
 
 cytoscape.use(fcose);
 
@@ -17,6 +18,7 @@ export type GalaxyResult = {
   positions: Record<string, Point>;
   routes: Record<string, Route>;
   components: number;
+  neighborhoods?: Record<string, string>;
 };
 
 const TAU = Math.PI * 2;
@@ -80,7 +82,7 @@ export function galaxyStructure(input: GalaxyInput) {
 
 /** Multi-scale layout: solve the connected skeleton, expand its branches,
  * relax local collisions, then pack whole connected components by translation. */
-export function layoutGalaxy(input: GalaxyInput): Record<string, Point> {
+export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, string> = {}, multiscale = true): Record<string, Point> {
   if (!input.nodes.length) return {};
   const plan = galaxyStructure(input);
   const byId = new Map(input.nodes.map(n => [n.id, n]));
@@ -88,10 +90,32 @@ export function layoutGalaxy(input: GalaxyInput): Record<string, Point> {
   const groups: Array<{ ids: string[]; w: number; h: number }> = [];
   for (const ids of plan.components) {
     const roots = ids.filter(id => plan.core.has(id));
+    const idSet = new Set(ids);
+    const localEdges = input.edges.filter(e => idSet.has(e.source) && idSet.has(e.target));
+    if (multiscale && ids.length >= 80 && roots.length >= 45 && localEdges.length/ids.length > 2.2) {
+      const regions = partitionSkeleton(roots, plan.neighbors);
+      if (regions.length > 1) {
+        regions.forEach(region => {
+          const anchor = region[0];
+          for (let i=0;i<region.length;i++) {
+            neighborhoods[region[i]] = anchor;
+            region.push(...plan.children.get(region[i])!);
+          }
+        });
+        Object.assign(positions, layoutNeighborhoods({ ...input, nodes: input.nodes.filter(n => idSet.has(n.id)), edges: localEdges }, regions, child => layoutGalaxy(child, {}, false)));
+        const x1=Math.min(...ids.map(id => positions[id].x-byId.get(id)!.labelWidth/2-20));
+        const x2=Math.max(...ids.map(id => positions[id].x+byId.get(id)!.labelWidth/2+20));
+        const y1=Math.min(...ids.map(id => positions[id].y-byId.get(id)!.diameter/2-20));
+        const y2=Math.max(...ids.map(id => positions[id].y+byId.get(id)!.diameter/2+40));
+        ids.forEach(id => { positions[id].x-=x1; positions[id].y-=y1; });
+        groups.push({ ids, w: x2-x1+32, h: y2-y1+32 });
+        continue;
+      }
+    }
     const footprint = (id: string) => {
       const count = plan.children.get(id)!.length;
       if (!count) return Math.max(30, byId.get(id)!.diameter + 14);
-      const fanRadius = Math.max(54, count * 23 / 3.8) + byId.get(id)!.diameter * 0.6;
+      const fanRadius = Math.max(54, count > 32 ? Math.sqrt(count)*30 : count*23/3.8) + byId.get(id)!.diameter * 0.6;
       return Math.max(byId.get(id)!.diameter + 24,
         count > 12 ? fanRadius * 1.7 : 0,
         (48 + Math.sqrt(Math.max(0, count - 2)) * 25 + Math.min(3, plan.depth.get(id)!) * 10) * (count > 5 ? 1.5 : 1));
@@ -165,12 +189,12 @@ export function layoutGalaxy(input: GalaxyInput): Record<string, Point> {
       const kids = plan.children.get(id)!;
       if (!kids.length) continue;
       const total = kids.reduce((sum, k) => sum + Math.sqrt(plan.mass.get(k)!), 0);
-      const baseRadius = Math.max(54, kids.length * 23 / sweep) + byId.get(id)!.diameter * 0.6;
+      const baseRadius = Math.max(54, kids.length > 32 ? Math.sqrt(kids.length*TAU/sweep)*26 : kids.length*23/sweep) + byId.get(id)!.diameter * 0.6;
       let cursor = angle - sweep / 2;
       kids.forEach(child => {
         const segment = sweep * Math.sqrt(plan.mass.get(child)!) / total;
         const theta = cursor + segment * (0.42 + randomFor(child + "angle") * 0.16);
-        const radius = baseRadius * (0.78 + 0.44 * randomFor(child)) + Math.min(70, (plan.depth.get(child) ?? 0) * 14);
+        const radius = baseRadius * (kids.length > 32 ? Math.sqrt(0.2+0.8*randomFor(child)) : 0.78+0.44*randomFor(child)) + Math.min(70, (plan.depth.get(child) ?? 0) * 14);
         positions[child] = { x: positions[id].x + Math.cos(theta) * radius, y: positions[id].y + Math.sin(theta) * radius };
         jobs.push({ id: child, angle: theta, sweep: Math.min(2.6, Math.max(0.7, segment)) });
         cursor += segment;
@@ -350,6 +374,7 @@ export function routeGalaxy(input: Pick<GalaxyInput, "edges"> & Partial<Pick<Gal
 }
 
 export function buildGalaxy(input: GalaxyInput): GalaxyResult {
-  const positions=layoutGalaxy(input);
-  return {positions,routes:routeGalaxy(input,positions),components:galaxyStructure(input).components.length};
+  const neighborhoods: Record<string, string> = {};
+  const positions=layoutGalaxy(input, neighborhoods);
+  return {positions,routes:routeGalaxy(input,positions),components:galaxyStructure(input).components.length, neighborhoods};
 }
