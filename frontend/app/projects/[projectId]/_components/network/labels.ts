@@ -1,5 +1,4 @@
 import type { Core, NodeSingular } from "cytoscape";
-import { labelBudget } from "./encoding";
 
 /**
  * Which gene names are on screen.
@@ -49,7 +48,8 @@ const overlaps = (a: Rect, b: Rect) =>
 export function applyLabelBudget(cy: Core) {
   if (cy.destroyed()) return;
   const nodes = cy.nodes();
-  const budget = labelBudget(nodes.length);
+  const relativeZoom = cy.zoom() / Math.max(0.01, Number(cy.scratch("galaxyFitZoom")) || cy.zoom());
+  const budget = nodes.length <= 40 ? nodes.length : Math.ceil(Math.sqrt(nodes.length) * 5 * Math.max(1, relativeZoom));
   const width = cy.width();
   const height = cy.height();
 
@@ -84,7 +84,7 @@ export function applyLabelBudget(cy: Core) {
       let show = false;
       if (text) {
         if (priority) show = true;
-        else if (onScreen && taken.length < budget) {
+        else if (onScreen && taken.length < budget && parseFloat(String(node.renderedStyle("font-size"))) >= 7) {
           const rect = labelRect(node, text);
           show = !taken.some((other) => overlaps(rect, other));
         }

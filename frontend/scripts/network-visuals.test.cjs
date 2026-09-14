@@ -298,7 +298,7 @@ test("inspection camera contains endpoints and long annotation after the canvas 
   }
 });
 
-test("gallery presets preserve topology, tips, metric widths and selection semantics", () => {
+test("gallery presets preserve topology, tips, metric widths and selection semantics", (t) => {
   const { NETWORK_APPEARANCES, updateGalleryCurves } = require(
     base + "networkAppearance.ts",
   );
@@ -318,6 +318,8 @@ test("gallery presets preserve topology, tips, metric widths and selection seman
     layout: { name: "preset" },
   });
   cy.$id("A").position({ x: 0, y: 0 });
+  // Release Cytoscape timers even when a preset assertion fails.
+  t.after(() => cy.destroy());
   cy.$id("B").position({ x: 160, y: 50 });
   cy.$id("C").position({ x: 90, y: -100 });
   const positions = cy.nodes().map((n) => ({ ...n.position() }));
@@ -347,7 +349,6 @@ test("gallery presets preserve topology, tips, metric widths and selection seman
     if (["silver", "graphite"].includes(preset))
       assert.notEqual(cy.$id("B").style("background-fill"), "solid");
   }
-  cy.destroy();
 });
 
 test("gene and relationship limits grow honestly without fabricating nodes", () => {

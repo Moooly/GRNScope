@@ -5,11 +5,13 @@ import { createPortal } from "react-dom";
 type NetworkHelpModalProps = {
   onClose: () => void;
   isClosing?: boolean;
+  galaxy?: boolean;
 };
 
 export default function NetworkHelpModal({
   onClose,
   isClosing = false,
+  galaxy = false,
 }: NetworkHelpModalProps) {
   return createPortal(
   <div
@@ -72,18 +74,23 @@ export default function NetworkHelpModal({
             Focus explicitly narrows the graph to its direct neighborhood.
           </p>
           <p className="mt-2">
-            The graph draws the first requested number of matching edges
-            in saved rank order and only the genes connected by those
-            edges. Isolating a gene keeps its directly incident edges;
+            {galaxy ? "The overview limits the number of visible relationships, ranked by supporting methods and then confidence. When relationships are omitted, the count and Show all control make that explicit. " : "The graph draws the first requested number of matching edges"}
+            {!galaxy && " in saved rank order and only the genes connected by those edges. "}
+            Isolating a gene keeps its directly incident edges;
             it does not recalculate evidence or rank.
           </p>
         </section>
 
         <section className="mt-5 border-t border-slate-100 pt-5">
           <h4 className="font-extrabold text-slate-900">Reading the atlas</h4>
-          <p className="mt-2">The legend is always visible below the canvas. Shape identifies transcription factors and other genes. Blue arrowheads indicate predicted activation; orange perpendicular bar tips indicate predicted repression. Gray open arrowheads indicate known direction with unresolved sign. Tips are placed at the affected gene; when direction is unresolved, the edge retains its sign color but has no tip. Line width shows the metric you choose, on a fixed scale. Dashed edges have no available value for that metric.</p>
-          <p className="mt-2">Switching between confidence, evidence and method support preserves the network layout and relationship set. Highlighting a method only emphasizes its existing relationships; Results Settings changes which methods contribute to the consensus. Connected groups describe topology, not proven biological modules.</p>
-          <p className="mt-2">Use arrow keys while the canvas is focused to browse genes, or click the relationship count to inspect edges with a keyboard. Escape clears the graph selection. Export includes the current view, legend, methods and filter context.</p>
+          {galaxy ? <>
+            <p className="mt-2">White circles are genes. Larger circles have more displayed relationships; a thin teal ring marks a transcription factor. Teal connections have activating or unresolved effect; clay connections have repressing effect. Line width encodes evidence. The legend sits above the canvas.</p>
+            <p className="mt-2">Curves can travel together to make the overview easier to read. Their meeting points are drawing bends, not extra genes. Click a gene or relationship to separate and highlight its connections. When direction is known, arrowheads and repression bars appear on selection or when zoomed in; an open arrow means the effect is unresolved. An undirected relationship has no tip.</p>
+            <p className="mt-2">Spacing follows connectivity, not measured biological distance. Separate islands are disconnected in the displayed network, and neighborhoods are not proven biological modules. Fit view shows the whole graph; Reset layout restores the computed arrangement after dragging. Arrow keys browse genes when the canvas is focused; Escape clears selection. Downloads include the current view and its filter context.</p>
+          </> : <>
+            <p className="mt-2">Shape identifies transcription factors and other genes. Arrowheads indicate predicted activation; perpendicular bar tips indicate predicted repression. Tips are placed at the affected gene; when direction is unresolved, the edge retains its sign color but has no tip. Line width shows the selected metric.</p>
+            <p className="mt-2">Connected groups describe topology, not proven biological modules. Export includes the current view, legend, methods and filter context.</p>
+          </>}
         </section>
 
         <section className="mt-5 border-t border-slate-100 pt-5">

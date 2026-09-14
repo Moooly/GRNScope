@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:network": "node --test scripts/network-visuals.test.cjs",
+    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs",
     "compare:network": "node scripts/compare-network-layouts.cjs"
   },
   "dependencies": {

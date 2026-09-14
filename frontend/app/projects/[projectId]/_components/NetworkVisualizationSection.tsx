@@ -67,8 +67,8 @@ type Props = {
 const layoutOptions = [
   {
     value: "force",
-    label: "Force",
-    title: "Explore components and regulatory neighborhoods",
+    label: "Galaxy",
+    title: "Explore hubs, branching neighborhoods and flowing connections",
   },
   {
     value: "hierarchical",
@@ -338,7 +338,7 @@ export default function NetworkVisualizationSection(props: Props) {
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <h3 className="text-2xl font-bold tracking-[-0.025em] text-slate-950">
-                  Regulatory atlas
+                  {useNewCanvas && networkLayout !== "circos" ? "Regulatory galaxy" : "Regulatory atlas"}
                 </h3>
                 <button
                   type="button"
@@ -640,6 +640,7 @@ export default function NetworkVisualizationSection(props: Props) {
         </div>
         {showHelp && (
           <NetworkHelpModal
+            galaxy={useNewCanvas && networkLayout !== "circos"}
             onClose={() => setShowHelp(false)}
             isClosing={false}
           />

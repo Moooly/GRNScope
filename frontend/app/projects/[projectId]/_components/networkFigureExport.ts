@@ -1,4 +1,5 @@
 import type { Core } from "cytoscape";
+import { NETWORK_THEME as GALAXY } from "./network/theme";
 import {
   METRICS,
   metricWidth,
@@ -39,7 +40,12 @@ export async function exportNetworkFigure(
   if (cy.destroyed() || !cy.elements().length)
     throw new Error("There is no network to export.");
   const appearance = context.appearance ?? "classic";
-  const palette = NETWORK_APPEARANCES[appearance];
+  const galaxy = Boolean(cy.scratch("galaxy"));
+  const palette = galaxy ? {
+    ...NETWORK_APPEARANCES.teal,
+    label: "Regulatory galaxy", background: GALAXY.ground, text: GALAXY.label,
+    node: GALAXY.node, tf: GALAXY.node, positive: GALAXY.link, negative: GALAXY.represses,
+  } : NETWORK_APPEARANCES[appearance];
   const width = Math.max(900, Math.round(cy.width()));
   const graphHeight = Math.round(cy.height());
   const svg = document.createElementNS(NS, "svg");
@@ -60,12 +66,15 @@ export async function exportNetworkFigure(
     `${context.scope} · ${context.geneCount} genes · ${context.edgeCount} of ${context.matchingEdges} matching relationships`,
     `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
     `Filters: ${context.filters || "None"}${context.focus ? " · Neighborhood: " + context.focus : ""}${context.highlightedMethod ? " · Highlight: " + context.highlightedMethod : ""}`,
-    appearance === "braid"
+    galaxy
+      ? "Node size: displayed relationships. Teal: activation or unresolved effect. Clay: repression. Width: evidence."
+      : appearance === "braid"
       ? "Arrowhead size counts the methods that agree; a solid head marks stronger evidence; line darkness is bootstrap confidence."
       : appearance === "atlas"
         ? "Colour groups genes by the regulatory hub that reaches them first. Neutral links bridge two modules."
         : METRICS[context.metric].description,
-    `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
+    galaxy ? "A thin ring marks transcription factors. Curves share drawing routes; they do not add genes or relationships. Direction tips appear on selected or zoomed-in relationships."
+      : `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
   ].flatMap((line) => {
     const maxChars = Math.floor((width - 48) / 6.5);
     const result: string[] = [];
@@ -95,7 +104,7 @@ export async function exportNetworkFigure(
       "font-weight": 600,
       "font-family": "Arial, sans-serif",
     },
-    appearance === "braid"
+    galaxy ? "GRNScope · Regulatory galaxy" : appearance === "braid"
       ? "GRNScope · Consensus regulatory network"
       : appearance === "atlas"
         ? "GRNScope · Regulatory atlas"
@@ -151,7 +160,17 @@ export async function exportNetworkFigure(
   const focused = appearance === "braid";
   const atlasView = appearance === "atlas";
 
-  if (focused) {
+  if (galaxy) {
+    add("circle", { cx: 31, cy: top + 24, r: 5, fill: palette.node });
+    label(44, top + 28, "Gene");
+    add("circle", { cx: 117, cy: top + 24, r: 6, fill: palette.node, stroke: GALAXY.regulatorRing, "stroke-width": 1.6 });
+    label(131, top + 28, "Transcription factor");
+    add("path", { d: `M295 ${top + 25}q20 -12 42 0`, stroke: palette.positive, "stroke-width": 1.6, fill: "none" });
+    label(350, top + 28, "Activation / unresolved");
+    add("path", { d: `M525 ${top + 25}q20 -12 42 0`, stroke: palette.negative, "stroke-width": 1.6, fill: "none" });
+    label(580, top + 28, "Repression");
+    label(24, top + 53, "Larger nodes have more displayed connections. Thin-to-thick links encode evidence on a fixed 0–1 scale.");
+  } else if (focused) {
     // Row 1: what a link means, and what a gene is.
     add("circle", {
       cx: 30,
@@ -333,7 +352,8 @@ export async function exportNetworkFigure(
   label(
     24,
     top + 76,
-    focused
+    galaxy ? "Layout distances describe graph structure, not measured biological distances. Gold outline: selection."
+      : focused
       ? "Fixed absolute scale · No tip: direction unresolved · Gold outline: selection · Support counts reporting methods, not agreement."
       : atlasView
         ? "Colour is assigned by graph distance to the highest-degree genes · Sign colours appear on screen when zoomed in · Gold outline: selection."
@@ -369,7 +389,7 @@ export async function exportNetworkFigure(
     }
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = `${filename}-${context.metric}-${appearance}.${format}`;
+    link.download = galaxy ? `${filename}-galaxy.${format}` : `${filename}-${context.metric}-${appearance}.${format}`;
     document.body.appendChild(link);
     link.click();
     link.remove();

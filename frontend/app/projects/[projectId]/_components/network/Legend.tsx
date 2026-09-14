@@ -82,21 +82,12 @@ export default function NetworkLegendBar({
         style={{ ...ROW, opacity: shapeIdle ? 0.45 : 1 }}
         title={
           shapeIdle
-            ? "Every gene in this view is a transcription factor"
+            ? regulatorShare === 0 ? "No transcription factors in this view" : "Every gene in this view is a transcription factor"
             : "Transcription factor"
         }
       >
         <svg width="17" height="16" aria-hidden="true">
-          <rect
-            x="2.4"
-            y="2.4"
-            width="11.2"
-            height="11.2"
-            transform="rotate(45 8 8)"
-            fill={T.node}
-            stroke={T.regulatorRing}
-            strokeWidth="1"
-          />
+          <circle cx="8" cy="8" r="5.5" fill={T.node} stroke="#548d85" strokeWidth="1.8" />
         </svg>
         Regulator
       </span>
@@ -115,8 +106,8 @@ export default function NetworkLegendBar({
         style={{ ...ROW, opacity: hasSign ? 1 : 0.45 }}
         title={
           hasSign
-            ? "Link colour — whether the regulator raises or lowers its target"
-            : "No method in this run resolved a direction of effect"
+            ? "Teal: activation or unresolved effect; clay: repression. Select a relationship or zoom in to see resolved direction."
+            : "Teal links have unresolved effect. Select a relationship to inspect its evidence."
         }
       >
         <svg width="44" height="17" aria-hidden="true">
@@ -125,7 +116,7 @@ export default function NetworkLegendBar({
           <path d="M2 12 H 34" stroke={T.represses} strokeWidth="2.2" fill="none" />
           <path d="M34.6 8.4 V 15.6" stroke={T.represses} strokeWidth="2.6" fill="none" />
         </svg>
-        Activates / represses
+        Effect · select for direction
       </span>
 
       <span style={ROW} title="Link thickness — how strong the evidence is">
@@ -154,7 +145,7 @@ export default function NetworkLegendBar({
             strokeWidth="1.4"
           />
         </svg>
-        Selected and what it reaches
+        Selection
       </span>
     </div>
   );

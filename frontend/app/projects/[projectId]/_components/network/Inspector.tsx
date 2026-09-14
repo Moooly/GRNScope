@@ -2,6 +2,7 @@
 
 import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { NETWORK_THEME as T } from "./theme";
+import { edgeMetric, hasDirection, relationshipLabel } from "../networkVisualEncoding";
 
 /**
  * What the canvas deliberately does not draw.
@@ -127,16 +128,16 @@ export default function NetworkInspectorPanel({
             label="Confidence"
             value={
               Number.isFinite(edge.confidence)
-                ? `${Math.round(edge.confidence * 100)}%`
+                && edgeMetric(edge, "confidence", methodCount) !== null ? `${Math.round(edge.confidence * 100)}%`
                 : "Not available"
             }
           />
           <Row
             label="Direction"
             value={
-              edge.directionCoverage > 0 && edge.directionConfidence !== null ? (
-                `${edge.source} → ${edge.target} · ${Math.round(
-                  edge.directionConfidence * 100,
+              hasDirection(edge) ? (
+                `${relationshipLabel(edge)} · ${Math.round(
+                  (edge.directionConfidence ?? 0) * 100,
                 )}% confident`
               ) : (
                 <span style={{ color: T.unknown }}>
