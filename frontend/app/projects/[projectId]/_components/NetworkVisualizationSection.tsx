@@ -22,13 +22,15 @@ import {
   type NetworkAppearance,
 } from "./networkAppearance";
 import NetworkLegend from "./NetworkLegend";
-import { selectOpeningEdges } from "./networkOpeningView";
+import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas from "./network/NetworkCanvas";
 import NetworkLegendBar from "./network/Legend";
+import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
 import NetworkInspector from "./NetworkInspector";
 import {
   edgeMetric,
+  hasDirection,
   type NetworkMetric,
 } from "./networkVisualEncoding";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
@@ -67,7 +69,7 @@ type Props = {
 const layoutOptions = [
   {
     value: "force",
-    label: "Galaxy",
+    label: "Force",
     title: "Explore hubs, branching neighborhoods and flowing connections",
   },
   {
@@ -204,8 +206,10 @@ export default function NetworkVisualizationSection(props: Props) {
   }, []);
 
   // Results Settings decides which relationships are credible; the opening
-  // view also decides how many can be read at once. Everything is one click
-  // away, and the count below the legend says so rather than hiding the cut.
+  // view also decides how many can be read at once. Neither cut is hidden: the
+  // live count inside Results Settings reports what the filters produced, and
+  // the canvas caption carries the trimmed total for readers who never open
+  // the panel.
   const [showAllEdges, setShowAllEdges] = useState(false);
   // The rebuilt canvas is what the project page shows. The previous renderer
   // is still here, reachable with ?canvas=legacy, because the inspector,
@@ -229,6 +233,19 @@ export default function NetworkVisualizationSection(props: Props) {
     [filteredNetworkEdges, networkNodes.length, showAllEdges],
   );
   const edges = opening.edges;
+  // Rebuilt only when a number actually moves, so opening or closing the panel
+  // cannot make the readout animate a change that did not happen.
+  const viewCounts = useMemo<NetworkViewCounts>(
+    () => ({
+      shown: opening.shown,
+      total: opening.total,
+      trimmed: opening.trimmed,
+      showAll: showAllEdges,
+      canShowAll: opening.total > openingEdgeBudget(networkNodes.length),
+      onToggleShowAll: () => setShowAllEdges((current) => !current),
+    }),
+    [opening.shown, opening.total, opening.trimmed, showAllEdges, networkNodes.length],
+  );
   const nodes = useMemo(
     () => networkNodes.filter((node) =>
       edges.some((edge) => edge.source === node.id || edge.target === node.id),
@@ -361,7 +378,9 @@ export default function NetworkVisualizationSection(props: Props) {
             </div>
             {resultsControls ? (
               <div className="network-atlas-controls shrink-0">
-                {resultsControls}
+                <NetworkViewCountsProvider value={viewCounts}>
+                  {resultsControls}
+                </NetworkViewCountsProvider>
               </div>
             ) : null}
           </div>
@@ -525,7 +544,8 @@ export default function NetworkVisualizationSection(props: Props) {
                 : 0
             }
             hasSign={edges.some((e) => e.sign !== 0)}
-            hasSelection={!!(selectedGene || selectedEdgeKey)}
+            hasUnsigned={edges.some((e) => e.sign === 0)}
+            directionResolved={edges.some((e) => hasDirection(e))}
           />
         ) : (
         <NetworkLegend
@@ -536,20 +556,6 @@ export default function NetworkVisualizationSection(props: Props) {
           onChangeMetric={setMetric}
           confidenceDisabled={!hasVerifiedConfidence}
         />
-        )}
-        {(opening.trimmed || showAllEdges) && (
-          <p className="grn-view-provenance">
-            {showAllEdges
-              ? `Showing all ${opening.total.toLocaleString()} relationships.`
-              : `Showing the ${opening.shown.toLocaleString()} strongest of ${opening.total.toLocaleString()} relationships \u2014 ranked by method agreement, then confidence.`}{" "}
-            <button
-              type="button"
-              className="grn-view-provenance-action"
-              onClick={() => setShowAllEdges(!showAllEdges)}
-            >
-              {showAllEdges ? "Show the strongest" : "Show all"}
-            </button>
-          </p>
         )}
         <div
           className={`grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
@@ -591,6 +597,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSelectGene={selectGene}
                 onSelectEdge={selectEdge}
                 onGraphReady={graphReady}
+                totalRelationships={opening.total}
               />
             ) : (
               <NetworkGraph

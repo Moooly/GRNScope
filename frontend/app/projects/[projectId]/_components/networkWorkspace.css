@@ -324,6 +324,22 @@
   color: #657d89;
   font-size: 10px;
 }
+/* The legend belongs to the header's column, not to the card's edge. The
+ * heading, the description and the layout pills above it are all inset by the
+ * header's own px-5 / sm:px-6, so the legend matches those two values exactly
+ * rather than picking a third number that only looks close. It carries no
+ * ground of its own: it reads as the last line of the header block, and the
+ * canvas below is the only surface on this card that is allowed a tint. */
+.grn-legend-bar {
+  padding-block: 8px;
+  padding-inline: 20px;
+  background: transparent;
+}
+@media (min-width: 40rem) {
+  .grn-legend-bar {
+    padding-inline: 24px;
+  }
+}
 .grn-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -346,8 +362,13 @@
   width: 100%;
   height: 100%;
 }
+/* The galaxy draws itself; it never renders through the appearance
+ * stylesheets, so it must not take its ground from their canvas colour --
+ * that made the background depend on gene count (white under sixty genes,
+ * #edf3f8 above it). This rule outranks the [data-appearance] ground below
+ * and pins the galaxy to the same stage every other layout renders on. */
 .grn-atlas[data-appearance] .grn-graph-region:has(.galaxy-caption) {
-  background: #3e3e3e;
+  background: radial-gradient(ellipse at center, #fff 0, #fafcfc 75%);
   height: clamp(560px, 72dvh, 900px);
 }
 .galaxy-caption {
@@ -357,19 +378,60 @@
   display: grid;
   gap: 7px;
   pointer-events: none;
-  color: #e5e9e4;
+  color: #6b8494;
 }
-.galaxy-caption span { font-size: 10px; letter-spacing: 2px; font-weight: 500; }
-.galaxy-caption small { font-size: 10px; color: #a8b5b0; }
+/* The caption states two numbers the way a figure legend does: the value in
+ * reading size with its label set small and tracked underneath, the pair split
+ * by a hairline. Nothing here has a background -- it floats directly on the
+ * canvas ground, so it stays a caption rather than becoming a widget parked on
+ * top of the figure. */
+.galaxy-stats {
+  display: flex;
+  align-items: stretch;
+}
+.galaxy-stat {
+  display: grid;
+  gap: 1px;
+}
+.galaxy-stat + .galaxy-stat {
+  margin-left: 13px;
+  padding-left: 13px;
+  border-left: 1px solid #dde6ea;
+}
+.galaxy-stat-value {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: #3c5666;
+  font-variant-numeric: tabular-nums;
+}
+/* The pre-budget total, kept subordinate: it is context for the number beside
+ * it, not a third statistic competing with the two labelled ones. */
+.galaxy-stat-value em {
+  margin-left: 4px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  color: #97a9b3;
+}
+.galaxy-stat-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #93a6b0;
+}
+.galaxy-caption small { font-size: 10px; color: #93a6b0; }
 .galaxy-status {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  color: #c9d8d2;
+  color: #7b919c;
   font-size: 13px;
 }
-.galaxy-error { position: absolute; top: 65px; left: 24px; color: #f4cb86; font-size: 12px; }
+.galaxy-error { position: absolute; top: 65px; left: 24px; color: #b4552f; font-size: 12px; }
 .galaxy-controls {
   position: absolute;
   bottom: 18px;
@@ -377,12 +439,14 @@
   display: flex;
   gap: 4px;
   padding: 4px;
-  border: 1px solid #69757266;
+  border: 1px solid var(--grn-line);
   border-radius: 7px;
-  background: #343938dd;
+  background: #ffffffe6;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 13px #3549560c;
 }
-.grn-atlas .galaxy-controls button { background: transparent; color: #c4cecb; border: 0; padding: 6px 10px; font-size: 11px; border-radius: 4px; }
-.grn-atlas .galaxy-controls button:hover:not(:disabled) { background: #ffffff12; color: #fff; }
+.grn-atlas .galaxy-controls button { background: transparent; color: #4e6875; border: 0; padding: 6px 10px; font-size: 11px; border-radius: 4px; }
+.grn-atlas .galaxy-controls button:hover:not(:disabled) { background: #edf3f5; color: var(--grn-accent); }
 .grn-canvas-caption {
   position: absolute;
   left: 22px;

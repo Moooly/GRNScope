@@ -1,0 +1,166 @@
+/* The relationship count is the outcome of every control in this panel, so it
+ * is the one element here allowed to move. Everything else stays still.
+ *
+ * Direction is carried twice -- by the arrow and by colour -- because a number
+ * that merely flickers tells the reader something changed without telling them
+ * which way. Teal for a view that opened up, clay for one that narrowed: the
+ * same pairing the canvas uses, so the panel and the figure speak one language.
+ *
+ * The flash is gated on data-pulsed, which the component only sets once a value
+ * has actually changed. Without that gate the number would animate every time
+ * the menu opened, which trains the reader to ignore it. */
+.grn-edge-count {
+  margin-bottom: 14px;
+  padding: 11px 14px 12px;
+  border: 1px solid rgb(27 117 166 / 0.22);
+  border-radius: 0.75rem;
+  background: #f2f9fc;
+}
+
+.grn-edge-count-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 16px;
+}
+
+.grn-edge-count-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1b75a6;
+}
+
+.grn-edge-count-delta {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  animation: grnEdgeCountDelta 1400ms ease-out forwards;
+}
+
+.grn-edge-count[data-direction="up"] .grn-edge-count-delta {
+  color: #0f6f78;
+  background: rgb(18 128 138 / 0.13);
+}
+
+.grn-edge-count[data-direction="down"] .grn-edge-count-delta {
+  color: #a4522f;
+  background: rgb(189 101 67 / 0.14);
+}
+
+.grn-edge-count-value {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 2px 0 0;
+}
+
+.grn-edge-count-number {
+  display: inline-block;
+  transform-origin: left center;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #22384a;
+  font-variant-numeric: tabular-nums;
+}
+
+.grn-edge-count[data-pulsed="true"] .grn-edge-count-number {
+  animation: grnEdgeCountFlash 950ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.grn-edge-count[data-direction="up"] .grn-edge-count-number {
+  --grn-edge-count-flash: #12808a;
+}
+
+.grn-edge-count[data-direction="down"] .grn-edge-count-number {
+  --grn-edge-count-flash: #bd6543;
+}
+
+/* How many of the matching relationships the canvas actually draws. A pill,
+ * not more headline: it is a consequence of the readability budget rather than
+ * of anything the reader just changed, so it must not compete with the number
+ * that is answering for the control they touched. */
+.grn-edge-count-total {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(27 117 166 / 0.1);
+  font-size: 11px;
+  font-weight: 700;
+  color: #35708f;
+}
+
+/* The toggle sits on the number's own row, pushed to the far edge. It used to
+ * have a divided footer to itself, shared with a sentence explaining the trim
+ * -- but the sentence only restated the two numbers beside it, and a rule plus
+ * two lines of prose is a lot of card to carry one button. */
+.grn-edge-count-action {
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+  padding: 4px 11px;
+  border: 1px solid rgb(27 117 166 / 0.28);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1b75a6;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.grn-edge-count-action:hover {
+  border-color: rgb(27 117 166 / 0.5);
+  background: #e8f5fb;
+}
+
+@keyframes grnEdgeCountFlash {
+  0% {
+    transform: scale(1);
+    color: var(--grn-edge-count-flash, #22384a);
+  }
+  24% {
+    transform: scale(1.16);
+    color: var(--grn-edge-count-flash, #22384a);
+  }
+  100% {
+    transform: scale(1);
+    color: #22384a;
+  }
+}
+
+@keyframes grnEdgeCountDelta {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion keeps the information and drops the movement: the number
+ * lands on its new value immediately and the delta chip stays put long enough
+ * to be read, rather than sliding in and fading out. */
+@media (prefers-reduced-motion: reduce) {
+  .grn-edge-count[data-pulsed="true"] .grn-edge-count-number {
+    animation: none;
+  }
+  .grn-edge-count-delta {
+    animation: none;
+  }
+}

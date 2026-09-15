@@ -48,7 +48,30 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function signText(sign: -1 | 0 | 1, confidence: number | null) {
+/**
+ * "Unresolved" hides two different situations, and the canvas cannot tell them
+ * apart -- both are grey, because in both cases there is no sign to believe.
+ * Here there is room to say which:
+ *
+ *   coverage 0   no method reported a sign at all. Absence of information.
+ *   coverage > 0 methods reported one and did not agree. Conflicting
+ *                information, which is a different thing to know, and the
+ *                reason the Sign stability threshold exists.
+ */
+function unresolved(coverage: number, methodCount: number, what: string) {
+  if (coverage > 0)
+    return `Methods disagree on ${what}${
+      methodCount > 1 ? ` — ${coverage} of ${methodCount} reported one` : ""
+    }`;
+  return `No method in this run reports ${what}`;
+}
+
+function signText(
+  sign: -1 | 0 | 1,
+  confidence: number | null,
+  coverage: number,
+  methodCount: number,
+) {
   if (sign === 1)
     return (
       <span style={{ color: T.activates }}>
@@ -61,7 +84,11 @@ function signText(sign: -1 | 0 | 1, confidence: number | null) {
         Represses{confidence !== null ? ` · ${Math.round(confidence * 100)}% stable` : ""}
       </span>
     );
-  return <span style={{ color: T.unknown }}>Direction of effect not resolved</span>;
+  return (
+    <span style={{ color: T.unknown }}>
+      {unresolved(coverage, methodCount, "the effect")}
+    </span>
+  );
 }
 
 export default function NetworkInspectorPanel({
@@ -111,7 +138,15 @@ export default function NetworkInspectorPanel({
 
       {edge ? (
         <>
-          <Row label="Effect" value={signText(edge.sign, edge.signConfidence)} />
+          <Row
+            label="Effect"
+            value={signText(
+              edge.sign,
+              edge.signConfidence,
+              edge.signCoverage,
+              methodCount,
+            )}
+          />
           <Row
             label="Agreement"
             value={
@@ -143,7 +178,11 @@ export default function NetworkInspectorPanel({
                 )}% confident`
               ) : (
                 <span style={{ color: T.unknown }}>
-                  Undirected — none of the methods in this run infer direction
+                  {unresolved(
+                    edge.directionCoverage,
+                    methodCount,
+                    "which gene regulates which",
+                  )}
                 </span>
               )
             }

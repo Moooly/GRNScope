@@ -86,13 +86,37 @@ test("routing preserves endpoints and does not bundle opposing signs or directio
 test("direction, evidence and topology updates keep their meaning", () => {
   const nodes=fixture.nodes.slice(0,3);
   const edge=fixture.edges[0];
-  const edges=[{...edge,key:"reverse",direction:-1,sign:-1},{...edge,key:"undirected",direction:0,sign:1},{...edge,key:"unverified",bootstrapVerified:false,sign:0}];
+  const edges=[
+    {...edge,key:"reverse",direction:-1,sign:-1},
+    {...edge,key:"undirected",direction:0,sign:1},
+    {...edge,key:"unsignedDirected",direction:1,sign:0},
+    {...edge,key:"unverified",bootstrapVerified:false,sign:0,direction:0},
+  ];
   const elements=galaxyElements(nodes,edges);
   const data=id=>elements.find(e=>e.data.id===id).data;
+
+  // The glyph states the EFFECT; where it sits states what is known about
+  // direction. A resolved direction puts one mark on the regulated end.
   assert.equal(data("reverse").sourceTip,"tee");
   assert.equal(data("reverse").targetTip,"none");
-  assert.equal(data("undirected").sourceTip,"none");
-  assert.equal(data("undirected").targetTip,"none");
+
+  // A known effect with no resolved direction marks BOTH ends, with the same
+  // glyph used everywhere else. Drawing a single arrowhead here would name a
+  // regulator the run never identified; drawing nothing -- which is what this
+  // used to do -- hides an effect the data is certain about, and that was every
+  // edge of every real run.
+  assert.equal(data("undirected").sourceTip,"triangle");
+  assert.equal(data("undirected").targetTip,"triangle");
+
+  // Direction without an effect still marks the regulated end, hollow, because
+  // there is a direction to state even though there is no effect to state.
+  assert.equal(data("unsignedDirected").targetTip,"triangle");
+  assert.equal(data("unsignedDirected").sourceTip,"none");
+  assert.equal(data("unsignedDirected").arrowFill,"hollow");
+
+  // Neither effect nor direction: nothing to say, so nothing is drawn.
+  assert.equal(data("unverified").sourceTip,"none");
+  assert.equal(data("unverified").targetTip,"none");
   assert.equal(data("unverified").confidence,null);
   assert.notEqual(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,edges,"circular"));
   assert.notEqual(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,[edges[0],{...edges[1],target:nodes[2].id},edges[2]],"force"));
@@ -208,14 +232,43 @@ test("zoom keeps cross-neighborhood ink restrained and emphasis preserves every 
   try {
     cy.scratch("galaxyFitZoom",1); cy.edges().data("crossNeighborhood",true);
     applyPresentation(cy); const count=cy.edges().length;
-    assert.equal(cy.edges()[0].data("inkOpacity"),0.045);
-    cy.zoom(2); applyPresentation(cy); assert.equal(cy.edges()[0].data("inkOpacity"),0.075);
-    cy.scratch("galaxyEmphasize",true); applyPresentation(cy); assert.equal(cy.edges()[0].data("inkOpacity"),0.6);
+    // The ladder is asserted as an ordering with a legibility floor rather than
+    // as three fixed numbers. The exact values are a property of the ground the
+    // canvas sits on -- they were raised when the galaxy moved from charcoal to
+    // the site's white stage -- but the relationship between them is the design.
+    const overview=cy.edges()[0].data("inkOpacity");
+    cy.zoom(2); applyPresentation(cy); const detail=cy.edges()[0].data("inkOpacity");
+    cy.scratch("galaxyEmphasize",true); applyPresentation(cy); const emphasized=cy.edges()[0].data("inkOpacity");
+    assert.ok(overview>=0.08,`overview ink ${overview} is below the visible floor`);
+    assert.ok(detail>overview,`zooming in must add ink (${detail} vs ${overview})`);
+    assert.ok(emphasized>detail,`emphasis must add ink (${emphasized} vs ${detail})`);
+    assert.ok(overview<0.25,`cross-neighborhood ink ${overview} is not restrained in overview`);
     assert.equal(cy.edges().length,count);
   } finally {cy.destroy();}
   const reserved={x1:0,x2:300,y1:0,y2:100};
   const labels=planLabels([{id:"A",x:100,y:40,radius:5,width:40,height:15,priority:4,degree:10}],1200,700,20,[reserved]);
   assert.equal(labels.size,0,"captions and controls reserve their own space");
+});
+
+test("an unsigned relationship is never coloured as an activation", () => {
+  // Colour is the sign channel and it has three values, not two. Before this,
+  // "not repression" was drawn teal, so an edge whose sign no method resolved
+  // was pixel-identical to a confirmed activation -- and since that case also
+  // draws no end glyph, there was nothing at all to tell them apart.
+  const nodes=fixture.nodes.slice(0,3);
+  const edge=fixture.edges[0];
+  const edges=[
+    {...edge,key:"up",sign:1,direction:0},
+    {...edge,key:"down",sign:-1,direction:0},
+    {...edge,key:"nosign",sign:0,direction:0},
+  ];
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet()});
+  try {
+    const colour=id=>cy.$id(id).style("line-color");
+    assert.notEqual(colour("nosign"),colour("up"),"unsigned must not read as activation");
+    assert.notEqual(colour("nosign"),colour("down"),"unsigned must not read as repression");
+    assert.notEqual(colour("up"),colour("down"));
+  } finally {cy.destroy();}
 });
 
 test("an updating graph cannot be exported with new filters but old geometry", async () => {

@@ -73,6 +73,9 @@ export type NetworkGraphProps = {
   focusGene?: string | null;
   neighborhood?: boolean;
   appearance?: import("./networkAppearance").NetworkAppearance;
+  /** Relationships passing the filters before the readability budget, so the
+   * caption can say "38 of 67" when the opening view trimmed the figure. */
+  totalRelationships?: number;
 };
 
 export type EdgeTooltipState = {

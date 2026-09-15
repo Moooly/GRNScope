@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AlgorithmCatalogItem } from "../_lib/types";
+import ResultsEdgeCount from "./ResultsEdgeCount";
+import { useNetworkViewCounts } from "./networkViewCounts";
 
 type ResultsControlsSectionProps = {
   completedAlgorithmIds: string[];
@@ -69,6 +71,9 @@ export default function ResultsControlsSection({
   onOpenGuide,
 }: ResultsControlsSectionProps) {
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  // Published by the network section through context; null on pages that
+  // render these controls without a network to count.
+  const viewCounts = useNetworkViewCounts();
   const [openPanel, setOpenPanel] = useState<SettingsPanel | null>(null);
   const [recoveryRankDraft, setRecoveryRankDraft] = useState<string | null>(null);
   const [algorithmDirectionFilter, setAlgorithmDirectionFilter] =
@@ -584,6 +589,8 @@ export default function ResultsControlsSection({
               ?
             </button>
           </div>
+
+          {viewCounts && <ResultsEdgeCount {...viewCounts} />}
 
           <div className="space-y-1.5">
             {sectionLabel("Filters")}

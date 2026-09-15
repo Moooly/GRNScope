@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core } from "cytoscape";
 import { buildCircularPositions, buildConcentricPositions, buildHierarchicalPositions } from "../networkGraphLayouts";
 import type { NetworkGraphProps } from "../networkGraphTypes";
-import { NETWORK_SCALE, NETWORK_THEME } from "./theme";
+import { NETWORK_SCALE } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
@@ -47,7 +47,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const busy = useRef(false);
   const [arranging, setArranging] = useState(false);
   const [error, setError] = useState("");
-  const [rerun, setRerun] = useState(0);
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
   const [emphasized, setEmphasized] = useState(false);
   const stopWorker = useCallback(() => {
@@ -177,7 +176,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       }, 45000);
     } catch { fail("The layout could not start. Try resetting it."); }
     return stopWorker;
-  }, [signature, rerun, stopWorker]);
+  }, [signature, stopWorker]);
 
   useEffect(() => {
     const cy = coreRef.current;
@@ -205,19 +204,48 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         const current=props.selectedGene ? ids.indexOf(props.selectedGene) : -1;
         const step=event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
         props.onSelectEdge(null); props.onSelectGene(ids[(current+step+ids.length)%ids.length]);
-      }} style={{ background: NETWORK_THEME.ground, opacity: arranging ? 0.45 : 1, pointerEvents: arranging ? "none" : "auto", transition: "opacity 220ms" }} />
-    <div className="galaxy-caption" aria-hidden="true"><span>REGULATORY GALAXY</span><small>{rendered.nodes.toLocaleString()} genes · {rendered.edges.toLocaleString()} relationships</small>
+      }} style={{ background: "transparent", opacity: arranging ? 0.45 : 1, pointerEvents: arranging ? "none" : "auto", transition: "opacity 220ms" }} />
+    {/* Two figures, read as figures. The sentence this replaced set the counts
+      * in the same small grey type as the words around them, so the numbers --
+      * the only part anyone actually reads off a figure caption -- had to be
+      * picked out of running text. Here each number carries its own label
+      * underneath and the pair is divided by a hairline.
+      *
+      * The div keeps its class whatever is inside it: the stylesheet uses
+      * :has(.galaxy-caption) to tell this canvas from the other layouts. */}
+    <div className="galaxy-caption" aria-hidden="true">
+      <div className="galaxy-stats">
+        <div className="galaxy-stat">
+          <span className="galaxy-stat-value">{rendered.nodes.toLocaleString()}</span>
+          <span className="galaxy-stat-label">Genes</span>
+        </div>
+        <div className="galaxy-stat">
+          <span className="galaxy-stat-value">
+            {rendered.edges.toLocaleString()}
+            {props.totalRelationships && props.totalRelationships > rendered.edges
+              ? <em>of {props.totalRelationships.toLocaleString()}</em>
+              : null}
+          </span>
+          <span className="galaxy-stat-label">Relationships</span>
+        </div>
+      </div>
       {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout neighborhoods · zoom for detail</small>}
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
-    <div className="galaxy-controls">
-      {rendered.edges > rendered.nodes*3 && <button type="button" aria-pressed={emphasized} disabled={arranging} title="Increase link visibility without filtering any relationships" onClick={() => {
+    {/* Only the dense-network control survives here. Fit view and Reset layout
+      * were conveniences the canvas already offers by other means -- the view
+      * fits itself whenever the arrangement changes and the camera has not been
+      * touched, and switching layouts rebuilds it. Emphasizing links has no
+      * other route, and it filters nothing, so it does not belong among the
+      * Results Settings thresholds either. The chip renders only when that
+      * button does, rather than leaving an empty bordered box floating over
+      * sparse networks. */}
+    {rendered.edges > rendered.nodes*3 && <div className="galaxy-controls">
+      <button type="button" aria-pressed={emphasized} disabled={arranging} title="Increase link visibility without filtering any relationships" onClick={() => {
         const next = !emphasized; setEmphasized(next);
         if (coreRef.current) { coreRef.current.scratch("galaxyEmphasize", next); applyPresentation(coreRef.current); }
-      }}>{emphasized ? "Quiet links" : "Emphasize links"}</button>}
-      <button type="button" onClick={() => coreRef.current && fit(coreRef.current)} disabled={arranging} title="Fit the whole network">Fit view</button>
-      <button type="button" onClick={() => setRerun(n => n + 1)} disabled={arranging} title="Restore the galaxy arrangement">Reset layout</button>
-    </div>
+      }}>{emphasized ? "Quiet links" : "Emphasize links"}</button>
+    </div>}
   </>;
 }
