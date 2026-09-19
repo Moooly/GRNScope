@@ -48,7 +48,8 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       `Filters: ${context.filters || "None"}${context.focus ? ` · Neighborhood: ${context.focus}` : ""}`,
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
       "Node size: incident relationships in this figure (bounded scale). Layout spacing represents connectivity, not biological distance.",
-      "Colour shows predicted sign. An arrow or bar marks the regulated end only when direction is resolved; no tip means unresolved direction.",
+      "Blue circles are transcription factors; mint circles are other genes. Edge colour shows predicted sign.",
+      "An arrowhead indicates activation; a perpendicular bar indicates repression. Each marks the regulated end only when direction is resolved; no tip means unresolved direction.",
       "Dashed negative links have unresolved direction. Grey links have unresolved sign; a hollow arrow shows resolved direction without a sign.",
       ...(pins.length ? [`Pinned labels: ${pins.join(", ")}`] : []),
     ];
@@ -80,12 +81,13 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     svg.appendChild(drawing);
     add("path", { d: `M32 ${top}H1168`, stroke: "#d8e3dd", "stroke-width": 1 });
     add("circle", { cx: 42, cy: top + 29, r: 7, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.6 });
-    text(59, top + 35, "Gene");
-    add("path", { d: `M170 ${top + 20}l9 9-9 9-9-9Z`, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.6 });
+    text(59, top + 35, "Other gene");
+    add("circle", { cx: 170, cy: top + 29, r: 7, fill: T.tf, stroke: T.tfRim, "stroke-width": 0.6 });
     text(191, top + 35, "Transcription factor");
     add("path", { d: `M393 ${top + 29}h30`, stroke: T.activates, "stroke-width": 1.5 });
+    add("path", { d: `M416 ${top + 24}l8 5-8 5Z`, fill: T.activates });
     text(433, top + 35, "Activation");
-    add("path", { d: `M550 ${top + 29}h30`, stroke: T.represses, "stroke-width": 1.5, "stroke-dasharray": "4 3" });
+    add("path", { d: `M550 ${top + 29}h30m0-6v12`, stroke: T.represses, "stroke-width": 1.5, fill: "none" });
     text(591, top + 35, "Repression");
     add("path", { d: `M718 ${top + 29}h30`, stroke: T.unknown, "stroke-width": 1.5 });
     text(759, top + 35, "Sign unresolved");
@@ -105,8 +107,8 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const samples = [...new Set([degrees[0], degrees[Math.floor(degrees.length / 2)], degrees.at(-1)])];
     samples.forEach((degree, i) => {
       const node = graph!.nodes().filter(n => Number(n.data("degree")) === degree).first();
-      // Use an equal-area circle even when the sampled node is a TF diamond.
-      const radius = Number(node.data("diameter")) * graph!.zoom() / 2 / (node.data("isTF") ? 1.2533 : 1);
+      // Both gene types use the same circle size at the same connection count.
+      const radius = Number(node.data("diameter")) * graph!.zoom() / 2;
       const x = 887 + i * 97;
       add("circle", { cx: x, cy: top + 66, r: radius, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.5 });
       text(x + radius + 6, top + 72, String(degree), 16);

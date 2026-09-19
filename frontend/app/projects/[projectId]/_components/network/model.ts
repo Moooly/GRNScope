@@ -3,7 +3,6 @@ import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { hasDirection, edgeMetric } from "../networkVisualEncoding";
 import type { GalaxyInput } from "./galaxyGeometry";
 import { nodeDiameter } from "./presentation";
-import { NETWORK_SCALE } from "./theme";
 
 export function galaxySignature(nodes: NetworkNode[], edges: NetworkEdge[], layout: string) {
   return JSON.stringify([layout, nodes.map(n => [n.id, n.isTF]).sort(), edges.map(e => [e.key, e.source, e.target]).sort()]);
@@ -15,11 +14,7 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[]): Elem
   return [
     ...nodes.map(n => {
       const d = degree.get(n.id) ?? 0;
-      // The widened regulator box is baked into `diameter`, not applied in the
-      // stylesheet, because this same value is what the geometry solver uses
-      // for collision. Scaling the drawn node without telling the layout would
-      // let regulators overlap their neighbours and their own labels.
-      const box = nodeDiameter(d, nodes.length, edges.length) * (n.isTF ? NETWORK_SCALE.regulatorScale : 1);
+      const box = nodeDiameter(d, nodes.length, edges.length);
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d, isTF: n.isTF ? 1 : 0,
         diameter: box,
         labelSize: Math.min(15, 9 + Math.sqrt(d) * 0.65),

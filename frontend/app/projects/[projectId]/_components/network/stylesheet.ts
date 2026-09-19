@@ -22,16 +22,7 @@ export function buildNetworkStylesheet(): StylesheetJson {
       "text-outline-width": 1, "text-outline-color": T.ground, "min-zoomed-font-size": 9,
       "overlay-opacity": 0, "z-index": 10,
     } },
-    /* Shape is the whole of it. Fill, rim and area are identical to a
-     * target gene, so nothing but the silhouette says "regulator" -- no second
-     * colour to learn, and the two marks sit at the same visual weight in a
-     * dense field. The area match is done in model.ts, not here, because the
-     * geometry solver has to know the widened box as well.
-     *
-     * The cost is at the smallest sizes: around seven pixels a diamond and a
-     * circle are nearly the same handful of pixels. Zoom resolves it, and the
-     * inspector names the role outright. */
-    { selector: "node[isTF = 1]", style: { shape: "diamond" } },
+    { selector: "node[isTF = 1]", style: { "background-color": T.tf, "border-color": T.tfRim } },
     { selector: "node[degree > 8]", style: { "font-weight": 600 } },
     { selector: "edge", style: {
       "curve-style": (e: EdgeSingular) => e.data("routeDistances") ? "unbundled-bezier" : "bezier",
