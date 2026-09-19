@@ -14,16 +14,15 @@ export function buildNetworkStylesheet(): StylesheetJson {
     { selector: "node", style: {
       width: "data(diameter)", height: "data(diameter)", shape: "ellipse",
       "background-color": T.node,
-      "background-fill": "linear-gradient", "background-gradient-direction": "to-bottom",
-      "background-gradient-stop-colors": [T.nodeTop, T.nodeBottom], "background-gradient-stop-positions": [0, 100],
-      "border-color": T.nodeRim, "border-width": 1.1, label: "data(label)", color: T.label,
+      "background-fill": "solid",
+      "border-color": T.nodeRim, "border-width": 0.55, label: "data(label)", color: T.label,
       "font-family": "Arial, Helvetica, sans-serif", "font-size": "data(labelSize)", "font-weight": 400,
       "text-halign": (n: NodeSingular) => n.data("labelHalign"), "text-valign": (n: NodeSingular) => n.data("labelValign"),
       "text-margin-x": (n: NodeSingular) => n.data("labelOffsetX"), "text-margin-y": (n: NodeSingular) => n.data("labelOffsetY"),
-      "text-outline-width": 1.3, "text-outline-color": T.ground, "min-zoomed-font-size": 7,
+      "text-outline-width": 1, "text-outline-color": T.ground, "min-zoomed-font-size": 9,
       "overlay-opacity": 0, "z-index": 10,
     } },
-    /* Shape is the whole of it. Fill, rim, gradient and area are identical to a
+    /* Shape is the whole of it. Fill, rim and area are identical to a
      * target gene, so nothing but the silhouette says "regulator" -- no second
      * colour to learn, and the two marks sit at the same visual weight in a
      * dense field. The area match is done in model.ts, not here, because the
@@ -39,6 +38,8 @@ export function buildNetworkStylesheet(): StylesheetJson {
       "control-point-distances": (e: EdgeSingular) => e.data("routeDistances") ?? [0],
       "control-point-weights": (e: EdgeSingular) => e.data("routeWeights") ?? [0.5],
       "edge-distances": "node-position", "line-cap": "round", "line-color": color,
+      "line-style": (e: EdgeSingular) => e.data("sign") === -1 && !e.data("direction") ? "dashed" : "solid",
+      "line-dash-pattern": [4, 3],
       width: "data(width)", opacity: (e: EdgeSingular) => e.data("inkOpacity"), "overlay-opacity": 0,
       // Drawn at every zoom, not gated behind a detail threshold. The glyph is
       // the only channel that states the effect as a mark rather than as a hue,
@@ -62,9 +63,8 @@ export function buildNetworkStylesheet(): StylesheetJson {
       "underlay-color": T.accent, "underlay-opacity": 0.16, "underlay-padding": 6, "z-index": 30,
     } },
     { selector: "node.traced-neighbour", style: { "min-zoomed-font-size": 0, "z-index": 20 } },
-    { selector: "edge.traced-neighbour", style: { opacity: 0.65 } },
+    { selector: "edge.traced-neighbour", style: { opacity: 0.85 } },
     { selector: "edge.traced, edge.hovered", style: { width: (e: EdgeSingular) => Number(e.data("width")) * 1.8, opacity: 1, "arrow-scale": (e: EdgeSingular) => (Number(e.data("arrowScale")) || 0.78) * 0.8, "z-index": 15 } },
-    { selector: "edge.traced, edge.traced-neighbour, edge.hovered", style: { "curve-style": "bezier", "control-point-step-size": 20 } },
     { selector: "node.muted", style: { opacity: 0.25, "text-opacity": 0.2 } },
     { selector: "edge.muted", style: { opacity: 0.09 } },
   ];

@@ -1,5 +1,4 @@
 import type { Core } from "cytoscape";
-import { NETWORK_THEME as GALAXY } from "./network/theme";
 import {
   METRICS,
   metricWidth,
@@ -28,6 +27,7 @@ export type NetworkFigureContext = {
   filters: string;
   focus: string | null;
   highlightedMethod: string | null;
+  selectionRule?: string;
 };
 const NS = "http://www.w3.org/2000/svg";
 
@@ -41,13 +41,12 @@ export async function exportNetworkFigure(
     throw new Error("The network is still arranging. Please wait before exporting the updated view.");
   if (cy.destroyed() || !cy.elements().length)
     throw new Error("There is no network to export.");
+  if (cy.scratch("galaxy")) {
+    const { exportPublicationFigure } = await import("./network/publicationExport");
+    return exportPublicationFigure(cy, format, filename, context);
+  }
   const appearance = context.appearance ?? "classic";
-  const galaxy = Boolean(cy.scratch("galaxy"));
-  const palette = galaxy ? {
-    ...NETWORK_APPEARANCES.teal,
-    label: "Regulatory galaxy", background: GALAXY.ground, text: GALAXY.label,
-    node: GALAXY.node, tf: GALAXY.node, positive: GALAXY.link, negative: GALAXY.represses,
-  } : NETWORK_APPEARANCES[appearance];
+  const palette = NETWORK_APPEARANCES[appearance];
   const width = Math.max(900, Math.round(cy.width()));
   const graphHeight = Math.round(cy.height());
   const svg = document.createElementNS(NS, "svg");
@@ -68,16 +67,12 @@ export async function exportNetworkFigure(
     `${context.scope} · ${context.geneCount} genes · ${context.edgeCount} of ${context.matchingEdges} matching relationships`,
     `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
     `Filters: ${context.filters || "None"}${context.focus ? " · Neighborhood: " + context.focus : ""}${context.highlightedMethod ? " · Highlight: " + context.highlightedMethod : ""}`,
-    galaxy
-      ? "Node size: displayed relationships (compressed for density). Teal: activation or unresolved effect. Clay: repression. Width: evidence."
-      : appearance === "braid"
+    appearance === "braid"
       ? "Arrowhead size counts the methods that agree; a solid head marks stronger evidence; line darkness is bootstrap confidence."
       : appearance === "atlas"
         ? "Colour groups genes by the regulatory hub that reaches them first. Neutral links bridge two modules."
         : METRICS[context.metric].description,
-    galaxy ? "A thin ring marks transcription factors. Curves share drawing routes; they do not add genes or relationships. Direction tips appear on selected or zoomed-in relationships."
-      : `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
-    ...(galaxy && Number(cy.scratch("galaxyNeighborhoods")) > 1 ? [`${cy.scratch("galaxyNeighborhoods")} layout neighborhoods, not inferred biological communities. Cross-neighborhood links are quieter in overview; no relationships are removed.`] : []),
+    `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
   ].flatMap((line) => {
     const maxChars = Math.floor((width - 48) / 6.5);
     const result: string[] = [];
@@ -96,28 +91,6 @@ export async function exportNetworkFigure(
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  // The legend's gene marks use the same top-lit gradient the canvas draws, so
-  // a printed figure's key matches its plate. Declared once, here, because the
-  // graph itself arrives later as a nested <svg> with its own scope.
-  if (galaxy) {
-    const defs = document.createElementNS(NS, "defs");
-    const gradient = document.createElementNS(NS, "linearGradient");
-    gradient.setAttribute("id", "grnExportNodeFill");
-    gradient.setAttribute("x1", "0");
-    gradient.setAttribute("y1", "0");
-    gradient.setAttribute("x2", "0");
-    gradient.setAttribute("y2", "1");
-    ([["0%", GALAXY.nodeTop], ["100%", GALAXY.nodeBottom]] as const).forEach(
-      ([offset, color]) => {
-        const stop = document.createElementNS(NS, "stop");
-        stop.setAttribute("offset", offset);
-        stop.setAttribute("stop-color", color);
-        gradient.appendChild(stop);
-      },
-    );
-    defs.appendChild(gradient);
-    svg.appendChild(defs);
-  }
   add("rect", { width, height, fill: palette.background });
   add(
     "text",
@@ -129,7 +102,7 @@ export async function exportNetworkFigure(
       "font-weight": 600,
       "font-family": "Arial, sans-serif",
     },
-    galaxy ? "GRNScope · Regulatory galaxy" : appearance === "braid"
+    appearance === "braid"
       ? "GRNScope · Consensus regulatory network"
       : appearance === "atlas"
         ? "GRNScope · Regulatory atlas"
@@ -185,37 +158,7 @@ export async function exportNetworkFigure(
   const focused = appearance === "braid";
   const atlasView = appearance === "atlas";
 
-  if (galaxy) {
-    // Same fill, same area, different silhouette -- the canvas rule exactly.
-    // The diamond's diagonal is the circle's radius times sqrt(pi/2), which is
-    // what makes the two marks equal ink rather than equal bounding box.
-    const markR = 5.5;
-    const markH = markR * 1.2533;
-    add("circle", { cx: 31, cy: top + 24, r: markR, fill: "url(#grnExportNodeFill)" });
-    label(44, top + 28, "Gene");
-    add("path", {
-      d: `M117 ${top + 24 - markH}L${117 + markH} ${top + 24}L117 ${top + 24 + markH}L${117 - markH} ${top + 24}Z`,
-      fill: "url(#grnExportNodeFill)",
-      "stroke-linejoin": "round",
-    });
-    label(131, top + 28, "Transcription factor");
-    // The same two marks the canvas draws, each named on its own. "Effect" as a
-    // single combined swatch left the reader to work out which glyph was which.
-    add("path", { d: `M295 ${top + 24}h34`, stroke: palette.positive, "stroke-width": 1.8, fill: "none" });
-    add("path", { d: `M329 ${top + 19.5}l7 4.5-7 4.5Z`, fill: palette.positive });
-    label(345, top + 28, "Activation");
-    add("path", { d: `M445 ${top + 24}h36`, stroke: palette.negative, "stroke-width": 1.8, fill: "none" });
-    add("path", { d: `M481 ${top + 18.5}v11`, stroke: palette.negative, "stroke-width": 2.6, "stroke-linecap": "round", fill: "none" });
-    label(495, top + 28, "Repression");
-    // Grey is a value: a relationship no method could sign. Drawn only when the
-    // figure contains one, since a printed key is read once and a permanently
-    // dimmed row cannot explain itself on hover the way the on-screen one can.
-    if (cy.edges().some((e) => Number(e.data("sign")) === 0)) {
-      add("path", { d: `M600 ${top + 24}h36`, stroke: GALAXY.unknown, "stroke-width": 1.8, fill: "none" });
-      label(645, top + 28, "Effect unresolved");
-    }
-    label(24, top + 53, "Diamonds are transcription factors. Larger nodes have more displayed connections. Thin-to-thick links encode evidence on a fixed 0–1 scale. A mark on both ends means the effect is known but no method resolved which gene regulates which.");
-  } else if (focused) {
+  if (focused) {
     // Row 1: what a link means, and what a gene is.
     add("circle", {
       cx: 30,
@@ -397,8 +340,7 @@ export async function exportNetworkFigure(
   label(
     24,
     top + 76,
-    galaxy ? "Layout distances describe graph structure, not measured biological distances. Gold outline: selection."
-      : focused
+    focused
       ? "Fixed absolute scale · No tip: direction unresolved · Gold outline: selection · Support counts reporting methods, not agreement."
       : atlasView
         ? "Colour is assigned by graph distance to the highest-degree genes · Sign colours appear on screen when zoomed in · Gold outline: selection."
@@ -434,7 +376,7 @@ export async function exportNetworkFigure(
     }
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = galaxy ? `${filename}-galaxy.${format}` : `${filename}-${context.metric}-${appearance}.${format}`;
+    link.download = `${filename}-${context.metric}-${appearance}.${format}`;
     document.body.appendChild(link);
     link.click();
     link.remove();

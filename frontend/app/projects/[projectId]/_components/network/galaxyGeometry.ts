@@ -143,9 +143,9 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
           fit: false, packComponents: false, tile: false, nodeDimensionsIncludeLabels: false,
           idealEdgeLength: (e: cytoscape.EdgeSingular) => {
             const d = Math.min(plan.neighbors.get(e.source().id())!.size, plan.neighbors.get(e.target().id())!.size);
-            return 35 + Math.min(90, d * 8);
+            return 52 + Math.min(110, d * 9);
           },
-          nodeRepulsion: (n: cytoscape.NodeSingular) => 6500 + 850 * Math.sqrt(plan.neighbors.get(n.id())!.size),
+          nodeRepulsion: (n: cytoscape.NodeSingular) => 7500 + 1000 * Math.sqrt(plan.neighbors.get(n.id())!.size),
           edgeElasticity: () => 0.32, gravity: 0.12, gravityRange: 4,
           numIter: roots.length > 500 ? 1400 : 2400,
         } as unknown as cytoscape.LayoutOptions).run();
@@ -277,98 +277,29 @@ function packGroups(groups: Array<{ ids: string[]; w: number; h: number }>, posi
   }
 }
 
-/** Compatibility-guided routing with fixed endpoints. A bundle is geometry,
- * never an extra edge or an extra gene. Opposite signs/directions stay apart. */
+/** Straight connections remain individually traceable. Only parallel or
+ * reciprocal records need separate gentle lanes; loops use native routing. */
 export function routeGalaxy(input: Pick<GalaxyInput, "edges"> & Partial<Pick<GalaxyInput, "nodes">>, positions: Record<string, Point>): Record<string, Route> {
   const routes: Record<string, Route> = {};
-  const radii = new Map(input.nodes?.map(n => [n.id, n.diameter / 2 + 4]) ?? []);
-  const edges = input.edges.filter(e => e.source !== e.target && positions[e.source] && positions[e.target]).map(e => {
-    const s = positions[e.source], t = positions[e.target];
-    const dx = t.x - s.x, dy = t.y - s.y, length = Math.max(0.01, Math.hypot(dx, dy));
-    return { ...e, s, t, dx, dy, length, mx: (s.x+t.x)/2, my: (s.y+t.y)/2, points: [0.2,0.4,0.6,0.8].map(w => ({ x:s.x+dx*w, y:s.y+dy*w })), peers: [] as Array<{ index: number; reverse: boolean; weight: number }> };
-  });
-  const cell = Math.max(80, edges.reduce((sum,e) => sum + e.length, 0) / Math.max(1,edges.length) * 0.65);
-  const grid = new Map<string, number[]>();
-  edges.forEach((e, i) => { const key = `${Math.floor(e.mx/cell)},${Math.floor(e.my/cell)}`; const ids = grid.get(key) ?? []; ids.push(i); grid.set(key,ids); });
-  edges.forEach((a, i) => {
-    const gx = Math.floor(a.mx/cell), gy = Math.floor(a.my/cell);
-    const candidates: number[] = [];
-    for (let x=gx-1;x<=gx+1;x++) for(let y=gy-1;y<=gy+1;y++) {
-      const bucket = grid.get(`${x},${y}`) ?? [];
-      const stride = Math.max(1,Math.ceil(bucket.length/96));
-      for(let k=0;k<bucket.length;k+=stride) candidates.push(bucket[k]);
-    }
-    for(const j of candidates) {
-      if(i === j) continue;
-      const b = edges[j];
-      if(a.sign !== b.sign || Boolean(a.direction) !== Boolean(b.direction)) continue;
-      // Reciprocal/parallel records use their own lane rather than collapsing.
-      if((a.source === b.source && a.target === b.target) || (a.source === b.target && a.target === b.source)) continue;
-      const cos = (a.dx*b.dx + a.dy*b.dy)/(a.length*b.length);
-      if(a.direction && cos*a.direction*b.direction < 0) continue;
-      const angle = Math.abs(cos);
-      const avg = (a.length+b.length)/2;
-      const scale = 2/(avg/Math.min(a.length,b.length)+Math.max(a.length,b.length)/avg);
-      const proximity = avg/(avg+Math.hypot(a.mx-b.mx,a.my-b.my));
-      const shared = a.source===b.source || a.target===b.target || a.source===b.target || a.target===b.source;
-      const weight = angle*angle * scale * proximity;
-      if(weight < (shared ? 0.42 : 0.62)) continue;
-      a.peers.push({ index:j, reverse:cos<0, weight });
-    }
-    a.peers.sort((a,b)=>b.weight-a.weight);
-    a.peers.length = Math.min(20,a.peers.length);
-  });
-  for(let pass=0;pass<32;pass++) {
-    const next = edges.map(a=>a.points.map((p,k)=> {
-      const before = k ? a.points[k-1] : a.s;
-      const after = k<3 ? a.points[k+1] : a.t;
-      let fx = (before.x+after.x-2*p.x)*0.22, fy=(before.y+after.y-2*p.y)*0.22;
-      let total=0, ax=0, ay=0;
-      for(const peer of a.peers) {
-        const q=edges[peer.index].points[peer.reverse?3-k:k];
-        const d=Math.hypot(q.x-p.x,q.y-p.y);
-        const weight=peer.weight/(1+d/Math.max(10,a.length*0.13));
-        ax+=(q.x-p.x)*weight; ay+=(q.y-p.y)*weight; total+=weight;
-      }
-      if(total) { fx+=ax/total*0.28; fy+=ay/total*0.28; }
-      const maxStep=Math.max(0.5,a.length*0.035), force=Math.hypot(fx,fy);
-      if(force>maxStep) { fx*=maxStep/force; fy*=maxStep/force; }
-      return {x:p.x+fx,y:p.y+fy};
-    }));
-    edges.forEach((a,i)=>{a.points=next[i];});
+  const radii = new Map((input.nodes ?? []).map(n => [n.id, n.diameter / 2 + 3]));
+  const pairs = new Map<string, GalaxyEdge[]>();
+  for (const e of input.edges) {
+    if (e.source === e.target || !positions[e.source] || !positions[e.target]) continue;
+    const key = JSON.stringify([e.source, e.target].sort());
+    const group = pairs.get(key) ?? [];
+    group.push(e); pairs.set(key, group);
   }
-  const pairs = new Map<string, typeof edges>();
-  edges.forEach(e=>{const key=JSON.stringify([e.source,e.target].sort());const group=pairs.get(key)??[];group.push(e);pairs.set(key,group);});
-  for(const group of pairs.values()) group.sort((a,b)=>a.id.localeCompare(b.id));
-  for(const e of edges) {
-    const start = radii.get(e.source) ?? 0;
-    const end = radii.get(e.target) ?? 0;
-    // Cytoscape intersects each endpoint with its nearest control point. A
-    // handle inside a large hub produces an invalid (invisible) edge. Keep the
-    // handle outside both node discs; let native routing handle short drags.
-    if(e.length <= start + end + 2) continue;
-    const group=pairs.get(JSON.stringify([e.source,e.target].sort()))!;
-    const lane=group.length>1 ? (group.indexOf(e)-(group.length-1)/2)*18*(e.source<e.target?1:-1) : 0;
-    const lo=start/e.length, hi=1-end/e.length;
-    const weight=(lo+hi)/2;
-    // The relaxed samples describe the shared flow, not drawable handles.
-    // Passing each sample directly to Cytoscape creates piecewise quadratics
-    // with abrupt curvature changes (little elbows/S-wiggles at close zoom).
-    // Fit ONE quadratic arc to the whole route instead. This has no internal
-    // joins or inflections and keeps the bundler's overall bending direction.
-    let numerator=0, denominator=0;
-    for(const p of e.points) {
-      const along=clamp(((p.x-e.s.x)*e.dx+(p.y-e.s.y)*e.dy)/(e.length*e.length),0,1);
-      // Invert x(t) = 2*w*t*(1-t) + t*t for an asymmetric handle near
-      // unequal-size nodes. The stable root also works when w is 0.5.
-      const t=along/(weight+Math.sqrt(weight*weight+(1-2*weight)*along));
-      const basis=2*t*(1-t);
-      const offset=((p.x-e.s.x)*-e.dy+(p.y-e.s.y)*e.dx)/e.length;
-      numerator+=basis*offset;
-      denominator+=basis*basis;
-    }
-    const bend=clamp(denominator>1e-8?numerator/denominator:0,-e.length*0.3,e.length*0.3);
-    routes[e.id]={ distances:[bend+lane],weights:[weight] };
+  for (const group of pairs.values()) {
+    if (group.length < 2) continue;
+    group.sort((a, b) => a.id.localeCompare(b.id));
+    group.forEach((e, index) => {
+      const s = positions[e.source], t = positions[e.target];
+      const length = Math.hypot(t.x - s.x, t.y - s.y);
+      const start = radii.get(e.source) ?? 0, end = radii.get(e.target) ?? 0;
+      if (length <= start + end + 2) return;
+      const lane = (index - (group.length - 1) / 2) * Math.min(24, length * 0.18) * (e.source < e.target ? 1 : -1);
+      routes[e.id] = { distances: [lane], weights: [(start / length + 1 - end / length) / 2] };
+    });
   }
   return routes;
 }

@@ -49,6 +49,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const [error, setError] = useState("");
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
   const [emphasized, setEmphasized] = useState(false);
+  const [weighted, setWeighted] = useState(true);
+  const [pins, setPins] = useState<string[]>([]);
+  const [layoutRevision, setLayoutRevision] = useState(0);
   const stopWorker = useCallback(() => {
     ++revision.current;
     workerRef.current?.terminate();
@@ -69,6 +72,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
+    cy.scratch("publicationWeighted", true);
     latest.current.onGraphReady?.(cy);
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
@@ -176,7 +180,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       }, 45000);
     } catch { fail("The layout could not start. Try resetting it."); }
     return stopWorker;
-  }, [signature, stopWorker]);
+  }, [signature, layoutRevision, stopWorker]);
 
   useEffect(() => {
     const cy = coreRef.current;
@@ -192,8 +196,17 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     applyPresentation(cy, true);
   }, [elements, props.selectedGene, props.selectedEdgeKey]);
 
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy || cy.destroyed()) return;
+    cy.scratch("publicationPins", pins);
+    applyLabelBudget(cy);
+  }, [pins]);
+
+  const visiblePins = pins.filter(id => props.nodes.some(n => n.id === id));
+  const selected = props.selectedGene;
   return <>
-    <div ref={containerRef} className="grn-canvas" role="group" tabIndex={0} aria-busy={arranging} aria-label={`Galaxy network: ${rendered.nodes} genes and ${rendered.edges} relationships. Arrow keys browse genes; Escape clears selection.`}
+    <div ref={containerRef} className="grn-canvas" role="group" tabIndex={0} aria-busy={arranging} aria-label={`Regulatory network: ${rendered.nodes} genes and ${rendered.edges} relationships. Arrow keys browse genes; Escape clears selection.`}
       onKeyDown={event=>{
         if (arranging) return;
         if(event.key === "Escape") { props.onSelectGene(null); props.onSelectEdge(null); return; }
@@ -229,23 +242,25 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           <span className="galaxy-stat-label">Relationships</span>
         </div>
       </div>
-      {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout neighborhoods · zoom for detail</small>}
+      {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout groups · spacing reflects connectivity</small>}
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
-    {/* Only the dense-network control survives here. Fit view and Reset layout
-      * were conveniences the canvas already offers by other means -- the view
-      * fits itself whenever the arrangement changes and the camera has not been
-      * touched, and switching layouts rebuilds it. Emphasizing links has no
-      * other route, and it filters nothing, so it does not belong among the
-      * Results Settings thresholds either. The chip renders only when that
-      * button does, rather than leaving an empty bordered box floating over
-      * sparse networks. */}
-    {rendered.edges > rendered.nodes*3 && <div className="galaxy-controls">
-      <button type="button" aria-pressed={emphasized} disabled={arranging} title="Increase link visibility without filtering any relationships" onClick={() => {
+    <div className="galaxy-controls" aria-label="Figure controls">
+      <button type="button" disabled={arranging} onClick={() => { if (coreRef.current) fit(coreRef.current); }}>Fit view</button>
+      <button type="button" disabled={arranging} title="Restore the computed arrangement after dragging" onClick={() => setLayoutRevision(value => value + 1)}>Reset layout</button>
+      <button type="button" aria-pressed={weighted} disabled={arranging} title="Line width: evidence on a fixed 0–1 scale, or uniform" onClick={() => {
+        const next = !weighted; setWeighted(next);
+        if (coreRef.current) { coreRef.current.scratch("publicationWeighted", next); applyPresentation(coreRef.current, true); }
+      }}>{weighted ? "Width: evidence" : "Width: uniform"}</button>
+      {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
+        {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label
+      </button>}
+      {visiblePins.length > 0 && <button type="button" onClick={() => setPins([])} title={visiblePins.join(", ")}>Clear {visiblePins.length} pinned {visiblePins.length === 1 ? "label" : "labels"}</button>}
+      {rendered.edges > rendered.nodes * 3 && <button type="button" aria-pressed={emphasized} disabled={arranging} onClick={() => {
         const next = !emphasized; setEmphasized(next);
         if (coreRef.current) { coreRef.current.scratch("galaxyEmphasize", next); applyPresentation(coreRef.current); }
-      }}>{emphasized ? "Quiet links" : "Emphasize links"}</button>
-    </div>}
+      }}>{emphasized ? "Quiet links" : "Emphasize links"}</button>}
+    </div>
   </>;
 }

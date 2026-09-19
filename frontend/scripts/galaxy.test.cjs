@@ -53,7 +53,7 @@ test("galaxy retains every gene through expansion and separates hubs from their 
       const leaves=distances("HUB_1",nodes.filter(n=>n.id.startsWith("LEAF_1_")).map(n=>n.id));
       assert.ok(Math.max(...leaves)-Math.min(...leaves)>20, "satellites must not be a fixed-radius ring");
       assert.ok(distances("HUB_1",["HUB_0","HUB_2"]).every(d=>d>Math.max(...leaves)));
-      assert.ok(Object.values(result.routes).filter(r=>r.distances.some(d=>Math.abs(d)>3)).length>30, "leaf fans should curve together");
+      assert.equal(Object.keys(result.routes).length, 0, "unique links should remain straight and individually traceable");
     }
   }
 });
@@ -78,7 +78,7 @@ test("routing preserves endpoints and does not bundle opposing signs or directio
   for(const second of [ {id:"ac",source:"a",target:"c",sign:-1,direction:1}, {id:"ac",source:"a",target:"c",sign:1,direction:-1} ]) {
     const original=structuredClone(positions);
     const result=routeGalaxy({edges:[first,second]},positions);
-    assert.ok(result.ab.distances.every(d=>Math.abs(d)<1e-8));
+    assert.deepEqual(result, {}, "distinct connections do not acquire shared bends");
     assert.deepEqual(positions,original);
   }
 });
@@ -100,13 +100,10 @@ test("direction, evidence and topology updates keep their meaning", () => {
   assert.equal(data("reverse").sourceTip,"tee");
   assert.equal(data("reverse").targetTip,"none");
 
-  // A known effect with no resolved direction marks BOTH ends, with the same
-  // glyph used everywhere else. Drawing a single arrowhead here would name a
-  // regulator the run never identified; drawing nothing -- which is what this
-  // used to do -- hides an effect the data is certain about, and that was every
-  // edge of every real run.
-  assert.equal(data("undirected").sourceTip,"triangle");
-  assert.equal(data("undirected").targetTip,"triangle");
+  // Unresolved direction must not look like bidirectional regulation.
+  assert.equal(data("undirected").sourceTip,"none");
+  assert.equal(data("undirected").targetTip,"none");
+  assert.equal(data("undirected").sign,1);
 
   // Direction without an effect still marks the regulated end, hollow, because
   // there is a direction to state even though there is no effect to state.
@@ -123,18 +120,18 @@ test("direction, evidence and topology updates keep their meaning", () => {
   assert.equal(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,edges.map(e=>({...e,score:0.1})),"force"));
 });
 
-test("selection releases a bundled relationship without changing topology", () => {
+test("selection keeps connection routes and node positions stable", () => {
   const input=inputFor(fixture.nodes,fixture.edges), result=buildGalaxy(input);
   const elements=galaxyElements(fixture.nodes,fixture.edges);
   elements.forEach(e=>{ if(result.positions[e.data.id]) e.position=result.positions[e.data.id]; if(result.routes[e.data.id]) {e.data.routeDistances=result.routes[e.data.id].distances;e.data.routeWeights=result.routes[e.data.id].weights;} });
   const cy=cytoscape({headless:true,styleEnabled:true,elements,style:buildNetworkStylesheet(),layout:{name:"preset"}});
   try {
     const e=cy.edges()[0];
-    assert.equal(e.style("curve-style"),"unbundled-bezier");
+    assert.equal(e.style("curve-style"),"bezier");
     e.addClass("traced");
     assert.equal(e.style("curve-style"),"bezier");
     e.removeClass("traced");
-    assert.equal(e.style("curve-style"),"unbundled-bezier");
+    assert.equal(e.style("curve-style"),"bezier");
     assert.deepEqual(cy.nodes().map(n=>n.id()).sort(),fixture.nodes.map(n=>n.id).sort());
   } finally {cy.destroy();}
 });
@@ -148,31 +145,23 @@ test("large hubs retain valid handles and overlapping drags fall back to native 
   assert.deepEqual(routeGalaxy(input,{a:{x:0,y:0},b:{x:20,y:0}}),{});
 });
 
-test("Irf8-like spokes use one smooth arc without local elbows, joins or backtracking", () => {
-  // Fixed geometry from the reported close-up: exercise routing only, not layout.
-  const positions={Irf8:{x:470,y:374},Tyrobp:{x:254,y:128},Csf1r:{x:774,y:168},Selplg:{x:123,y:356},F13a1:{x:794,y:412},Sell:{x:181,y:594},Ptpn6:{x:432,y:645},Psap:{x:677,y:675}};
-  const nodes=Object.keys(positions).map(id=>({id,diameter:id==="Irf8"?114:44,labelWidth:80}));
-  const edges=nodes.slice(1).map(n=>({id:`Irf8-${n.id}`,source:"Irf8",target:n.id,sign:1,direction:0}));
-  const input={nodes,edges,width:1022,height:812}, original=structuredClone(positions);
-  const routes=routeGalaxy(input,positions);
-  verify(input,{positions,routes});
-  assert.deepEqual(positions,original);
-  assert.ok(Object.values(routes).some(r=>Math.abs(r.distances[0])>3),"retain the hub's curved flow");
-  for(const e of edges) {
-    const r=routes[e.id], s=positions[e.source], t=positions[e.target];
-    assert.equal(r.weights.length,1,"a single analytic quadratic, not stitched curve sections");
-    const dx=t.x-s.x,dy=t.y-s.y,len=Math.hypot(dx,dy),w=r.weights[0],d=r.distances[0];
-    const c={x:s.x+dx*w-dy/len*d,y:s.y+dy*w+dx/len*d};
-    const dd={x:2*(t.x-2*c.x+s.x),y:2*(t.y-2*c.y+s.y)};
-    let curvature;
-    for(let i=0;i<=100;i++) {
-      const u=i/100, vx=2*((1-u)*(c.x-s.x)+u*(t.x-c.x)),vy=2*((1-u)*(c.y-s.y)+u*(t.y-c.y));
-      assert.ok(vx*dx+vy*dy>0,"curve must not reverse along the connection");
-      const cross=vx*dd.y-vy*dd.x;
-      if(curvature===undefined) curvature=cross;
-      assert.ok(Math.abs(cross-curvature)<1e-7,"no local curvature-sign changes");
-    }
-  }
+test("spokes remain straight, while reciprocal records retain separate lanes on selection", () => {
+  const nodes=fixture.nodes.slice(0,3), edge=fixture.edges[0];
+  const edges=[{...edge,key:"forward"},{...edge,key:"reverse",source:edge.target,target:edge.source}];
+  const input=inputFor(nodes,edges), result=buildGalaxy(input);
+  const elements=galaxyElements(nodes,edges);
+  elements.forEach(e=> { if(result.positions[e.data.id]) e.position=result.positions[e.data.id]; if(result.routes[e.data.id]) Object.assign(e.data,{routeDistances:result.routes[e.data.id].distances,routeWeights:result.routes[e.data.id].weights}); });
+  const cy=cytoscape({headless:true,styleEnabled:true,elements,style:buildNetworkStylesheet(),layout:{name:"preset"}});
+  try {
+    const before=cy.nodes().map(n=>({...n.position()}));
+    const e=cy.$id("forward"), control=e.data("routeDistances");
+    assert.equal(e.style("curve-style"),"unbundled-bezier");
+    e.addClass("traced");
+    assert.equal(e.style("curve-style"),"unbundled-bezier");
+    assert.deepEqual(e.data("routeDistances"),control);
+    assert.deepEqual(cy.nodes().map(n=>({...n.position()})),before);
+    verify(input,result);
+  } finally {cy.destroy();}
 });
 
 test("density-aware sizes stay bounded, monotonic, and smaller in dense cores", () => {
@@ -206,7 +195,7 @@ test("dense 100- and 1193-node views retain every record and form bounded layout
     const input={nodes,edges,width:1200,height:700}, original=structuredClone(input), start=performance.now();
     const result=buildGalaxy(input);
     verify(input,result);assert.deepEqual(input,original);
-    assert.equal(Object.keys(result.routes).length,edges.length);
+    assert.equal(Object.keys(result.routes).length,0,"unique records use native straight links");
     assert.equal(Object.keys(result.neighborhoods).length,count);
     assert.ok(new Set(Object.values(result.neighborhoods)).size>=3);
     const structure=galaxyStructure(input), partition=partitionSkeleton([...structure.core],structure.neighbors);
@@ -226,7 +215,7 @@ test("a giant satellite fan fills an area instead of forcing a thousand-node rin
   assert.ok(Math.min(...distances)<Math.max(...distances)*0.6);
 });
 
-test("zoom keeps cross-neighborhood ink restrained and emphasis preserves every edge", () => {
+test("bridges retain the same readable ink as local links and emphasis preserves every edge", () => {
   const nodes=fixture.nodes.slice(0,3),edges=fixture.edges.slice(0,1);
   const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet()});
   try {
@@ -239,10 +228,11 @@ test("zoom keeps cross-neighborhood ink restrained and emphasis preserves every 
     const overview=cy.edges()[0].data("inkOpacity");
     cy.zoom(2); applyPresentation(cy); const detail=cy.edges()[0].data("inkOpacity");
     cy.scratch("galaxyEmphasize",true); applyPresentation(cy); const emphasized=cy.edges()[0].data("inkOpacity");
-    assert.ok(overview>=0.08,`overview ink ${overview} is below the visible floor`);
+    assert.ok(overview>=0.4,`overview ink ${overview} is below the visible floor`);
     assert.ok(detail>overview,`zooming in must add ink (${detail} vs ${overview})`);
     assert.ok(emphasized>detail,`emphasis must add ink (${emphasized} vs ${detail})`);
-    assert.ok(overview<0.25,`cross-neighborhood ink ${overview} is not restrained in overview`);
+    cy.scratch("galaxyEmphasize",false); cy.zoom(1); cy.edges().data("crossNeighborhood",false); applyPresentation(cy,true);
+    assert.equal(cy.edges()[0].data("inkOpacity"),overview,"layout partition must not hide bridges");
     assert.equal(cy.edges().length,count);
   } finally {cy.destroy();}
   const reserved={x1:0,x2:300,y1:0,y2:100};
@@ -277,4 +267,36 @@ test("an updating graph cannot be exported with new filters but old geometry", a
     cy.scratch("galaxyBusy",true);
     await assert.rejects(exportNetworkFigure(cy,"svg","test",{}),/still arranging/);
   } finally {cy.destroy();}
+});
+
+
+test("appearance and sign updates do not trigger a new layout", () => {
+  const nodes=fixture.nodes.slice(0,3), edges=fixture.edges.slice(0,1);
+  assert.equal(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,edges.map(e=>({...e,sign:-1,direction:-1})),"force"));
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet(),layout:{name:"preset"}});
+  try {
+    cy.scratch("galaxyFitZoom",1);
+    const positions=cy.nodes().map(n=>({...n.position()}));
+    cy.scratch("publicationWeighted",false); applyPresentation(cy,true);
+    const uniform=cy.edges()[0].data("width");
+    cy.scratch("publicationWeighted",true); applyPresentation(cy,true);
+    assert.notEqual(cy.edges()[0].data("width"),uniform);
+    assert.deepEqual(cy.nodes().map(n=>({...n.position()})),positions);
+    assert.equal(cy.nodes()[0].style("background-fill"),"solid");
+  } finally {cy.destroy();}
+});
+
+test("pinning a low-degree label gives it priority without allowing overlap", () => {
+  const candidates=[{id:"Pinned",x:200,y:200,radius:5,width:80,height:18,priority:5,degree:1},{id:"Hub",x:210,y:200,radius:5,width:80,height:18,priority:1,degree:100}];
+  const labels=planLabels(candidates,500,400,1);
+  assert.ok(labels.has("Pinned")); assert.equal(labels.size,1);
+});
+
+test("opening ranking never uses unverified bootstrap values", () => {
+  const {selectOpeningEdges}=require(base+"../networkOpeningView.ts");
+  const edges=Array.from({length:14},(_,i)=>({key:String(i),supportingAlgorithms:["A"],score:i/14,confidence:1-i/14,bootstrapVerified:false}));
+  const shown=selectOpeningEdges(edges,1,false);
+  assert.equal(shown.shown,12); assert.equal(shown.total,14);
+  assert.equal(shown.edges[0].key,"13");
+  assert.equal(selectOpeningEdges(edges,1,true).edges.length,14);
 });

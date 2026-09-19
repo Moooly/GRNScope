@@ -353,7 +353,7 @@
   min-width: 0;
   height: clamp(450px, calc(100dvh - 405px), 820px);
   overflow: hidden;
-  background: radial-gradient(ellipse at center, #fff 0, #fafcfc 75%);
+  background: #ffffff;
 }
 .grn-canvas-shell,
 .grn-canvas {
@@ -368,7 +368,7 @@
  * #edf3f8 above it). This rule outranks the [data-appearance] ground below
  * and pins the galaxy to the same stage every other layout renders on. */
 .grn-atlas[data-appearance] .grn-graph-region:has(.galaxy-caption) {
-  background: radial-gradient(ellipse at center, #fff 0, #fafcfc 75%);
+  background: #ffffff;
   height: clamp(560px, 72dvh, 900px);
 }
 .galaxy-caption {
@@ -1335,3 +1335,13 @@
 .grn-legend-emphasis-select:hover {
   border-color: #1b75a6;
 }
+
+/* Compact publication key and controls; label placement reserves their bounds. */
+.publication-legend { color: #4a5953; font-size: 11px; display: flex; flex-wrap: wrap; gap: 10px 18px; padding-block: 12px; border-block: 1px solid #e3e9e6; background: #fff; }
+.publication-views { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: #56665e; font-size: 11px; }
+.publication-views button { padding: 6px 10px; border: 1px solid #d4dfda; border-radius: 5px; background: white; }
+.publication-views button[aria-pressed="true"] { background: #e6f1ec; border-color: #7aab99; color: #285e4c; }
+.galaxy-controls { flex-wrap: wrap; max-width: calc(100% - 32px); bottom: 10px; right: 16px; box-shadow: none; backdrop-filter: none; background: #fff; border-radius: 4px; }
+.galaxy-controls button[aria-pressed="true"] { color: #245f52; background: #edf5f1; }
+.galaxy-caption { top: 16px; left: 20px; }
+.galaxy-stat-label, .galaxy-caption small { color: #677c72; }

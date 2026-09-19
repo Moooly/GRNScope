@@ -6,7 +6,7 @@ import { nodeDiameter } from "./presentation";
 import { NETWORK_SCALE } from "./theme";
 
 export function galaxySignature(nodes: NetworkNode[], edges: NetworkEdge[], layout: string) {
-  return JSON.stringify([layout, nodes.map(n => [n.id, n.isTF]).sort(), edges.map(e => [e.key, e.source, e.target, e.sign, hasDirection(e) ? e.direction : 0]).sort()]);
+  return JSON.stringify([layout, nodes.map(n => [n.id, n.isTF]).sort(), edges.map(e => [e.key, e.source, e.target]).sort()]);
 }
 
 export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[]): ElementDefinition[] {
@@ -28,31 +28,13 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[]): Elem
     }),
     ...edges.map(e => {
       const directed = hasDirection(e);
-      const signed = e.sign !== 0;
-      // One glyph vocabulary throughout: arrowhead for activation, crossbar for
-      // repression, whether or not direction was resolved. Placement is what
-      // carries direction -- one mark means the run identified a regulator,
-      // two mean it did not.
+      // Endpoint marks assert direction only when the inference resolved it.
+      // Sign remains visible in colour (and dashed undirected negative links).
       const tip = e.sign === -1 ? "tee" : "triangle";
-      // The glyph encodes EFFECT; where it sits encodes what we know about
-      // direction. Keying the glyph to direction, as this did, meant that a run
-      // where no method resolves direction -- which is every run checked so far
-      // -- drew no glyph at all, hiding a fact the data was certain about
-      // (activation vs repression on 100% of edges) behind line colour alone.
-      //
-      //   signed + directed    one glyph, on the regulated end
-      //   signed + undirected  the same glyph on BOTH ends: the effect is
-      //                        known, the regulator is not, and putting a single
-      //                        arrowhead on one end would assert a direction the
-      //                        run never resolved
-      //   unsigned + directed  a hollow tip on the regulated end, marking
-      //                        direction only
-      //   unsigned + undirected  nothing to say, so nothing drawn
-      const bothEnds = signed && !directed;
       return { data: { id: e.key, source: e.source, target: e.target, sign: e.sign,
         direction: directed ? e.direction : 0,
-        sourceTip: bothEnds || (directed && e.direction === -1) ? tip : "none",
-        targetTip: bothEnds || (directed && e.direction === 1) ? tip : "none",
+        sourceTip: directed && e.direction === -1 ? tip : "none",
+        targetTip: directed && e.direction === 1 ? tip : "none",
         arrowFill: e.sign === 0 ? "hollow" : "filled",
         evidence: edgeMetric(e, "evidence", 1) ?? 0,
         confidence: edgeMetric(e, "confidence", 1),

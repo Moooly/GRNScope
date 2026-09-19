@@ -70,7 +70,7 @@ const layoutOptions = [
   {
     value: "force",
     label: "Force",
-    title: "Explore hubs, branching neighborhoods and flowing connections",
+    title: "Explore hubs, branches and connections",
   },
   {
     value: "hierarchical",
@@ -228,9 +228,9 @@ export default function NetworkVisualizationSection(props: Props) {
       selectOpeningEdges(
         filteredNetworkEdges,
         networkNodes.length,
-        showAllEdges,
+        showAllEdges || Boolean(isolatedGene),
       ),
-    [filteredNetworkEdges, networkNodes.length, showAllEdges],
+    [filteredNetworkEdges, networkNodes.length, showAllEdges, isolatedGene],
   );
   const edges = opening.edges;
   // Rebuilt only when a number actually moves, so opening or closing the panel
@@ -312,7 +312,7 @@ export default function NetworkVisualizationSection(props: Props) {
         if (svgRef.current) await props.onExportCircosPng(svgRef.current);
       } else
         await props.onExportNetwork(format, {
-          metric,
+          metric: useNewCanvas ? "evidence" : metric,
           // Resolved, not requested: an exported figure of a 100-gene network
           // is an atlas, and its legend has to say so.
           appearance: activeAppearance,
@@ -325,6 +325,7 @@ export default function NetworkVisualizationSection(props: Props) {
           filters: props.filterSummary,
           focus: isolatedGene,
           highlightedMethod: effectiveHighlight,
+          selectionRule: isolatedGene ? "All matching direct relationships of the focused gene" : opening.trimmed ? `Overview: top ${opening.shown} by method support, then verified bootstrap confidence or evidence` : "All relationships passing the selected filters",
         });
     } catch (error) {
       setExportError(
@@ -355,7 +356,7 @@ export default function NetworkVisualizationSection(props: Props) {
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <h3 className="text-2xl font-bold tracking-[-0.025em] text-slate-950">
-                  {useNewCanvas && networkLayout !== "circos" ? "Regulatory galaxy" : "Regulatory atlas"}
+                  {useNewCanvas && networkLayout !== "circos" ? "Regulatory network" : "Regulatory atlas"}
                 </h3>
                 <button
                   type="button"
@@ -483,7 +484,7 @@ export default function NetworkVisualizationSection(props: Props) {
                             Publication vector
                           </span>
                           <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                            Scalable atlas with a self-contained legend.
+                            Complete displayed network with labels and a figure legend.
                           </span>
                         </span>
                         <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-[#087ead]">
@@ -504,8 +505,7 @@ export default function NetworkVisualizationSection(props: Props) {
                           Presentation image
                         </span>
                         <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                          High-resolution view with the current focus and
-                          framing.
+                          High-resolution figure with the same layout and legend.
                         </span>
                       </span>
                       <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-[#087ead]">
@@ -517,6 +517,12 @@ export default function NetworkVisualizationSection(props: Props) {
               </div>
             </div>
           </div>
+
+          {useNewCanvas && networkLayout !== "circos" && !isolatedGene && <div className="publication-views" aria-label="Network scope">
+            <button type="button" aria-pressed={!showAllEdges} onClick={() => setShowAllEdges(false)}>Overview</button>
+            <button type="button" aria-pressed={showAllEdges} onClick={() => setShowAllEdges(true)}>Complete network</button>
+            <span>{opening.shown.toLocaleString()} of {opening.total.toLocaleString()} matching relationships{opening.trimmed ? " · ranked by method support, then verified confidence or evidence" : " · all matching relationships shown"}</span>
+          </div>}
 
           {isolatedGene ? (
             <button
@@ -536,7 +542,7 @@ export default function NetworkVisualizationSection(props: Props) {
             {exportError}
           </p>
         )}
-        {useNewCanvas ? (
+        {useNewCanvas && networkLayout !== "circos" ? (
           <NetworkLegendBar
             regulatorShare={
               nodes.length

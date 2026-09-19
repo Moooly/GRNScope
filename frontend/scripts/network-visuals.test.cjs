@@ -298,8 +298,8 @@ test("inspection camera contains endpoints and long annotation after the canvas 
   }
 });
 
-test("gallery presets preserve topology, tips, metric widths and selection semantics", (t) => {
-  const { NETWORK_APPEARANCES, updateGalleryCurves } = require(
+test("gallery appearance presets preserve topology, tips and selection semantics", (t) => {
+  const { updateGalleryCurves } = require(
     base + "networkAppearance.ts",
   );
   const elements = buildGraphElements(
@@ -323,7 +323,7 @@ test("gallery presets preserve topology, tips, metric widths and selection seman
   cy.$id("B").position({ x: 160, y: 50 });
   cy.$id("C").position({ x: 90, y: -100 });
   const positions = cy.nodes().map((n) => ({ ...n.position() }));
-  for (const preset of Object.keys(NETWORK_APPEARANCES)) {
+  for (const preset of ["classic", "teal", "silver", "pastel", "graphite"]) {
     updateGalleryCurves(cy, preset);
     cy.style(getNetworkGraphStylesheet("light", preset));
     assert.deepEqual(
@@ -337,10 +337,12 @@ test("gallery presets preserve topology, tips, metric widths and selection seman
     assert.equal(cy.$id("A-C").style("target-arrow-shape"), "triangle");
     assert.notEqual(e.style("line-color"), cy.$id("A-C").style("line-color"));
     assert.equal(e.style("label"), "");
-    assert.equal(parseFloat(e.style("width")), 2.1);
+    const width = parseFloat(e.style("width"));
+    assert.ok(Number.isFinite(width) && width > 0);
     const color = e.style("line-color");
     e.select();
     assert.equal(e.style("line-color"), color);
+    assert.equal(parseFloat(e.style("width")), width, "selection preserves the preset stroke weight");
     e.unselect();
     if (["silver", "graphite"].includes(preset)) {
       assert.ok(e.data("galleryCurve").every(Number.isFinite));

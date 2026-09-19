@@ -29,7 +29,7 @@ export function openingEdgeBudget(geneCount: number) {
 
 type RankableEdge = Pick<
   NetworkEdge,
-  "supportingAlgorithms" | "confidence" | "score"
+  "supportingAlgorithms" | "confidence" | "bootstrapVerified" | "score"
 >;
 
 function support(edge: RankableEdge) {
@@ -37,7 +37,7 @@ function support(edge: RankableEdge) {
 }
 
 function strength(edge: RankableEdge) {
-  const value = Number(edge.confidence ?? edge.score);
+  const value = Number(edge.bootstrapVerified === true && Number.isFinite(edge.confidence) ? edge.confidence : edge.score);
   return Number.isFinite(value) ? value : 0;
 }
 

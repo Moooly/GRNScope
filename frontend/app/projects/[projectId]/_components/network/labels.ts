@@ -52,7 +52,8 @@ export function applyLabelBudget(cy: Core) {
   if (cy.destroyed()) return;
   const zoom = cy.zoom(), nodes = cy.nodes();
   const relative = zoom / (Number(cy.scratch("galaxyFitZoom")) || zoom);
-  const budget = nodes.length <= 100 ? nodes.length : Math.ceil(Math.min(90, Math.sqrt(nodes.length)*4.5) * Math.max(1, relative));
+  const pinned = new Set<string>(cy.scratch("publicationPins") ?? []);
+  const budget = nodes.length <= 35 ? nodes.length : Math.max(pinned.size, Math.ceil(Math.min(55, Math.sqrt(nodes.length) * 2.2) * Math.max(1, relative)));
   // Canvas text metrics match the renderer's face and weight. The fallback is
   // conservative and also supports headless geometry/export tests.
   let measure = cy.scratch("galaxyLabelMeasure") as CanvasRenderingContext2D | undefined;
@@ -60,7 +61,7 @@ export function applyLabelBudget(cy: Core) {
     measure = cy.container()!.ownerDocument.createElement("canvas").getContext("2d") ?? undefined;
     cy.scratch("galaxyLabelMeasure", measure);
   }
-  const priority = (n: NodeSingular) => n.hasClass("traced") || n.selected() ? 4 : n.hasClass("hovered") ? 3 : n.hasClass("traced-neighbour") ? 2 : n.data("layoutAnchor") ? 1 : 0;
+  const priority = (n: NodeSingular) => pinned.has(n.id()) ? 5 : n.hasClass("traced") || n.selected() ? 4 : n.hasClass("hovered") ? 3 : n.hasClass("traced-neighbour") ? 2 : n.data("layoutAnchor") ? 1 : 0;
   const candidates = nodes.map(n => {
     const font = Number(n.data("labelSize"))*zoom, text = String(n.data("fullLabel"));
     if (measure) measure.font = `${Number(n.data("degree")) > 8 ? 600 : 400} ${font}px Arial`;
