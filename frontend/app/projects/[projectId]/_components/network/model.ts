@@ -11,10 +11,11 @@ export function galaxySignature(nodes: NetworkNode[], edges: NetworkEdge[], layo
 export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[]): ElementDefinition[] {
   const degree = new Map<string, number>();
   edges.forEach(e => { degree.set(e.source, (degree.get(e.source) ?? 0) + 1); degree.set(e.target, (degree.get(e.target) ?? 0) + 1); });
+  const maxDegree = Math.max(18, ...degree.values());
   return [
     ...nodes.map(n => {
       const d = degree.get(n.id) ?? 0;
-      const box = nodeDiameter(d, nodes.length, edges.length);
+      const box = nodeDiameter(d, maxDegree);
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d, isTF: n.isTF ? 1 : 0,
         diameter: box,
         labelSize: Math.min(15, 9 + Math.sqrt(d) * 0.65),

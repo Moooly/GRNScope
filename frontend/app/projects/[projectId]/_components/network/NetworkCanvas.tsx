@@ -9,6 +9,7 @@ import { buildNetworkStylesheet } from "./stylesheet";
 import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
 import { applyPresentation } from "./presentation";
+import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
 import type { GalaxyResult, Point } from "./galaxyGeometry";
 
 function fit(cy: Core) {
@@ -49,7 +50,8 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const [error, setError] = useState("");
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
   const [emphasized, setEmphasized] = useState(false);
-  const [weighted, setWeighted] = useState(true);
+  const [weighted, setWeighted] = useState(false);
+  const [spacing, setSpacing] = useState(100);
   const [pins, setPins] = useState<string[]>([]);
   const [layoutRevision, setLayoutRevision] = useState(0);
   const stopWorker = useCallback(() => {
@@ -72,7 +74,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
-    cy.scratch("publicationWeighted", true);
+    cy.scratch("publicationWeighted", false);
     latest.current.onGraphReady?.(cy);
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
@@ -153,14 +155,21 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         });
       });
       busy.current = false; cy.scratch("galaxyBusy", false); setArranging(false);
-      if (initial) { fit(cy); select(cy, latest.current); }
+      if (initial) {
+        cy.scratch("publicationSpacing", 1);
+        fit(cy);
+        const initialSpacing = cy.nodes().length >= 250 ? 150 : cy.nodes().length >= 80 ? 125 : 100;
+        applyNetworkSpacing(cy, initialSpacing / 100);
+        setSpacing(initialSpacing);
+        select(cy, latest.current);
+      }
       initial = false;
     };
     const fail = (message: string) => {
       clearTimeout(timeoutRef.current);
       workerRef.current?.terminate(); workerRef.current = null;
       setError(message);
-      const fallback = buildCircularPositions(nodes, edges);
+      const fallback = spacePresetPositions(input.nodes, buildCircularPositions(nodes, edges));
       finish({ positions: fallback, routes: {}, components: 0 });
     };
     try {
@@ -174,7 +183,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       worker.onerror = () => {
         if (!cy.destroyed() && workerRef.current === worker) fail("The layout could not load. Try resetting it.");
       };
-      worker.postMessage({ id, input, positions });
+      worker.postMessage({ id, input, positions: positions ? spacePresetPositions(input.nodes, positions) : undefined });
       timeoutRef.current = setTimeout(() => {
         if (!cy.destroyed() && initial && id === revision.current) fail("This arrangement took too long. Showing a circular fallback; use Reset layout to retry.");
       }, 45000);
@@ -242,12 +251,25 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           <span className="galaxy-stat-label">Relationships</span>
         </div>
       </div>
+      {spacing > 100 && <small>Spaced view · drag the background to pan; Fit view shows all genes</small>}
       {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout groups · spacing reflects connectivity</small>}
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
     <div className="galaxy-controls" aria-label="Figure controls">
       <button type="button" disabled={arranging} onClick={() => { if (coreRef.current) fit(coreRef.current); }}>Fit view</button>
+      <label className="galaxy-spacing">Spacing
+        <input type="range" aria-label="Network spacing" min="100" max="250" step="25" value={spacing} disabled={arranging} onChange={event => {
+          const next = Number(event.target.value); setSpacing(next);
+          const cy = coreRef.current;
+          if (cy && !busy.current) {
+            ++revision.current; // Ignore any routing response from a pre-spacing drag.
+            applyNetworkSpacing(cy, next / 100);
+            applyPresentation(cy, true);
+          }
+        }} />
+        <output>{spacing}%</output>
+      </label>
       <button type="button" disabled={arranging} title="Restore the computed arrangement after dragging" onClick={() => setLayoutRevision(value => value + 1)}>Reset layout</button>
       <button type="button" aria-pressed={weighted} disabled={arranging} title="Line width: evidence on a fixed 0–1 scale, or uniform" onClick={() => {
         const next = !weighted; setWeighted(next);

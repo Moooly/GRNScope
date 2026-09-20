@@ -164,12 +164,44 @@ test("spokes remain straight, while reciprocal records retain separate lanes on 
   } finally {cy.destroy();}
 });
 
-test("density-aware sizes stay bounded, monotonic, and smaller in dense cores", () => {
-  for (const [n,e] of [[19,67],[100,1738],[1193,7104]]) {
-    const sizes=[1,3,10,50,723].map(d => nodeDiameter(d,n,e));
-    assert.ok(sizes.every((s,i) => s>=7 && s<=34 && (!i || s>=sizes[i-1])));
+test("linear degree sizes keep tenfold hub contrast without saturating large hubs", () => {
+  for (const maximum of [18,100,723]) {
+    const sizes=[1,3,10,18,maximum].sort((a,b)=>a-b).map(d => nodeDiameter(d,maximum));
+    assert.ok(sizes.every((s,i) => s>=20 && s<=200 && (!i || s>=sizes[i-1])));
+    assert.equal(nodeDiameter(maximum,maximum)/nodeDiameter(1,maximum),10);
+    assert.ok(nodeDiameter(maximum/2,maximum)<nodeDiameter(maximum,maximum));
   }
-  assert.ok(nodeDiameter(34,100,1738)<nodeDiameter(34,100,200));
+  assert.equal(nodeDiameter(0),20);
+});
+
+test("spacing expands positions without zooming, growing glyphs, or losing records", () => {
+  const {applyNetworkSpacing}=require(base+"spacing.ts");
+  const cy=cytoscape({headless:true,elements:[
+    {data:{id:"a",diameter:6},position:{x:10,y:20}},
+    {data:{id:"b",diameter:60},position:{x:110,y:20}},
+    {data:{id:"ab",source:"a",target:"b",routeDistances:[20],routeWeights:[0.5]}}
+  ],layout:{name:"preset"}});
+  try {
+    const zoom=cy.zoom(),pan={...cy.pan()},original=cy.nodes().map(n=>({...n.position()}));
+    applyNetworkSpacing(cy,1.5);
+    assert.equal(cy.$id("b").position("x")-cy.$id("a").position("x"),150);
+    assert.equal(cy.zoom(),zoom);assert.deepEqual(cy.pan(),pan);
+    assert.deepEqual(cy.nodes().map(n=>n.data("diameter")),[6,60]);
+    assert.equal(cy.elements().length,3);assert.deepEqual(cy.$id("ab").data("routeDistances"),[30]);
+    applyNetworkSpacing(cy,1);
+    cy.nodes().forEach((n,i)=>assert.ok(Math.hypot(n.position("x")-original[i].x,n.position("y")-original[i].y)<1e-9));
+  } finally {cy.destroy();}
+});
+
+test("preset layouts reserve larger hubs without changing their ordering", () => {
+  const {spacePresetPositions}=require(base+"spacing.ts");
+  const input={a:{x:0,y:0},b:{x:30,y:0},c:{x:60,y:0}};
+  const nodes=[{id:"a",diameter:20},{id:"b",diameter:200},{id:"c",diameter:150}];
+  const positions=spacePresetPositions(nodes,input);
+  verify({nodes,edges:[]},{positions,routes:{}});
+  assert.equal(positions.a.y,positions.b.y);
+  assert.equal(positions.b.y,positions.c.y);
+  assert.deepEqual(input,{a:{x:0,y:0},b:{x:30,y:0},c:{x:60,y:0}});
 });
 
 test("a selected 723-neighbour hub never bypasses name or disc collisions", () => {
@@ -196,8 +228,10 @@ test("dense 100- and 1193-node views retain every record and form bounded layout
     const result=buildGalaxy(input);
     verify(input,result);assert.deepEqual(input,original);
     assert.equal(Object.keys(result.routes).length,0,"unique records use native straight links");
-    assert.equal(Object.keys(result.neighborhoods).length,count);
-    assert.ok(new Set(Object.values(result.neighborhoods)).size>=3);
+    if(count>=400) {
+      assert.equal(Object.keys(result.neighborhoods).length,count);
+      assert.ok(new Set(Object.values(result.neighborhoods)).size>=3);
+    } else assert.equal(Object.keys(result.neighborhoods).length,0,"moderate dense graphs should spread as one network, without artificial clumps");
     const structure=galaxyStructure(input), partition=partitionSkeleton([...structure.core],structure.neighbors);
     assert.deepEqual(partition,partitionSkeleton([...structure.core].reverse(),structure.neighbors));
     assert.ok(partition.every(g=>g.length<=72));

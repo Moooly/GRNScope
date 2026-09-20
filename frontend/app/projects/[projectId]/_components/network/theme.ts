@@ -8,7 +8,7 @@ export const NETWORK_THEME = {
   activates: "#588f89", represses: "#b77d66", unknown: "#89928f",
 } as const;
 export const NETWORK_SCALE = {
-  nodeMinModel: 6, nodeMaxModel: 34,
+  nodeMinModel: 20, nodeMaxModel: 200,
   labelMinPx: 9, labelMaxPx: 14, linkPx: 1, linkTracePx: 2,
   maxFitZoom: 1.7, minZoom: 0.015, maxZoom: 6,
   fitPadding: 64,

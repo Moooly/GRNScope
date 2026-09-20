@@ -1345,3 +1345,7 @@
 .galaxy-controls button[aria-pressed="true"] { color: #245f52; background: #edf5f1; }
 .galaxy-caption { top: 16px; left: 20px; }
 .galaxy-stat-label, .galaxy-caption small { color: #677c72; }
+
+.galaxy-spacing { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 11px; color: #456158; }
+.galaxy-spacing input { width: 85px; accent-color: #237d85; }
+.galaxy-spacing output { min-width: 30px; font-variant-numeric: tabular-nums; }

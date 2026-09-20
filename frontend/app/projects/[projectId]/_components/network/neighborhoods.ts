@@ -52,7 +52,7 @@ export function layoutNeighborhoods(input: GalaxyInput, groups: string[][], loca
     const y1 = Math.min(...nodes.map(n => local[n.id].y-n.diameter/2));
     const y2 = Math.max(...nodes.map(n => local[n.id].y+n.diameter/2+18));
     ids.forEach(id => { positions[id].x -= (x1+x2)/2; positions[id].y -= (y1+y2)/2; });
-    return { id: `region-${i}`, w: x2-x1+110, h: y2-y1+110 };
+    return { id: `region-${i}`, w: x2-x1+160, h: y2-y1+160 };
   });
   const links = new Map<string, { source: string; target: string; count: number }>();
   for (const e of input.edges) {
@@ -68,7 +68,7 @@ export function layoutNeighborhoods(input: GalaxyInput, groups: string[][], loca
   const centers: Point[] = [];
   try {
     solver.layout({ name: "fcose", quality: "proof", randomize: false, animate: false, fit: false, tile: false, packComponents: false,
-      idealEdgeLength: 140, nodeRepulsion: 18000, edgeElasticity: 0.12, gravity: 0.08, numIter: 1400,
+      idealEdgeLength: 200, nodeRepulsion: 24000, edgeElasticity: 0.12, gravity: 0.08, numIter: 1400,
     } as unknown as cytoscape.LayoutOptions).run();
     boxes.forEach(box => centers.push({ ...solver.$id(box.id).position() }));
   } finally { solver.destroy(); }

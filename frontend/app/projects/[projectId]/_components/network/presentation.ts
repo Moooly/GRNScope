@@ -1,17 +1,16 @@
 import type { Core } from "cytoscape";
 import { applyLabelBudget } from "./labels";
 
-/** Bounded, monotonic connection scale; small satellites leave space for hubs. */
-export function nodeDiameter(degree: number, nodes: number, edges: number) {
-  const base = nodes > 250 ? 6 : 7;
-  const density = Math.sqrt(Math.max(1, edges / Math.max(1, nodes)));
-  return Math.min(34, base + 7 * Math.log2(1 + Math.max(0, degree)) / density);
+/** Linear degree mapping with the reference's 10:1 diameter contrast.
+ * The upper domain grows beyond 18 so large hubs do not all hit one size. */
+export function nodeDiameter(degree: number, maxDegree = 18) {
+  return 20 + 180 * Math.max(0, Math.min(1, (degree - 1) / (Math.max(18, maxDegree) - 1)));
 }
 
 /** Evidence has a fixed, restrained screen-space width; opacity is visual
  * density, not another statistical measure. Bridges retain the same ink. */
-export function evidenceWidth(value: number, weighted = true) {
-  return weighted ? 0.65 + Math.max(0, Math.min(1, value)) * 0.8 : 0.9;
+export function evidenceWidth(value: number, weighted = false) {
+  return weighted ? 0.45 + Math.max(0, Math.min(1, value)) * 0.65 : 0.55;
 }
 
 export function applyPresentation(cy: Core, force = false) {
@@ -20,12 +19,16 @@ export function applyPresentation(cy: Core, force = false) {
   const zoom = cy.zoom(), relative = zoom / (Number(cy.scratch("galaxyFitZoom")) || zoom);
   const detail = relative >= 1.8;
   const emphasized = Boolean(cy.scratch("galaxyEmphasize"));
-  const weighted = cy.scratch("publicationWeighted") !== false;
-  const opacity = emphasized ? 0.85 : detail ? 0.72 : density > 5 ? 0.4 : count <= 40 ? 0.66 : 0.54;
+  const weighted = cy.scratch("publicationWeighted") === true;
+  const opacity = emphasized ? 0.85 : detail ? 0.72 : density > 5 ? 0.32 : count <= 40 ? 0.66 : count > 500 ? 0.35 : 0.46;
   const key = `${count}:${cy.edges().length}:${zoom}:${detail}:${emphasized}:${weighted}`;
   if (force || cy.scratch("galaxyPresentationKey") !== key) cy.batch(() => {
     cy.scratch("galaxyPresentationKey", key);
-    cy.nodes().forEach(n => { n.data("labelSize", (cy.scratch("publicationExport") ? 18 : count <= 40 ? 12 : 11) / zoom); });
+    cy.nodes().forEach(n => {
+      const prominence = Math.max(0, Math.min(1, (Number(n.data("diameter")) - 20) / 180));
+      const font = cy.scratch("publicationExport") ? 16 + 8 * prominence : (count <= 40 ? 11 : 9) + 5 * prominence;
+      n.data("labelSize", font / zoom);
+    });
     cy.edges().forEach(e => {
       e.data("width", evidenceWidth(Number(e.data("evidence")), weighted) / zoom);
       e.data("arrowScale", 0.65);

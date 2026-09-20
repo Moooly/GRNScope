@@ -19,11 +19,11 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
   try {
     graph = cytoscape({ container: host, style: buildNetworkStylesheet(),
       elements: source.elements().map(element => ({ data: { ...element.data(), label: "" }, ...(element.isNode() ? { position: { ...element.position() } } : {}) })),
-      layout: { name: "preset" }, minZoom: 0.0001, maxZoom: 8, pixelRatio: 1,
+      layout: { name: "preset" }, minZoom: 0.0001, maxZoom: 1.5, pixelRatio: 1,
     });
     const pins: string[] = (source.scratch("publicationPins") ?? []).filter((id: string) => !source.$id(id).empty());
     graph.scratch("publicationPins", pins);
-    graph.scratch("publicationWeighted", source.scratch("publicationWeighted") !== false);
+    graph.scratch("publicationWeighted", source.scratch("publicationWeighted") === true);
     graph.scratch("publicationExport", true);
     graph.fit(graph.nodes(), 90);
     graph.scratch("galaxyFitZoom", graph.zoom());
@@ -47,7 +47,8 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
       `Filters: ${context.filters || "None"}${context.focus ? ` · Neighborhood: ${context.focus}` : ""}`,
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
-      "Node size: incident relationships in this figure (bounded scale). Layout spacing represents connectivity, not biological distance.",
+      `Spacing: ${Math.round((Number(source.scratch("publicationSpacing")) || 1) * 100)}% · All displayed genes included.`,
+      "Node diameter: linear in displayed connections, from 20 to 200 units; upper degree domain is at least 18. Layout spacing represents connectivity, not biological distance.",
       "Blue circles are transcription factors; mint circles are other genes. Edge colour shows predicted sign.",
       "An arrowhead indicates activation; a perpendicular bar indicates repression. Each marks the regulated end only when direction is resolved; no tip means unresolved direction.",
       "Dashed negative links have unresolved direction. Grey links have unresolved sign; a hollow arrow shows resolved direction without a sign.",
@@ -65,7 +66,16 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       }
       lines.push(line);
     }
-    const top = GRAPH_HEIGHT + 64, height = top + 112 + lines.length * 25;
+    const degrees = [...new Set(source.nodes().map(n => Number(n.data("degree"))))].sort((a, b) => a - b);
+    const samples = [...new Set([degrees[0], degrees[Math.floor(degrees.length / 2)], degrees.at(-1)])].map(degree => {
+      const node = graph!.nodes().filter(n => Number(n.data("degree")) === degree).first();
+      return { degree, radius: Number(node.data("diameter")) * graph!.zoom() / 2 };
+    });
+    const largestRadius = Math.max(0, ...samples.map(s => s.radius));
+    const top = GRAPH_HEIGHT + 64;
+    const sizeY = top + 110 + largestRadius;
+    const metadataY = sizeY + largestRadius + 36;
+    const height = metadataY + lines.length * 25 + 16;
     svg.setAttribute("xmlns", NS);
     svg.setAttribute("width", "180mm");
     svg.setAttribute("height", `${(height / WIDTH * 180).toFixed(2)}mm`);
@@ -95,25 +105,23 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     add("path", { d: `M983 ${top + 24}l8 5-8 5Z`, fill: T.label });
     text(1070, top + 35, "Direction");
 
-    const weighted = source.scratch("publicationWeighted") !== false;
+    const weighted = source.scratch("publicationWeighted") === true;
     text(32, top + 72, weighted ? "Line width: evidence" : "Line width: uniform");
     (weighted ? [0, 0.5, 1] : [0]).forEach((value, i) => {
       const x = 222 + i * 100;
       add("path", { d: `M${x} ${top + 67}h35`, stroke: T.activates, "stroke-width": evidenceWidth(value, weighted) });
       if (weighted) text(x + 43, top + 73, value.toFixed(1), 16);
     });
-    text(575, top + 72, "Node size: displayed connections");
-    const degrees = [...new Set(source.nodes().map(n => Number(n.data("degree"))))].sort((a, b) => a - b);
-    const samples = [...new Set([degrees[0], degrees[Math.floor(degrees.length / 2)], degrees.at(-1)])];
-    samples.forEach((degree, i) => {
-      const node = graph!.nodes().filter(n => Number(n.data("degree")) === degree).first();
-      // Both gene types use the same circle size at the same connection count.
-      const radius = Number(node.data("diameter")) * graph!.zoom() / 2;
-      const x = 887 + i * 97;
-      add("circle", { cx: x, cy: top + 66, r: radius, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.5 });
-      text(x + radius + 6, top + 72, String(degree), 16);
+    text(32, top + 104, "Node diameter: displayed connections");
+    const keyWidth = samples.reduce((sum, sample) => sum + 2 * sample.radius + 76, 0);
+    let cursor = (WIDTH - keyWidth) / 2;
+    samples.forEach(({ degree, radius }) => {
+      const x = cursor + radius;
+      add("circle", { cx: x, cy: sizeY, r: radius, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.5 });
+      text(x + radius + 8, sizeY + 6, String(degree), 16);
+      cursor += 2 * radius + 76;
     });
-    lines.forEach((line, i) => text(32, top + 110 + i * 25, line));
+    lines.forEach((line, i) => text(32, metadataY + i * 25, line));
     return new XMLSerializer().serializeToString(svg);
   } finally { graph?.destroy(); host.remove(); }
 }
