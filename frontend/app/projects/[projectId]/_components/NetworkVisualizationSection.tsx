@@ -25,6 +25,7 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas from "./network/NetworkCanvas";
 import NetworkLegendBar from "./network/Legend";
+import type { EdgeWidthBy, NodeSizeBy } from "./network/encoding";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
 import NetworkInspector from "./NetworkInspector";
@@ -210,7 +211,11 @@ export default function NetworkVisualizationSection(props: Props) {
   // live count inside Results Settings reports what the filters produced, and
   // the canvas caption carries the trimmed total for readers who never open
   // the panel.
-  const [showAllEdges, setShowAllEdges] = useState(false);
+  // The complete network (every relationship passing Results Settings) is the
+  // only view; the old trimmed "Overview" has been retired.
+  const [showAllEdges, setShowAllEdges] = useState(true);
+  const [sizeBy, setSizeBy] = useState<NodeSizeBy>("all");
+  const [widthBy, setWidthBy] = useState<EdgeWidthBy>("evidence");
   // The rebuilt canvas is what the project page shows. The previous renderer
   // is still here, reachable with ?canvas=legacy, because the inspector,
   // Circos, figure export and the trajectory and perturbation views all reach
@@ -518,12 +523,6 @@ export default function NetworkVisualizationSection(props: Props) {
             </div>
           </div>
 
-          {useNewCanvas && networkLayout !== "circos" && !isolatedGene && <div className="publication-views" aria-label="Network scope">
-            <button type="button" aria-pressed={!showAllEdges} onClick={() => setShowAllEdges(false)}>Overview</button>
-            <button type="button" aria-pressed={showAllEdges} onClick={() => setShowAllEdges(true)}>Complete network</button>
-            <span>{opening.shown.toLocaleString()} of {opening.total.toLocaleString()} matching relationships{opening.trimmed ? " · ranked by method support, then verified confidence or evidence" : " · all matching relationships shown"}</span>
-          </div>}
-
           {isolatedGene ? (
             <button
               type="button"
@@ -552,6 +551,11 @@ export default function NetworkVisualizationSection(props: Props) {
             hasSign={edges.some((e) => e.sign !== 0)}
             hasUnsigned={edges.some((e) => e.sign === 0)}
             directionResolved={edges.some((e) => hasDirection(e))}
+            hasUndirected={edges.some((e) => !hasDirection(e))}
+            hasConfidence={edges.some((e) => e.bootstrapVerified === true)}
+            sizeBy={edges.some((e) => hasDirection(e)) ? sizeBy : "all"}
+            widthBy={widthBy}
+            methodCount={selectedAlgorithmIds.length}
           />
         ) : (
         <NetworkLegend
@@ -604,6 +608,11 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSelectEdge={selectEdge}
                 onGraphReady={graphReady}
                 totalRelationships={opening.total}
+                methodCount={selectedAlgorithmIds.length}
+                sizeBy={sizeBy}
+                widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
+                onSizeByChange={setSizeBy}
+                onWidthByChange={setWidthBy}
               />
             ) : (
               <NetworkGraph

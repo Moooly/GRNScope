@@ -1,6 +1,7 @@
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
 import { layoutNeighborhoods, partitionSkeleton } from "./neighborhoods";
+import { EDGE_GAP } from "./theme";
 
 cytoscape.use(fcose);
 
@@ -12,6 +13,8 @@ export type GalaxyInput = {
   edges: GalaxyEdge[];
   width: number;
   height: number;
+  /** Visible rim-to-rim length every edge aims for. Defaults to EDGE_GAP. */
+  gap?: number;
 };
 export type Route = { distances: number[]; weights: number[] };
 export type GalaxyResult = {
@@ -112,19 +115,24 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
         continue;
       }
     }
+    const gap = input.gap ?? EDGE_GAP;
+    const kidMax = (id: string) => Math.max(0, ...plan.children.get(id)!.map(k => byId.get(k)!.diameter));
+    // A hub reserves room for its fan of single-link genes; a plain gene
+    // reserves little more than its own disc, so its edges can reach `gap`.
     const footprint = (id: string) => {
-      const count = plan.children.get(id)!.length;
-      if (!count) return Math.max(44, byId.get(id)!.diameter + 28);
-      const fanRadius = Math.max(54, count > 32 ? Math.sqrt(count)*42 : count*23/3.8) + byId.get(id)!.diameter * 0.6;
-      return Math.max(byId.get(id)!.diameter + 24,
-        count > 12 ? fanRadius * 2.4 : 0,
-        (48 + Math.sqrt(Math.max(0, count - 2)) * 25 + Math.min(3, plan.depth.get(id)!) * 10) * (count > 5 ? 1.5 : 1));
+      const d = byId.get(id)!.diameter, kids = plan.children.get(id)!.length;
+      if (!kids) return d + 12;
+      return d + 2 * (gap + kidMax(id)) * Math.min(1, 0.45 + kids / 14);
     };
+    const extra = (id: string) => (footprint(id) - byId.get(id)!.diameter) / 2;
     if (roots.length === 1) positions[roots[0]] = { x: 0, y: 0 };
     else {
       const rootSet = new Set(roots);
       const links = new Set<string>();
-      const elements: cytoscape.ElementDefinition[] = roots.map((id, i) => {
+      // Seed the best-connected genes at the centre of the spiral so hubs start
+      // among their neighbours instead of being pushed to the rim.
+      const seeded = [...roots].sort((a, b) => plan.neighbors.get(b)!.size - plan.neighbors.get(a)!.size || a.localeCompare(b));
+      const elements: cytoscape.ElementDefinition[] = seeded.map((id, i) => {
         const angle = i * 2.399963;
         const radius = 100 * Math.sqrt(i + 1);
         return { data: { id, footprint: footprint(id) }, position: { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius } };
@@ -141,16 +149,24 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
         solver.layout({
           name: "fcose", quality: "proof", randomize: false, animate: false,
           fit: false, packComponents: false, tile: false, nodeDimensionsIncludeLabels: false,
-          idealEdgeLength: (e: cytoscape.EdgeSingular) => {
-            const d = Math.min(plan.neighbors.get(e.source().id())!.size, plan.neighbors.get(e.target().id())!.size);
-            return 85 + Math.min(140, d * 10);
-          },
-          nodeRepulsion: (n: cytoscape.NodeSingular) => 14000 + 1600 * Math.sqrt(plan.neighbors.get(n.id())!.size),
-          edgeElasticity: () => 0.18, gravity: 0.05, gravityRange: 4,
+          // Fixed edge length: the rim-to-rim distance aims for `gap` on every
+          // edge. The solver measures between footprints, so a hub's reserved
+          // fan margin is subtracted; the floor keeps two fans from colliding.
+          idealEdgeLength: (e: cytoscape.EdgeSingular) => Math.max(24, gap - extra(e.source().id()) - extra(e.target().id())),
+          nodeRepulsion: () => 22000,
+          edgeElasticity: () => 0.45, gravity: 0.04, gravityRange: 4,
           numIter: roots.length > 500 ? 1400 : 2400,
         } as unknown as cytoscape.LayoutOptions).run();
         solver.nodes().forEach(n => { positions[n.id()] = { ...n.position() }; });
       } finally { solver.destroy(); }
+    }
+    // Fixed edge length: refine the force solution with stress majorization,
+    // whose springs connect every pair of genes and rest at graph distance.
+    // One hop rests at exactly rim + gap + rim, so connected genes end up the
+    // same visible distance apart wherever the topology allows it.
+    if (roots.length > 1 && roots.length <= 900) {
+      const reach = (id: string) => byId.get(id)!.diameter / 2 + (plan.children.get(id)!.length ? 0.5 * (gap + kidMax(id)) : 0);
+      stressMajorize(roots, positions, plan.neighbors, reach, gap);
     }
 
     const centre = roots.reduce((c, id) => ({ x: c.x + positions[id].x / roots.length, y: c.y + positions[id].y / roots.length }), { x: 0, y: 0 });
@@ -159,12 +175,8 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
       roots.forEach(id=>{const x=positions[id].x-centre.x,y=positions[id].y-centre.y;xx+=x*x;yy+=y*y;xy+=x*y;});
       const angle=-0.5*Math.atan2(2*xy,xx-yy);
       roots.forEach(id=>{const p=positions[id],x=p.x-centre.x,y=p.y-centre.y;p.x=centre.x+x*Math.cos(angle)-y*Math.sin(angle);p.y=centre.y+x*Math.sin(angle)+y*Math.cos(angle);});
-      const w=Math.max(...roots.map(id=>positions[id].x))-Math.min(...roots.map(id=>positions[id].x));
-      const h=Math.max(...roots.map(id=>positions[id].y))-Math.min(...roots.map(id=>positions[id].y));
-      const spread=clamp(Math.sqrt((input.width/Math.max(1,input.height))*Math.max(h,100)/Math.max(w,100)),1,1.85);
-      // Shape the skeleton before expanding neighborhoods. Satellite fans keep
-      // their local distances and angles; the finished graph is never stretched.
-      roots.forEach(id=>{positions[id].x=centre.x+(positions[id].x-centre.x)*spread;});
+      // No anisotropic stretch: it would make horizontal edges longer than
+      // vertical ones and break the fixed edge length.
     }
     const jobs: Array<{ id: string; angle: number; sweep: number }> = [];
     for (const id of roots) {
@@ -184,20 +196,46 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
       } else angle = randomFor(id) * TAU;
       jobs.push({ id, angle, sweep });
     }
+    // Single-link genes sit on an arc around their hub at exactly one edge
+    // length from its rim. When one arc cannot hold them, further rings follow.
     for (let i = 0; i < jobs.length; i++) {
       const { id, angle, sweep } = jobs[i];
       const kids = plan.children.get(id)!;
       if (!kids.length) continue;
-      const total = kids.reduce((sum, k) => sum + Math.sqrt(plan.mass.get(k)!), 0);
-      const baseRadius = Math.max(54, kids.length > 32 ? Math.sqrt(kids.length*TAU/sweep)*32 : kids.length*30/sweep) + byId.get(id)!.diameter * 0.6;
-      let cursor = angle - sweep / 2;
-      kids.forEach(child => {
-        const segment = sweep * Math.sqrt(plan.mass.get(child)!) / total;
-        const theta = cursor + segment * (0.42 + randomFor(child + "angle") * 0.16);
-        const radius = baseRadius * (kids.length > 32 ? Math.sqrt(0.2+0.8*randomFor(child)) : 0.78+0.44*randomFor(child)) + Math.min(70, (plan.depth.get(child) ?? 0) * 14);
-        positions[child] = { x: positions[id].x + Math.cos(theta) * radius, y: positions[id].y + Math.sin(theta) * radius };
-        jobs.push({ id: child, angle: theta, sweep: Math.min(2.6, Math.max(0.7, segment)) });
-        cursor += segment;
+      const r = byId.get(id)!.diameter / 2, maxKid = kidMax(id);
+      // A gene occupies its disc or its name, whichever is wider, plus margin.
+      const extent = (k: string) => Math.max(byId.get(k)!.diameter, byId.get(k)!.labelWidth) + 18;
+      const ringStep = Math.max(...kids.map(extent));
+      const need = (k: string, ring: number) => extent(k) / (r + gap + maxKid / 2 + ring * ringStep);
+      const limit = TAU * 0.94;
+      const rings: string[][] = [[]];
+      let used = 0;
+      const ordered = [...kids].sort((a, b) => plan.mass.get(b)! - plan.mass.get(a)! || a.localeCompare(b));
+      for (const k of ordered) {
+        const ring = rings.length - 1;
+        if (used + need(k, ring) > limit && rings[ring].length) { rings.push([]); used = 0; }
+        rings[rings.length - 1].push(k);
+        used += need(k, rings.length - 1);
+      }
+      rings.forEach((ringKids, ring) => {
+        ringKids.sort();
+        const needs = ringKids.map(k => need(k, ring));
+        const needed = needs.reduce((a, b) => a + b, 0);
+        const span = clamp(Math.max(sweep, needed), Math.min(needed, 0.6), limit);
+        // Every gene first gets the arc it needs; spare arc goes to genes that
+        // carry their own branches. Nothing is ever squeezed below its need.
+        const spare = Math.max(0, span - needed), massTotal = ringKids.reduce((t, q) => t + Math.sqrt(plan.mass.get(q)!), 0);
+        const weights = ringKids.map((k, j) => needs[j] + spare * Math.sqrt(plan.mass.get(k)!) / massTotal);
+        const scale = 1;
+        let cursor = angle - span / 2;
+        ringKids.forEach((child, j) => {
+          const segment = weights[j] * scale;
+          const theta = cursor + segment / 2;
+          const radius = r + gap + byId.get(child)!.diameter / 2 + ring * ringStep;
+          positions[child] = { x: positions[id].x + Math.cos(theta) * radius, y: positions[id].y + Math.sin(theta) * radius };
+          jobs.push({ id: child, angle: theta, sweep: Math.min(2.6, Math.max(0.9, segment)) });
+          cursor += segment;
+        });
       });
     }
     relaxCollisions(ids, positions, byId);
@@ -213,12 +251,59 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
     const minX = Math.min(...ids.map(id => positions[id].x - Math.max(byId.get(id)!.diameter / 2, byId.get(id)!.labelWidth / 2)));
     const minY = Math.min(...ids.map(id => positions[id].y - byId.get(id)!.diameter / 2));
     const maxX = Math.max(...ids.map(id => positions[id].x + Math.max(byId.get(id)!.diameter / 2, byId.get(id)!.labelWidth / 2)));
-    const maxY = Math.max(...ids.map(id => positions[id].y + byId.get(id)!.diameter / 2 + 17));
+    const maxY = Math.max(...ids.map(id => positions[id].y + byId.get(id)!.diameter / 2));
     ids.forEach(id => { positions[id].x -= minX; positions[id].y -= minY; });
     groups.push({ ids, w: maxX - minX + 32, h: maxY - minY + 32 });
   }
   packGroups(groups, positions, input.width / Math.max(1, input.height));
   return positions;
+}
+
+/** Localized stress majorization (Gansner, Koren & North 2004). Ideal
+ * distances are shortest paths in which an edge a-b is reach(a) + gap + reach(b);
+ * weights 1/d^2 satisfy short-range distances first. Deterministic. */
+export function stressMajorize(ids: string[], positions: Record<string, Point>, neighbors: Map<string, Set<string>>, reach: (id: string) => number, gap: number, iterations = 160) {
+  const n = ids.length, index = new Map(ids.map((id, i) => [id, i]));
+  const r = ids.map(reach);
+  const adj: Array<Array<[number, number]>> = ids.map((id, i) => [...neighbors.get(id)!].filter(o => index.has(o)).map(o => { const j = index.get(o)!; return [j, r[i] + gap + r[j]] as [number, number]; }));
+  const dist = new Float64Array(n * n).fill(Infinity);
+  for (let s = 0; s < n; s++) {
+    // Dijkstra with a binary heap.
+    const d = dist.subarray(s * n, s * n + n); d[s] = 0;
+    const heap: Array<[number, number]> = [[0, s]];
+    while (heap.length) {
+      const top = heap[0], last = heap.pop()!;
+      if (heap.length) { heap[0] = last; let k = 0; for (;;) { const a = 2 * k + 1, b = a + 1; let m = k; if (a < heap.length && heap[a][0] < heap[m][0]) m = a; if (b < heap.length && heap[b][0] < heap[m][0]) m = b; if (m === k) break; [heap[k], heap[m]] = [heap[m], heap[k]]; k = m; } }
+      const [du, u] = top; if (du > d[u]) continue;
+      for (const [v, w] of adj[u]) if (du + w < d[v]) { d[v] = du + w; heap.push([d[v], v]); let k = heap.length - 1; while (k) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[k], heap[p]] = [heap[p], heap[k]]; k = p; } }
+    }
+  }
+  const x = new Float64Array(n), y = new Float64Array(n);
+  ids.forEach((id, i) => { x[i] = positions[id].x; y[i] = positions[id].y; });
+  // Scale the starting arrangement to the ideal distances before iterating.
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const d = dist[i * n + j]; if (!Number.isFinite(d)) continue; const e = Math.hypot(x[i] - x[j], y[i] - y[j]) || 1; num += e / d; den += (e * e) / (d * d); }
+  const k0 = den ? num / den : 1;
+  for (let i = 0; i < n; i++) { x[i] *= k0; y[i] *= k0; }
+  for (let it = 0; it < iterations; it++) {
+    let moved = 0;
+    for (let i = 0; i < n; i++) {
+      let sx = 0, sy = 0, sw = 0;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const d = dist[i * n + j]; if (!Number.isFinite(d)) continue;
+        const w = 1 / (d * d), dx = x[i] - x[j], dy = y[i] - y[j];
+        const e = Math.hypot(dx, dy) || 1e-6;
+        sx += w * (x[j] + d * dx / e); sy += w * (y[j] + d * dy / e); sw += w;
+      }
+      if (!sw) continue;
+      const nx = sx / sw, ny = sy / sw;
+      moved = Math.max(moved, Math.hypot(nx - x[i], ny - y[i]));
+      x[i] = nx; y[i] = ny;
+    }
+    if (moved < 0.5) break;
+  }
+  ids.forEach((id, i) => { positions[id] = { x: x[i], y: y[i] }; });
 }
 
 function relaxCollisions(ids: string[], positions: Record<string, Point>, nodes: Map<string, GalaxyNode>) {
@@ -236,8 +321,10 @@ function relaxCollisions(ids: string[], positions: Record<string, Point>, nodes:
         for (const other of grid.get(`${x},${y}`) ?? []) {
           const q = positions[other], peer = nodes.get(other)!;
           const dx = p.x - q.x, dy = p.y - q.y;
-          const minX = (Math.max(node.diameter + 8, node.labelWidth) + Math.max(peer.diameter + 8, peer.labelWidth)) / 2 + 6;
-          const minY = (node.diameter + peer.diameter) / 2 + 18;
+          // Names sit inside the discs, so a gene only needs its disc -- or its
+          // name, where that is wider -- plus a clear margin.
+          const minX = (Math.max(node.diameter, node.labelWidth) + Math.max(peer.diameter, peer.labelWidth)) / 2 + 16;
+          const minY = (node.diameter + peer.diameter) / 2 + 16;
           const ox = minX - Math.abs(dx), oy = minY - Math.abs(dy);
           if (ox <= 0 || oy <= 0) continue;
           collisions++;

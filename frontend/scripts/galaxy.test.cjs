@@ -208,7 +208,9 @@ test("a selected 723-neighbour hub never bypasses name or disc collisions", () =
   const candidates=Array.from({length:724},(_,i) => ({ id:`Gene${i}`,x: i ? 600+Math.cos(i*2.399963)*(60+Math.sqrt(i)*9) : 600,
     y: i ? 350+Math.sin(i*2.399963)*(60+Math.sqrt(i)*9) : 350, radius: i?4:15, width:60, height:17, priority:i?2:4, degree:i?1:723 }));
   const labels=planLabels(candidates,1200,700,90);
-  assert.ok(labels.has("Gene0")); assert.ok(labels.size<90 && labels.size>5);
+  // Names now sit inside their discs, so a tightly packed fan shows fewer of
+  // them; the hub is always named and nothing may overlap.
+  assert.ok(labels.has("Gene0")); assert.ok(labels.size<90 && labels.size>=1);
   const entries=[...labels.entries()];
   entries.forEach(([id,{rect:r}],i) => {
     entries.slice(i+1).forEach(([,p])=>assert.ok(!labelsOverlap(r,p.rect)));
@@ -249,25 +251,23 @@ test("a giant satellite fan fills an area instead of forcing a thousand-node rin
   assert.ok(Math.min(...distances)<Math.max(...distances)*0.6);
 });
 
-test("bridges retain the same readable ink as local links and emphasis preserves every edge", () => {
-  const nodes=fixture.nodes.slice(0,3),edges=fixture.edges.slice(0,1);
+test("opacity encodes bootstrap confidence only: bridges, zoom and missing values never change it", () => {
+  const nodes=fixture.nodes.slice(0,3), base0=fixture.edges[0];
+  const edges=[
+    {...base0,key:"high",bootstrapVerified:true,confidence:0.9},
+    {...base0,key:"mid",bootstrapVerified:true,confidence:0.6},
+    {...base0,key:"low",bootstrapVerified:true,confidence:0.2},
+    {...base0,key:"none",bootstrapVerified:false,confidence:0.2},
+  ];
   const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet()});
   try {
-    cy.scratch("galaxyFitZoom",1); cy.edges().data("crossNeighborhood",true);
-    applyPresentation(cy); const count=cy.edges().length;
-    // The ladder is asserted as an ordering with a legibility floor rather than
-    // as three fixed numbers. The exact values are a property of the ground the
-    // canvas sits on -- they were raised when the galaxy moved from charcoal to
-    // the site's white stage -- but the relationship between them is the design.
-    const overview=cy.edges()[0].data("inkOpacity");
-    cy.zoom(2); applyPresentation(cy); const detail=cy.edges()[0].data("inkOpacity");
-    cy.scratch("galaxyEmphasize",true); applyPresentation(cy); const emphasized=cy.edges()[0].data("inkOpacity");
-    assert.ok(overview>=0.4,`overview ink ${overview} is below the visible floor`);
-    assert.ok(detail>overview,`zooming in must add ink (${detail} vs ${overview})`);
-    assert.ok(emphasized>detail,`emphasis must add ink (${emphasized} vs ${detail})`);
-    cy.scratch("galaxyEmphasize",false); cy.zoom(1); cy.edges().data("crossNeighborhood",false); applyPresentation(cy,true);
-    assert.equal(cy.edges()[0].data("inkOpacity"),overview,"layout partition must not hide bridges");
-    assert.equal(cy.edges().length,count);
+    cy.scratch("galaxyFitZoom",1); cy.edges().data("crossNeighborhood",true); applyPresentation(cy,true);
+    const ink=id=>cy.$id(id).data("inkOpacity");
+    assert.equal(ink("high"),1); assert.equal(ink("mid"),0.45); assert.equal(ink("low"),0.15);
+    assert.equal(ink("none"),1,"an unverified relationship is drawn solid, not penalised");
+    cy.zoom(2); applyPresentation(cy,true);
+    assert.equal(ink("mid"),0.45,"zoom must not change the confidence channel");
+    assert.ok(cy.$id("high").data("zIndex")>cy.$id("low").data("zIndex"),"confident relationships draw on top");
   } finally {cy.destroy();}
   const reserved={x1:0,x2:300,y1:0,y2:100};
   const labels=planLabels([{id:"A",x:100,y:40,radius:5,width:40,height:15,priority:4,degree:10}],1200,700,20,[reserved]);
@@ -307,17 +307,34 @@ test("an updating graph cannot be exported with new filters but old geometry", a
 test("appearance and sign updates do not trigger a new layout", () => {
   const nodes=fixture.nodes.slice(0,3), edges=fixture.edges.slice(0,1);
   assert.equal(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,edges.map(e=>({...e,sign:-1,direction:-1})),"force"));
-  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet(),layout:{name:"preset"}});
+  assert.notEqual(galaxySignature(nodes,edges,"force","all"),galaxySignature(nodes,edges,"force","out"),"a new size measure re-solves the layout");
+  const weak=edges.map(e=>({...e,score:0.3,count:1}));
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,weak,{widthBy:"evidence",methodCount:3}),style:buildNetworkStylesheet(),layout:{name:"preset"}});
   try {
     cy.scratch("galaxyFitZoom",1);
     const positions=cy.nodes().map(n=>({...n.position()}));
-    cy.scratch("publicationWeighted",false); applyPresentation(cy,true);
-    const uniform=cy.edges()[0].data("width");
-    cy.scratch("publicationWeighted",true); applyPresentation(cy,true);
-    assert.notEqual(cy.edges()[0].data("width"),uniform);
+    applyPresentation(cy,true);
+    const thin=cy.edges()[0].data("width");
+    galaxyElements(nodes,weak.map(e=>({...e,score:0.95})),{widthBy:"evidence",methodCount:3}).forEach(el=>cy.$id(String(el.data.id)).data(el.data));
+    applyPresentation(cy,true);
+    assert.ok(cy.edges()[0].data("width")>thin*5,"the strongest evidence step is at least 5x the weakest");
+    galaxyElements(nodes,weak.map(e=>({...e,count:3})),{widthBy:"support",methodCount:3}).forEach(el=>cy.$id(String(el.data.id)).data(el.data));
+    applyPresentation(cy,true);
+    assert.equal(cy.edges()[0].data("widthStep"),3,"all methods = widest step");
     assert.deepEqual(cy.nodes().map(n=>({...n.position()})),positions);
     assert.equal(cy.nodes()[0].style("background-fill"),"solid");
+    assert.equal(Number(cy.nodes()[0].style("border-width").replace("px","")),0,"nodes have no rim");
   } finally {cy.destroy();}
+});
+
+test("node size follows the chosen measure: targets, all connections or regulators", () => {
+  const nodes=[{id:"TF",isTF:true},{id:"A",isTF:false},{id:"B",isTF:false},{id:"C",isTF:false}];
+  const e=(key,source,target,direction)=>({key,source,target,score:0.5,confidence:0,count:1,rank:1,supportingAlgorithms:[],direction,directionConfidence:1,directionCoverage:1,sign:1,signConfidence:1,signCoverage:1});
+  const edges=[e("1","TF","A",1),e("2","TF","B",1),e("3","TF","C",1),e("4","A","B",0),e("5","C","B",1)];
+  const size=(by,id)=>galaxyElements(nodes,edges,{sizeBy:by}).find(x=>x.data.id===id).data.sizeValue;
+  assert.equal(size("out","TF"),3); assert.equal(size("in","TF"),0); assert.equal(size("all","TF"),3);
+  assert.equal(size("in","B"),2,"the undirected A-B link is not a regulator");
+  assert.equal(size("all","B"),3,"but it is a connection");
 });
 
 test("pinning a low-degree label gives it priority without allowing overlap", () => {
@@ -333,4 +350,19 @@ test("opening ranking never uses unverified bootstrap values", () => {
   assert.equal(shown.shown,12); assert.equal(shown.total,14);
   assert.equal(shown.edges[0].key,"13");
   assert.equal(selectOpeningEdges(edges,1,true).edges.length,14);
+});
+
+test("sparse networks keep a fixed rim-to-rim edge length and clear space between genes", () => {
+  const { EDGE_GAP } = require(base + "theme.ts");
+  const input = inputFor(fixture.nodes, fixture.edges), result = buildGalaxy(input);
+  verify(input, result);
+  const P = result.positions, D = new Map(input.nodes.map(n => [n.id, n.diameter]));
+  const rim = input.edges.filter(e => e.source !== e.target).map(e => Math.hypot(P[e.source].x-P[e.target].x, P[e.source].y-P[e.target].y) - D.get(e.source)/2 - D.get(e.target)/2).sort((a,b)=>a-b);
+  const median = rim[Math.floor(rim.length/2)];
+  assert.ok(Math.abs(median-EDGE_GAP) <= EDGE_GAP*0.25, `median rim length ${median} should be close to ${EDGE_GAP}`);
+  assert.ok(rim[0] > 12, "no edge collapses to a stub");
+  for (let i=0;i<input.nodes.length;i++) for (let j=i+1;j<input.nodes.length;j++) {
+    const a=input.nodes[i], b=input.nodes[j];
+    assert.ok(Math.hypot(P[a.id].x-P[b.id].x, P[a.id].y-P[b.id].y) - (a.diameter+b.diameter)/2 >= 12, `too close: ${a.id} ${b.id}`);
+  }
 });

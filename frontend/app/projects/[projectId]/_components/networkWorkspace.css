@@ -1349,3 +1349,9 @@
 .galaxy-spacing { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 11px; color: #456158; }
 .galaxy-spacing input { width: 85px; accent-color: #237d85; }
 .galaxy-spacing output { min-width: 30px; font-variant-numeric: tabular-nums; }
+
+/* Encoding v2: node-size and line-width choices in the figure controls. */
+.galaxy-select { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 11px; color: #3d4a52; }
+.galaxy-select select { font: inherit; font-size: 11px; color: #1a1a1a; background: #fff; border: 1px solid #cfd6da; border-radius: 3px; padding: 2px 4px; }
+.galaxy-spacing input { accent-color: #2166ac; }
+.publication-legend { row-gap: 6px; column-gap: 22px; flex-wrap: wrap; }

@@ -76,6 +76,12 @@ export type NetworkGraphProps = {
   /** Relationships passing the filters before the readability budget, so the
    * caption can say "38 of 67" when the opening view trimmed the figure. */
   totalRelationships?: number;
+  /** What node size encodes: genes it regulates, all connections, or its regulators. */
+  sizeBy?: import("./network/encoding").NodeSizeBy;
+  /** What edge width encodes: evidence or method support. */
+  widthBy?: import("./network/encoding").EdgeWidthBy;
+  onSizeByChange?: (value: import("./network/encoding").NodeSizeBy) => void;
+  onWidthByChange?: (value: import("./network/encoding").EdgeWidthBy) => void;
 };
 
 export type EdgeTooltipState = {

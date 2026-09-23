@@ -11,6 +11,8 @@ import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements }
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
 import type { GalaxyResult, Point } from "./galaxyGeometry";
+import { NODE_SIZE_OPTIONS, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { hasDirection } from "../networkVisualEncoding";
 
 function fit(cy: Core) {
   if (cy.destroyed() || cy.nodes().empty()) return;
@@ -49,8 +51,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const [arranging, setArranging] = useState(false);
   const [error, setError] = useState("");
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
-  const [emphasized, setEmphasized] = useState(false);
-  const [weighted, setWeighted] = useState(false);
   const [spacing, setSpacing] = useState(100);
   const [pins, setPins] = useState<string[]>([]);
   const [layoutRevision, setLayoutRevision] = useState(0);
@@ -61,8 +61,14 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     clearTimeout(timeoutRef.current);
   }, []);
   useEffect(() => { latest.current = props; });
-  const signature = useMemo(() => galaxySignature(props.nodes, props.edges, props.layout), [props.nodes, props.edges, props.layout]);
-  const elements = useMemo(() => galaxyElements(props.nodes, props.edges), [props.nodes, props.edges]);
+  // Targets and regulators need directed links; without any, size by all connections.
+  const hasDirected = useMemo(() => props.edges.some(e => hasDirection(e)), [props.edges]);
+  const sizeBy: NodeSizeBy = hasDirected ? props.sizeBy ?? "all" : "all";
+  const widthBy: EdgeWidthBy = props.widthBy ?? "evidence";
+  const methodCount = props.methodCount ?? 1;
+  const options = useMemo(() => ({ sizeBy, widthBy, methodCount }), [sizeBy, widthBy, methodCount]);
+  const signature = useMemo(() => galaxySignature(props.nodes, props.edges, props.layout, sizeBy), [props.nodes, props.edges, props.layout, sizeBy]);
+  const elements = useMemo(() => galaxyElements(props.nodes, props.edges, options), [props.nodes, props.edges, options]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -74,7 +80,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
-    cy.scratch("publicationWeighted", false);
     latest.current.onGraphReady?.(cy);
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
@@ -116,7 +121,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     if (!cy || cy.destroyed()) return;
     workerRef.current?.terminate();
     const id = ++revision.current;
-    const next = galaxyElements(latest.current.nodes, latest.current.edges);
+    const directedNow = latest.current.edges.some(e => hasDirection(e));
+    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1 } as const;
+    const next = galaxyElements(latest.current.nodes, latest.current.edges, optionsNow);
     const hasNodes = latest.current.nodes.length > 0;
     busy.current = hasNodes;
     cy.scratch("galaxyBusy", hasNodes);
@@ -140,7 +147,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       cy.batch(() => {
         if (initial) {
           cy.elements().remove();
-          cy.add(galaxyElements(latest.current.nodes, latest.current.edges));
+          cy.add(galaxyElements(latest.current.nodes, latest.current.edges, optionsNow));
           cy.nodes().positions(n => result.positions[n.id()] ?? { x: 0, y: 0 });
           cy.nodes().forEach(n => { n.data({ layoutNeighborhood: result.neighborhoods?.[n.id()] ?? "", layoutAnchor: result.neighborhoods?.[n.id()] === n.id() }); });
           cy.edges().forEach(e => { e.data("crossNeighborhood", Boolean(e.source().data("layoutNeighborhood") && e.source().data("layoutNeighborhood") !== e.target().data("layoutNeighborhood"))); });
@@ -158,9 +165,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       if (initial) {
         cy.scratch("publicationSpacing", 1);
         fit(cy);
-        const initialSpacing = cy.nodes().length >= 250 ? 150 : cy.nodes().length >= 80 ? 125 : 100;
-        applyNetworkSpacing(cy, initialSpacing / 100);
-        setSpacing(initialSpacing);
+        // The layout itself is sparse now (fixed edge length); spacing starts
+        // at 100% and remains a reader's choice.
+        setSpacing(100);
         select(cy, latest.current);
       }
       initial = false;
@@ -193,7 +200,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
 
   useEffect(() => {
     const cy = coreRef.current;
-    if (!cy || cy.destroyed() || busy.current) return;
+    if (!cy || cy.destroyed()) return;
+    cy.scratch("networkEncoding", options);
+    if (busy.current) return;
     cy.batch(() => elements.forEach(element => {
       const item = cy.$id(String(element.data.id));
       if (item.empty()) return;
@@ -203,7 +212,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     }));
     select(cy, latest.current);
     applyPresentation(cy, true);
-  }, [elements, props.selectedGene, props.selectedEdgeKey]);
+  }, [elements, options, props.selectedGene, props.selectedEdgeKey]);
 
   useEffect(() => {
     const cy = coreRef.current;
@@ -271,18 +280,21 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         <output>{spacing}%</output>
       </label>
       <button type="button" disabled={arranging} title="Restore the computed arrangement after dragging" onClick={() => setLayoutRevision(value => value + 1)}>Reset layout</button>
-      <button type="button" aria-pressed={weighted} disabled={arranging} title="Line width: evidence on a fixed 0–1 scale, or uniform" onClick={() => {
-        const next = !weighted; setWeighted(next);
-        if (coreRef.current) { coreRef.current.scratch("publicationWeighted", next); applyPresentation(coreRef.current, true); }
-      }}>{weighted ? "Width: evidence" : "Width: uniform"}</button>
+      <label className="galaxy-select" title={NODE_SIZE_OPTIONS[sizeBy].help}>Node size
+        <select value={sizeBy} disabled={arranging} onChange={event => props.onSizeByChange?.(event.target.value as NodeSizeBy)}>
+          {(Object.keys(NODE_SIZE_OPTIONS) as NodeSizeBy[]).map(key => <option key={key} value={key} disabled={key !== "all" && !hasDirected}>{NODE_SIZE_OPTIONS[key].label}</option>)}
+        </select>
+      </label>
+      <label className="galaxy-select" title="Line width: evidence (per-target rank, 0–1) or the number of selected methods reporting the relationship">Line width
+        <select value={widthBy} disabled={arranging} onChange={event => props.onWidthByChange?.(event.target.value as EdgeWidthBy)}>
+          <option value="evidence">Evidence</option>
+          <option value="support" disabled={methodCount <= 1}>Method support</option>
+        </select>
+      </label>
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label
       </button>}
       {visiblePins.length > 0 && <button type="button" onClick={() => setPins([])} title={visiblePins.join(", ")}>Clear {visiblePins.length} pinned {visiblePins.length === 1 ? "label" : "labels"}</button>}
-      {rendered.edges > rendered.nodes * 3 && <button type="button" aria-pressed={emphasized} disabled={arranging} onClick={() => {
-        const next = !emphasized; setEmphasized(next);
-        if (coreRef.current) { coreRef.current.scratch("galaxyEmphasize", next); applyPresentation(coreRef.current); }
-      }}>{emphasized ? "Quiet links" : "Emphasize links"}</button>}
     </div>
   </>;
 }

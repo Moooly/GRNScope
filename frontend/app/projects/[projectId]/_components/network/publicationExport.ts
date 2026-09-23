@@ -2,7 +2,8 @@ import cytoscape, { type Core } from "cytoscape";
 import type { NetworkFigureContext } from "../networkFigureExport";
 import { NETWORK_THEME as T } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
-import { applyPresentation, evidenceWidth } from "./presentation";
+import { applyPresentation } from "./presentation";
+import { CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, WIDTH_STEPS, supportLabels, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1200;
@@ -23,7 +24,6 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     });
     const pins: string[] = (source.scratch("publicationPins") ?? []).filter((id: string) => !source.$id(id).empty());
     graph.scratch("publicationPins", pins);
-    graph.scratch("publicationWeighted", source.scratch("publicationWeighted") === true);
     graph.scratch("publicationExport", true);
     graph.fit(graph.nodes(), 90);
     graph.scratch("galaxyFitZoom", graph.zoom());
@@ -42,16 +42,18 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       svg.appendChild(element); return element;
     };
     const text = (x: number, y: number, value: string, size = 17) => add("text", { x, y, fill: T.label, "font-family": "Arial, Helvetica, sans-serif", "font-size": size }, value);
+    const encoding = (source.scratch("networkEncoding") ?? {}) as { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number };
+    const sizeBy = encoding.sizeBy ?? "all", methodCount = encoding.methodCount ?? context.methodCount ?? 1;
+    const widthBy: EdgeWidthBy = encoding.widthBy === "support" && methodCount > 1 ? "support" : "evidence";
+    const hasConfidence = source.edges().some(e => typeof e.data("confidence") === "number");
     const descriptions = [
       `${context.scope} · ${source.nodes().length} genes · ${source.edges().length} of ${context.matchingEdges} matching relationships`,
       `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
       `Filters: ${context.filters || "None"}${context.focus ? ` · Neighborhood: ${context.focus}` : ""}`,
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
-      `Spacing: ${Math.round((Number(source.scratch("publicationSpacing")) || 1) * 100)}% · All displayed genes included.`,
-      "Node diameter: linear in displayed connections, from 20 to 200 units; upper degree domain is at least 18. Layout spacing represents connectivity, not biological distance.",
-      "Blue circles are transcription factors; mint circles are other genes. Edge colour shows predicted sign.",
-      "An arrowhead indicates activation; a perpendicular bar indicates repression. Each marks the regulated end only when direction is resolved; no tip means unresolved direction.",
-      "Dashed negative links have unresolved direction. Grey links have unresolved sign; a hollow arrow shows resolved direction without a sign.",
+      `Orange circles are transcription factors; grey circles are other genes. Node diameter is linear in ${sizeBy === "out" ? "the number of displayed genes each gene regulates" : sizeBy === "in" ? "the number of displayed regulators of each gene" : "displayed connections"}. Layout distance represents connectivity, not biological distance; connected genes are drawn a fixed rim-to-rim distance apart where the topology allows.`,
+      "Blue = activation (arrowhead), red = repression (bar), grey = sign unknown (hollow arrowhead). A tip marks the regulated gene; no tip means the direction was not resolved.",
+      `Line width: ${widthBy === "support" ? "number of selected methods reporting the relationship" : "evidence (per-target rank, 0–1)"}.${hasConfidence ? " Opacity: bootstrap confidence (≥ 0.8 solid, 0.5–0.8 45%, < 0.5 15%); relationships without a verified value are solid." : ""}`,
       ...(pins.length ? [`Pinned labels: ${pins.join(", ")}`] : []),
     ];
     const measure = document.createElement("canvas").getContext("2d");
@@ -66,9 +68,9 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       }
       lines.push(line);
     }
-    const degrees = [...new Set(source.nodes().map(n => Number(n.data("degree"))))].sort((a, b) => a - b);
+    const degrees = [...new Set(source.nodes().map(n => Number(n.data("sizeValue"))))].sort((a, b) => a - b);
     const samples = [...new Set([degrees[0], degrees[Math.floor(degrees.length / 2)], degrees.at(-1)])].map(degree => {
-      const node = graph!.nodes().filter(n => Number(n.data("degree")) === degree).first();
+      const node = graph!.nodes().filter(n => Number(n.data("sizeValue")) === degree).first();
       return { degree, radius: Number(node.data("diameter")) * graph!.zoom() / 2 };
     });
     const largestRadius = Math.max(0, ...samples.map(s => s.radius));
@@ -89,35 +91,44 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     drawing.setAttribute("x", "0"); drawing.setAttribute("y", "48");
     drawing.setAttribute("width", String(WIDTH)); drawing.setAttribute("height", String(GRAPH_HEIGHT));
     svg.appendChild(drawing);
-    add("path", { d: `M32 ${top}H1168`, stroke: "#d8e3dd", "stroke-width": 1 });
-    add("circle", { cx: 42, cy: top + 29, r: 7, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.6 });
-    text(59, top + 35, "Other gene");
-    add("circle", { cx: 170, cy: top + 29, r: 7, fill: T.tf, stroke: T.tfRim, "stroke-width": 0.6 });
-    text(191, top + 35, "Transcription factor");
-    add("path", { d: `M393 ${top + 29}h30`, stroke: T.activates, "stroke-width": 1.5 });
-    add("path", { d: `M416 ${top + 24}l8 5-8 5Z`, fill: T.activates });
+    add("path", { d: `M32 ${top}H1168`, stroke: "#d9d9d9", "stroke-width": 1 });
+    add("circle", { cx: 42, cy: top + 29, r: 8, fill: T.tf });
+    text(59, top + 35, "Transcription factor");
+    add("circle", { cx: 236, cy: top + 29, r: 8, fill: T.node });
+    text(253, top + 35, "Other gene");
+    add("path", { d: `M393 ${top + 29}h26`, stroke: T.activates, "stroke-width": 1.6 });
+    add("path", { d: `M417 ${top + 24}l9 5-9 5Z`, fill: T.activates });
     text(433, top + 35, "Activation");
-    add("path", { d: `M550 ${top + 29}h30m0-6v12`, stroke: T.represses, "stroke-width": 1.5, fill: "none" });
+    add("path", { d: `M550 ${top + 29}h30m0-7v14`, stroke: T.represses, "stroke-width": 1.8, fill: "none" });
     text(591, top + 35, "Repression");
-    add("path", { d: `M718 ${top + 29}h30`, stroke: T.unknown, "stroke-width": 1.5 });
-    text(759, top + 35, "Sign unresolved");
-    add("path", { d: `M962 ${top + 29}h24m42 0h24m0-6v12`, stroke: T.label, "stroke-width": 1.2, fill: "none" });
-    add("path", { d: `M983 ${top + 24}l8 5-8 5Z`, fill: T.label });
-    text(1070, top + 35, "Direction");
+    add("path", { d: `M718 ${top + 29}h24`, stroke: T.unknown, "stroke-width": 1.6 });
+    add("path", { d: `M742 ${top + 24}l9 5-9 5Z`, fill: "#fff", stroke: T.unknown, "stroke-width": 1.2 });
+    text(759, top + 35, "Sign unknown");
+    text(930, top + 35, "Tip = regulated gene", 16);
 
-    const weighted = source.scratch("publicationWeighted") === true;
-    text(32, top + 72, weighted ? "Line width: evidence" : "Line width: uniform");
-    (weighted ? [0, 0.5, 1] : [0]).forEach((value, i) => {
-      const x = 222 + i * 100;
-      add("path", { d: `M${x} ${top + 67}h35`, stroke: T.activates, "stroke-width": evidenceWidth(value, weighted) });
-      if (weighted) text(x + 43, top + 73, value.toFixed(1), 16);
+    const widthLabels = widthBy === "support" ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
+    text(32, top + 72, widthBy === "support" ? "Width: method support" : "Width: evidence");
+    let wx = 232;
+    WIDTH_STEPS.forEach((w, i) => {
+      if (!widthLabels[i]) return;
+      add("path", { d: `M${wx} ${top + 67}h32`, stroke: "#333", "stroke-width": w });
+      text(wx + 40, top + 73, widthLabels[i], 15);
+      wx += 40 + widthLabels[i].length * 8.5 + 26;
     });
-    text(32, top + 104, "Node diameter: displayed connections");
+    if (hasConfidence) {
+      let cx = Math.max(wx + 20, 760);
+      text(cx, top + 72, "Opacity: confidence"); cx += 170;
+      CONFIDENCE_OPACITY.forEach((o, i) => {
+        add("path", { d: `M${cx} ${top + 67}h28`, stroke: "#333", "stroke-width": 2.2, opacity: o });
+        text(cx + 34, top + 73, CONFIDENCE_LABELS[i], 15); cx += 34 + CONFIDENCE_LABELS[i].length * 8.5 + 20;
+      });
+    }
+    text(32, top + 104, `Node diameter: ${NODE_SIZE_OPTIONS[sizeBy].legend.replace(/^Size: /, "")}`);
     const keyWidth = samples.reduce((sum, sample) => sum + 2 * sample.radius + 76, 0);
     let cursor = (WIDTH - keyWidth) / 2;
     samples.forEach(({ degree, radius }) => {
       const x = cursor + radius;
-      add("circle", { cx: x, cy: sizeY, r: radius, fill: T.node, stroke: T.nodeRim, "stroke-width": 0.5 });
+      add("circle", { cx: x, cy: sizeY, r: radius, fill: T.node });
       text(x + radius + 8, sizeY + 6, String(degree), 16);
       cursor += 2 * radius + 76;
     });
