@@ -130,7 +130,8 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const sizeBy: NodeSizeBy = hasDirected ? props.sizeBy ?? "all" : "all";
   const widthBy: EdgeWidthBy = props.widthBy ?? "evidence";
   const methodCount = props.methodCount ?? 1;
-  const options = useMemo(() => ({ sizeBy, widthBy, methodCount }), [sizeBy, widthBy, methodCount]);
+  const nodeMin = PALETTES[props.palette ?? "contrast"].nodeMin;
+  const options = useMemo(() => ({ sizeBy, widthBy, methodCount, nodeMin }), [sizeBy, widthBy, methodCount, nodeMin]);
   const signature = useMemo(() => galaxySignature(props.nodes, props.edges, props.layout, sizeBy), [props.nodes, props.edges, props.layout, sizeBy]);
   const elements = useMemo(() => galaxyElements(props.nodes, props.edges, options), [props.nodes, props.edges, options]);
 
@@ -190,7 +191,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     workerRef.current?.terminate();
     const id = ++revision.current;
     const directedNow = latest.current.edges.some(e => hasDirection(e));
-    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1 } as const;
+    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1, nodeMin: PALETTES[latest.current.palette ?? "contrast"].nodeMin } as const;
     const next = galaxyElements(latest.current.nodes, latest.current.edges, optionsNow);
     const hasNodes = latest.current.nodes.length > 0;
     busy.current = hasNodes;

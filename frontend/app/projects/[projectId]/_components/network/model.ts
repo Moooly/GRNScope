@@ -5,7 +5,7 @@ import type { GalaxyInput } from "./galaxyGeometry";
 import { nodeDiameter } from "./presentation";
 import { CONFIDENCE_OPACITY, WIDTH_STEPS, confidenceBand, evidenceStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
-export type GalaxyOptions = { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number };
+export type GalaxyOptions = { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number; nodeMin?: number };
 
 export function galaxySignature(nodes: NetworkNode[], edges: NetworkEdge[], layout: string, sizeBy: NodeSizeBy = "all") {
   return JSON.stringify([layout, sizeBy, nodes.map(n => [n.id, n.isTF]).sort(), edges.map(e => [e.key, e.source, e.target]).sort()]);
@@ -37,7 +37,7 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
   return [
     ...nodes.map(n => {
       const d = degrees.all.get(n.id) ?? 0, value = sized.get(n.id) ?? 0;
-      const box = nodeDiameter(value, minValue, maxValue);
+      const box = nodeDiameter(value, minValue, maxValue, options.nodeMin);
       const out = degrees.out.get(n.id) ?? 0, inn = degrees.in.get(n.id) ?? 0, unk = degrees.unknown.get(n.id) ?? 0;
       const total = out + inn + unk || 1;
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d,

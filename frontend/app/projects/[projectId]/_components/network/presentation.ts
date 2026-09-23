@@ -6,9 +6,9 @@ export const NODE_MIN = 10, NODE_MAX = 100;
 /** Linear between this network's own smallest and largest value, with a 10:1
  * diameter contrast, so only the genuinely best-connected genes read as big.
  * Name length never enters this; long names overflow. */
-export function nodeDiameter(value: number, minValue = 0, maxValue = 18) {
+export function nodeDiameter(value: number, minValue = 0, maxValue = 18, smallest = NODE_MIN) {
   if (!(maxValue > minValue)) return 40;
-  return NODE_MIN + (NODE_MAX - NODE_MIN) * Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
+  return smallest + (NODE_MAX - smallest) * Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
 }
 
 /** Arrowheads grow with their line: a head about 5 px long on the thinnest

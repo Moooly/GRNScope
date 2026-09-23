@@ -30,17 +30,24 @@ export type Palette = {
   ground: string; node: string; tf: string; label: string; accent: string;
   activates: string; represses: string; unknown: string;
   pieTF: readonly [string, string, string]; pieGene: readonly [string, string, string];
+  /** Smallest node diameter (model units); the largest stays 100. */
+  nodeMin: number;
 };
 export const PALETTES: Record<PaletteName, Palette> = {
   contrast: {
     ground: "#ffffff", node: "#d9d9d9", tf: "#d9913a", label: "#1a1a1a", accent: "#1a1a1a",
     activates: "#2166ac", represses: "#b2182b", unknown: "#b5b5b5",
     pieTF: ["#b8732a", "#e8b779", "#f5e1c6"], pieGene: ["#9a9a9a", "#d1d1d1", "#ececec"],
+    nodeMin: 10,
   },
   soft: {
     ground: "#ffffff", node: "#95c4b3", tf: "#8faed0", label: "#33433e", accent: "#33433e",
     activates: "#588f89", represses: "#b77d66", unknown: "#a3aba8",
-    pieTF: ["#5f86b3", "#b9cde3", "#e3ebf4"], pieGene: ["#5f9c86", "#b8dacd", "#e2f0ea"],
+    // The original fills are the darkest slice, so TFs and genes still read
+    // as the original soft blue and mint; the split is a gentle tone step.
+    pieTF: ["#8faed0", "#c9d8ea", "#e6edf6"], pieGene: ["#95c4b3", "#c8e2d8", "#e6f2ed"],
+    // Low-degree genes stay visible circles, as in the original look.
+    nodeMin: 24,
   },
 };
 export const PALETTE_LABELS: Record<PaletteName, string> = { contrast: "Contrast", soft: "Soft" };
