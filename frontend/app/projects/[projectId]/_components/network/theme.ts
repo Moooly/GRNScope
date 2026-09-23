@@ -1,11 +1,12 @@
-/** Shared publication palette ("Soft", chosen 2026-09-23): blue TFs, mint
+/** Shared publication palette ("Soft", chosen 2026-09-23): blue TFs, yellow
  * genes, teal activation and clay repression on white. The figure stays white
  * independently of app theme. Nodes have no rim: the *Rim keys equal their
  * fills and exist only so older consumers keep compiling. */
 export const NETWORK_THEME = {
   ground: "#ffffff",
-  node: "#95c4b3", nodeRim: "#95c4b3",
-  tf: "#8faed0", tfRim: "#8faed0",
+  // Node colours from the boss's swatches (2026-09-23): blue TFs, yellow genes.
+  node: "#fbdd85", nodeRim: "#fbdd85",
+  tf: "#80a6e2", tfRim: "#80a6e2",
   nodeMuted: "#e6f2ed", link: "#588f89", linkMuted: "#dde6e4",
   label: "#33433e", labelHalo: "#ffffff",
   accent: "#33433e", accentSoft: "#eef3f1",
@@ -36,12 +37,12 @@ export type Palette = {
 const SOFT: Palette = {
   ground: NETWORK_THEME.ground, node: NETWORK_THEME.node, tf: NETWORK_THEME.tf, label: NETWORK_THEME.label, accent: NETWORK_THEME.accent,
   activates: NETWORK_THEME.activates, represses: NETWORK_THEME.represses, unknown: NETWORK_THEME.unknown,
-  pieTF: ["#8faed0", "#c9d8ea", "#e6edf6"], pieGene: ["#95c4b3", "#c8e2d8", "#e6f2ed"],
+  pieTF: ["#80a6e2", "#c0d3f1", "#e4ecf9"], pieGene: ["#fbdd85", "#fdedbd", "#fef7e2"],
   nodeMin: 24,
 };
 
 /** Two palettes, switchable in Display while the boss chooses.
- * "soft": blue TFs, mint genes, teal/clay links (the original look).
+ * "soft": blue TFs (#80A6E2), yellow genes (#FBDD85), one grey link ink.
  * "contrast": amber TFs, grey genes, ColorBrewer blue/red links. */
 export type PaletteName = "soft" | "contrast";
 export const PALETTES: Record<PaletteName, Palette> = {
