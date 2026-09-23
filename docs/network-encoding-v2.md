@@ -11,7 +11,7 @@ Branch `feature/network-encoding-v2`, built on `experiment/nature-journal-figure
 ## Nodes
 - Circles, no rim. Transcription factor `#E08214`, other gene `#E3E3E3`.
 - Size: linear, 20–200 units (up to tenfold). The user chooses Targets (directed out-links), All connections, or Regulators (directed in-links). Undirected links count only towards all connections. Without any directed link, only All connections is offered.
-- Name inside the circle, dark text on a thin white halo. Name length never changes size; long names overflow. Networks up to 60 genes name every gene; larger networks drop names that would overlap.
+- Name inside the circle, plain dark text (no halo or outline). Name length never changes size; long names overflow. Networks up to 60 genes name every gene; larger networks drop names that would overlap.
 
 ## Edges
 - Sign: activation `#2166AC` + arrowhead, repression `#B2182B` + bar, unknown `#B5B5B5` (+ hollow arrowhead when directed).

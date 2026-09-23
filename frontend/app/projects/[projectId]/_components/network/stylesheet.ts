@@ -11,13 +11,13 @@ export function buildNetworkStylesheet(): StylesheetJson {
     { selector: "node", style: {
       width: "data(diameter)", height: "data(diameter)", shape: "ellipse",
       "background-color": T.node, "background-fill": "solid", "border-width": 0,
-      // The name sits inside the circle. It may run past the rim of a small
-      // node; dark text on a thin white halo stays readable either way.
+      // The name sits inside the circle and may run past the rim of a small
+      // node. Plain dark text, no halo.
       label: "data(label)", color: T.label,
       "font-family": "Arial, Helvetica, sans-serif", "font-size": "data(labelSize)", "font-weight": 400,
       "text-halign": (n: NodeSingular) => n.data("labelHalign"), "text-valign": (n: NodeSingular) => n.data("labelValign"),
       "text-margin-x": (n: NodeSingular) => n.data("labelOffsetX"), "text-margin-y": (n: NodeSingular) => n.data("labelOffsetY"),
-      "text-outline-width": 1, "text-outline-color": T.labelHalo, "text-outline-opacity": 0.85,
+      "text-outline-width": 0,
       "min-zoomed-font-size": 7,
       "overlay-opacity": 0, "z-index": 10,
     } },
