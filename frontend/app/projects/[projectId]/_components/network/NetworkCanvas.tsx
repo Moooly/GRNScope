@@ -11,7 +11,7 @@ import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements }
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
 import type { GalaxyResult, Point } from "./galaxyGeometry";
-import { NODE_SIZE_OPTIONS, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { NODE_SIZE_OPTIONS, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
 import { hasDirection } from "../networkVisualEncoding";
 
 function fit(cy: Core) {
@@ -37,6 +37,17 @@ function select(cy: Core, props: NetworkGraphProps) {
     cy.elements().difference(neighborhood).addClass("muted");
   });
   applyLabelBudget(cy);
+}
+
+/** Show only links of one effect. Positions never change, so the reader can
+ * flip between effects and compare; a gene left without links fades. */
+function applyEffect(cy: Core, effect: EffectFilter) {
+  if (cy.destroyed()) return;
+  cy.scratch("effectFilter", effect);
+  cy.batch(() => {
+    cy.edges().forEach(e => { const hidden = !passesEffect(Number(e.data("sign")), effect); if (Boolean(e.data("effectHidden")) !== hidden) e.data("effectHidden", hidden); });
+    cy.nodes().forEach(n => { const faded = effect !== "all" && n.connectedEdges().every(e => Boolean(e.data("effectHidden"))); if (Boolean(n.data("effectFaded")) !== faded) n.data("effectFaded", faded); });
+  });
 }
 
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -230,6 +241,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         // at 100% and remains a reader's choice.
         setSpacing(100);
         select(cy, latest.current);
+        applyEffect(cy, latest.current.effect ?? "all");
         glide(cy, previous, () => {});
       } else applyPresentation(cy, true);
       initial = false;
@@ -275,6 +287,12 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     select(cy, latest.current);
     applyPresentation(cy, true);
   }, [elements, options, props.selectedGene, props.selectedEdgeKey]);
+
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy || cy.destroyed() || busy.current) return;
+    applyEffect(cy, props.effect ?? "all");
+  }, [props.effect, elements]);
 
   useEffect(() => {
     const cy = coreRef.current;

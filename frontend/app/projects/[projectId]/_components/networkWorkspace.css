@@ -1368,3 +1368,4 @@
 .figure-key .key-item { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 .figure-key .key-label { color: #8a969c; }
 .figure-key svg { display: block; flex: none; }
+.figure-key .key-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }

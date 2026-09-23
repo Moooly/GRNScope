@@ -25,7 +25,7 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas from "./network/NetworkCanvas";
 import NetworkLegendBar from "./network/Legend";
-import { figureCounts, type EdgeWidthBy, type NodeSizeBy } from "./network/encoding";
+import { EFFECT_NOTE, EFFECT_OPTIONS, figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
@@ -217,6 +217,7 @@ export default function NetworkVisualizationSection(props: Props) {
   const [showAllEdges, setShowAllEdges] = useState(true);
   const [sizeBy, setSizeBy] = useState<NodeSizeBy>("all");
   const [widthBy, setWidthBy] = useState<EdgeWidthBy>("evidence");
+  const [effect, setEffect] = useState<EffectFilter>("all");
   // The rebuilt canvas is what the project page shows. The previous renderer
   // is still here, reachable with ?canvas=legacy, because the inspector,
   // Circos, figure export and the trajectory and perturbation views all reach
@@ -259,16 +260,19 @@ export default function NetworkVisualizationSection(props: Props) {
     [edges, networkNodes],
   );
   const effectiveSizeBy: NodeSizeBy = edges.some((e) => hasDirection(e)) ? sizeBy : "all";
+  const hasUnsignedLinks = edges.some((e) => e.sign === 0);
+  const effectiveEffect: EffectFilter = effect === "unknown" && !hasUnsignedLinks ? "all" : effect;
+  const visibleEdges = useMemo(() => edges.filter((e) => passesEffect(e.sign, effectiveEffect)), [edges, effectiveEffect]);
   const figureKeyCounts = useMemo(() => {
     const degrees = nodeDegrees(edges)[effectiveSizeBy];
     const effectiveWidth: EdgeWidthBy = selectedAlgorithmIds.length > 1 ? widthBy : "evidence";
-    return figureCounts(edges, effectiveWidth, selectedAlgorithmIds.length, nodes.map((node) => degrees.get(node.id) ?? 0));
-  }, [edges, nodes, effectiveSizeBy, widthBy, selectedAlgorithmIds.length]);
+    return figureCounts(visibleEdges, effectiveWidth, selectedAlgorithmIds.length, nodes.map((node) => degrees.get(node.id) ?? 0));
+  }, [edges, visibleEdges, nodes, effectiveSizeBy, widthBy, selectedAlgorithmIds.length]);
   const figureNote = useMemo(() => {
     const evidence = /Evidence ≥ ([0-9.]+)/.exec(props.filterSummary ?? "")?.[1];
     const methods = selectedAlgorithmIds.length;
-    return [`${methods} ${methods === 1 ? "method" : "methods"}`, evidence && Number(evidence) > 0 ? `evidence ≥ ${evidence}` : ""].filter(Boolean).join(" · ");
-  }, [props.filterSummary, selectedAlgorithmIds.length]);
+    return [`${methods} ${methods === 1 ? "method" : "methods"}`, evidence && Number(evidence) > 0 ? `evidence ≥ ${evidence}` : "", EFFECT_NOTE[effectiveEffect]].filter(Boolean).join(" · ");
+  }, [props.filterSummary, selectedAlgorithmIds.length, effectiveEffect]);
   const selectedEdge =
     edges.find((edge) => edge.key === selectedEdgeKey) ?? null;
   const selectedVisibleNode =
@@ -430,6 +434,32 @@ export default function NetworkVisualizationSection(props: Props) {
                   );
                 })}
               </div>
+              {useNewCanvas && networkLayout !== "circos" && (
+                <div className="grn-effect-picker inline-flex h-10 items-center gap-2" aria-label="Links shown">
+                  <span className="text-xs text-slate-500">Links</span>
+                  <div className="grn-layout-picker inline-flex h-10 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-px">
+                    {EFFECT_OPTIONS.filter(({ value }) => value !== "unknown" || hasUnsignedLinks).map(({ value, label }) => {
+                      const isActive = effectiveEffect === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setEffect(value)}
+                          aria-pressed={isActive}
+                          title={value === "all" ? "Show every link" : `Show ${label.toLowerCase()} links only; genes keep their places`}
+                          className={`h-full rounded-full px-4 text-xs font-bold transition ${
+                            isActive
+                              ? "bg-[#1b75a6] text-white shadow-sm"
+                              : "text-slate-600 hover:bg-white hover:text-[#1b75a6]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -570,7 +600,9 @@ export default function NetworkVisualizationSection(props: Props) {
             methodCount={selectedAlgorithmIds.length}
             counts={figureKeyCounts}
             genes={nodes.length}
-            relationships={edges.length}
+            relationships={visibleEdges.length}
+            totalRelationships={edges.length}
+            directionSplit={edges.some((e) => hasDirection(e))}
             note={figureNote}
           />
         ) : (
@@ -629,6 +661,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
                 onSizeByChange={setSizeBy}
                 onWidthByChange={setWidthBy}
+                effect={effectiveEffect}
               />
             ) : (
               <NetworkGraph

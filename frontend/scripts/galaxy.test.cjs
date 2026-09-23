@@ -424,3 +424,34 @@ test("a round arrangement is widened towards a wide canvas, by at most 1.8x, wit
   const xs = Object.values(result.positions).map(p => p.x), ys = Object.values(result.positions).map(p => p.y);
   assert.ok((Math.max(...xs) - Math.min(...xs)) / (Math.max(...ys) - Math.min(...ys)) > 1.5, "the arrangement uses the wide frame");
 });
+
+test("genes are split by link direction in their own colour, only when the view has directed links", () => {
+  const nodes=[{id:"TF",isTF:true},{id:"A",isTF:false},{id:"B",isTF:false}];
+  const e=(key,source,target,direction)=>({key,source,target,score:0.8,confidence:0,count:1,rank:1,supportingAlgorithms:[],direction,directionConfidence:1,directionCoverage:1,sign:1,signConfidence:1,signCoverage:1});
+  const els=galaxyElements(nodes,[e("1","TF","A",1),e("2","TF","B",1),e("3","A","TF",0),e("4","B","TF",1)]);
+  const tf=els.find(x=>x.data.id==="TF").data;
+  // TF regulates A and B, is regulated by B, and has one undirected link with A.
+  assert.equal(tf.pieSize,"100%");
+  assert.equal(Math.round(tf.pieOut),50); assert.equal(Math.round(tf.pieIn),25); assert.equal(Math.round(tf.pieUnknown),25);
+  assert.notEqual(tf.pieOutColor, els.find(x=>x.data.id==="A").data.pieOutColor, "TFs and other genes keep their own hue");
+  const undirected=galaxyElements(nodes,[e("1","TF","A",0)]);
+  assert.equal(undirected.find(x=>x.data.id==="TF").data.pieSize,"0%","no split without any direction");
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:els,style:buildNetworkStylesheet()});
+  try { assert.equal(cy.$id("TF").style("border-width"),"0px"); } finally { cy.destroy(); }
+});
+
+test("the links filter keeps genes in place, hides other effects and fades genes left without links", () => {
+  const { passesEffect } = require(base + "encoding.ts");
+  assert.ok(passesEffect(1,"activation") && !passesEffect(-1,"activation") && passesEffect(-1,"repression") && passesEffect(0,"unknown") && passesEffect(-1,"all"));
+  const nodes=[{id:"A",isTF:true},{id:"B",isTF:false},{id:"C",isTF:false}];
+  const e=(key,source,target,sign)=>({key,source,target,score:0.8,confidence:0,count:1,rank:1,supportingAlgorithms:[],direction:1,directionConfidence:1,directionCoverage:1,sign,signConfidence:1,signCoverage:1});
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,[e("ab","A","B",1),e("ac","A","C",-1)]),style:buildNetworkStylesheet()});
+  try {
+    cy.edges().forEach(x=>x.data("effectHidden",!passesEffect(x.data("sign"),"activation")));
+    cy.nodes().forEach(n=>n.data("effectFaded",n.connectedEdges().every(x=>x.data("effectHidden"))));
+    assert.equal(cy.$id("ac").style("display"),"none");
+    assert.equal(cy.$id("ab").style("display"),"element");
+    assert.equal(Number(cy.$id("C").style("opacity")),0.25);
+    assert.equal(Number(cy.$id("B").style("opacity")),1);
+  } finally { cy.destroy(); }
+});

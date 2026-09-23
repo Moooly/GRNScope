@@ -66,3 +66,21 @@ export function figureCounts(
   }
   return { width, confidence, hasConfidence, size: { min: sizeValues.length ? Math.min(...sizeValues) : 0, max: sizeValues.length ? Math.max(...sizeValues) : 0 } };
 }
+
+/** Which links the figure shows by effect. Genes keep their places. */
+export type EffectFilter = "all" | "activation" | "repression" | "unknown";
+export const EFFECT_OPTIONS: Array<{ value: EffectFilter; label: string }> = [
+  { value: "all", label: "All" }, { value: "activation", label: "Activation" },
+  { value: "repression", label: "Repression" }, { value: "unknown", label: "Sign unknown" },
+];
+export function passesEffect(sign: number, effect: EffectFilter) {
+  return effect === "all" || (effect === "activation" ? sign === 1 : effect === "repression" ? sign === -1 : sign === 0);
+}
+export const EFFECT_NOTE: Record<EffectFilter, string> = { all: "", activation: "activation only", repression: "repression only", unknown: "sign unknown only" };
+
+/** Direction split inside a node, in the node's own hue:
+ * dark = regulates, light = regulated by, pale = direction unknown. */
+export const PIE_SHADES = {
+  tf: ["#b8732a", "#e8b779", "#f5e1c6"],
+  gene: ["#9a9a9a", "#d1d1d1", "#ececec"],
+} as const;

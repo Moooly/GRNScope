@@ -3,7 +3,7 @@ import type { NetworkFigureContext } from "../networkFigureExport";
 import { NETWORK_THEME as T } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
-import { CONFIDENCE_OPACITY, NODE_SIZE_OPTIONS, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, EFFECT_NOTE, NODE_SIZE_OPTIONS, PIE_SHADES, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1200;
@@ -19,7 +19,7 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
   let graph: Core | undefined;
   try {
     graph = cytoscape({ container: host, style: buildNetworkStylesheet(),
-      elements: source.elements().map(element => ({ data: { ...element.data(), label: "" }, ...(element.isNode() ? { position: { ...element.position() } } : {}) })),
+      elements: source.elements().filter(element => !element.data("effectHidden")).map(element => ({ data: { ...element.data(), label: "" }, ...(element.isNode() ? { position: { ...element.position() } } : {}) })),
       layout: { name: "preset" }, minZoom: 0.0001, maxZoom: 1.5, pixelRatio: 1,
     });
     const pins: string[] = (source.scratch("publicationPins") ?? []).filter((id: string) => !source.$id(id).empty());
@@ -45,14 +45,18 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const encoding = (source.scratch("networkEncoding") ?? {}) as { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number };
     const sizeBy = encoding.sizeBy ?? "all", methodCount = encoding.methodCount ?? context.methodCount ?? 1;
     const widthBy: EdgeWidthBy = encoding.widthBy === "support" && methodCount > 1 ? "support" : "evidence";
-    const hasConfidence = source.edges().some(e => typeof e.data("confidence") === "number");
+    const effect = (source.scratch("effectFilter") ?? "all") as EffectFilter;
+    const shownEdges = source.edges().filter(e => !e.data("effectHidden"));
+    const hasConfidence = shownEdges.some(e => typeof e.data("confidence") === "number");
+    const split = source.nodes().some(n => n.data("pieSize") === "100%");
     const descriptions = [
-      `${context.scope} · ${source.nodes().length} genes · ${source.edges().length} of ${context.matchingEdges} matching relationships`,
+      `${context.scope} · ${source.nodes().length} genes · ${shownEdges.length} of ${context.matchingEdges} matching relationships${EFFECT_NOTE[effect] ? ` · ${EFFECT_NOTE[effect]}` : ""}`,
       `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
       `Filters: ${context.filters || "None"}${context.focus ? ` · Neighborhood: ${context.focus}` : ""}`,
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
       `Orange circles are transcription factors; grey circles are other genes. Node diameter runs linearly (1:10) from the smallest to the largest value of ${sizeBy === "out" ? "the number of displayed genes each gene regulates" : sizeBy === "in" ? "the number of displayed regulators of each gene" : "displayed connections"}. Layout distance represents connectivity, not biological distance; connected genes are drawn a fixed rim-to-rim distance apart where the topology allows; in dense networks each gene is placed by its three strongest links. Links passing under an unrelated gene are drawn lighter.`,
       "Blue = activation (arrowhead), red = repression (bar), grey = sign unknown (hollow arrowhead). A tip marks the regulated gene; no tip means the direction was not resolved.",
+      ...(split ? ["Each gene is split by the direction of its displayed links, in its own colour: dark = regulates, light = regulated by, pale = direction unknown."] : []),
       `Line width: ${widthBy === "support" ? "number of selected methods reporting the relationship" : "evidence (per-target rank, 0–1)"}.${hasConfidence ? " Opacity: bootstrap confidence (≥ 0.8 solid, 0.5–0.8 45%, < 0.5 15%); relationships without a verified value are solid." : ""}`,
       ...(pins.length ? [`Pinned labels: ${pins.join(", ")}`] : []),
     ];
@@ -78,11 +82,18 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const txt = (value: string, color: string = T.label): Part => ({ w: tw(value), draw: (x, y) => { add("text", { x, y: y + KEY * 0.36, fill: color, "font-family": "Arial, Helvetica, sans-serif", "font-size": KEY }, value); } });
     const mark = (w: number, draw: Mark): Part => ({ w, draw });
     const values = source.nodes().map(n => Number(n.data("sizeValue")));
-    const directed = source.edges().some(e => Number(e.data("direction")) !== 0);
-    const unsigned = source.edges().some(e => Number(e.data("sign")) === 0);
+    const directed = shownEdges.some(e => Number(e.data("direction")) !== 0);
+    const unsigned = shownEdges.some(e => Number(e.data("sign")) === 0);
+    const undirected = source.edges().some(e => Number(e.data("direction")) === 0);
+    const swatch = (color: string): Part => mark(12, (x, y) => { add("rect", { x, y: y - 6, width: 12, height: 12, rx: 2, fill: color }); });
     const [low, high] = widthEnds(widthBy, methodCount);
     const groups: Part[][] = [
       [mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.tf }); }), txt("TF"), mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.node }); }), txt("Other gene")],
+      ...(split ? [[mark(18, (x, y) => {
+        add("path", { d: `M${x + 9} ${y}V${y - 9}A9 9 0 0 1 ${x + 17.5} ${y + 2.8}Z`, fill: PIE_SHADES.tf[0] });
+        add("path", { d: `M${x + 9} ${y}L${x + 17.5} ${y + 2.8}A9 9 0 0 1 ${x + 2.1} ${y + 5.8}Z`, fill: PIE_SHADES.tf[1] });
+        add("path", { d: `M${x + 9} ${y}L${x + 2.1} ${y + 5.8}A9 9 0 0 1 ${x + 9} ${y - 9}Z`, fill: PIE_SHADES.tf[2] });
+      }), swatch(PIE_SHADES.tf[0]), txt("regulates"), swatch(PIE_SHADES.tf[1]), txt("regulated by"), ...(undirected ? [swatch(PIE_SHADES.tf[2]), txt("unknown")] : [])]] : []),
       [txt(NODE_SIZE_OPTIONS[sizeBy].scale, "#8a969c"), txt(String(Math.min(...values))), mark(56, (x, y) => {
         add("circle", { cx: x + 6, cy: y + 5, r: 3, fill: T.node }); add("circle", { cx: x + 21, cy: y + 2, r: 6.5, fill: T.node }); add("circle", { cx: x + 44, cy: y - 1, r: 10, fill: T.node });
       }), txt(String(Math.max(...values)))],

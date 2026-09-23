@@ -56,3 +56,8 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - "Activates" and "Represses" replace the Effect heading. Tips are dropped from the key when no direction is resolved.
 - Per-step counts moved into tooltips on the width and confidence groups.
 - The exported figure uses the same one-line key, drawn with measured text widths and wrapping between groups; the separate size-sample row is gone.
+
+## Update: links filter and direction split (2026-09-23)
+- **Links filter**: `Links [All | Activation | Repression]` next to the layout choices, plus "Sign unknown" only when the view has unsigned links. It hides links of other effects without moving any gene. Genes left with no visible link fade to 25%. The caption reports "30 of 71 relationships · repression only", and the width/confidence counts follow the filter. Exports drop the hidden links and say which effect is shown.
+- **Direction split**: each gene is a pie in its own hue (TF `#B8732A`/`#E8B779`/`#F5E1C6`, other gene `#9A9A9A`/`#D1D1D1`/`#ECECEC`), with dark = regulates, light = regulated by, pale = direction unknown, starting at 12 o'clock. It's based on all displayed links, not only the filtered ones, and is off when the view has no directed link. The legend and export show a small pie with the three shades.
+- `npm run test:network`: 44 pass.

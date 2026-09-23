@@ -3,7 +3,7 @@ import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { hasDirection, edgeMetric } from "../networkVisualEncoding";
 import type { GalaxyInput } from "./galaxyGeometry";
 import { nodeDiameter } from "./presentation";
-import { CONFIDENCE_OPACITY, WIDTH_STEPS, confidenceBand, evidenceStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, PIE_SHADES, WIDTH_STEPS, confidenceBand, evidenceStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 export type GalaxyOptions = { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number };
 
@@ -15,20 +15,22 @@ export function galaxySignature(nodes: NetworkNode[], edges: NetworkEdge[], layo
  * regulating and regulated end respectively; links whose direction no method
  * resolved count only towards all connections. */
 export function nodeDegrees(edges: NetworkEdge[]) {
-  const all = new Map<string, number>(), out = new Map<string, number>(), inn = new Map<string, number>();
+  const all = new Map<string, number>(), out = new Map<string, number>(), inn = new Map<string, number>(), unknown = new Map<string, number>();
   const bump = (m: Map<string, number>, id: string) => m.set(id, (m.get(id) ?? 0) + 1);
   for (const e of edges) {
     bump(all, e.source); if (e.target !== e.source) bump(all, e.target);
-    if (!hasDirection(e)) continue;
+    if (!hasDirection(e)) { bump(unknown, e.source); if (e.target !== e.source) bump(unknown, e.target); continue; }
     const [from, to] = e.direction === -1 ? [e.target, e.source] : [e.source, e.target];
     bump(out, from); bump(inn, to);
   }
-  return { all, out, in: inn };
+  return { all, out, in: inn, unknown };
 }
 
 export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], options: GalaxyOptions = {}): ElementDefinition[] {
   const sizeBy = options.sizeBy ?? "all", widthBy = options.widthBy ?? "evidence", methodCount = options.methodCount ?? 1;
   const degrees = nodeDegrees(edges);
+  // Split nodes by link direction only when the view has directed links.
+  const split = edges.some(e => hasDirection(e));
   const sized = degrees[sizeBy];
   const values = nodes.map(n => sized.get(n.id) ?? 0);
   const minValue = values.length ? Math.min(...values) : 0, maxValue = values.length ? Math.max(...values) : 0;
@@ -36,9 +38,15 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
     ...nodes.map(n => {
       const d = degrees.all.get(n.id) ?? 0, value = sized.get(n.id) ?? 0;
       const box = nodeDiameter(value, minValue, maxValue);
+      const out = degrees.out.get(n.id) ?? 0, inn = degrees.in.get(n.id) ?? 0, unk = degrees.unknown.get(n.id) ?? 0;
+      const total = out + inn + unk || 1;
+      const shades = n.isTF ? PIE_SHADES.tf : PIE_SHADES.gene;
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d,
         degreeOut: degrees.out.get(n.id) ?? 0, degreeIn: degrees.in.get(n.id) ?? 0, sizeValue: value,
         isTF: n.isTF ? 1 : 0,
+        pieSize: split ? "100%" : "0%",
+        pieOut: (100 * out) / total, pieIn: (100 * inn) / total, pieUnknown: (100 * unk) / total,
+        pieOutColor: shades[0], pieInColor: shades[1], pieUnknownColor: shades[2],
         diameter: box,
         labelSize: 11,
         labelHalign: "center", labelValign: "center", labelOffsetX: 0, labelOffsetY: 0,
