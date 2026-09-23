@@ -10,7 +10,7 @@ import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
-import { routeGalaxy, type GalaxyResult, type Point } from "./galaxyGeometry";
+import type { GalaxyResult, Point } from "./galaxyGeometry";
 import { NODE_SIZE_OPTIONS, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 import { hasDirection } from "../networkVisualEncoding";
 
@@ -95,7 +95,6 @@ function glide(cy: Core, previous: Map<string, Point>, done: () => void) {
 /** Worker-owned geometry; the visible graph owns camera and interaction. */
 export default function NetworkCanvas(props: NetworkGraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [curved, setCurved] = useState(true);
   const coreRef = useRef<Core | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -134,7 +133,8 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
-    cy.scratch("curvedLinks", true);
+    // Straight links; only parallel or reciprocal records get separate lanes.
+    cy.scratch("curvedLinks", false);
     latest.current.onGraphReady?.(cy);
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
@@ -344,20 +344,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           <option value="support" disabled={methodCount <= 1}>Method support</option>
         </select>
       </label>
-      <button type="button" aria-pressed={curved} disabled={arranging} title="Draw links as gentle arcs; opposite directions between two genes then separate on their own" onClick={() => {
-        const next = !curved; setCurved(next);
-        const cy = coreRef.current;
-        if (!cy || busy.current) return;
-        cy.scratch("curvedLinks", next);
-        const positions: Record<string, Point> = {};
-        cy.nodes().forEach(n => { positions[n.id()] = { ...n.position() }; });
-        const routes = routeGalaxy(galaxyInput(cy), positions);
-        cy.batch(() => cy.edges().forEach(e => {
-          const route = routes[e.id()];
-          if (route) e.data({ routeDistances: route.distances, routeWeights: route.weights });
-          else e.removeData("routeDistances routeWeights");
-        }));
-      }}>Curved links</button>
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label
       </button>}

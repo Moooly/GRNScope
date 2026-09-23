@@ -43,5 +43,5 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Group shading**: tried and removed on 2026-09-23 because it looked too busy.
 - **Smooth transitions**: after a new arrangement, genes glide from where the reader last saw them (520 ms); new genes grow out from the centre (620 ms). Skipped for reduced-motion users, networks over 1,500 genes and background tabs.
 - **Hover flow**: hovering a gene or link makes dashes drift from regulator to target along its directed links. Screen-only.
-- **Curved links (toggle, on by default)**: every link bows by min(10% of its length, 36 units) relative to its own direction, so A→B and B→A separate on their own.
+- **Curved links**: tried and removed on 2026-09-23. Links are straight again; only parallel or reciprocal records get separate lanes. The curved mode is still in `routeGalaxy` (`curved: true`) but nothing turns it on.
 - `npm run test:network`: 41 pass.
