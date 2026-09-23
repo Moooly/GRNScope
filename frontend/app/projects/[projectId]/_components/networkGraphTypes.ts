@@ -87,6 +87,8 @@ export type NetworkGraphProps = {
   /** Display menu: spacing (100–250 %) and a counter that re-solves the layout. */
   spacing?: number;
   layoutNonce?: number;
+  /** A table row under the pointer: its link is emphasised and labelled. */
+  hoveredEdgeKey?: string | null;
   /** Colour palette (temporary switch while the boss chooses). */
   palette?: import("./network/theme").PaletteName;
 

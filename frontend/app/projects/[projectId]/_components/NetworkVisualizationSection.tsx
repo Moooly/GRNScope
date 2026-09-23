@@ -30,6 +30,7 @@ import { NODE_SIZE_OPTIONS, figureCounts, passesEffect, type EdgeWidthBy, type E
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
+import NetworkTablePanel from "./network/TablePanel";
 import NetworkInspector from "./NetworkInspector";
 import {
   edgeMetric,
@@ -225,6 +226,20 @@ export default function NetworkVisualizationSection(props: Props) {
   const [figurePalette, setFigurePalette] = useState<PaletteName>(DEFAULT_PALETTE);
   const [layoutNonce, setLayoutNonce] = useState(0);
   const [displayOpen, setDisplayOpen] = useState(false);
+  // Side-by-side table: open by default, resizable, can be hidden.
+  const [tableOpen, setTableOpen] = useState(true);
+  const [tableWidth, setTableWidth] = useState(480);
+  const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const box = splitRef.current?.getBoundingClientRect();
+    if (!box) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const move = (e: PointerEvent) => setTableWidth(Math.round(Math.max(340, Math.min(box.width * 0.6, box.right - e.clientX))));
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const displayMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!displayOpen) return;
@@ -276,6 +291,7 @@ export default function NetworkVisualizationSection(props: Props) {
     [edges, networkNodes],
   );
   const effectiveSizeBy: NodeSizeBy = edges.some((e) => hasDirection(e)) ? sizeBy : "all";
+  const tableMode = useNewCanvas && networkLayout !== "circos";
   const hasUnsignedLinks = edges.some((e) => e.sign === 0);
   const effectiveEffect: EffectFilter = effect === "unknown" && !hasUnsignedLinks ? "all" : effect;
   const visibleEdges = useMemo(() => edges.filter((e) => passesEffect(e.sign, effectiveEffect)), [edges, effectiveEffect]);
@@ -490,6 +506,18 @@ export default function NetworkVisualizationSection(props: Props) {
                   )}
                 </div>
               )}
+              {tableMode && (
+                <button
+                  type="button"
+                  onClick={() => { setTableOpen((open) => !open); setHoveredEdgeKey(null); }}
+                  aria-pressed={tableOpen}
+                  title={tableOpen ? "Hide the table" : "Show the exact numbers beside the network"}
+                  className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-4 text-xs font-bold transition ${tableOpen ? "border-[#b9cfe0] bg-[#eef4f8] text-[#1b75a6]" : "border-slate-200 bg-white text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"}`}
+                >
+                  <svg width="13" height="12" viewBox="0 0 13 12" aria-hidden="true"><rect x=".75" y=".75" width="11.5" height="10.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M.75 4.2h11.5M5 4.2v7" stroke="currentColor" strokeWidth="1.3"/></svg>
+                  Table
+                </button>
+              )}
               {networkLayout !== "circos" && (
                 <div
                   className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"
@@ -644,7 +672,11 @@ export default function NetworkVisualizationSection(props: Props) {
         />
         )}
         <div
-          className={`grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
+          ref={splitRef}
+          className={tableMode
+            ? "grn-stage grn-split"
+            : `grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
+          style={tableMode ? { gridTemplateColumns: tableOpen ? `minmax(0, 1fr) 7px min(${tableWidth}px, 45%)` : "minmax(0, 1fr)" } : undefined}
         >
           <div className="grn-graph-region">
             {!nodes.length ? (
@@ -693,6 +725,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 spacing={spacing}
                 layoutNonce={layoutNonce}
                 palette={figurePalette}
+                hoveredEdgeKey={hoveredEdgeKey}
               />
             ) : (
               <NetworkGraph
@@ -711,7 +744,29 @@ export default function NetworkVisualizationSection(props: Props) {
               />
             )}
           </div>
-          {useNewCanvas ? (
+          {tableMode ? (tableOpen ? (
+            <>
+              <div className="grn-split-handle" role="separator" aria-orientation="vertical" aria-label="Resize table" tabIndex={0}
+                onPointerDown={startResize}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft") setTableWidth((w) => Math.min(900, w + 24));
+                  if (event.key === "ArrowRight") setTableWidth((w) => Math.max(340, w - 24));
+                }} />
+              <NetworkTablePanel
+                edges={visibleEdges}
+                nodes={nodes}
+                methodCount={selectedAlgorithmIds.length}
+                selectedGene={selectedVisibleNode?.id ?? null}
+                selectedEdgeKey={selectedEdge?.key ?? null}
+                onSelectGene={(id) => { if (id) selectGene(id); else clearSelection(); }}
+                onSelectEdge={(key) => { if (key) selectEdge(key); else clearSelection(); }}
+                onHoverEdge={setHoveredEdgeKey}
+                onHide={() => { setTableOpen(false); setHoveredEdgeKey(null); }}
+                onFocus={(id) => { focus(id); clearSelection(); }}
+                palette={figurePalette}
+              />
+            </>
+          ) : null) : useNewCanvas ? (
             <NetworkInspectorPanel
               node={selectedVisibleNode}
               edge={selectedEdge}

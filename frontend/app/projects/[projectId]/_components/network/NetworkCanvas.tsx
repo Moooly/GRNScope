@@ -305,6 +305,26 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     cy.style(buildNetworkStylesheet(PALETTES[palette]));
   }, [props.palette]);
 
+  // A hovered table row lights up its link and labels it.
+  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; from: string; to: string; mark: string; evidence: string } | null>(null);
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy || cy.destroyed()) return;
+    cy.edges(".row-hover").removeClass("row-hover");
+    const edge = props.hoveredEdgeKey ? cy.$id(props.hoveredEdgeKey) : cy.collection();
+    let tip: typeof hoverTip = null;
+    if (edge.nonempty() && edge.isEdge()) {
+      edge.addClass("row-hover");
+      const a = edge.source().renderedPosition(), b = edge.target().renderedPosition();
+      const reversed = Number(edge.data("direction")) === -1;
+      const sign = Number(edge.data("sign"));
+      tip = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
+        from: reversed ? edge.target().id() : edge.source().id(), to: reversed ? edge.source().id() : edge.target().id(),
+        mark: Number(edge.data("direction")) === 0 ? "—" : sign === -1 ? "⊣" : "→", evidence: Number(edge.data("evidence")).toFixed(3) };
+    }
+    queueMicrotask(() => setHoverTip(tip));
+  }, [props.hoveredEdgeKey]);
+
   // Spacing and Reset layout are driven from the Display menu.
   useEffect(() => {
     const cy = coreRef.current;
@@ -351,6 +371,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
+    {hoverTip && <div className="galaxy-hover-tip" style={{ left: hoverTip.x, top: hoverTip.y }}><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · {hoverTip.evidence}</div>}
     {(selected || visiblePins.length > 0) && <div className="galaxy-controls" aria-label="Label pins">
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label

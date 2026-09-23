@@ -75,3 +75,13 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Key line** under the network (option B): `● TF ● Other gene | ◔ dark regulates · light regulated by (· pale unknown) | Width = evidence | Fade = low confidence`. Steps and counts are in tooltips. The size scale and the Activates/Represses entries are removed from the screen key; the filter line already shows the link symbols. The exported key keeps the link symbols but drops the size scale.
 - The bottom control bar is removed. A small Pin / Clear pins bar appears only while a gene is selected or pinned.
 - **Palette switch restored** (the boss is still choosing): Display ▾ → Palette, Soft (default) or Contrast. `PALETTES`, `PALETTE_LABELS` and `DEFAULT_PALETTE` are in `theme.ts`. It restyles in place with no movement, and the key, filter line and export follow it. Once chosen, delete the other entry, the select and the `palette` props.
+
+## Update: full-width page and side-by-side table (2026-09-23)
+- On the Network tab the project page widens from 1180 px to up to 2400 px (`page.tsx`); other tabs keep the reading width.
+- **Table panel** (`network/TablePanel.tsx`) sits to the right of the network, 480 px by default and never more than 45% of the width. The divider can be dragged or moved with the arrow keys, the panel hides with ⟩, and the toolbar has a **▥ Table** toggle. It replaces the pop-up inspector for the force canvas (Circos keeps the old inspector).
+  - **Links**: regulator, effect glyph (link colour; hollow when the sign is unknown, plain line when undirected), target, evidence (number and bar), confidence, methods. Every column sorts. The first 300 rows are shown with a "Show all" button. A row's tooltip gives direction agreement and method names.
+  - **Genes**: gene (TF dot), targets, regulators, unknown, links, sortable.
+  - It shares the Links filter and Results Settings with the network, so the counts always match.
+  - **Linking**: selecting a gene in the network narrows the table and shows "Selected SRY · 14 links · regulates 12, regulated by 2 · Focus ✕". Hovering a row emphasises that link and labels it on the canvas. Clicking a row selects the link and shows its full details (evidence, confidence, methods, direction and sign agreement) in the panel.
+  - CSV download of the current tab and selection.
+- The Comparison tab's consensus table is untouched for now; remove it once the panel is accepted.

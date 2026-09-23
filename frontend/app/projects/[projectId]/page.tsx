@@ -2586,7 +2586,9 @@ useEffect(() => {
         </div>
       ) : null}
       <section className="relative overflow-x-clip overflow-y-visible bg-[#f7fbff]">
-        <div className="relative mx-auto max-w-[1180px] px-6 py-10 lg:px-10">
+        {/* The network view uses the full page width, so the figure and its
+          * table can sit side by side; other views keep the reading width. */}
+        <div className={`relative mx-auto px-6 py-10 lg:px-10 ${resultsHubView === "network" ? "max-w-[2400px]" : "max-w-[1180px]"}`}>
           <ProjectHeader
             projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
             projectId={projectId}

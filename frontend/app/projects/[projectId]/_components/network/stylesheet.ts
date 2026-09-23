@@ -58,7 +58,7 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
     } },
     { selector: "node.traced-neighbour", style: { "min-zoomed-font-size": 0, "z-index": 20 } },
     { selector: "edge.traced-neighbour", style: { opacity: (e: EdgeSingular) => Math.max(0.6, Number(e.data("inkOpacity")) || 1) } },
-    { selector: "edge.traced, edge.hovered", style: { width: (e: EdgeSingular) => Number(e.data("width")) * 1.6, opacity: 1, "z-index": 25 } },
+    { selector: "edge.traced, edge.hovered, edge.row-hover", style: { width: (e: EdgeSingular) => Number(e.data("width")) * 1.6, opacity: 1, "z-index": 25 } },
     { selector: "edge.flowing", style: { "line-style": "dashed" } },
     { selector: "node.muted", style: { opacity: 0.25, "text-opacity": 0.2 } },
     { selector: "edge.muted", style: { opacity: 0.06 } },
