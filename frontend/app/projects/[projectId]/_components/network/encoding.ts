@@ -44,3 +44,19 @@ export function confidenceBand(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return value >= 0.8 ? 0 : value >= 0.5 ? 1 : 2;
 }
+
+/** What this figure contains, for a key that reports the figure rather than
+ * only defining its symbols. Uses exactly the rules the canvas draws with. */
+export type FigureCounts = { width: number[]; confidence: number[]; hasConfidence: boolean; size: { min: number; max: number } };
+export function figureCounts(
+  edges: Array<{ score: number; count: number; confidence: number; bootstrapVerified?: boolean }>,
+  widthBy: EdgeWidthBy, methodCount: number, sizeValues: number[],
+): FigureCounts {
+  const width = [0, 0, 0, 0], confidence = [0, 0, 0];
+  let hasConfidence = false;
+  for (const e of edges) {
+    width[widthBy === "support" ? supportStep(e.count, methodCount) : evidenceStep(e.score)]++;
+    if (e.bootstrapVerified === true) { hasConfidence = true; confidence[confidenceBand(e.confidence)]++; }
+  }
+  return { width, confidence, hasConfidence, size: { min: sizeValues.length ? Math.min(...sizeValues) : 0, max: sizeValues.length ? Math.max(...sizeValues) : 0 } };
+}

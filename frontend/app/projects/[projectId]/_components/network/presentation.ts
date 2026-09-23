@@ -11,6 +11,15 @@ export function nodeDiameter(value: number, minValue = 0, maxValue = 18) {
   return NODE_MIN + (NODE_MAX - NODE_MIN) * Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
 }
 
+/** Arrowheads grow with their line: about 5 px on the thinnest link and 13 px
+ * on the thickest. Cytoscape sizes a head as max((w*13.37)^0.9, 29) model
+ * units times arrow-scale, so the scale is solved from that rule. */
+export function arrowScaleFor(linePx: number, zoom: number) {
+  const width = linePx / zoom;
+  const base = Math.max(Math.pow(width * 13.37, 0.9), 29);
+  return ((4.2 + 2.6 * linePx) / zoom) / base;
+}
+
 /** Screen-space stroke for a width step, independent of zoom. */
 export function stepWidth(step: number) {
   return WIDTH_STEPS[Math.max(0, Math.min(3, Math.round(step)))];
@@ -30,8 +39,9 @@ export function applyPresentation(cy: Core, force = false) {
       n.data("labelSize", font / zoom);
     });
     cy.edges().forEach(e => {
-      e.data("width", stepWidth(Number(e.data("widthStep"))) / zoom);
-      e.data("arrowScale", 0.8);
+      const px = stepWidth(Number(e.data("widthStep")));
+      e.data("width", px / zoom);
+      e.data("arrowScale", arrowScaleFor(px, zoom));
       // A link that passes under an unrelated gene is drawn a little lighter,
       // so it is not mistaken for ending there.
       e.data("inkOpacity", CONFIDENCE_OPACITY[Number(e.data("confidenceBand")) || 0] * (e.data("occluded") ? 0.55 : 1));

@@ -33,3 +33,15 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Node size relative to the network.** Diameter runs linearly from 10 to 100 (reduced from 15–150 so the links stay visible) between the smallest and largest value in the network shown. If every gene has the same value, all are drawn at 40. Names wider than a small disc need only a 6-unit clearance from the next name, so small genes do not push their links long.
 - **Links under genes.** A straight link that passes under a gene it does not connect is drawn at 55% of its opacity (`occludedEdges`, computed in the layout worker and after dragging).
 - Timings (layout worker, local): 19 genes 0.1 s, 100 genes / 636 links 0.4 s, 1,170 genes / 3,870 links 1.1 s. `npm run test:network`: 39 pass.
+
+## Update: figure polish (2026-09-23)
+- **Gene names in italics**, as in journals.
+- **Arrowheads scale with their line**: about 6 px on the thinnest link and 13 px on the thickest (`arrowScaleFor`), replacing the library's fixed minimum.
+- **Caption strip**: one line of small type, "19 genes | 71 relationships | 5 methods · evidence ≥ 0.50", replacing the big stat blocks.
+- **Key reports this figure**: columns for Genes, Size (with the actual min–max of the chosen measure), Effect, Width and Opacity, each width and confidence step with its count. The exported figure's key carries the same counts.
+- **Colours**: TF amber `#D9913A` (further from repression red), other genes `#D9D9D9`.
+- **Group shading (Groups toggle, on by default)**: Louvain-style local moving on the layout backbone, with groups of 4 or more genes, shown only when there are at least 2 groups and at most 600 genes. Each group gets a pale rounded hull `#E9EEF4`, named in grey italic after its best-connected TF on the first side that clears every gene and other name. Groups describe connectivity in this figure, not biological pathways. Included in exports.
+- **Smooth transitions**: after a new arrangement, genes glide from where the reader last saw them (520 ms); new genes grow out from the centre (620 ms). Skipped for reduced-motion users, networks over 1,500 genes and background tabs.
+- **Hover flow**: hovering a gene or link makes dashes drift from regulator to target along its directed links. Screen-only.
+- **Curved links (toggle, on by default)**: every link bows by min(10% of its length, 36 units) relative to its own direction, so A→B and B→A separate on their own.
+- `npm run test:network`: 42 pass.

@@ -1355,3 +1355,16 @@
 .galaxy-select select { font: inherit; font-size: 11px; color: #1a1a1a; background: #fff; border: 1px solid #cfd6da; border-radius: 3px; padding: 2px 4px; }
 .galaxy-spacing input { accent-color: #2166ac; }
 .publication-legend { row-gap: 6px; column-gap: 22px; flex-wrap: wrap; }
+
+/* Figure polish: caption strip and a key that reads as one aligned band. */
+.galaxy-strip { margin: 0; display: flex; flex-wrap: wrap; gap: 0 14px; font-size: 11px; line-height: 1.4; color: #5f6b72; font-variant-numeric: tabular-nums; }
+.galaxy-strip span + span::before { content: ""; display: inline-block; width: 1px; height: 9px; margin-right: 14px; background: #d5dbdf; vertical-align: -1px; }
+.galaxy-strip b { font-weight: 600; color: #1f2a30; }
+.figure-key { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 34px; padding-block: 12px 14px; font-size: 11px; color: #3f4a50; }
+.figure-key .key-col { display: grid; gap: 4px; min-width: 0; }
+.figure-key .key-head { font-size: 10px; color: #7d8a91; margin-bottom: 1px; }
+.figure-key .key-row { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.figure-key .key-num { color: #8a969c; font-variant-numeric: tabular-nums; margin-left: 2px; }
+.figure-key .key-note { font-size: 10px; color: #7d8a91; }
+.galaxy-modules { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.galaxy-modules text { font: italic 11px Arial, Helvetica, sans-serif; fill: #7a8791; }

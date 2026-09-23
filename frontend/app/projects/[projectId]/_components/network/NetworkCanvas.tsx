@@ -10,8 +10,9 @@ import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
-import type { GalaxyResult, Point } from "./galaxyGeometry";
+import { routeGalaxy, type GalaxyResult, type Point } from "./galaxyGeometry";
 import { NODE_SIZE_OPTIONS, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { computeModules, moduleMarkup, type Module } from "./modules";
 import { hasDirection } from "../networkVisualEncoding";
 
 function fit(cy: Core) {
@@ -39,9 +40,72 @@ function select(cy: Core, props: NetworkGraphProps) {
   applyLabelBudget(cy);
 }
 
+const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+/** Regulation flows along a hovered gene's directed links: dashes drift from
+ * regulator to target. Screen-only; the exported figure never carries it. */
+function startFlow(cy: Core, target: cytoscape.NodeSingular | cytoscape.EdgeSingular) {
+  stopFlow(cy);
+  const edges = (target.isNode() ? target.connectedEdges() : target).filter(e => Number(e.data("direction")) !== 0);
+  if (edges.empty() || prefersReducedMotion()) return;
+  const zoom = cy.zoom();
+  edges.forEach(e => { e.style("line-dash-pattern", [7 / zoom, 5 / zoom]); });
+  edges.addClass("flowing");
+  let offset = 0, last = performance.now();
+  const tick = (now: number) => {
+    if (cy.destroyed()) return;
+    offset += (now - last) * 0.028 / cy.zoom(); last = now;
+    edges.forEach(e => { e.style("line-dash-offset", (Number(e.data("direction")) === -1 ? offset : -offset)); });
+    cy.scratch("flowFrame", requestAnimationFrame(tick));
+  };
+  cy.scratch("flowEdges", edges);
+  cy.scratch("flowFrame", requestAnimationFrame(tick));
+}
+function stopFlow(cy: Core) {
+  cancelAnimationFrame(Number(cy.scratch("flowFrame")) || 0);
+  const edges = cy.scratch("flowEdges") as cytoscape.EdgeCollection | undefined;
+  if (edges && !cy.destroyed()) { edges.removeClass("flowing"); edges.removeStyle("line-dash-offset line-dash-pattern"); }
+  cy.scratch("flowEdges", undefined);
+}
+
+/** Genes glide to a new arrangement instead of jumping. A gene that was on
+ * screen starts where the reader last saw it; a new gene grows out from the
+ * middle of the figure. The camera is already at its final fit. */
+function glide(cy: Core, previous: Map<string, Point>, done: () => void) {
+  // A background tab does not animate; place the genes directly there.
+  if (prefersReducedMotion() || cy.nodes().length > 1500 || document.hidden) { done(); return; }
+  const zoom = cy.zoom(), pan = cy.pan();
+  const box = cy.nodes().boundingBox({ includeLabels: false });
+  const centre = { x: box.x1 + box.w / 2, y: box.y1 + box.h / 2 };
+  cy.scratch("galaxyAnimating", true);
+  let pending = 0;
+  const finishOne = () => { if (--pending === 0 && !cy.destroyed()) { cy.scratch("galaxyAnimating", false); applyLabelBudget(cy); done(); } };
+  cy.nodes().forEach(n => {
+    const target = { ...n.position() }, seen = previous.get(n.id());
+    const start = seen ? { x: (seen.x - pan.x) / zoom, y: (seen.y - pan.y) / zoom }
+      : { x: centre.x + (target.x - centre.x) * 0.55, y: centre.y + (target.y - centre.y) * 0.55 };
+    n.position(start);
+    pending++;
+    n.animate({ position: target }, { duration: seen ? 520 : 620, easing: "ease-in-out-cubic", complete: finishOne });
+  });
+  if (!pending) { cy.scratch("galaxyAnimating", false); done(); return; }
+  // If the tab is hidden mid-glide, finish at the final positions.
+  setTimeout(() => { if (!cy.destroyed() && cy.scratch("galaxyAnimating")) cy.nodes().stop(true, true); }, 1500);
+}
+
+/** Redraw the pale group shading under the network for the current camera. */
+function drawModules(cy: Core, overlay: SVGSVGElement | null) {
+  if (!overlay) return;
+  const modules = (cy.scratch("networkModules") ?? []) as Module[];
+  overlay.innerHTML = cy.destroyed() || cy.scratch("showModules") === false || cy.scratch("galaxyBusy") || cy.scratch("galaxyAnimating") ? "" : moduleMarkup(cy, modules, cy.zoom(), cy.pan());
+}
+
 /** Worker-owned geometry; the visible graph owns camera and interaction. */
 export default function NetworkCanvas(props: NetworkGraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<SVGSVGElement | null>(null);
+  const [showModules, setShowModules] = useState(true);
+  const [curved, setCurved] = useState(true);
   const coreRef = useRef<Core | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -80,21 +144,28 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
+    cy.scratch("curvedLinks", true);
     latest.current.onGraphReady?.(cy);
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
     cy.on("tap", e => { if (e.target === cy) { latest.current.onSelectGene(null); latest.current.onSelectEdge(null); } });
-    cy.on("mouseover", "node, edge", e => { e.target.addClass("hovered"); applyLabelBudget(cy); });
-    cy.on("mouseout", "node, edge", e => { e.target.removeClass("hovered"); applyLabelBudget(cy); });
+    cy.on("mouseover", "node, edge", e => { e.target.addClass("hovered"); startFlow(cy, e.target); applyLabelBudget(cy); });
+    cy.on("mouseout", "node, edge", e => { e.target.removeClass("hovered"); stopFlow(cy); applyLabelBudget(cy); });
     let frame = 0;
     cy.on("zoom pan", () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         if (cy.destroyed() || busy.current) return;
         applyPresentation(cy);
+        drawModules(cy, overlayRef.current);
       });
     });
     cy.on("dragpan scrollzoom", () => cy.scratch("galaxyCameraTouched", true));
+    let dragFrame = 0;
+    cy.on("drag", "node", () => {
+      cancelAnimationFrame(dragFrame);
+      dragFrame = requestAnimationFrame(() => drawModules(cy, overlayRef.current));
+    });
     cy.on("dragfree", "node", () => {
       const input = galaxyInput(cy);
       const positions: Record<string, Point> = {};
@@ -109,6 +180,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     observer.observe(containerRef.current);
     return () => {
+      stopFlow(cy);
       stopWorker();
       observer.disconnect(); cancelAnimationFrame(frame);
       latest.current.onGraphReady?.(null);
@@ -127,6 +199,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     const hasNodes = latest.current.nodes.length > 0;
     busy.current = hasNodes;
     cy.scratch("galaxyBusy", hasNodes);
+    drawModules(cy, overlayRef.current);
     // Publish the external worker's lifecycle after this synchronization pass.
     queueMicrotask(() => {
       if (cy.destroyed() || id !== revision.current) return;
@@ -136,16 +209,19 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     if (!latest.current.nodes.length) { cy.elements().remove(); return stopWorker; }
     // Keep the previous view visible until a complete new arrangement arrives.
-    const input = galaxyInputFromElements(next, cy.width(), cy.height());
+    const input = galaxyInputFromElements(next, cy.width(), cy.height(), cy.scratch("curvedLinks") === true);
     const { nodes, edges, layout } = latest.current;
     const positions = layout === "force" ? undefined : layout === "hierarchical"
       ? buildHierarchicalPositions(nodes, edges) : layout === "concentric"
       ? buildConcentricPositions(nodes, edges) : buildCircularPositions(nodes, edges);
     let initial = true;
+    let previous = new Map<string, Point>();
     const finish = (result: GalaxyResult) => {
       clearTimeout(timeoutRef.current);
       cy.batch(() => {
         if (initial) {
+          // Remember where each gene sat on screen, so it can glide from there.
+          previous = new Map(cy.nodes().map(n => [n.id(), { ...n.renderedPosition() }]));
           cy.elements().remove();
           cy.add(galaxyElements(latest.current.nodes, latest.current.edges, optionsNow));
           cy.nodes().positions(n => result.positions[n.id()] ?? { x: 0, y: 0 });
@@ -154,6 +230,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           const neighborhoods = new Set(Object.values(result.neighborhoods ?? {})).size;
           cy.scratch("galaxyNeighborhoods", neighborhoods);
           setRendered({ nodes: cy.nodes().length, edges: cy.edges().length, neighborhoods });
+          computeModules(cy);
         }
         const occluded = new Set(result.occluded ?? []);
         cy.edges().forEach(e => {
@@ -171,7 +248,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         // at 100% and remains a reader's choice.
         setSpacing(100);
         select(cy, latest.current);
+        glide(cy, previous, () => drawModules(cy, overlayRef.current));
       } else applyPresentation(cy, true);
+      drawModules(cy, overlayRef.current);
       initial = false;
     };
     const fail = (message: string) => {
@@ -226,6 +305,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const visiblePins = pins.filter(id => props.nodes.some(n => n.id === id));
   const selected = props.selectedGene;
   return <>
+    <svg ref={overlayRef} className="galaxy-modules" aria-hidden="true" />
     <div ref={containerRef} className="grn-canvas" role="group" tabIndex={0} aria-busy={arranging} aria-label={`Regulatory network: ${rendered.nodes} genes and ${rendered.edges} relationships. Arrow keys browse genes; Escape clears selection.`}
       onKeyDown={event=>{
         if (arranging) return;
@@ -247,21 +327,12 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       * The div keeps its class whatever is inside it: the stylesheet uses
       * :has(.galaxy-caption) to tell this canvas from the other layouts. */}
     <div className="galaxy-caption" aria-hidden="true">
-      <div className="galaxy-stats">
-        <div className="galaxy-stat">
-          <span className="galaxy-stat-value">{rendered.nodes.toLocaleString()}</span>
-          <span className="galaxy-stat-label">Genes</span>
-        </div>
-        <div className="galaxy-stat">
-          <span className="galaxy-stat-value">
-            {rendered.edges.toLocaleString()}
-            {props.totalRelationships && props.totalRelationships > rendered.edges
-              ? <em>of {props.totalRelationships.toLocaleString()}</em>
-              : null}
-          </span>
-          <span className="galaxy-stat-label">Relationships</span>
-        </div>
-      </div>
+      {/* A figure caption, not a widget: one quiet line of small type. */}
+      <p className="galaxy-strip">
+        <span><b>{rendered.nodes.toLocaleString()}</b> genes</span>
+        <span><b>{rendered.edges.toLocaleString()}</b> relationships</span>
+        {props.figureNote ? <span>{props.figureNote}</span> : null}
+      </p>
       {spacing > 100 && <small>Spaced view · drag the background to pan; Fit view shows all genes</small>}
       {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout groups · spacing reflects connectivity</small>}
     </div>
@@ -277,6 +348,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
             ++revision.current; // Ignore any routing response from a pre-spacing drag.
             applyNetworkSpacing(cy, next / 100);
             applyPresentation(cy, true);
+            drawModules(cy, overlayRef.current);
           }
         }} />
         <output>{spacing}%</output>
@@ -293,6 +365,25 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           <option value="support" disabled={methodCount <= 1}>Method support</option>
         </select>
       </label>
+      <button type="button" aria-pressed={showModules} disabled={arranging} title="Pale shading behind groups of densely connected genes, named after their best-connected transcription factor. Groups describe connectivity in this figure, not biological pathways." onClick={() => {
+        const next = !showModules; setShowModules(next);
+        const cy = coreRef.current;
+        if (cy) { cy.scratch("showModules", next); drawModules(cy, overlayRef.current); }
+      }}>Groups</button>
+      <button type="button" aria-pressed={curved} disabled={arranging} title="Draw links as gentle arcs; opposite directions between two genes then separate on their own" onClick={() => {
+        const next = !curved; setCurved(next);
+        const cy = coreRef.current;
+        if (!cy || busy.current) return;
+        cy.scratch("curvedLinks", next);
+        const positions: Record<string, Point> = {};
+        cy.nodes().forEach(n => { positions[n.id()] = { ...n.position() }; });
+        const routes = routeGalaxy(galaxyInput(cy), positions);
+        cy.batch(() => cy.edges().forEach(e => {
+          const route = routes[e.id()];
+          if (route) e.data({ routeDistances: route.distances, routeWeights: route.weights });
+          else e.removeData("routeDistances routeWeights");
+        }));
+      }}>Curved links</button>
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label
       </button>}

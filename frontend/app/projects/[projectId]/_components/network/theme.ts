@@ -4,11 +4,11 @@
  * consumers keep compiling. */
 export const NETWORK_THEME = {
   ground: "#ffffff",
-  node: "#e3e3e3", nodeRim: "#e3e3e3",
-  tf: "#e08214", tfRim: "#e08214",
+  node: "#d9d9d9", nodeRim: "#d9d9d9",
+  tf: "#d9913a", tfRim: "#d9913a",
   nodeMuted: "#f0f0f0", link: "#2166ac", linkMuted: "#dde3ea",
   label: "#1a1a1a", labelHalo: "#ffffff",
-  accent: "#1a1a1a", accentSoft: "#eef2f7",
+  accent: "#1a1a1a", accentSoft: "#eef2f7", module: "#e9eef4",
   activates: "#2166ac", represses: "#b2182b", unknown: "#b5b5b5",
 } as const;
 export const NETWORK_SCALE = {

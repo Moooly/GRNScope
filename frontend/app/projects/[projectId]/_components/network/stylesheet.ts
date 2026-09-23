@@ -15,6 +15,8 @@ export function buildNetworkStylesheet(): StylesheetJson {
       // node. Plain dark text, no halo.
       label: "data(label)", color: T.label,
       "font-family": "Arial, Helvetica, sans-serif", "font-size": "data(labelSize)", "font-weight": 400,
+      // Gene symbols are italic by convention, as in journal figures.
+      "font-style": "italic",
       "text-halign": (n: NodeSingular) => n.data("labelHalign"), "text-valign": (n: NodeSingular) => n.data("labelValign"),
       "text-margin-x": (n: NodeSingular) => n.data("labelOffsetX"), "text-margin-y": (n: NodeSingular) => n.data("labelOffsetY"),
       "text-outline-width": 0,
@@ -47,6 +49,7 @@ export function buildNetworkStylesheet(): StylesheetJson {
     { selector: "node.traced-neighbour", style: { "min-zoomed-font-size": 0, "z-index": 20 } },
     { selector: "edge.traced-neighbour", style: { opacity: (e: EdgeSingular) => Math.max(0.6, Number(e.data("inkOpacity")) || 1) } },
     { selector: "edge.traced, edge.hovered", style: { width: (e: EdgeSingular) => Number(e.data("width")) * 1.6, opacity: 1, "z-index": 25 } },
+    { selector: "edge.flowing", style: { "line-style": "dashed" } },
     { selector: "node.muted", style: { opacity: 0.25, "text-opacity": 0.2 } },
     { selector: "edge.muted", style: { opacity: 0.06 } },
   ];

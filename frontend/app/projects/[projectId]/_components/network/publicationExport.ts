@@ -3,6 +3,7 @@ import type { NetworkFigureContext } from "../networkFigureExport";
 import { NETWORK_THEME as T } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
+import { moduleMarkup, type Module } from "./modules";
 import { CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, WIDTH_STEPS, supportLabels, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -31,7 +32,7 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     // The same chosen labels are embedded as vector text in both formats.
     const { default: plugin } = await import("cytoscape-svg");
     plugin(cytoscape);
-    const parsed = new DOMParser().parseFromString(graph.svg({ full: false, scale: 1, bg: T.ground }), "image/svg+xml");
+    const parsed = new DOMParser().parseFromString(graph.svg({ full: false, scale: 1 }), "image/svg+xml");
     if (parsed.querySelector("parsererror")) throw new Error("Could not create the vector figure.");
 
     const svg = document.createElementNS(NS, "svg");
@@ -90,6 +91,12 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const drawing = document.importNode(parsed.documentElement, true);
     drawing.setAttribute("x", "0"); drawing.setAttribute("y", "48");
     drawing.setAttribute("width", String(WIDTH)); drawing.setAttribute("height", String(GRAPH_HEIGHT));
+    // Group shading sits under the drawing, in the same coordinates.
+    const modules = (source.scratch("networkModules") ?? []) as Module[];
+    if (modules.length && source.scratch("showModules") !== false) {
+      const shade = new DOMParser().parseFromString(`<svg xmlns="${NS}">${moduleMarkup(graph, modules, graph.zoom(), graph.pan(), 15)}</svg>`, "image/svg+xml").documentElement;
+      [...shade.childNodes].reverse().forEach(node => drawing.insertBefore(document.importNode(node, true), drawing.firstChild));
+    }
     svg.appendChild(drawing);
     add("path", { d: `M32 ${top}H1168`, stroke: "#d9d9d9", "stroke-width": 1 });
     add("circle", { cx: 42, cy: top + 29, r: 8, fill: T.tf });
@@ -106,7 +113,12 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     text(759, top + 35, "Sign unknown");
     text(930, top + 35, "Tip = regulated gene", 16);
 
-    const widthLabels = widthBy === "support" ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
+    const widthCounts = [0, 0, 0, 0], confidenceCounts = [0, 0, 0];
+    source.edges().forEach(e => {
+      widthCounts[Number(e.data("widthStep")) || 0]++;
+      if (typeof e.data("confidence") === "number") confidenceCounts[Number(e.data("confidenceBand")) || 0]++;
+    });
+    const widthLabels = (widthBy === "support" ? supportLabels(methodCount) : [...EVIDENCE_LABELS]).map((label, i) => label ? `${label} (${widthCounts[i]})` : "");
     text(32, top + 72, widthBy === "support" ? "Width: method support" : "Width: evidence");
     let wx = 232;
     WIDTH_STEPS.forEach((w, i) => {
@@ -120,7 +132,8 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       text(cx, top + 72, "Opacity: confidence"); cx += 170;
       CONFIDENCE_OPACITY.forEach((o, i) => {
         add("path", { d: `M${cx} ${top + 67}h28`, stroke: "#333", "stroke-width": 2.2, opacity: o });
-        text(cx + 34, top + 73, CONFIDENCE_LABELS[i], 15); cx += 34 + CONFIDENCE_LABELS[i].length * 8.5 + 20;
+        const label = `${CONFIDENCE_LABELS[i]} (${confidenceCounts[i]})`;
+        text(cx + 34, top + 73, label, 15); cx += 34 + label.length * 8.5 + 20;
       });
     }
     text(32, top + 104, `Node diameter: ${NODE_SIZE_OPTIONS[sizeBy].legend.replace(/^Size: /, "")}`);

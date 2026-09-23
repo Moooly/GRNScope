@@ -25,7 +25,8 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas from "./network/NetworkCanvas";
 import NetworkLegendBar from "./network/Legend";
-import type { EdgeWidthBy, NodeSizeBy } from "./network/encoding";
+import { figureCounts, type EdgeWidthBy, type NodeSizeBy } from "./network/encoding";
+import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
 import NetworkInspector from "./NetworkInspector";
@@ -257,6 +258,17 @@ export default function NetworkVisualizationSection(props: Props) {
     ),
     [edges, networkNodes],
   );
+  const effectiveSizeBy: NodeSizeBy = edges.some((e) => hasDirection(e)) ? sizeBy : "all";
+  const figureKeyCounts = useMemo(() => {
+    const degrees = nodeDegrees(edges)[effectiveSizeBy];
+    const effectiveWidth: EdgeWidthBy = selectedAlgorithmIds.length > 1 ? widthBy : "evidence";
+    return figureCounts(edges, effectiveWidth, selectedAlgorithmIds.length, nodes.map((node) => degrees.get(node.id) ?? 0));
+  }, [edges, nodes, effectiveSizeBy, widthBy, selectedAlgorithmIds.length]);
+  const figureNote = useMemo(() => {
+    const evidence = /Evidence ≥ ([0-9.]+)/.exec(props.filterSummary ?? "")?.[1];
+    const methods = selectedAlgorithmIds.length;
+    return [`${methods} ${methods === 1 ? "method" : "methods"}`, evidence && Number(evidence) > 0 ? `evidence ≥ ${evidence}` : ""].filter(Boolean).join(" · ");
+  }, [props.filterSummary, selectedAlgorithmIds.length]);
   const selectedEdge =
     edges.find((edge) => edge.key === selectedEdgeKey) ?? null;
   const selectedVisibleNode =
@@ -553,9 +565,10 @@ export default function NetworkVisualizationSection(props: Props) {
             directionResolved={edges.some((e) => hasDirection(e))}
             hasUndirected={edges.some((e) => !hasDirection(e))}
             hasConfidence={edges.some((e) => e.bootstrapVerified === true)}
-            sizeBy={edges.some((e) => hasDirection(e)) ? sizeBy : "all"}
+            sizeBy={effectiveSizeBy}
             widthBy={widthBy}
             methodCount={selectedAlgorithmIds.length}
+            counts={figureKeyCounts}
           />
         ) : (
         <NetworkLegend
@@ -608,6 +621,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSelectEdge={selectEdge}
                 onGraphReady={graphReady}
                 totalRelationships={opening.total}
+                figureNote={figureNote}
                 methodCount={selectedAlgorithmIds.length}
                 sizeBy={sizeBy}
                 widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}

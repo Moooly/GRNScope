@@ -15,6 +15,8 @@ export type GalaxyInput = {
   height: number;
   /** Visible rim-to-rim length every edge aims for. Defaults to EDGE_GAP. */
   gap?: number;
+  /** Draw every link as a gentle arc instead of a straight line. */
+  curved?: boolean;
 };
 export type Route = { distances: number[]; weights: number[] };
 export type GalaxyResult = {
@@ -371,9 +373,27 @@ function packGroups(groups: Array<{ ids: string[]; w: number; h: number }>, posi
 
 /** Straight connections remain individually traceable. Only parallel or
  * reciprocal records need separate gentle lanes; loops use native routing. */
-export function routeGalaxy(input: Pick<GalaxyInput, "edges"> & Partial<Pick<GalaxyInput, "nodes">>, positions: Record<string, Point>): Record<string, Route> {
+export function routeGalaxy(input: Pick<GalaxyInput, "edges"> & Partial<Pick<GalaxyInput, "nodes" | "curved">>, positions: Record<string, Point>): Record<string, Route> {
   const routes: Record<string, Route> = {};
   const radii = new Map((input.nodes ?? []).map(n => [n.id, n.diameter / 2 + 3]));
+  if (input.curved) {
+    // Gentle, uniform curvature: every link bows the same way relative to its
+    // own direction, so A->B and B->A separate on their own. Extra records
+    // between the same ordered pair step further out.
+    const seen = new Map<string, number>();
+    for (const e of [...input.edges].sort((a, b) => a.id.localeCompare(b.id))) {
+      if (e.source === e.target || !positions[e.source] || !positions[e.target]) continue;
+      const s = positions[e.source], t = positions[e.target];
+      const length = Math.hypot(t.x - s.x, t.y - s.y);
+      const start = radii.get(e.source) ?? 0, end = radii.get(e.target) ?? 0;
+      if (length <= start + end + 2) continue;
+      const key = `${e.source}\u0000${e.target}`, index = seen.get(key) ?? 0;
+      seen.set(key, index + 1);
+      const bow = Math.min(36, length * 0.1) + index * Math.min(18, length * 0.12);
+      routes[e.id] = { distances: [bow], weights: [(start / length + 1 - end / length) / 2] };
+    }
+    return routes;
+  }
   const pairs = new Map<string, GalaxyEdge[]>();
   for (const e of input.edges) {
     if (e.source === e.target || !positions[e.source] || !positions[e.target]) continue;

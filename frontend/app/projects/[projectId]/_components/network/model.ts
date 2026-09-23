@@ -70,8 +70,9 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
   ];
 }
 
-export function galaxyInputFromElements(elements: ElementDefinition[], width: number, height: number): GalaxyInput {
+export function galaxyInputFromElements(elements: ElementDefinition[], width: number, height: number, curved = false): GalaxyInput {
   return {
+    curved,
     nodes: elements.filter(e => e.data.source === undefined).map(({ data: d }) => ({ id: String(d.id), diameter: Number(d.diameter), labelWidth: Math.min(150, String(d.fullLabel).length * 6.5) })),
     edges: elements.filter(e => e.data.source !== undefined).map(({ data: d }) => ({ id: String(d.id), source: String(d.source), target: String(d.target), sign: Number(d.sign), direction: Number(d.direction), weight: Number(d.evidence) || 0 })),
     width, height,
@@ -80,6 +81,7 @@ export function galaxyInputFromElements(elements: ElementDefinition[], width: nu
 
 export function galaxyInput(cy: Core): GalaxyInput {
   return {
+    curved: cy.scratch("curvedLinks") === true,
     nodes: cy.nodes().map(n => ({ id: n.id(), diameter: Number(n.data("diameter")), labelWidth: Math.min(150, String(n.data("fullLabel")).length * 5.7) })),
     edges: cy.edges().map(e => ({ id: e.id(), source: e.source().id(), target: e.target().id(), sign: Number(e.data("sign")), direction: Number(e.data("direction")), weight: Number(e.data("evidence")) || 0 })),
     width: cy.width(), height: cy.height(),
