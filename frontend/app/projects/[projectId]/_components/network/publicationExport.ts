@@ -3,7 +3,7 @@ import type { NetworkFigureContext } from "../networkFigureExport";
 import { NETWORK_THEME as T } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
-import { CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, WIDTH_STEPS, supportLabels, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, NODE_SIZE_OPTIONS, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1200;
@@ -68,15 +68,43 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       }
       lines.push(line);
     }
-    const degrees = [...new Set(source.nodes().map(n => Number(n.data("sizeValue"))))].sort((a, b) => a - b);
-    const samples = [...new Set([degrees[0], degrees[Math.floor(degrees.length / 2)], degrees.at(-1)])].map(degree => {
-      const node = graph!.nodes().filter(n => Number(n.data("sizeValue")) === degree).first();
-      return { degree, radius: Number(node.data("diameter")) * graph!.zoom() / 2 };
-    });
-    const largestRadius = Math.max(0, ...samples.map(s => s.radius));
+    // One-line key, the same as on screen: each group is laid out in turn and
+    // the line wraps between groups if the figure is too narrow.
+    const KEY = 16;
+    if (measure) measure.font = `${KEY}px Arial`;
+    const tw = (value: string) => measure?.measureText(value).width ?? value.length * KEY * 0.55;
+    type Mark = (x: number, y: number) => void;
+    type Part = { w: number; draw: Mark };
+    const txt = (value: string, color: string = T.label): Part => ({ w: tw(value), draw: (x, y) => { add("text", { x, y: y + KEY * 0.36, fill: color, "font-family": "Arial, Helvetica, sans-serif", "font-size": KEY }, value); } });
+    const mark = (w: number, draw: Mark): Part => ({ w, draw });
+    const values = source.nodes().map(n => Number(n.data("sizeValue")));
+    const directed = source.edges().some(e => Number(e.data("direction")) !== 0);
+    const unsigned = source.edges().some(e => Number(e.data("sign")) === 0);
+    const [low, high] = widthEnds(widthBy, methodCount);
+    const groups: Part[][] = [
+      [mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.tf }); }), txt("TF"), mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.node }); }), txt("Other gene")],
+      [txt(NODE_SIZE_OPTIONS[sizeBy].scale, "#8a969c"), txt(String(Math.min(...values))), mark(56, (x, y) => {
+        add("circle", { cx: x + 6, cy: y + 5, r: 3, fill: T.node }); add("circle", { cx: x + 21, cy: y + 2, r: 6.5, fill: T.node }); add("circle", { cx: x + 44, cy: y - 1, r: 10, fill: T.node });
+      }), txt(String(Math.max(...values)))],
+      [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h${directed ? 20 : 30}`, stroke: T.activates, "stroke-width": 1.6 }); if (directed) add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: T.activates }); }), txt("Activates"),
+       mark(28, (x, y) => { add("path", { d: directed ? `M${x} ${y}h26m0-7v14` : `M${x} ${y}h28`, stroke: T.represses, "stroke-width": 1.8, fill: "none" }); }), txt("Represses"),
+       ...(unsigned ? [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h${directed ? 20 : 30}`, stroke: T.unknown, "stroke-width": 1.6 }); if (directed) add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: "#fff", stroke: T.unknown, "stroke-width": 1.2 }); }), txt("Sign unknown")] : [])],
+      [txt(widthBy === "support" ? "Methods" : "Evidence", "#8a969c"), txt(low), mark(88, (x, y) => { WIDTH_STEPS.forEach((w, i) => add("path", { d: `M${x + 2 + i * 22.5} ${y}h16`, stroke: "#333", "stroke-width": w })); }), txt(high)],
+      ...(hasConfidence ? [[txt("Confidence", "#8a969c"), txt("<0.5"), mark(66, (x, y) => { [...CONFIDENCE_OPACITY].reverse().forEach((o, i) => add("path", { d: `M${x + 2 + i * 22} ${y}h16`, stroke: "#333", "stroke-width": 2.6, opacity: o })); }), txt("≥0.8")]] : []),
+    ];
+    const GAP = 8, PAD = 22, LINE = 34, left = 32, right = WIDTH - 32;
+    const groupWidth = (g: Part[]) => g.reduce((sum, p) => sum + p.w, 0) + GAP * (g.length - 1);
+    const rows: Part[][][] = [[]];
+    let used = 0;
+    for (const g of groups) {
+      const need = groupWidth(g) + (rows[rows.length - 1].length ? 2 * PAD + 1 : 0);
+      if (rows[rows.length - 1].length && used + need > right - left) { rows.push([]); used = 0; }
+      used += rows[rows.length - 1].length ? need : groupWidth(g);
+      rows[rows.length - 1].push(g);
+    }
     const top = GRAPH_HEIGHT + 64;
-    const sizeY = top + 110 + largestRadius;
-    const metadataY = sizeY + largestRadius + 36;
+    const keyTop = top + 30;
+    const metadataY = keyTop + rows.length * LINE + 26;
     const height = metadataY + lines.length * 25 + 16;
     svg.setAttribute("xmlns", NS);
     svg.setAttribute("width", "180mm");
@@ -92,51 +120,13 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     drawing.setAttribute("width", String(WIDTH)); drawing.setAttribute("height", String(GRAPH_HEIGHT));
     svg.appendChild(drawing);
     add("path", { d: `M32 ${top}H1168`, stroke: "#d9d9d9", "stroke-width": 1 });
-    add("circle", { cx: 42, cy: top + 29, r: 8, fill: T.tf });
-    text(59, top + 35, "Transcription factor");
-    add("circle", { cx: 236, cy: top + 29, r: 8, fill: T.node });
-    text(253, top + 35, "Other gene");
-    add("path", { d: `M393 ${top + 29}h26`, stroke: T.activates, "stroke-width": 1.6 });
-    add("path", { d: `M417 ${top + 24}l9 5-9 5Z`, fill: T.activates });
-    text(433, top + 35, "Activation");
-    add("path", { d: `M550 ${top + 29}h30m0-7v14`, stroke: T.represses, "stroke-width": 1.8, fill: "none" });
-    text(591, top + 35, "Repression");
-    add("path", { d: `M718 ${top + 29}h24`, stroke: T.unknown, "stroke-width": 1.6 });
-    add("path", { d: `M742 ${top + 24}l9 5-9 5Z`, fill: "#fff", stroke: T.unknown, "stroke-width": 1.2 });
-    text(759, top + 35, "Sign unknown");
-    text(930, top + 35, "Tip = regulated gene", 16);
-
-    const widthCounts = [0, 0, 0, 0], confidenceCounts = [0, 0, 0];
-    source.edges().forEach(e => {
-      widthCounts[Number(e.data("widthStep")) || 0]++;
-      if (typeof e.data("confidence") === "number") confidenceCounts[Number(e.data("confidenceBand")) || 0]++;
-    });
-    const widthLabels = (widthBy === "support" ? supportLabels(methodCount) : [...EVIDENCE_LABELS]).map((label, i) => label ? `${label} (${widthCounts[i]})` : "");
-    text(32, top + 72, widthBy === "support" ? "Width: method support" : "Width: evidence");
-    let wx = 232;
-    WIDTH_STEPS.forEach((w, i) => {
-      if (!widthLabels[i]) return;
-      add("path", { d: `M${wx} ${top + 67}h32`, stroke: "#333", "stroke-width": w });
-      text(wx + 40, top + 73, widthLabels[i], 15);
-      wx += 40 + widthLabels[i].length * 8.5 + 26;
-    });
-    if (hasConfidence) {
-      let cx = Math.max(wx + 20, 760);
-      text(cx, top + 72, "Opacity: confidence"); cx += 170;
-      CONFIDENCE_OPACITY.forEach((o, i) => {
-        add("path", { d: `M${cx} ${top + 67}h28`, stroke: "#333", "stroke-width": 2.2, opacity: o });
-        const label = `${CONFIDENCE_LABELS[i]} (${confidenceCounts[i]})`;
-        text(cx + 34, top + 73, label, 15); cx += 34 + label.length * 8.5 + 20;
+    rows.forEach((row, r) => {
+      let x = left;
+      const y = keyTop + r * LINE;
+      row.forEach((g, gi) => {
+        if (gi) { x += PAD; add("path", { d: `M${x} ${y - 9}v18`, stroke: "#e0e5e8", "stroke-width": 1 }); x += 1 + PAD; }
+        g.forEach((part, pi) => { part.draw(x, y); x += part.w + (pi < g.length - 1 ? GAP : 0); });
       });
-    }
-    text(32, top + 104, `Node diameter: ${NODE_SIZE_OPTIONS[sizeBy].legend.replace(/^Size: /, "")}`);
-    const keyWidth = samples.reduce((sum, sample) => sum + 2 * sample.radius + 76, 0);
-    let cursor = (WIDTH - keyWidth) / 2;
-    samples.forEach(({ degree, radius }) => {
-      const x = cursor + radius;
-      add("circle", { cx: x, cy: sizeY, r: radius, fill: T.node });
-      text(x + radius + 8, sizeY + 6, String(degree), 16);
-      cursor += 2 * radius + 76;
     });
     lines.forEach((line, i) => text(32, metadataY + i * 25, line));
     return new XMLSerializer().serializeToString(svg);

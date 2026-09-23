@@ -82,8 +82,7 @@ export type NetworkGraphProps = {
   widthBy?: import("./network/encoding").EdgeWidthBy;
   onSizeByChange?: (value: import("./network/encoding").NodeSizeBy) => void;
   onWidthByChange?: (value: import("./network/encoding").EdgeWidthBy) => void;
-  /** One-line figure description after the counts, e.g. "5 methods · evidence ≥ 0.50". */
-  figureNote?: string;
+
 };
 
 export type EdgeTooltipState = {

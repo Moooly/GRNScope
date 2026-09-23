@@ -49,3 +49,10 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 ## Update: more spread, fill the frame (2026-09-23)
 - Target rim-to-rim link length raised from 80 to 100 units (`EDGE_GAP`).
 - `fillFrame`: after layout, the arrangement is stretched towards the canvas's proportions, up to 1.8×. A round network in a wide canvas now uses the horizontal space. Stretching only lengthens distances, so it can't create overlaps. The frame shape is read when the layout is computed; after resizing the window, press Reset layout to refit.
+
+## Update: legend v3 (2026-09-23)
+- Two quiet lines above the network: the caption ("19 genes | 71 relationships | 5 methods · evidence ≥ 0.50", moved out of the canvas corner), then every encoding on one line with hairline dividers. It wraps between groups on narrow screens.
+- Every scale reads the same way: grey label, low end, samples, high end. `Connections 4 ●●● 14` (or Targets / Regulators), `Evidence <0.5 ━━━━ ≥0.9` (or `Methods 1 … N`), `Confidence <0.5 ━━━ ≥0.8`.
+- "Activates" and "Represses" replace the Effect heading. Tips are dropped from the key when no direction is resolved.
+- Per-step counts moved into tooltips on the width and confidence groups.
+- The exported figure uses the same one-line key, drawn with measured text widths and wrapping between groups; the separate size-sample row is gone.

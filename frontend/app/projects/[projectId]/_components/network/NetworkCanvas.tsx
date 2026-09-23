@@ -307,12 +307,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       * The div keeps its class whatever is inside it: the stylesheet uses
       * :has(.galaxy-caption) to tell this canvas from the other layouts. */}
     <div className="galaxy-caption" aria-hidden="true">
-      {/* A figure caption, not a widget: one quiet line of small type. */}
-      <p className="galaxy-strip">
-        <span><b>{rendered.nodes.toLocaleString()}</b> genes</span>
-        <span><b>{rendered.edges.toLocaleString()}</b> relationships</span>
-        {props.figureNote ? <span>{props.figureNote}</span> : null}
-      </p>
       {spacing > 100 && <small>Spaced view · drag the background to pan; Fit view shows all genes</small>}
       {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout groups · spacing reflects connectivity</small>}
     </div>

@@ -3,11 +3,17 @@
 export type NodeSizeBy = "out" | "all" | "in";
 export type EdgeWidthBy = "evidence" | "support";
 
-export const NODE_SIZE_OPTIONS: Record<NodeSizeBy, { label: string; legend: string; help: string }> = {
-  out: { label: "Targets", legend: "Size: genes it regulates", help: "Number of displayed genes this gene regulates (directed out-links)." },
-  all: { label: "All connections", legend: "Size: all connections", help: "Number of displayed relationships touching this gene, directed or not." },
-  in: { label: "Regulators", legend: "Size: its regulators", help: "Number of displayed genes that regulate this gene (directed in-links)." },
+export const NODE_SIZE_OPTIONS: Record<NodeSizeBy, { label: string; scale: string; legend: string; help: string }> = {
+  out: { label: "Targets", scale: "Targets", legend: "Size: genes it regulates", help: "Node size: number of displayed genes this gene regulates (directed out-links)." },
+  all: { label: "All connections", scale: "Connections", legend: "Size: all connections", help: "Node size: number of displayed relationships touching this gene, directed or not." },
+  in: { label: "Regulators", scale: "Regulators", legend: "Size: its regulators", help: "Node size: number of displayed genes that regulate this gene (directed in-links)." },
 };
+
+/** End labels for the compact width scale. */
+export function widthEnds(widthBy: EdgeWidthBy, methodCount: number): [string, string] {
+  if (widthBy === "support" && methodCount > 1) return ["1", `${methodCount}`];
+  return ["<0.5", "≥0.9"];
+}
 
 /** Four fixed steps with a 6x range, so the strongest relationships stand out. */
 export const WIDTH_STEPS = [0.6, 1.2, 2.2, 3.6] as const;

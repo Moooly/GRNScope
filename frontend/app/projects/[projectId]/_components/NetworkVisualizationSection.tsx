@@ -569,6 +569,9 @@ export default function NetworkVisualizationSection(props: Props) {
             widthBy={widthBy}
             methodCount={selectedAlgorithmIds.length}
             counts={figureKeyCounts}
+            genes={nodes.length}
+            relationships={edges.length}
+            note={figureNote}
           />
         ) : (
         <NetworkLegend
@@ -621,7 +624,6 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSelectEdge={selectEdge}
                 onGraphReady={graphReady}
                 totalRelationships={opening.total}
-                figureNote={figureNote}
                 methodCount={selectedAlgorithmIds.length}
                 sizeBy={sizeBy}
                 widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}

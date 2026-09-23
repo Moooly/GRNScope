@@ -1356,13 +1356,15 @@
 .galaxy-spacing input { accent-color: #2166ac; }
 .publication-legend { row-gap: 6px; column-gap: 22px; flex-wrap: wrap; }
 
-/* Figure polish: caption strip and a key that reads as one aligned band. */
-.galaxy-strip { margin: 0; display: flex; flex-wrap: wrap; gap: 0 14px; font-size: 11px; line-height: 1.4; color: #5f6b72; font-variant-numeric: tabular-nums; }
-.galaxy-strip span + span::before { content: ""; display: inline-block; width: 1px; height: 9px; margin-right: 14px; background: #d5dbdf; vertical-align: -1px; }
-.galaxy-strip b { font-weight: 600; color: #1f2a30; }
-.figure-key { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 34px; padding-block: 12px 14px; font-size: 11px; color: #3f4a50; }
-.figure-key .key-col { display: grid; gap: 4px; min-width: 0; }
-.figure-key .key-head { font-size: 10px; color: #7d8a91; margin-bottom: 1px; }
-.figure-key .key-row { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.figure-key .key-num { color: #8a969c; font-variant-numeric: tabular-nums; margin-left: 2px; }
-.figure-key .key-note { font-size: 10px; color: #7d8a91; }
+
+/* Legend v3: caption line + one encoding line. */
+.figure-key { display: grid; gap: 8px; padding-block: 12px 12px; font-size: 12px; color: #3f4a50; border-block: 1px solid #eef1f3; }
+.figure-key .key-caption { margin: 0; display: flex; flex-wrap: wrap; gap: 0 12px; font-size: 12px; color: #5f6b72; font-variant-numeric: tabular-nums; }
+.figure-key .key-caption span + span::before { content: ""; display: inline-block; width: 1px; height: 10px; margin-right: 12px; background: #d5dbdf; vertical-align: -1px; }
+.figure-key .key-caption b { font-weight: 600; color: #1f2a30; }
+.figure-key .key-line { display: flex; flex-wrap: wrap; align-items: center; row-gap: 8px; }
+.figure-key .key-group { display: inline-flex; align-items: center; gap: 12px; padding: 0 18px; border-left: 1px solid #e6eaed; white-space: nowrap; }
+.figure-key .key-group:first-child { padding-left: 0; border-left: 0; }
+.figure-key .key-item { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.figure-key .key-label { color: #8a969c; }
+.figure-key svg { display: block; flex: none; }
