@@ -15,8 +15,9 @@ export function widthEnds(widthBy: EdgeWidthBy, methodCount: number): [string, s
   return ["<0.5", "≥0.9"];
 }
 
-/** Four fixed steps with a 6x range, so the strongest relationships stand out. */
-export const WIDTH_STEPS = [0.6, 1.2, 2.2, 3.6] as const;
+/** Four fixed steps (1 → 3.6 px). The thinnest stays clearly visible; the
+ * strongest relationships still stand out. */
+export const WIDTH_STEPS = [1, 1.6, 2.4, 3.6] as const;
 export const EVIDENCE_BREAKS = [0.5, 0.75, 0.9] as const;
 export const EVIDENCE_LABELS = ["< 0.5", "0.5–0.75", "0.75–0.9", "≥ 0.9"] as const;
 

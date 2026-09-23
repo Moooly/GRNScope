@@ -51,6 +51,8 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
       "source-arrow-fill": (e: EdgeSingular) => e.data("arrowFill"),
       "target-arrow-fill": (e: EdgeSingular) => e.data("arrowFill"),
       "arrow-scale": (e: EdgeSingular) => Number(e.data("arrowScale")) || 0.8,
+      "source-distance-from-node": (e: EdgeSingular) => Number(e.data("tipGap")) || 4,
+      "target-distance-from-node": (e: EdgeSingular) => Number(e.data("tipGap")) || 4,
       // Weak relationships underneath, strong ones on top.
       "z-index": (e: EdgeSingular) => Number(e.data("zIndex")) || 1,
     } },

@@ -320,7 +320,7 @@ test("appearance and sign updates do not trigger a new layout", () => {
     const thin=cy.edges()[0].data("width");
     galaxyElements(nodes,weak.map(e=>({...e,score:0.95})),{widthBy:"evidence",methodCount:3}).forEach(el=>cy.$id(String(el.data.id)).data(el.data));
     applyPresentation(cy,true);
-    assert.ok(cy.edges()[0].data("width")>thin*5,"the strongest evidence step is at least 5x the weakest");
+    assert.ok(cy.edges()[0].data("width")>=thin*3.5,"the strongest evidence step is 3.6x the weakest");
     galaxyElements(nodes,weak.map(e=>({...e,count:3})),{widthBy:"support",methodCount:3}).forEach(el=>cy.$id(String(el.data.id)).data(el.data));
     applyPresentation(cy,true);
     assert.equal(cy.edges()[0].data("widthStep"),3,"all methods = widest step");
@@ -408,8 +408,8 @@ test("arrowheads scale with their line and stay clearly visible", () => {
   // Rendered head length in screen px: 0.3 of cytoscape's arrow size.
   const head = (px, zoom) => 0.3 * Math.max(Math.pow(px / zoom * 13.37, 0.9), 29) * arrowScaleFor(px, zoom) * zoom;
   for (const zoom of [0.5, 1, 2]) {
-    assert.ok(Math.abs(head(0.6, zoom) - 5.2) < 0.01, "thin link: a 5 px head at any zoom");
-    assert.ok(Math.abs(head(3.6, zoom) - 11.2) < 0.01, "thick link: an 11 px head");
+    assert.ok(Math.abs(head(1, zoom) - 8.2) < 0.01, "thin link: an 8 px head at any zoom");
+    assert.ok(Math.abs(head(3.6, zoom) - 13.92) < 0.01, "thick link: a 14 px head");
   }
 });
 

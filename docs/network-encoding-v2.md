@@ -91,3 +91,4 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - Directed: activation = solid line with arrowhead, repression = solid line with bar, sign unknown = solid plain line.
 - Undirected: the same tips on a **dashed** line, with the tip at the listed target (the candidate regulator's target in the ranking). The dash keeps its on-screen rhythm at every zoom (`dashPattern`).
 - Key, filter line, table glyphs, help text and export follow. The key shows "┄ direction unknown" when such links exist.
+- Refinement: width steps are now 1 / 1.6 / 2.4 / 3.6 px (thinnest raised from 0.6). Arrowheads and bars are about 8 px on the thinnest link and 14 px on the thickest (`6 + 2.2 × width`). Tips stand 4 screen px off the circle (`source/target-distance-from-node`).

@@ -11,15 +11,15 @@ export function nodeDiameter(value: number, minValue = 0, maxValue = 18, smalles
   return smallest + (NODE_MAX - smallest) * Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
 }
 
-/** Arrowheads grow with their line: a head about 5 px long on the thinnest
- * link and 11 px on the thickest (a bar is as wide as a head is long).
+/** Arrowheads grow with their line: a head about 8 px long on the thinnest
+ * link and 14 px on the thickest (a bar is as wide as a head is long).
  * Cytoscape sizes an arrow as max((w*13.37)^0.9, 29) * arrow-scale model
  * units, and a triangle's length (and a bar's width) is 0.3 of that size, so
  * the scale is solved from that rule. */
 export function arrowScaleFor(linePx: number, zoom: number) {
   const width = linePx / zoom;
   const base = Math.max(Math.pow(width * 13.37, 0.9), 29);
-  return ((4 + 2 * linePx) / zoom) / (0.3 * base);
+  return ((6 + 2.2 * linePx) / zoom) / (0.3 * base);
 }
 
 /** Screen-space stroke for a width step, independent of zoom. */
@@ -46,6 +46,8 @@ export function applyPresentation(cy: Core, force = false) {
       // Dashes keep the same on-screen rhythm at every zoom.
       if (e.data("dashed")) e.data("dashPattern", [(4 + px) / zoom, (3 + px * 0.6) / zoom]);
       e.data("arrowScale", arrowScaleFor(px, zoom));
+      // Tips stand a little off the circle so they read as marks, not dents.
+      e.data("tipGap", 4 / zoom);
       // A link that passes under an unrelated gene is drawn a little lighter,
       // so it is not mistaken for ending there.
       e.data("inkOpacity", CONFIDENCE_OPACITY[Number(e.data("confidenceBand")) || 0] * (e.data("occluded") ? 0.55 : 1));
