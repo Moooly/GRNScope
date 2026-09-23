@@ -401,11 +401,12 @@ test("curved links bow uniformly, and reciprocal links separate on their own", (
   assert.equal(Object.keys(straight).length, 0, "without curves a single link stays straight");
 });
 
-test("arrowheads scale with their line instead of a fixed minimum", () => {
+test("arrowheads scale with their line and stay clearly visible", () => {
   const { arrowScaleFor } = require(base + "presentation.ts");
-  const head = (px, zoom) => Math.max(Math.pow(px / zoom * 13.37, 0.9), 29) * arrowScaleFor(px, zoom) * zoom;
+  // Rendered head length in screen px: 0.3 of cytoscape's arrow size.
+  const head = (px, zoom) => 0.3 * Math.max(Math.pow(px / zoom * 13.37, 0.9), 29) * arrowScaleFor(px, zoom) * zoom;
   for (const zoom of [0.5, 1, 2]) {
-    assert.ok(Math.abs(head(0.6, zoom) - 5.76) < 0.01, "thin link: about 6 px head at any zoom");
-    assert.ok(head(3.6, zoom) > head(0.6, zoom) * 2, "thick link: a clearly larger head");
+    assert.ok(Math.abs(head(0.6, zoom) - 5.2) < 0.01, "thin link: a 5 px head at any zoom");
+    assert.ok(Math.abs(head(3.6, zoom) - 11.2) < 0.01, "thick link: an 11 px head");
   }
 });

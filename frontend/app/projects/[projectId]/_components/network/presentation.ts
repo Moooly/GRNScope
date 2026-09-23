@@ -11,13 +11,15 @@ export function nodeDiameter(value: number, minValue = 0, maxValue = 18) {
   return NODE_MIN + (NODE_MAX - NODE_MIN) * Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
 }
 
-/** Arrowheads grow with their line: about 5 px on the thinnest link and 13 px
- * on the thickest. Cytoscape sizes a head as max((w*13.37)^0.9, 29) model
- * units times arrow-scale, so the scale is solved from that rule. */
+/** Arrowheads grow with their line: a head about 5 px long on the thinnest
+ * link and 11 px on the thickest (a bar is as wide as a head is long).
+ * Cytoscape sizes an arrow as max((w*13.37)^0.9, 29) * arrow-scale model
+ * units, and a triangle's length (and a bar's width) is 0.3 of that size, so
+ * the scale is solved from that rule. */
 export function arrowScaleFor(linePx: number, zoom: number) {
   const width = linePx / zoom;
   const base = Math.max(Math.pow(width * 13.37, 0.9), 29);
-  return ((4.2 + 2.6 * linePx) / zoom) / base;
+  return ((4 + 2 * linePx) / zoom) / (0.3 * base);
 }
 
 /** Screen-space stroke for a width step, independent of zoom. */

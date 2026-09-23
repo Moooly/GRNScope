@@ -36,7 +36,7 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 
 ## Update: figure polish (2026-09-23)
 - **Gene names in italics**, as in journals.
-- **Arrowheads scale with their line**: about 6 px on the thinnest link and 13 px on the thickest (`arrowScaleFor`), replacing the library's fixed minimum.
+- **Arrowheads scale with their line**: a head about 5 px long on the thinnest link and 11 px on the thickest (`arrowScaleFor`). The first version forgot that a triangle is only 0.3 of Cytoscape's arrow size, which made heads 2–3 px and practically invisible; fixed.
 - **Caption strip**: one line of small type, "19 genes | 71 relationships | 5 methods · evidence ≥ 0.50", replacing the big stat blocks.
 - **Key reports this figure**: columns for Genes, Size (with the actual min–max of the chosen measure), Effect, Width and Opacity, each width and confidence step with its count. The exported figure's key carries the same counts.
 - **Colours**: TF amber `#D9913A` (further from repression red), other genes `#D9D9D9`.
