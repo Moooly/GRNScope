@@ -25,7 +25,7 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas from "./network/NetworkCanvas";
 import NetworkLegendBar from "./network/Legend";
-import { EFFECT_NOTE, EFFECT_OPTIONS, figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
+import { figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
@@ -271,8 +271,8 @@ export default function NetworkVisualizationSection(props: Props) {
   const figureNote = useMemo(() => {
     const evidence = /Evidence ≥ ([0-9.]+)/.exec(props.filterSummary ?? "")?.[1];
     const methods = selectedAlgorithmIds.length;
-    return [`${methods} ${methods === 1 ? "method" : "methods"}`, evidence && Number(evidence) > 0 ? `evidence ≥ ${evidence}` : "", EFFECT_NOTE[effectiveEffect]].filter(Boolean).join(" · ");
-  }, [props.filterSummary, selectedAlgorithmIds.length, effectiveEffect]);
+    return [`${methods} ${methods === 1 ? "method" : "methods"}`, evidence && Number(evidence) > 0 ? `evidence ≥ ${evidence}` : ""].filter(Boolean).join(" · ");
+  }, [props.filterSummary, selectedAlgorithmIds.length]);
   const selectedEdge =
     edges.find((edge) => edge.key === selectedEdgeKey) ?? null;
   const selectedVisibleNode =
@@ -434,32 +434,6 @@ export default function NetworkVisualizationSection(props: Props) {
                   );
                 })}
               </div>
-              {useNewCanvas && networkLayout !== "circos" && (
-                <div className="grn-effect-picker inline-flex h-10 items-center gap-2" aria-label="Links shown">
-                  <span className="text-xs text-slate-500">Links</span>
-                  <div className="grn-layout-picker inline-flex h-10 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-px">
-                    {EFFECT_OPTIONS.filter(({ value }) => value !== "unknown" || hasUnsignedLinks).map(({ value, label }) => {
-                      const isActive = effectiveEffect === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setEffect(value)}
-                          aria-pressed={isActive}
-                          title={value === "all" ? "Show every link" : `Show ${label.toLowerCase()} links only; genes keep their places`}
-                          className={`h-full rounded-full px-4 text-xs font-bold transition ${
-                            isActive
-                              ? "bg-[#1b75a6] text-white shadow-sm"
-                              : "text-slate-600 hover:bg-white hover:text-[#1b75a6]"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -600,8 +574,14 @@ export default function NetworkVisualizationSection(props: Props) {
             methodCount={selectedAlgorithmIds.length}
             counts={figureKeyCounts}
             genes={nodes.length}
-            relationships={visibleEdges.length}
-            totalRelationships={edges.length}
+            relationships={edges.length}
+            signCounts={{
+              activation: edges.filter((e) => e.sign === 1).length,
+              repression: edges.filter((e) => e.sign === -1).length,
+              unknown: edges.filter((e) => e.sign === 0).length,
+            }}
+            effect={effectiveEffect}
+            onEffectChange={setEffect}
             directionSplit={edges.some((e) => hasDirection(e))}
             note={figureNote}
           />

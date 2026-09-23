@@ -3,7 +3,7 @@
 import { NETWORK_THEME as T } from "./theme";
 import {
   CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, PIE_SHADES, WIDTH_STEPS, supportLabels, widthEnds,
-  type EdgeWidthBy, type FigureCounts, type NodeSizeBy,
+  type EdgeWidthBy, type EffectFilter, type FigureCounts, type NodeSizeBy,
 } from "./encoding";
 
 type Props = {
@@ -20,8 +20,10 @@ type Props = {
   /** Caption line: displayed genes and relationships, then e.g. "5 methods · evidence ≥ 0.50". */
   genes?: number;
   relationships?: number;
-  /** All displayed relationships, when a links filter shows only some. */
-  totalRelationships?: number;
+  /** Relationships by effect; each part of the caption filters the figure. */
+  signCounts?: { activation: number; repression: number; unknown: number };
+  effect?: EffectFilter;
+  onEffectChange?: (effect: EffectFilter) => void;
   /** Nodes are split by link direction (only when the view has directed links). */
   directionSplit?: boolean;
   note?: string;
@@ -32,7 +34,7 @@ const plural = (n: number, one: string) => `${n.toLocaleString()} ${n === 1 ? on
 /** Two quiet lines: the figure caption, then every encoding on one line.
  * Each scale reads the same way -- what it measures, low end, samples, high
  * end -- and the per-step counts live in the tooltip. */
-export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndirected = false, directionResolved, sizeBy = "all", widthBy = "evidence", methodCount = 1, counts, genes, relationships, totalRelationships, directionSplit = false, note }: Props) {
+export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndirected = false, directionResolved, sizeBy = "all", widthBy = "evidence", methodCount = 1, counts, genes, relationships, signCounts, effect = "all", onEffectChange, directionSplit = false, note }: Props) {
   const support = widthBy === "support" && methodCount > 1;
   const stepLabels = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
   const [low, high] = widthEnds(widthBy, methodCount);
@@ -40,10 +42,25 @@ export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndir
   const confidenceTip = counts ? CONFIDENCE_LABELS.map((label, i) => `${label}: ${plural(counts.confidence[i], "link")}`).join("\n") : "";
   const size = counts?.size;
   const shaft = directionResolved ? "M1 5H16" : "M1 5H23";
+  // Each part of the relationship count is also the filter for it.
+  const filterPart = (value: EffectFilter, content: React.ReactNode, title: string, empty = false) => {
+    const active = effect === value;
+    return <button type="button" className={`key-part${active && effect !== "all" ? " is-on" : ""}${effect !== "all" && !active ? " is-dim" : ""}`}
+      aria-pressed={active} disabled={empty || !onEffectChange} title={active && value !== "all" ? "Show every relationship" : title}
+      onClick={() => onEffectChange?.(active ? "all" : value)}>{content}</button>;
+  };
   return <div className="grn-legend-bar publication-legend figure-key" aria-label="Network legend">
     {genes !== undefined && <p className="key-caption">
       <span><b>{genes.toLocaleString()}</b> genes</span>
-      <span><b>{(relationships ?? 0).toLocaleString()}</b>{totalRelationships !== undefined && totalRelationships !== relationships ? ` of ${totalRelationships.toLocaleString()}` : ""} relationships</span>
+      <span className="key-filter">
+        {filterPart("all", <><b>{(relationships ?? 0).toLocaleString()}</b> relationships</>, "Show every relationship")}
+        {signCounts && <>
+          <span className="key-colon" aria-hidden="true">:</span>
+          {filterPart("activation", <><svg width="22" height="10" aria-hidden="true"><path d="M1 5H14" stroke={T.activates} strokeWidth="1.6"/><path d="M13 1.5L21 5L13 8.5Z" fill={T.activates}/></svg><b>{signCounts.activation.toLocaleString()}</b> activation</>, "Show only activation links", signCounts.activation === 0)}
+          {filterPart("repression", <><svg width="20" height="10" aria-hidden="true"><path d="M1 5H18M18 .5V9.5" stroke={T.represses} strokeWidth="1.8" fill="none"/></svg><b>{signCounts.repression.toLocaleString()}</b> repression</>, "Show only repression links", signCounts.repression === 0)}
+          {signCounts.unknown > 0 && filterPart("unknown", <><svg width="20" height="10" aria-hidden="true"><path d="M1 5H19" stroke={T.unknown} strokeWidth="1.6"/></svg><b>{signCounts.unknown.toLocaleString()}</b> sign unknown</>, "Show only links whose sign is unknown")}
+        </>}
+      </span>
       {note ? <span>{note}</span> : null}
     </p>}
     <div className="key-line">

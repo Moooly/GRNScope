@@ -1369,3 +1369,11 @@
 .figure-key .key-label { color: #8a969c; }
 .figure-key svg { display: block; flex: none; }
 .figure-key .key-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }
+.figure-key .key-filter { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.figure-key .key-colon { color: #b3bcc2; margin: 0 4px 0 1px; }
+.figure-key .key-part { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; margin: -2px 0; border: 0; border-radius: 5px; background: transparent; font: inherit; color: #5f6b72; cursor: pointer; transition: background 120ms, opacity 120ms; }
+.figure-key .key-part:hover:not(:disabled) { background: #f1f4f7; }
+.figure-key .key-part.is-on { background: #e8eef5; color: #1f2a30; }
+.figure-key .key-part.is-dim { opacity: 0.55; }
+.figure-key .key-part:disabled { cursor: default; opacity: 0.45; }
+.figure-key .key-part:focus-visible { outline: 2px solid #1b75a6; outline-offset: 1px; }
