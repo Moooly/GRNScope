@@ -433,11 +433,17 @@ test("genes are split by link direction in their own colour, only when the view 
   // TF regulates A and B, is regulated by B, and has one undirected link with A.
   assert.equal(tf.pieSize,"100%");
   assert.equal(Math.round(tf.pieOut),50); assert.equal(Math.round(tf.pieIn),25); assert.equal(Math.round(tf.pieUnknown),25);
-  assert.notEqual(tf.pieOutColor, els.find(x=>x.data.id==="A").data.pieOutColor, "TFs and other genes keep their own hue");
+
   const undirected=galaxyElements(nodes,[e("1","TF","A",0)]);
   assert.equal(undirected.find(x=>x.data.id==="TF").data.pieSize,"0%","no split without any direction");
   const cy=cytoscape({headless:true,styleEnabled:true,elements:els,style:buildNetworkStylesheet()});
-  try { assert.equal(cy.$id("TF").style("border-width"),"0px"); } finally { cy.destroy(); }
+  try {
+    assert.equal(cy.$id("TF").style("border-width"),"0px");
+    assert.notEqual(cy.$id("TF").style("pie-1-background-color"), cy.$id("A").style("pie-1-background-color"), "TFs and other genes keep their own hue");
+    const { PALETTES } = require(base + "theme.ts");
+    cy.style(buildNetworkStylesheet(PALETTES.soft));
+    assert.equal(cy.$id("TF").style("pie-1-background-color"), "rgb(95,134,179)", "the soft palette recolours the split in place");
+  } finally { cy.destroy(); }
 });
 
 test("the links filter keeps genes in place, hides other effects and fades genes left without links", () => {

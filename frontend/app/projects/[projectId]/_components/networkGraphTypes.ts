@@ -84,6 +84,9 @@ export type NetworkGraphProps = {
   onWidthByChange?: (value: import("./network/encoding").EdgeWidthBy) => void;
   /** Show only activation, repression or sign-unknown links. */
   effect?: import("./network/encoding").EffectFilter;
+  /** Colour palette under comparison. */
+  palette?: import("./network/theme").PaletteName;
+  onPaletteChange?: (value: import("./network/theme").PaletteName) => void;
 
 };
 

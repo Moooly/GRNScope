@@ -61,3 +61,8 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Links filter** (reworked; now lives in the caption): the caption's relationship count is the filter, e.g. "19 genes | [71 relationships] : [→ 41 activation] [⊣ 30 repression] | 5 methods · evidence ≥ 0.50", with "sign unknown" shown only when present. Clicking a part shows only those links; it gets a pale shaded background and the others dim. Clicking it again, or "relationships", shows everything. Genes never move, genes left without links fade to 25%, the width/confidence counts follow the filter, and exports drop hidden links and state the filter. The earlier toolbar pills looked like a second layout picker and were removed.
 - **Direction split**: each gene is a pie in its own hue (TF `#B8732A`/`#E8B779`/`#F5E1C6`, other gene `#9A9A9A`/`#D1D1D1`/`#ECECEC`), with dark = regulates, light = regulated by, pale = direction unknown, starting at 12 o'clock. It's based on all displayed links, not only the filtered ones, and is off when the view has no directed link. The legend and export show a small pie with the three shades.
 - `npm run test:network`: 44 pass.
+
+## Temporary: palette switch (2026-09-23)
+- A "Palette" select in the figure controls toggles between **Contrast** (the default: amber TFs, grey genes, blue/red links) and **Soft** (the original look the boss liked: TF `#8FAED0`, gene `#95C4B3`, activation `#588F89`, repression `#B77D66`, unknown `#A3ABA8`, labels `#33433E`; pie shades TF `#5F86B3`/`#B9CDE3`/`#E3EBF4`, gene `#5F9C86`/`#B8DACD`/`#E2F0EA`).
+- Switching restyles in place, so genes don't move. The legend and exports follow the choice.
+- Once the boss picks one, remove `PALETTES`' other entry, the select and the `palette` props/state.

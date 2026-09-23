@@ -1,7 +1,7 @@
 import type { StylesheetJson, EdgeSingular, NodeSingular } from "cytoscape";
-import { NETWORK_THEME as T } from "./theme";
+import { PALETTES, type Palette } from "./theme";
 
-export function buildNetworkStylesheet(): StylesheetJson {
+export function buildNetworkStylesheet(T: Palette = PALETTES.contrast): StylesheetJson {
   // Three sign states, three colours: activation blue, repression red, and a
   // light grey for relationships no method could sign, so an unsigned record is
   // never drawn as an activation.
@@ -27,9 +27,9 @@ export function buildNetworkStylesheet(): StylesheetJson {
     // Direction split: dark = regulates, light = regulated by, pale = unknown.
     { selector: "node", style: {
       "pie-size": "data(pieSize)",
-      "pie-1-background-color": "data(pieOutColor)", "pie-1-background-size": (n: NodeSingular) => Number(n.data("pieOut")) || 0,
-      "pie-2-background-color": "data(pieInColor)", "pie-2-background-size": (n: NodeSingular) => Number(n.data("pieIn")) || 0,
-      "pie-3-background-color": "data(pieUnknownColor)", "pie-3-background-size": (n: NodeSingular) => Number(n.data("pieUnknown")) || 0,
+      "pie-1-background-color": (n: NodeSingular) => (n.data("isTF") === 1 ? T.pieTF : T.pieGene)[0], "pie-1-background-size": (n: NodeSingular) => Number(n.data("pieOut")) || 0,
+      "pie-2-background-color": (n: NodeSingular) => (n.data("isTF") === 1 ? T.pieTF : T.pieGene)[1], "pie-2-background-size": (n: NodeSingular) => Number(n.data("pieIn")) || 0,
+      "pie-3-background-color": (n: NodeSingular) => (n.data("isTF") === 1 ? T.pieTF : T.pieGene)[2], "pie-3-background-size": (n: NodeSingular) => Number(n.data("pieUnknown")) || 0,
     } },
     // Links filter: hidden links leave the figure; genes left without any fade.
     { selector: "edge[?effectHidden]", style: { display: "none" } },

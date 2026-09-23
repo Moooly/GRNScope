@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core } from "cytoscape";
 import { buildCircularPositions, buildConcentricPositions, buildHierarchicalPositions } from "../networkGraphLayouts";
 import type { NetworkGraphProps } from "../networkGraphTypes";
-import { NETWORK_SCALE } from "./theme";
+import { NETWORK_SCALE, PALETTES, PALETTE_LABELS, type PaletteName } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
@@ -137,13 +137,14 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   useEffect(() => {
     if (!containerRef.current) return;
     const cy = cytoscape({
-      container: containerRef.current, elements: [], style: buildNetworkStylesheet(),
+      container: containerRef.current, elements: [], style: buildNetworkStylesheet(PALETTES[latest.current.palette ?? "contrast"]),
       layout: { name: "preset" }, minZoom: NETWORK_SCALE.minZoom, maxZoom: NETWORK_SCALE.maxZoom,
       pixelRatio: "auto", textureOnViewport: false, motionBlur: false,
       selectionType: "single", boxSelectionEnabled: false,
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
+    cy.scratch("palette", latest.current.palette ?? "contrast");
     // Straight links; only parallel or reciprocal records get separate lanes.
     cy.scratch("curvedLinks", false);
     latest.current.onGraphReady?.(cy);
@@ -294,6 +295,16 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     applyEffect(cy, props.effect ?? "all");
   }, [props.effect, elements]);
 
+  // Palette comparison: restyle in place, nothing moves.
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy || cy.destroyed()) return;
+    const palette = props.palette ?? "contrast";
+    if (cy.scratch("palette") === palette) return;
+    cy.scratch("palette", palette);
+    cy.style(buildNetworkStylesheet(PALETTES[palette]));
+  }, [props.palette]);
+
   useEffect(() => {
     const cy = coreRef.current;
     if (!cy || cy.destroyed()) return;
@@ -348,6 +359,11 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       <label className="galaxy-select" title={NODE_SIZE_OPTIONS[sizeBy].help}>Node size
         <select value={sizeBy} disabled={arranging} onChange={event => props.onSizeByChange?.(event.target.value as NodeSizeBy)}>
           {(Object.keys(NODE_SIZE_OPTIONS) as NodeSizeBy[]).map(key => <option key={key} value={key} disabled={key !== "all" && !hasDirected}>{NODE_SIZE_OPTIONS[key].label}</option>)}
+        </select>
+      </label>
+      <label className="galaxy-select" title="Colour palette, temporary while the two options are compared">Palette
+        <select value={props.palette ?? "contrast"} disabled={arranging} onChange={event => props.onPaletteChange?.(event.target.value as PaletteName)}>
+          {(Object.keys(PALETTE_LABELS) as PaletteName[]).map(key => <option key={key} value={key}>{PALETTE_LABELS[key]}</option>)}
         </select>
       </label>
       <label className="galaxy-select" title="Line width: evidence (per-target rank, 0–1) or the number of selected methods reporting the relationship">Line width

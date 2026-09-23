@@ -3,7 +3,7 @@ import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { hasDirection, edgeMetric } from "../networkVisualEncoding";
 import type { GalaxyInput } from "./galaxyGeometry";
 import { nodeDiameter } from "./presentation";
-import { CONFIDENCE_OPACITY, PIE_SHADES, WIDTH_STEPS, confidenceBand, evidenceStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, WIDTH_STEPS, confidenceBand, evidenceStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 export type GalaxyOptions = { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number };
 
@@ -40,13 +40,11 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
       const box = nodeDiameter(value, minValue, maxValue);
       const out = degrees.out.get(n.id) ?? 0, inn = degrees.in.get(n.id) ?? 0, unk = degrees.unknown.get(n.id) ?? 0;
       const total = out + inn + unk || 1;
-      const shades = n.isTF ? PIE_SHADES.tf : PIE_SHADES.gene;
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d,
         degreeOut: degrees.out.get(n.id) ?? 0, degreeIn: degrees.in.get(n.id) ?? 0, sizeValue: value,
         isTF: n.isTF ? 1 : 0,
         pieSize: split ? "100%" : "0%",
         pieOut: (100 * out) / total, pieIn: (100 * inn) / total, pieUnknown: (100 * unk) / total,
-        pieOutColor: shades[0], pieInColor: shades[1], pieUnknownColor: shades[2],
         diameter: box,
         labelSize: 11,
         labelHalign: "center", labelValign: "center", labelOffsetX: 0, labelOffsetY: 0,

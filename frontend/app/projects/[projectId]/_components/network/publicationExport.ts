@@ -1,9 +1,9 @@
 import cytoscape, { type Core } from "cytoscape";
 import type { NetworkFigureContext } from "../networkFigureExport";
-import { NETWORK_THEME as T } from "./theme";
+import { PALETTES, type PaletteName } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
-import { CONFIDENCE_OPACITY, EFFECT_NOTE, NODE_SIZE_OPTIONS, PIE_SHADES, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, EFFECT_NOTE, NODE_SIZE_OPTIONS, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1200;
@@ -17,8 +17,9 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
   host.setAttribute("aria-hidden", "true");
   document.body.appendChild(host);
   let graph: Core | undefined;
+  const T = PALETTES[(source.scratch("palette") ?? "contrast") as PaletteName];
   try {
-    graph = cytoscape({ container: host, style: buildNetworkStylesheet(),
+    graph = cytoscape({ container: host, style: buildNetworkStylesheet(T),
       elements: source.elements().filter(element => !element.data("effectHidden")).map(element => ({ data: { ...element.data(), label: "" }, ...(element.isNode() ? { position: { ...element.position() } } : {}) })),
       layout: { name: "preset" }, minZoom: 0.0001, maxZoom: 1.5, pixelRatio: 1,
     });
@@ -90,10 +91,10 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const groups: Part[][] = [
       [mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.tf }); }), txt("TF"), mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.node }); }), txt("Other gene")],
       ...(split ? [[mark(18, (x, y) => {
-        add("path", { d: `M${x + 9} ${y}V${y - 9}A9 9 0 0 1 ${x + 17.5} ${y + 2.8}Z`, fill: PIE_SHADES.tf[0] });
-        add("path", { d: `M${x + 9} ${y}L${x + 17.5} ${y + 2.8}A9 9 0 0 1 ${x + 2.1} ${y + 5.8}Z`, fill: PIE_SHADES.tf[1] });
-        add("path", { d: `M${x + 9} ${y}L${x + 2.1} ${y + 5.8}A9 9 0 0 1 ${x + 9} ${y - 9}Z`, fill: PIE_SHADES.tf[2] });
-      }), swatch(PIE_SHADES.tf[0]), txt("regulates"), swatch(PIE_SHADES.tf[1]), txt("regulated by"), ...(undirected ? [swatch(PIE_SHADES.tf[2]), txt("unknown")] : [])]] : []),
+        add("path", { d: `M${x + 9} ${y}V${y - 9}A9 9 0 0 1 ${x + 17.5} ${y + 2.8}Z`, fill: T.pieTF[0] });
+        add("path", { d: `M${x + 9} ${y}L${x + 17.5} ${y + 2.8}A9 9 0 0 1 ${x + 2.1} ${y + 5.8}Z`, fill: T.pieTF[1] });
+        add("path", { d: `M${x + 9} ${y}L${x + 2.1} ${y + 5.8}A9 9 0 0 1 ${x + 9} ${y - 9}Z`, fill: T.pieTF[2] });
+      }), swatch(T.pieTF[0]), txt("regulates"), swatch(T.pieTF[1]), txt("regulated by"), ...(undirected ? [swatch(T.pieTF[2]), txt("unknown")] : [])]] : []),
       [txt(NODE_SIZE_OPTIONS[sizeBy].scale, "#8a969c"), txt(String(Math.min(...values))), mark(56, (x, y) => {
         add("circle", { cx: x + 6, cy: y + 5, r: 3, fill: T.node }); add("circle", { cx: x + 21, cy: y + 2, r: 6.5, fill: T.node }); add("circle", { cx: x + 44, cy: y - 1, r: 10, fill: T.node });
       }), txt(String(Math.max(...values)))],

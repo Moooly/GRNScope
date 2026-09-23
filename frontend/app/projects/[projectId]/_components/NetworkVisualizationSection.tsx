@@ -25,6 +25,7 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas from "./network/NetworkCanvas";
 import NetworkLegendBar from "./network/Legend";
+import type { PaletteName } from "./network/theme";
 import { figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
@@ -218,6 +219,8 @@ export default function NetworkVisualizationSection(props: Props) {
   const [sizeBy, setSizeBy] = useState<NodeSizeBy>("all");
   const [widthBy, setWidthBy] = useState<EdgeWidthBy>("evidence");
   const [effect, setEffect] = useState<EffectFilter>("all");
+  // Temporary: both palettes stay available until one is chosen.
+  const [figurePalette, setFigurePalette] = useState<PaletteName>("contrast");
   // The rebuilt canvas is what the project page shows. The previous renderer
   // is still here, reachable with ?canvas=legacy, because the inspector,
   // Circos, figure export and the trajectory and perturbation views all reach
@@ -582,6 +585,7 @@ export default function NetworkVisualizationSection(props: Props) {
             }}
             effect={effectiveEffect}
             onEffectChange={setEffect}
+            palette={figurePalette}
             directionSplit={edges.some((e) => hasDirection(e))}
             note={figureNote}
           />
@@ -642,6 +646,8 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSizeByChange={setSizeBy}
                 onWidthByChange={setWidthBy}
                 effect={effectiveEffect}
+                palette={figurePalette}
+                onPaletteChange={setFigurePalette}
               />
             ) : (
               <NetworkGraph

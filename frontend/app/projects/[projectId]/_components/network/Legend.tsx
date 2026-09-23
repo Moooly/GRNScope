@@ -1,8 +1,8 @@
 "use client";
 
-import { NETWORK_THEME as T } from "./theme";
+import { PALETTES, type PaletteName } from "./theme";
 import {
-  CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, PIE_SHADES, WIDTH_STEPS, supportLabels, widthEnds,
+  CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, WIDTH_STEPS, supportLabels, widthEnds,
   type EdgeWidthBy, type EffectFilter, type FigureCounts, type NodeSizeBy,
 } from "./encoding";
 
@@ -24,6 +24,7 @@ type Props = {
   signCounts?: { activation: number; repression: number; unknown: number };
   effect?: EffectFilter;
   onEffectChange?: (effect: EffectFilter) => void;
+  palette?: PaletteName;
   /** Nodes are split by link direction (only when the view has directed links). */
   directionSplit?: boolean;
   note?: string;
@@ -34,7 +35,8 @@ const plural = (n: number, one: string) => `${n.toLocaleString()} ${n === 1 ? on
 /** Two quiet lines: the figure caption, then every encoding on one line.
  * Each scale reads the same way -- what it measures, low end, samples, high
  * end -- and the per-step counts live in the tooltip. */
-export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndirected = false, directionResolved, sizeBy = "all", widthBy = "evidence", methodCount = 1, counts, genes, relationships, signCounts, effect = "all", onEffectChange, directionSplit = false, note }: Props) {
+export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndirected = false, directionResolved, sizeBy = "all", widthBy = "evidence", methodCount = 1, counts, genes, relationships, signCounts, effect = "all", onEffectChange, directionSplit = false, note, palette = "contrast" }: Props) {
+  const T = PALETTES[palette];
   const support = widthBy === "support" && methodCount > 1;
   const stepLabels = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
   const [low, high] = widthEnds(widthBy, methodCount);
@@ -71,10 +73,10 @@ export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndir
         <span className="key-item"><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5.5" fill={T.node} /></svg>Other gene</span>
       </span>
       {directionSplit && <span className="key-group" title="Each gene is split by the direction of its links, in its own colour: dark = regulates other genes, light = regulated by other genes, pale = direction unknown.">
-        <svg width="16" height="16" aria-hidden="true"><path d="M8 8V0.5A7.5 7.5 0 0 1 15.1 10.4Z" fill={PIE_SHADES.tf[0]}/><path d="M8 8L15.1 10.4A7.5 7.5 0 0 1 2.3 12.9Z" fill={PIE_SHADES.tf[1]}/><path d="M8 8L2.3 12.9A7.5 7.5 0 0 1 8 0.5Z" fill={PIE_SHADES.tf[2]}/></svg>
-        <span className="key-item"><i className="key-swatch" style={{ background: PIE_SHADES.tf[0] }} />regulates</span>
-        <span className="key-item"><i className="key-swatch" style={{ background: PIE_SHADES.tf[1] }} />regulated by</span>
-        {hasUndirected && <span className="key-item"><i className="key-swatch" style={{ background: PIE_SHADES.tf[2] }} />unknown</span>}
+        <svg width="16" height="16" aria-hidden="true"><path d="M8 8V0.5A7.5 7.5 0 0 1 15.1 10.4Z" fill={T.pieTF[0]}/><path d="M8 8L15.1 10.4A7.5 7.5 0 0 1 2.3 12.9Z" fill={T.pieTF[1]}/><path d="M8 8L2.3 12.9A7.5 7.5 0 0 1 8 0.5Z" fill={T.pieTF[2]}/></svg>
+        <span className="key-item"><i className="key-swatch" style={{ background: T.pieTF[0] }} />regulates</span>
+        <span className="key-item"><i className="key-swatch" style={{ background: T.pieTF[1] }} />regulated by</span>
+        {hasUndirected && <span className="key-item"><i className="key-swatch" style={{ background: T.pieTF[2] }} />unknown</span>}
       </span>}
       {size && <span className="key-group" title={NODE_SIZE_OPTIONS[sizeBy].help}>
         <span className="key-label">{NODE_SIZE_OPTIONS[sizeBy].scale}</span>
