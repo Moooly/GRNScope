@@ -4,17 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core } from "cytoscape";
 import { buildCircularPositions, buildConcentricPositions, buildHierarchicalPositions } from "../networkGraphLayouts";
 import type { NetworkGraphProps } from "../networkGraphTypes";
-import { NETWORK_SCALE, PALETTES, PALETTE_LABELS, type PaletteName } from "./theme";
+import { NETWORK_SCALE, PALETTE } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
 import type { GalaxyResult, Point } from "./galaxyGeometry";
-import { NODE_SIZE_OPTIONS, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
+import { passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
 import { hasDirection } from "../networkVisualEncoding";
 
-function fit(cy: Core) {
+export function fitNetwork(cy: Core) {
   if (cy.destroyed() || cy.nodes().empty()) return;
   const box=cy.nodes().boundingBox({ includeLabels: false, includeOverlays: false });
   const padding=NETWORK_SCALE.fitPadding;
@@ -115,9 +115,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const [arranging, setArranging] = useState(false);
   const [error, setError] = useState("");
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
-  const [spacing, setSpacing] = useState(100);
   const [pins, setPins] = useState<string[]>([]);
-  const [layoutRevision, setLayoutRevision] = useState(0);
   const stopWorker = useCallback(() => {
     ++revision.current;
     workerRef.current?.terminate();
@@ -130,7 +128,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const sizeBy: NodeSizeBy = hasDirected ? props.sizeBy ?? "all" : "all";
   const widthBy: EdgeWidthBy = props.widthBy ?? "evidence";
   const methodCount = props.methodCount ?? 1;
-  const nodeMin = PALETTES[props.palette ?? "contrast"].nodeMin;
+  const nodeMin = PALETTE.nodeMin;
   const options = useMemo(() => ({ sizeBy, widthBy, methodCount, nodeMin }), [sizeBy, widthBy, methodCount, nodeMin]);
   const signature = useMemo(() => galaxySignature(props.nodes, props.edges, props.layout, sizeBy), [props.nodes, props.edges, props.layout, sizeBy]);
   const elements = useMemo(() => galaxyElements(props.nodes, props.edges, options), [props.nodes, props.edges, options]);
@@ -138,14 +136,13 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   useEffect(() => {
     if (!containerRef.current) return;
     const cy = cytoscape({
-      container: containerRef.current, elements: [], style: buildNetworkStylesheet(PALETTES[latest.current.palette ?? "contrast"]),
+      container: containerRef.current, elements: [], style: buildNetworkStylesheet(),
       layout: { name: "preset" }, minZoom: NETWORK_SCALE.minZoom, maxZoom: NETWORK_SCALE.maxZoom,
       pixelRatio: "auto", textureOnViewport: false, motionBlur: false,
       selectionType: "single", boxSelectionEnabled: false,
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
-    cy.scratch("palette", latest.current.palette ?? "contrast");
     // Straight links; only parallel or reciprocal records get separate lanes.
     cy.scratch("curvedLinks", false);
     latest.current.onGraphReady?.(cy);
@@ -173,7 +170,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     const observer = new ResizeObserver(() => {
       if (cy.destroyed()) return;
       cy.resize();
-      if (!busy.current && !cy.scratch("galaxyCameraTouched")) fit(cy);
+      if (!busy.current && !cy.scratch("galaxyCameraTouched")) fitNetwork(cy);
     });
     observer.observe(containerRef.current);
     return () => {
@@ -191,7 +188,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     workerRef.current?.terminate();
     const id = ++revision.current;
     const directedNow = latest.current.edges.some(e => hasDirection(e));
-    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1, nodeMin: PALETTES[latest.current.palette ?? "contrast"].nodeMin } as const;
+    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1, nodeMin: PALETTE.nodeMin } as const;
     const next = galaxyElements(latest.current.nodes, latest.current.edges, optionsNow);
     const hasNodes = latest.current.nodes.length > 0;
     busy.current = hasNodes;
@@ -238,10 +235,11 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       busy.current = false; cy.scratch("galaxyBusy", false); setArranging(false);
       if (initial) {
         cy.scratch("publicationSpacing", 1);
-        fit(cy);
-        // The layout itself is sparse now (fixed edge length); spacing starts
-        // at 100% and remains a reader's choice.
-        setSpacing(100);
+        fitNetwork(cy);
+        // The layout itself is sparse (fixed edge length); spacing is a
+        // reader's choice from the Display menu and survives re-layouts.
+        const chosen = latest.current.spacing ?? 100;
+        if (chosen !== 100) applyNetworkSpacing(cy, chosen / 100);
         select(cy, latest.current);
         applyEffect(cy, latest.current.effect ?? "all");
         glide(cy, previous, () => {});
@@ -272,7 +270,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       }, 45000);
     } catch { fail("The layout could not start. Try resetting it."); }
     return stopWorker;
-  }, [signature, layoutRevision, stopWorker]);
+  }, [signature, props.layoutNonce, stopWorker]);
 
   useEffect(() => {
     const cy = coreRef.current;
@@ -296,15 +294,15 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     applyEffect(cy, props.effect ?? "all");
   }, [props.effect, elements]);
 
-  // Palette comparison: restyle in place, nothing moves.
+  // Spacing and Reset layout are driven from the Display menu.
   useEffect(() => {
     const cy = coreRef.current;
-    if (!cy || cy.destroyed()) return;
-    const palette = props.palette ?? "contrast";
-    if (cy.scratch("palette") === palette) return;
-    cy.scratch("palette", palette);
-    cy.style(buildNetworkStylesheet(PALETTES[palette]));
-  }, [props.palette]);
+    const next = props.spacing ?? 100;
+    if (!cy || cy.destroyed() || busy.current) return;
+    ++revision.current; // Ignore any routing response from a pre-spacing drag.
+    applyNetworkSpacing(cy, next / 100);
+    applyPresentation(cy, true);
+  }, [props.spacing]);
 
   useEffect(() => {
     const cy = coreRef.current;
@@ -337,46 +335,16 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       * The div keeps its class whatever is inside it: the stylesheet uses
       * :has(.galaxy-caption) to tell this canvas from the other layouts. */}
     <div className="galaxy-caption" aria-hidden="true">
-      {spacing > 100 && <small>Spaced view · drag the background to pan; Fit view shows all genes</small>}
+      {(props.spacing ?? 100) > 100 && <small>Spaced view · drag the background to pan; Fit view shows all genes</small>}
       {rendered.neighborhoods > 1 && <small>{rendered.neighborhoods} layout groups · spacing reflects connectivity</small>}
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
-    <div className="galaxy-controls" aria-label="Figure controls">
-      <button type="button" disabled={arranging} onClick={() => { if (coreRef.current) fit(coreRef.current); }}>Fit view</button>
-      <label className="galaxy-spacing">Spacing
-        <input type="range" aria-label="Network spacing" min="100" max="250" step="25" value={spacing} disabled={arranging} onChange={event => {
-          const next = Number(event.target.value); setSpacing(next);
-          const cy = coreRef.current;
-          if (cy && !busy.current) {
-            ++revision.current; // Ignore any routing response from a pre-spacing drag.
-            applyNetworkSpacing(cy, next / 100);
-            applyPresentation(cy, true);
-          }
-        }} />
-        <output>{spacing}%</output>
-      </label>
-      <button type="button" disabled={arranging} title="Restore the computed arrangement after dragging" onClick={() => setLayoutRevision(value => value + 1)}>Reset layout</button>
-      <label className="galaxy-select" title={NODE_SIZE_OPTIONS[sizeBy].help}>Node size
-        <select value={sizeBy} disabled={arranging} onChange={event => props.onSizeByChange?.(event.target.value as NodeSizeBy)}>
-          {(Object.keys(NODE_SIZE_OPTIONS) as NodeSizeBy[]).map(key => <option key={key} value={key} disabled={key !== "all" && !hasDirected}>{NODE_SIZE_OPTIONS[key].label}</option>)}
-        </select>
-      </label>
-      <label className="galaxy-select" title="Colour palette, temporary while the two options are compared">Palette
-        <select value={props.palette ?? "contrast"} disabled={arranging} onChange={event => props.onPaletteChange?.(event.target.value as PaletteName)}>
-          {(Object.keys(PALETTE_LABELS) as PaletteName[]).map(key => <option key={key} value={key}>{PALETTE_LABELS[key]}</option>)}
-        </select>
-      </label>
-      <label className="galaxy-select" title="Line width: evidence (per-target rank, 0–1) or the number of selected methods reporting the relationship">Line width
-        <select value={widthBy} disabled={arranging} onChange={event => props.onWidthByChange?.(event.target.value as EdgeWidthBy)}>
-          <option value="evidence">Evidence</option>
-          <option value="support" disabled={methodCount <= 1}>Method support</option>
-        </select>
-      </label>
+    {(selected || visiblePins.length > 0) && <div className="galaxy-controls" aria-label="Label pins">
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label
       </button>}
       {visiblePins.length > 0 && <button type="button" onClick={() => setPins([])} title={visiblePins.join(", ")}>Clear {visiblePins.length} pinned {visiblePins.length === 1 ? "label" : "labels"}</button>}
-    </div>
+    </div>}
   </>;
 }

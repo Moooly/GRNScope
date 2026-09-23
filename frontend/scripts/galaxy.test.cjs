@@ -440,9 +440,7 @@ test("genes are split by link direction in their own colour, only when the view 
   try {
     assert.equal(cy.$id("TF").style("border-width"),"0px");
     assert.notEqual(cy.$id("TF").style("pie-1-background-color"), cy.$id("A").style("pie-1-background-color"), "TFs and other genes keep their own hue");
-    const { PALETTES } = require(base + "theme.ts");
-    cy.style(buildNetworkStylesheet(PALETTES.soft));
-    assert.equal(cy.$id("TF").style("pie-1-background-color"), "rgb(143,174,208)", "the soft palette recolours the split in place");
+    assert.equal(cy.$id("TF").style("pie-1-background-color"), "rgb(143,174,208)", "the darkest slice is the TF's own soft blue");
   } finally { cy.destroy(); }
 });
 

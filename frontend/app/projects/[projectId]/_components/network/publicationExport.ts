@@ -1,9 +1,9 @@
 import cytoscape, { type Core } from "cytoscape";
 import type { NetworkFigureContext } from "../networkFigureExport";
-import { PALETTES, type PaletteName } from "./theme";
+import { PALETTE } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
-import { CONFIDENCE_OPACITY, EFFECT_NOTE, NODE_SIZE_OPTIONS, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, EFFECT_NOTE, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1200;
@@ -17,7 +17,7 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
   host.setAttribute("aria-hidden", "true");
   document.body.appendChild(host);
   let graph: Core | undefined;
-  const T = PALETTES[(source.scratch("palette") ?? "contrast") as PaletteName];
+  const T = PALETTE;
   try {
     graph = cytoscape({ container: host, style: buildNetworkStylesheet(T),
       elements: source.elements().filter(element => !element.data("effectHidden")).map(element => ({ data: { ...element.data(), label: "" }, ...(element.isNode() ? { position: { ...element.position() } } : {}) })),
@@ -82,7 +82,6 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     type Part = { w: number; draw: Mark };
     const txt = (value: string, color: string = T.label): Part => ({ w: tw(value), draw: (x, y) => { add("text", { x, y: y + KEY * 0.36, fill: color, "font-family": "Arial, Helvetica, sans-serif", "font-size": KEY }, value); } });
     const mark = (w: number, draw: Mark): Part => ({ w, draw });
-    const values = source.nodes().map(n => Number(n.data("sizeValue")));
     const directed = shownEdges.some(e => Number(e.data("direction")) !== 0);
     const unsigned = shownEdges.some(e => Number(e.data("sign")) === 0);
     const undirected = source.edges().some(e => Number(e.data("direction")) === 0);
@@ -95,9 +94,6 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
         add("path", { d: `M${x + 9} ${y}L${x + 17.5} ${y + 2.8}A9 9 0 0 1 ${x + 2.1} ${y + 5.8}Z`, fill: T.pieTF[1] });
         add("path", { d: `M${x + 9} ${y}L${x + 2.1} ${y + 5.8}A9 9 0 0 1 ${x + 9} ${y - 9}Z`, fill: T.pieTF[2] });
       }), swatch(T.pieTF[0]), txt("regulates"), swatch(T.pieTF[1]), txt("regulated by"), ...(undirected ? [swatch(T.pieTF[2]), txt("unknown")] : [])]] : []),
-      [txt(NODE_SIZE_OPTIONS[sizeBy].scale, "#8a969c"), txt(String(Math.min(...values))), mark(56, (x, y) => {
-        add("circle", { cx: x + 6, cy: y + 5, r: 3, fill: T.node }); add("circle", { cx: x + 21, cy: y + 2, r: 6.5, fill: T.node }); add("circle", { cx: x + 44, cy: y - 1, r: 10, fill: T.node });
-      }), txt(String(Math.max(...values)))],
       [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h${directed ? 20 : 30}`, stroke: T.activates, "stroke-width": 1.6 }); if (directed) add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: T.activates }); }), txt("Activates"),
        mark(28, (x, y) => { add("path", { d: directed ? `M${x} ${y}h26m0-7v14` : `M${x} ${y}h28`, stroke: T.represses, "stroke-width": 1.8, fill: "none" }); }), txt("Represses"),
        ...(unsigned ? [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h${directed ? 20 : 30}`, stroke: T.unknown, "stroke-width": 1.6 }); if (directed) add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: "#fff", stroke: T.unknown, "stroke-width": 1.2 }); }), txt("Sign unknown")] : [])],

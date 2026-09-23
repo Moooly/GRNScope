@@ -23,10 +23,9 @@ import {
 } from "./networkAppearance";
 import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
-import NetworkCanvas from "./network/NetworkCanvas";
-import NetworkLegendBar from "./network/Legend";
-import type { PaletteName } from "./network/theme";
-import { figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
+import NetworkCanvas, { fitNetwork } from "./network/NetworkCanvas";
+import { NetworkKey, NetworkLinkFilter } from "./network/Legend";
+import { NODE_SIZE_OPTIONS, figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
@@ -219,8 +218,19 @@ export default function NetworkVisualizationSection(props: Props) {
   const [sizeBy, setSizeBy] = useState<NodeSizeBy>("all");
   const [widthBy, setWidthBy] = useState<EdgeWidthBy>("evidence");
   const [effect, setEffect] = useState<EffectFilter>("all");
-  // Temporary: both palettes stay available until one is chosen.
-  const [figurePalette, setFigurePalette] = useState<PaletteName>("contrast");
+  // Display menu: occasional adjustments, out of the way until needed.
+  const [spacing, setSpacing] = useState(100);
+  const [layoutNonce, setLayoutNonce] = useState(0);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const displayMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!displayOpen) return;
+    const close = (event: MouseEvent) => { if (!displayMenuRef.current?.contains(event.target as Node)) setDisplayOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setDisplayOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
+  }, [displayOpen]);
   // The rebuilt canvas is what the project page shows. The previous renderer
   // is still here, reachable with ?canvas=legacy, because the inspector,
   // Circos, figure export and the trajectory and perturbation views all reach
@@ -402,7 +412,8 @@ export default function NetworkVisualizationSection(props: Props) {
               </p>
             </div>
             {resultsControls ? (
-              <div className="network-atlas-controls shrink-0">
+              <div className="network-atlas-controls flex shrink-0 items-center gap-3">
+                {useNewCanvas && figureNote ? <span className="text-xs text-slate-500" title="Current result filters">{figureNote}</span> : null}
                 <NetworkViewCountsProvider value={viewCounts}>
                   {resultsControls}
                 </NetworkViewCountsProvider>
@@ -440,6 +451,43 @@ export default function NetworkVisualizationSection(props: Props) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {useNewCanvas && networkLayout !== "circos" && (
+                <div ref={displayMenuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setDisplayOpen((open) => !open)}
+                    aria-expanded={displayOpen}
+                    aria-haspopup="dialog"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                  >
+                    Display <span aria-hidden="true">▾</span>
+                  </button>
+                  {displayOpen && (
+                    <div className="display-menu" role="dialog" aria-label="Display options">
+                      <label>Node size
+                        <select value={effectiveSizeBy} onChange={(event) => setSizeBy(event.target.value as NodeSizeBy)} title={NODE_SIZE_OPTIONS[effectiveSizeBy].help}>
+                          {(Object.keys(NODE_SIZE_OPTIONS) as NodeSizeBy[]).map((key) => (
+                            <option key={key} value={key} disabled={key !== "all" && !edges.some((e) => hasDirection(e))}>{NODE_SIZE_OPTIONS[key].label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>Line width
+                        <select value={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"} onChange={(event) => setWidthBy(event.target.value as EdgeWidthBy)}>
+                          <option value="evidence">Evidence</option>
+                          <option value="support" disabled={selectedAlgorithmIds.length <= 1}>Method support</option>
+                        </select>
+                      </label>
+                      <label>Spacing
+                        <span className="display-range">
+                          <input type="range" min="100" max="250" step="25" value={spacing} onChange={(event) => setSpacing(Number(event.target.value))} aria-label="Network spacing" />
+                          <output>{spacing}%</output>
+                        </span>
+                      </label>
+                      <button type="button" className="display-link" onClick={() => { setLayoutNonce((n) => n + 1); setDisplayOpen(false); }} title="Recompute the arrangement, e.g. after dragging genes">Reset layout</button>
+                    </div>
+                  )}
+                </div>
+              )}
               {networkLayout !== "circos" && (
                 <div
                   className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"
@@ -465,6 +513,17 @@ export default function NetworkVisualizationSection(props: Props) {
                   >
                     +
                   </button>
+                  {useNewCanvas && (
+                    <button
+                      type="button"
+                      onClick={() => { const graph = coreRef.current; if (graph && !graph.destroyed()) fitNetwork(graph); }}
+                      className="inline-flex h-full w-10 items-center justify-center border-l border-slate-200 text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                      aria-label="Fit network to view"
+                      title="Fit view"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
+                    </button>
+                  )}
                 </div>
               )}
               <div ref={exportMenuRef} className="relative">
@@ -561,22 +620,7 @@ export default function NetworkVisualizationSection(props: Props) {
           </p>
         )}
         {useNewCanvas && networkLayout !== "circos" ? (
-          <NetworkLegendBar
-            regulatorShare={
-              nodes.length
-                ? nodes.filter((n) => n.isTF).length / nodes.length
-                : 0
-            }
-            hasSign={edges.some((e) => e.sign !== 0)}
-            hasUnsigned={edges.some((e) => e.sign === 0)}
-            directionResolved={edges.some((e) => hasDirection(e))}
-            hasUndirected={edges.some((e) => !hasDirection(e))}
-            hasConfidence={edges.some((e) => e.bootstrapVerified === true)}
-            sizeBy={effectiveSizeBy}
-            widthBy={widthBy}
-            methodCount={selectedAlgorithmIds.length}
-            counts={figureKeyCounts}
-            genes={nodes.length}
+          <NetworkLinkFilter
             relationships={edges.length}
             signCounts={{
               activation: edges.filter((e) => e.sign === 1).length,
@@ -585,9 +629,6 @@ export default function NetworkVisualizationSection(props: Props) {
             }}
             effect={effectiveEffect}
             onEffectChange={setEffect}
-            palette={figurePalette}
-            directionSplit={edges.some((e) => hasDirection(e))}
-            note={figureNote}
           />
         ) : (
         <NetworkLegend
@@ -646,8 +687,8 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSizeByChange={setSizeBy}
                 onWidthByChange={setWidthBy}
                 effect={effectiveEffect}
-                palette={figurePalette}
-                onPaletteChange={setFigurePalette}
+                spacing={spacing}
+                layoutNonce={layoutNonce}
               />
             ) : (
               <NetworkGraph
@@ -696,6 +737,15 @@ export default function NetworkVisualizationSection(props: Props) {
           />
           )}
         </div>
+        {useNewCanvas && networkLayout !== "circos" && nodes.length > 0 && (
+          <NetworkKey
+            directionSplit={edges.some((e) => hasDirection(e))}
+            hasUndirected={edges.some((e) => !hasDirection(e))}
+            widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
+            methodCount={selectedAlgorithmIds.length}
+            counts={figureKeyCounts}
+          />
+        )}
         {showHelp && (
           <NetworkHelpModal
             galaxy={useNewCanvas && networkLayout !== "circos"}

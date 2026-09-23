@@ -84,9 +84,9 @@ export type NetworkGraphProps = {
   onWidthByChange?: (value: import("./network/encoding").EdgeWidthBy) => void;
   /** Show only activation, repression or sign-unknown links. */
   effect?: import("./network/encoding").EffectFilter;
-  /** Colour palette under comparison. */
-  palette?: import("./network/theme").PaletteName;
-  onPaletteChange?: (value: import("./network/theme").PaletteName) => void;
+  /** Display menu: spacing (100–250 %) and a counter that re-solves the layout. */
+  spacing?: number;
+  layoutNonce?: number;
 
 };
 

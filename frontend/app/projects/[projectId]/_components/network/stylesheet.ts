@@ -1,7 +1,7 @@
 import type { StylesheetJson, EdgeSingular, NodeSingular } from "cytoscape";
-import { PALETTES, type Palette } from "./theme";
+import { PALETTE, type Palette } from "./theme";
 
-export function buildNetworkStylesheet(T: Palette = PALETTES.contrast): StylesheetJson {
+export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
   // Three sign states, three colours: activation blue, repression red, and a
   // light grey for relationships no method could sign, so an unsigned record is
   // never drawn as an activation.
