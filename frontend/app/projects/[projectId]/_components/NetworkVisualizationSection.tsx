@@ -281,11 +281,6 @@ export default function NetworkVisualizationSection(props: Props) {
     const effectiveWidth: EdgeWidthBy = selectedAlgorithmIds.length > 1 ? widthBy : "evidence";
     return figureCounts(visibleEdges, effectiveWidth, selectedAlgorithmIds.length, nodes.map((node) => degrees.get(node.id) ?? 0));
   }, [edges, visibleEdges, nodes, effectiveSizeBy, widthBy, selectedAlgorithmIds.length]);
-  const figureNote = useMemo(() => {
-    const evidence = /Evidence ≥ ([0-9.]+)/.exec(props.filterSummary ?? "")?.[1];
-    const methods = selectedAlgorithmIds.length;
-    return [`${methods} ${methods === 1 ? "method" : "methods"}`, evidence && Number(evidence) > 0 ? `evidence ≥ ${evidence}` : ""].filter(Boolean).join(" · ");
-  }, [props.filterSummary, selectedAlgorithmIds.length]);
   const selectedEdge =
     edges.find((edge) => edge.key === selectedEdgeKey) ?? null;
   const selectedVisibleNode =
@@ -412,8 +407,7 @@ export default function NetworkVisualizationSection(props: Props) {
               </p>
             </div>
             {resultsControls ? (
-              <div className="network-atlas-controls flex shrink-0 items-center gap-3">
-                {useNewCanvas && figureNote ? <span className="text-xs text-slate-500" title="Current result filters">{figureNote}</span> : null}
+              <div className="network-atlas-controls shrink-0">
                 <NetworkViewCountsProvider value={viewCounts}>
                   {resultsControls}
                 </NetworkViewCountsProvider>

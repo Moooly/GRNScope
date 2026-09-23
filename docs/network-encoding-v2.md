@@ -70,7 +70,7 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 
 ## Update: cleanup of settings, caption and key (2026-09-23)
 - **Soft is the only palette.** `PALETTE` replaces `PALETTES`, `NETWORK_THEME` carries the Soft colours, and the switch is gone.
-- **Toolbar**: layouts … Display ▾ | − + ⤢ | Download. **Display ▾** holds Node size, Line width, Spacing and Reset layout. ⤢ is fit-to-view (`fitNetwork`). The current filter summary ("5 methods · evidence ≥ 0.50") sits as grey text next to Results Settings.
+- **Toolbar**: layouts … Display ▾ | − + ⤢ | Download. **Display ▾** holds Node size, Line width, Spacing and Reset layout. ⤢ is fit-to-view (`fitNetwork`). (The grey filter summary next to Results Settings was removed at the user's request.)
 - **Filter line** above the network: `Links [71 all] [→ 41 activation] [⊣ 30 repression]`, with "all" selected by default. The gene count is removed.
 - **Key line** under the network (option B): `● TF ● Other gene | ◔ dark regulates · light regulated by (· pale unknown) | Width = evidence | Fade = low confidence`. Steps and counts are in tooltips. The size scale and the Activates/Represses entries are removed from the screen key; the filter line already shows the link symbols. The exported key keeps the link symbols but drops the size scale.
 - The bottom control bar is removed. A small Pin / Clear pins bar appears only while a gene is selected or pinned.
