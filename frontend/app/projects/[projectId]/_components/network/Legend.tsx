@@ -45,9 +45,11 @@ export default function NetworkLegendBar({ regulatorShare, hasUnsigned, hasUndir
   // Each part of the relationship count is also the filter for it.
   const filterPart = (value: EffectFilter, content: React.ReactNode, title: string, empty = false) => {
     const active = effect === value;
-    return <button type="button" className={`key-part${active && effect !== "all" ? " is-on" : ""}${effect !== "all" && !active ? " is-dim" : ""}`}
-      aria-pressed={active} disabled={empty || !onEffectChange} title={active && value !== "all" ? "Show every relationship" : title}
+    return <button type="button" className={`key-part${active ? " is-on" : ""}${effect !== "all" && !active ? " is-dim" : ""}`}
+      aria-pressed={active} disabled={empty || !onEffectChange} title={active ? (value === "all" ? "Showing every relationship; click a count to show only those links" : "Show every relationship") : title}
       onClick={() => onEffectChange?.(active ? "all" : value)}>{content}</button>;
+    // The selected part is always shaded -- including "relationships" by
+    // default -- so the counts read as a choice that can be changed.
   };
   return <div className="grn-legend-bar publication-legend figure-key" aria-label="Network legend">
     {genes !== undefined && <p className="key-caption">
