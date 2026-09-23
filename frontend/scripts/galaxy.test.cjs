@@ -401,20 +401,6 @@ test("curved links bow uniformly, and reciprocal links separate on their own", (
   assert.equal(Object.keys(straight).length, 0, "without curves a single link stays straight");
 });
 
-test("groups are found on the backbone, named after their best-connected TF, and shaded without hiding genes", () => {
-  const { detectModules, labelModules, modulePath } = require(base + "modules.ts");
-  const ids = Array.from({ length: 12 }, (_, i) => `g${i}`), edges = [];
-  for (const block of [0, 6]) for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) edges.push({ source: `g${block+i}`, target: `g${block+j}`, weight: 0.9 });
-  edges.push({ source: "g0", target: "g6", weight: 0.2 });
-  const modules = labelModules(detectModules(ids, edges), id => id === "g2" ? 9 : 1, id => id === "g2" || id === "g7");
-  assert.equal(modules.length, 2);
-  assert.deepEqual(modules.map(m => m.members.length).sort(), [6, 6]);
-  assert.ok(modules.some(m => m.label === "g2") && modules.some(m => m.label === "g7"));
-  assert.deepEqual(detectModules(ids.slice(0, 5), edges), [], "tiny networks are not shaded");
-  const shape = modulePath([{ x: 0, y: 0, r: 10 }, { x: 100, y: 0, r: 10 }, { x: 50, y: 80, r: 10 }]);
-  assert.ok(shape.d.startsWith("M") && shape.d.endsWith("Z") && shape.top.y < -10);
-});
-
 test("arrowheads scale with their line instead of a fixed minimum", () => {
   const { arrowScaleFor } = require(base + "presentation.ts");
   const head = (px, zoom) => Math.max(Math.pow(px / zoom * 13.37, 0.9), 29) * arrowScaleFor(px, zoom) * zoom;

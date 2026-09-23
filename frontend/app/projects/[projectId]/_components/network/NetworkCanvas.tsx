@@ -12,7 +12,6 @@ import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
 import { routeGalaxy, type GalaxyResult, type Point } from "./galaxyGeometry";
 import { NODE_SIZE_OPTIONS, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
-import { computeModules, moduleMarkup, type Module } from "./modules";
 import { hasDirection } from "../networkVisualEncoding";
 
 function fit(cy: Core) {
@@ -93,18 +92,9 @@ function glide(cy: Core, previous: Map<string, Point>, done: () => void) {
   setTimeout(() => { if (!cy.destroyed() && cy.scratch("galaxyAnimating")) cy.nodes().stop(true, true); }, 1500);
 }
 
-/** Redraw the pale group shading under the network for the current camera. */
-function drawModules(cy: Core, overlay: SVGSVGElement | null) {
-  if (!overlay) return;
-  const modules = (cy.scratch("networkModules") ?? []) as Module[];
-  overlay.innerHTML = cy.destroyed() || cy.scratch("showModules") === false || cy.scratch("galaxyBusy") || cy.scratch("galaxyAnimating") ? "" : moduleMarkup(cy, modules, cy.zoom(), cy.pan());
-}
-
 /** Worker-owned geometry; the visible graph owns camera and interaction. */
 export default function NetworkCanvas(props: NetworkGraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const overlayRef = useRef<SVGSVGElement | null>(null);
-  const [showModules, setShowModules] = useState(true);
   const [curved, setCurved] = useState(true);
   const coreRef = useRef<Core | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -157,15 +147,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       frame = requestAnimationFrame(() => {
         if (cy.destroyed() || busy.current) return;
         applyPresentation(cy);
-        drawModules(cy, overlayRef.current);
       });
     });
     cy.on("dragpan scrollzoom", () => cy.scratch("galaxyCameraTouched", true));
-    let dragFrame = 0;
-    cy.on("drag", "node", () => {
-      cancelAnimationFrame(dragFrame);
-      dragFrame = requestAnimationFrame(() => drawModules(cy, overlayRef.current));
-    });
     cy.on("dragfree", "node", () => {
       const input = galaxyInput(cy);
       const positions: Record<string, Point> = {};
@@ -199,7 +183,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     const hasNodes = latest.current.nodes.length > 0;
     busy.current = hasNodes;
     cy.scratch("galaxyBusy", hasNodes);
-    drawModules(cy, overlayRef.current);
     // Publish the external worker's lifecycle after this synchronization pass.
     queueMicrotask(() => {
       if (cy.destroyed() || id !== revision.current) return;
@@ -230,7 +213,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           const neighborhoods = new Set(Object.values(result.neighborhoods ?? {})).size;
           cy.scratch("galaxyNeighborhoods", neighborhoods);
           setRendered({ nodes: cy.nodes().length, edges: cy.edges().length, neighborhoods });
-          computeModules(cy);
         }
         const occluded = new Set(result.occluded ?? []);
         cy.edges().forEach(e => {
@@ -248,9 +230,8 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         // at 100% and remains a reader's choice.
         setSpacing(100);
         select(cy, latest.current);
-        glide(cy, previous, () => drawModules(cy, overlayRef.current));
+        glide(cy, previous, () => {});
       } else applyPresentation(cy, true);
-      drawModules(cy, overlayRef.current);
       initial = false;
     };
     const fail = (message: string) => {
@@ -305,7 +286,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const visiblePins = pins.filter(id => props.nodes.some(n => n.id === id));
   const selected = props.selectedGene;
   return <>
-    <svg ref={overlayRef} className="galaxy-modules" aria-hidden="true" />
     <div ref={containerRef} className="grn-canvas" role="group" tabIndex={0} aria-busy={arranging} aria-label={`Regulatory network: ${rendered.nodes} genes and ${rendered.edges} relationships. Arrow keys browse genes; Escape clears selection.`}
       onKeyDown={event=>{
         if (arranging) return;
@@ -348,7 +328,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
             ++revision.current; // Ignore any routing response from a pre-spacing drag.
             applyNetworkSpacing(cy, next / 100);
             applyPresentation(cy, true);
-            drawModules(cy, overlayRef.current);
           }
         }} />
         <output>{spacing}%</output>
@@ -365,11 +344,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           <option value="support" disabled={methodCount <= 1}>Method support</option>
         </select>
       </label>
-      <button type="button" aria-pressed={showModules} disabled={arranging} title="Pale shading behind groups of densely connected genes, named after their best-connected transcription factor. Groups describe connectivity in this figure, not biological pathways." onClick={() => {
-        const next = !showModules; setShowModules(next);
-        const cy = coreRef.current;
-        if (cy) { cy.scratch("showModules", next); drawModules(cy, overlayRef.current); }
-      }}>Groups</button>
       <button type="button" aria-pressed={curved} disabled={arranging} title="Draw links as gentle arcs; opposite directions between two genes then separate on their own" onClick={() => {
         const next = !curved; setCurved(next);
         const cy = coreRef.current;

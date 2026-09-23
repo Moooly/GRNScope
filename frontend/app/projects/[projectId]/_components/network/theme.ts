@@ -8,7 +8,7 @@ export const NETWORK_THEME = {
   tf: "#d9913a", tfRim: "#d9913a",
   nodeMuted: "#f0f0f0", link: "#2166ac", linkMuted: "#dde3ea",
   label: "#1a1a1a", labelHalo: "#ffffff",
-  accent: "#1a1a1a", accentSoft: "#eef2f7", module: "#e9eef4",
+  accent: "#1a1a1a", accentSoft: "#eef2f7",
   activates: "#2166ac", represses: "#b2182b", unknown: "#b5b5b5",
 } as const;
 export const NETWORK_SCALE = {

@@ -40,8 +40,8 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Caption strip**: one line of small type, "19 genes | 71 relationships | 5 methods · evidence ≥ 0.50", replacing the big stat blocks.
 - **Key reports this figure**: columns for Genes, Size (with the actual min–max of the chosen measure), Effect, Width and Opacity, each width and confidence step with its count. The exported figure's key carries the same counts.
 - **Colours**: TF amber `#D9913A` (further from repression red), other genes `#D9D9D9`.
-- **Group shading (Groups toggle, on by default)**: Louvain-style local moving on the layout backbone, with groups of 4 or more genes, shown only when there are at least 2 groups and at most 600 genes. Each group gets a pale rounded hull `#E9EEF4`, named in grey italic after its best-connected TF on the first side that clears every gene and other name. Groups describe connectivity in this figure, not biological pathways. Included in exports.
+- **Group shading**: tried and removed on 2026-09-23 because it looked too busy.
 - **Smooth transitions**: after a new arrangement, genes glide from where the reader last saw them (520 ms); new genes grow out from the centre (620 ms). Skipped for reduced-motion users, networks over 1,500 genes and background tabs.
 - **Hover flow**: hovering a gene or link makes dashes drift from regulator to target along its directed links. Screen-only.
 - **Curved links (toggle, on by default)**: every link bows by min(10% of its length, 36 units) relative to its own direction, so A→B and B→A separate on their own.
-- `npm run test:network`: 42 pass.
+- `npm run test:network`: 41 pass.

@@ -3,7 +3,6 @@ import type { NetworkFigureContext } from "../networkFigureExport";
 import { NETWORK_THEME as T } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
-import { moduleMarkup, type Module } from "./modules";
 import { CONFIDENCE_LABELS, CONFIDENCE_OPACITY, EVIDENCE_LABELS, NODE_SIZE_OPTIONS, WIDTH_STEPS, supportLabels, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -91,12 +90,6 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const drawing = document.importNode(parsed.documentElement, true);
     drawing.setAttribute("x", "0"); drawing.setAttribute("y", "48");
     drawing.setAttribute("width", String(WIDTH)); drawing.setAttribute("height", String(GRAPH_HEIGHT));
-    // Group shading sits under the drawing, in the same coordinates.
-    const modules = (source.scratch("networkModules") ?? []) as Module[];
-    if (modules.length && source.scratch("showModules") !== false) {
-      const shade = new DOMParser().parseFromString(`<svg xmlns="${NS}">${moduleMarkup(graph, modules, graph.zoom(), graph.pan(), 15)}</svg>`, "image/svg+xml").documentElement;
-      [...shade.childNodes].reverse().forEach(node => drawing.insertBefore(document.importNode(node, true), drawing.firstChild));
-    }
     svg.appendChild(drawing);
     add("path", { d: `M32 ${top}H1168`, stroke: "#d9d9d9", "stroke-width": 1 });
     add("circle", { cx: 42, cy: top + 29, r: 8, fill: T.tf });
