@@ -50,6 +50,7 @@ const CONFIDENCE_STABILITY_TOP_K = 10;
 const MODAL_ANIMATION_MS = 480;
 // Number of strongest edges to reveal when a project detail page first opens.
 const INITIAL_VISIBLE_EDGE_TARGET = 10;
+const DEFAULT_EVIDENCE_THRESHOLD = 0.5;
 // Shown for algorithm failures that aren't user-actionable (most are internal).
 const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
@@ -1898,17 +1899,26 @@ export default function ProjectDetailPage() {
       ? consensusCandidateRows
       : standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [];
 
-    // Wait until this project's edges have actually loaded before seeding.
-    if (candidatePool.length === 0) return;
+    // Wait until this project's edges have actually loaded before seeding --
+    // all of them: a partial load averages consensus evidence over missing
+    // methods and would seed a threshold far too low.
+    if (candidatePool.length === 0 || isPreparingFinishedResults) return;
 
     const sortedByEvidence = candidatePool
       .filter((edge) => Number.isFinite(edge.score))
       .sort((a, b) => b.score - a.score);
     if (sortedByEvidence.length === 0) return;
 
+    // Open the (complete) network at evidence >= 0.5: weak links stay out of
+    // the first view, and the reader can loosen the cut in Results Settings.
+    // Projects too weak to show a handful of links at 0.5 fall back to the
+    // strongest ~INITIAL_VISIBLE_EDGE_TARGET.
     const targetIndex =
       Math.min(INITIAL_VISIBLE_EDGE_TARGET, sortedByEvidence.length) - 1;
-    const seedEvidenceThreshold = sortedByEvidence[targetIndex].score;
+    const passingDefault = sortedByEvidence.filter((edge) => edge.score >= DEFAULT_EVIDENCE_THRESHOLD).length;
+    const seedEvidenceThreshold = passingDefault >= INITIAL_VISIBLE_EDGE_TARGET
+      ? DEFAULT_EVIDENCE_THRESHOLD
+      : sortedByEvidence[targetIndex].score;
 
     // Evidence alone drives the initial count; relax the other axes so they
     // don't undercut the target. The panel then honestly reflects what is shown.
@@ -1924,6 +1934,7 @@ export default function ProjectDetailPage() {
     activeAlgorithmIds,
     consensusCandidateRows,
     standardizedAlgorithmEdgeRows,
+    isPreparingFinishedResults,
   ]);
 
   const geneCoordinateMap = useMemo(() => {

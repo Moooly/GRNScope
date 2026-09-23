@@ -7,7 +7,7 @@ cytoscape.use(fcose);
 
 export type Point = { x: number; y: number };
 export type GalaxyNode = { id: string; diameter: number; labelWidth: number };
-export type GalaxyEdge = { id: string; source: string; target: string; sign: number; direction: number };
+export type GalaxyEdge = { id: string; source: string; target: string; sign: number; direction: number; /** Evidence, 0–1; ranks links for the layout backbone. */ weight?: number };
 export type GalaxyInput = {
   nodes: GalaxyNode[];
   edges: GalaxyEdge[];
@@ -22,6 +22,8 @@ export type GalaxyResult = {
   routes: Record<string, Route>;
   components: number;
   neighborhoods?: Record<string, string>;
+  /** Edges whose straight line passes under a gene they do not connect. */
+  occluded?: string[];
 };
 
 const TAU = Math.PI * 2;
@@ -394,8 +396,56 @@ export function routeGalaxy(input: Pick<GalaxyInput, "edges"> & Partial<Pick<Gal
   return routes;
 }
 
+/** Backbone for dense networks: every gene keeps its `perGene` strongest
+ * links (by evidence), and only those position the genes. All links are still
+ * drawn. Sparse networks use every link. */
+export function layoutBackbone(input: GalaxyInput, perGene = 3): GalaxyInput {
+  const real = input.edges.filter(e => e.source !== e.target);
+  // Above ~600 genes the dense path partitions the network into bounded
+  // regions instead, which is what keeps very large layouts fast.
+  if (real.length <= input.nodes.length * 1.5 || input.nodes.length > 600) return input;
+  const byGene = new Map<string, GalaxyEdge[]>();
+  for (const e of real) for (const id of [e.source, e.target]) { const list = byGene.get(id) ?? []; list.push(e); byGene.set(id, list); }
+  const keep = new Set<string>();
+  for (const list of byGene.values()) {
+    list.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0) || a.id.localeCompare(b.id));
+    list.slice(0, perGene).forEach(e => keep.add(e.id));
+  }
+  return { ...input, edges: input.edges.filter(e => keep.has(e.id)) };
+}
+
+/** Straight links that pass under the disc of a gene they do not connect. */
+export function occludedEdges(input: Pick<GalaxyInput, "nodes" | "edges">, positions: Record<string, Point>): string[] {
+  const cell = 120, grid = new Map<string, GalaxyNode[]>();
+  let maxR = 0;
+  for (const n of input.nodes) {
+    const p = positions[n.id]; if (!p) continue;
+    const key = `${Math.floor(p.x / cell)},${Math.floor(p.y / cell)}`;
+    const bucket = grid.get(key) ?? []; bucket.push(n); grid.set(key, bucket);
+    maxR = Math.max(maxR, n.diameter / 2);
+  }
+  const out: string[] = [];
+  for (const e of input.edges) {
+    const a = positions[e.source], b = positions[e.target];
+    if (!a || !b || e.source === e.target) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1;
+    const x1 = Math.floor((Math.min(a.x, b.x) - maxR) / cell), x2 = Math.floor((Math.max(a.x, b.x) + maxR) / cell);
+    const y1 = Math.floor((Math.min(a.y, b.y) - maxR) / cell), y2 = Math.floor((Math.max(a.y, b.y) + maxR) / cell);
+    let hit = false;
+    for (let gx = x1; gx <= x2 && !hit; gx++) for (let gy = y1; gy <= y2 && !hit; gy++) {
+      for (const n of grid.get(`${gx},${gy}`) ?? []) {
+        if (n.id === e.source || n.id === e.target) continue;
+        const p = positions[n.id], t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+        if (Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y) < n.diameter / 2 - 1) { hit = true; break; }
+      }
+    }
+    if (hit) out.push(e.id);
+  }
+  return out;
+}
+
 export function buildGalaxy(input: GalaxyInput): GalaxyResult {
   const neighborhoods: Record<string, string> = {};
-  const positions=layoutGalaxy(input, neighborhoods);
-  return {positions,routes:routeGalaxy(input,positions),components:galaxyStructure(input).components.length, neighborhoods};
+  const positions=layoutGalaxy(layoutBackbone(input), neighborhoods);
+  return {positions,routes:routeGalaxy(input,positions),components:galaxyStructure(input).components.length, neighborhoods, occluded: occludedEdges(input, positions)};
 }

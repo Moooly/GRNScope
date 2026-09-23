@@ -1,10 +1,10 @@
-import { buildGalaxy, routeGalaxy, type GalaxyInput, type Point } from "./galaxyGeometry";
+import { buildGalaxy, occludedEdges, routeGalaxy, type GalaxyInput, type Point } from "./galaxyGeometry";
 
 self.onmessage = (event: MessageEvent<{ id: number; input: GalaxyInput; positions?: Record<string, Point> }>) => {
   const { id, input, positions } = event.data;
   try {
     const result = positions
-      ? { positions, routes: routeGalaxy(input, positions), components: 0 }
+      ? { positions, routes: routeGalaxy(input, positions), components: 0, occluded: occludedEdges(input, positions) }
       : buildGalaxy(input);
     self.postMessage({ id, result });
   } catch (error) {

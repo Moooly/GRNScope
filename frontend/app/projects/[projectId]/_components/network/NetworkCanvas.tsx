@@ -155,7 +155,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
           cy.scratch("galaxyNeighborhoods", neighborhoods);
           setRendered({ nodes: cy.nodes().length, edges: cy.edges().length, neighborhoods });
         }
+        const occluded = new Set(result.occluded ?? []);
         cy.edges().forEach(e => {
+          e.data("occluded", occluded.has(e.id()));
           const route = result.routes[e.id()];
           if (route) e.data({ routeDistances: route.distances, routeWeights: route.weights });
           else e.removeData("routeDistances routeWeights");
@@ -169,7 +171,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
         // at 100% and remains a reader's choice.
         setSpacing(100);
         select(cy, latest.current);
-      }
+      } else applyPresentation(cy, true);
       initial = false;
     };
     const fail = (message: string) => {

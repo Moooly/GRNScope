@@ -30,11 +30,12 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
   const sizeBy = options.sizeBy ?? "all", widthBy = options.widthBy ?? "evidence", methodCount = options.methodCount ?? 1;
   const degrees = nodeDegrees(edges);
   const sized = degrees[sizeBy];
-  const maxValue = Math.max(0, ...sized.values());
+  const values = nodes.map(n => sized.get(n.id) ?? 0);
+  const minValue = values.length ? Math.min(...values) : 0, maxValue = values.length ? Math.max(...values) : 0;
   return [
     ...nodes.map(n => {
       const d = degrees.all.get(n.id) ?? 0, value = sized.get(n.id) ?? 0;
-      const box = nodeDiameter(value, maxValue);
+      const box = nodeDiameter(value, minValue, maxValue);
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d,
         degreeOut: degrees.out.get(n.id) ?? 0, degreeIn: degrees.in.get(n.id) ?? 0, sizeValue: value,
         isTF: n.isTF ? 1 : 0,
@@ -72,7 +73,7 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
 export function galaxyInputFromElements(elements: ElementDefinition[], width: number, height: number): GalaxyInput {
   return {
     nodes: elements.filter(e => e.data.source === undefined).map(({ data: d }) => ({ id: String(d.id), diameter: Number(d.diameter), labelWidth: Math.min(150, String(d.fullLabel).length * 6.5) })),
-    edges: elements.filter(e => e.data.source !== undefined).map(({ data: d }) => ({ id: String(d.id), source: String(d.source), target: String(d.target), sign: Number(d.sign), direction: Number(d.direction) })),
+    edges: elements.filter(e => e.data.source !== undefined).map(({ data: d }) => ({ id: String(d.id), source: String(d.source), target: String(d.target), sign: Number(d.sign), direction: Number(d.direction), weight: Number(d.evidence) || 0 })),
     width, height,
   };
 }
@@ -80,7 +81,7 @@ export function galaxyInputFromElements(elements: ElementDefinition[], width: nu
 export function galaxyInput(cy: Core): GalaxyInput {
   return {
     nodes: cy.nodes().map(n => ({ id: n.id(), diameter: Number(n.data("diameter")), labelWidth: Math.min(150, String(n.data("fullLabel")).length * 5.7) })),
-    edges: cy.edges().map(e => ({ id: e.id(), source: e.source().id(), target: e.target().id(), sign: Number(e.data("sign")), direction: Number(e.data("direction")) })),
+    edges: cy.edges().map(e => ({ id: e.id(), source: e.source().id(), target: e.target().id(), sign: Number(e.data("sign")), direction: Number(e.data("direction")), weight: Number(e.data("evidence")) || 0 })),
     width: cy.width(), height: cy.height(),
   };
 }

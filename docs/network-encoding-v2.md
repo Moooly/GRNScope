@@ -26,3 +26,10 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - `npm run test:network`: 38 pass, including new tests for fixed edge length, the size measures, the width steps and the confidence opacities.
 - `tsc --noEmit` and ESLint on the changed files pass. A production `next build` was not run, so it would not disturb the running dev server.
 - On real projects: 19 genes, median rim-to-rim length 89 (target 80), no overlaps; 100 genes / 636 links, no overlaps, 0.8 s layout; 1,170 genes, 1.2 s.
+
+## Update: backbone layout and density (2026-09-23)
+- **Backbone layout.** When a network has more than 1.5 links per gene (and at most 600 genes), each gene's three strongest links by evidence decide where it sits. All links are still drawn. Larger networks keep the bounded-region path, which is what keeps them fast.
+- **Opening evidence cut.** Projects now open at evidence ≥ 0.5, or at the strongest ~10 links when fewer than 10 pass 0.5. Seeding now waits until every method's results have loaded. Before, a partial load averaged consensus evidence over missing methods and set the cut far too low (the 19-gene project opened at 0.19 and showed 108 links; it now shows 71).
+- **Node size relative to the network.** Diameter runs linearly from 15 to 150 between the smallest and largest value in the network shown, so only the best-connected genes read as big. If every gene has the same value, all are drawn at 60.
+- **Links under genes.** A straight link that passes under a gene it does not connect is drawn at 55% of its opacity (`occludedEdges`, computed in the layout worker and after dragging).
+- Timings (layout worker, local): 19 genes 0.1 s, 100 genes / 636 links 0.4 s, 1,170 genes / 3,870 links 1.1 s. `npm run test:network`: 39 pass.

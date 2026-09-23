@@ -164,14 +164,13 @@ test("spokes remain straight, while reciprocal records retain separate lanes on 
   } finally {cy.destroy();}
 });
 
-test("linear degree sizes keep tenfold hub contrast without saturating large hubs", () => {
-  for (const maximum of [18,100,723]) {
-    const sizes=[1,3,10,18,maximum].sort((a,b)=>a-b).map(d => nodeDiameter(d,maximum));
-    assert.ok(sizes.every((s,i) => s>=20 && s<=200 && (!i || s>=sizes[i-1])));
-    assert.equal(nodeDiameter(maximum,maximum)/nodeDiameter(1,maximum),10);
-    assert.ok(nodeDiameter(maximum/2,maximum)<nodeDiameter(maximum,maximum));
+test("node sizes span this network's own range with tenfold contrast", () => {
+  for (const [lo, hi] of [[1,18],[13,17],[0,723]]) {
+    const sizes=[lo,(lo+hi)/2,hi].map(d => nodeDiameter(d,lo,hi));
+    assert.ok(sizes.every((s,i) => s>=15 && s<=150 && (!i || s>sizes[i-1])));
+    assert.equal(nodeDiameter(hi,lo,hi)/nodeDiameter(lo,lo,hi),10,"smallest to largest is 1:10 whatever the degree range");
   }
-  assert.equal(nodeDiameter(0),20);
+  assert.equal(nodeDiameter(5,5,5),60,"a network where every gene is alike draws them alike");
 });
 
 test("spacing expands positions without zooming, growing glyphs, or losing records", () => {
@@ -230,10 +229,13 @@ test("dense 100- and 1193-node views retain every record and form bounded layout
     const result=buildGalaxy(input);
     verify(input,result);assert.deepEqual(input,original);
     assert.equal(Object.keys(result.routes).length,0,"unique records use native straight links");
-    if(count>=400) {
+    // Up to 600 genes a dense input is positioned by its backbone (each
+    // gene's three strongest links) and solved as one network; larger inputs
+    // keep the bounded-region path.
+    if(count>600) {
       assert.equal(Object.keys(result.neighborhoods).length,count);
       assert.ok(new Set(Object.values(result.neighborhoods)).size>=3);
-    } else assert.equal(Object.keys(result.neighborhoods).length,0,"moderate dense graphs should spread as one network, without artificial clumps");
+    } else assert.equal(Object.keys(result.neighborhoods).length,0);
     const structure=galaxyStructure(input), partition=partitionSkeleton([...structure.core],structure.neighbors);
     assert.deepEqual(partition,partitionSkeleton([...structure.core].reverse(),structure.neighbors));
     assert.ok(partition.every(g=>g.length<=72));
@@ -365,4 +367,25 @@ test("sparse networks keep a fixed rim-to-rim edge length and clear space betwee
     const a=input.nodes[i], b=input.nodes[j];
     assert.ok(Math.hypot(P[a.id].x-P[b.id].x, P[a.id].y-P[b.id].y) - (a.diameter+b.diameter)/2 >= 12, `too close: ${a.id} ${b.id}`);
   }
+});
+
+test("dense networks are positioned by a backbone of each gene's strongest links; all links stay drawn", () => {
+  const { layoutBackbone, occludedEdges } = require(base + "galaxyGeometry.ts");
+  const nodes = Array.from({ length: 12 }, (_, i) => ({ id: `g${i}`, diameter: 30, labelWidth: 20 }));
+  const edges = [];
+  for (let i = 0; i < 12; i++) for (let j = i + 1; j < 12; j++) edges.push({ id: `${i}-${j}`, source: `g${i}`, target: `g${j}`, sign: 1, direction: 0, weight: ((i * 7 + j * 3) % 10) / 10 });
+  const input = { nodes, edges, width: 1000, height: 600 };
+  const backbone = layoutBackbone(input);
+  assert.ok(backbone.edges.length < edges.length / 2, "the layout ignores most weak links");
+  for (const n of nodes) assert.ok(backbone.edges.some(e => e.source === n.id || e.target === n.id), "every gene keeps a link");
+  const top = edges.filter(e => e.source === "g0" || e.target === "g0").sort((a, b) => b.weight - a.weight)[0];
+  assert.ok(backbone.edges.includes(top), "a gene's strongest link is in the backbone");
+  const result = buildGalaxy(input);
+  assert.equal(Object.keys(result.positions).length, 12);
+  assert.ok(Array.isArray(result.occluded));
+  const sparse = { nodes: nodes.slice(0, 3), edges: edges.filter(e => ["0-1", "1-2"].includes(e.id)), width: 1000, height: 600 };
+  assert.equal(layoutBackbone(sparse), sparse, "sparse networks use every link");
+  const line = { nodes: [{ id: "a", diameter: 10 }, { id: "b", diameter: 10 }, { id: "c", diameter: 40 }], edges: [{ id: "ab", source: "a", target: "b", sign: 1, direction: 0 }] };
+  assert.deepEqual(occludedEdges(line, { a: { x: 0, y: 0 }, b: { x: 200, y: 0 }, c: { x: 100, y: 5 } }), ["ab"]);
+  assert.deepEqual(occludedEdges(line, { a: { x: 0, y: 0 }, b: { x: 200, y: 0 }, c: { x: 100, y: 60 } }), []);
 });
