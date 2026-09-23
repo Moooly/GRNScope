@@ -206,7 +206,7 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
       if (!kids.length) continue;
       const r = byId.get(id)!.diameter / 2, maxKid = kidMax(id);
       // A gene occupies its disc or its name, whichever is wider, plus margin.
-      const extent = (k: string) => Math.max(byId.get(k)!.diameter, byId.get(k)!.labelWidth) + 18;
+      const extent = (k: string) => Math.max(byId.get(k)!.diameter + 18, byId.get(k)!.labelWidth + 8);
       const ringStep = Math.max(...kids.map(extent));
       const need = (k: string, ring: number) => extent(k) / (r + gap + maxKid / 2 + ring * ringStep);
       const limit = TAU * 0.94;
@@ -325,7 +325,7 @@ function relaxCollisions(ids: string[], positions: Record<string, Point>, nodes:
           const dx = p.x - q.x, dy = p.y - q.y;
           // Names sit inside the discs, so a gene only needs its disc -- or its
           // name, where that is wider -- plus a clear margin.
-          const minX = (Math.max(node.diameter, node.labelWidth) + Math.max(peer.diameter, peer.labelWidth)) / 2 + 16;
+          const minX = Math.max((node.diameter + peer.diameter) / 2 + 16, (Math.max(node.diameter, node.labelWidth) + Math.max(peer.diameter, peer.labelWidth)) / 2 + 6);
           const minY = (node.diameter + peer.diameter) / 2 + 16;
           const ox = minX - Math.abs(dx), oy = minY - Math.abs(dy);
           if (ox <= 0 || oy <= 0) continue;

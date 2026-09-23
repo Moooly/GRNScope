@@ -22,7 +22,7 @@ export function buildNetworkStylesheet(): StylesheetJson {
       "overlay-opacity": 0, "z-index": 10,
     } },
     { selector: "node[isTF = 1]", style: { "background-color": T.tf } },
-    { selector: "node[diameter > 90]", style: { "font-weight": 600 } },
+    { selector: "node[diameter > 60]", style: { "font-weight": 600 } },
     { selector: "edge", style: {
       "curve-style": (e: EdgeSingular) => e.data("routeDistances") ? "unbundled-bezier" : "bezier",
       "control-point-distances": (e: EdgeSingular) => e.data("routeDistances") ?? [0],

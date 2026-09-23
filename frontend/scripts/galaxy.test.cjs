@@ -167,10 +167,10 @@ test("spokes remain straight, while reciprocal records retain separate lanes on 
 test("node sizes span this network's own range with tenfold contrast", () => {
   for (const [lo, hi] of [[1,18],[13,17],[0,723]]) {
     const sizes=[lo,(lo+hi)/2,hi].map(d => nodeDiameter(d,lo,hi));
-    assert.ok(sizes.every((s,i) => s>=15 && s<=150 && (!i || s>sizes[i-1])));
+    assert.ok(sizes.every((s,i) => s>=10 && s<=100 && (!i || s>sizes[i-1])));
     assert.equal(nodeDiameter(hi,lo,hi)/nodeDiameter(lo,lo,hi),10,"smallest to largest is 1:10 whatever the degree range");
   }
-  assert.equal(nodeDiameter(5,5,5),60,"a network where every gene is alike draws them alike");
+  assert.equal(nodeDiameter(5,5,5),40,"a network where every gene is alike draws them alike");
 });
 
 test("spacing expands positions without zooming, growing glyphs, or losing records", () => {
