@@ -45,3 +45,7 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Hover flow**: hovering a gene or link makes dashes drift from regulator to target along its directed links. Screen-only.
 - **Curved links**: tried and removed on 2026-09-23. Links are straight again; only parallel or reciprocal records get separate lanes. The curved mode is still in `routeGalaxy` (`curved: true`) but nothing turns it on.
 - `npm run test:network`: 41 pass.
+
+## Update: more spread, fill the frame (2026-09-23)
+- Target rim-to-rim link length raised from 80 to 100 units (`EDGE_GAP`).
+- `fillFrame`: after layout, the arrangement is stretched towards the canvas's proportions, up to 1.8×. A round network in a wide canvas now uses the horizontal space. Stretching only lengthens distances, so it can't create overlaps. The frame shape is read when the layout is computed; after resizing the window, press Reset layout to refit.

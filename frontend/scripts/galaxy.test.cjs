@@ -356,7 +356,8 @@ test("opening ranking never uses unverified bootstrap values", () => {
 
 test("sparse networks keep a fixed rim-to-rim edge length and clear space between genes", () => {
   const { EDGE_GAP } = require(base + "theme.ts");
-  const input = inputFor(fixture.nodes, fixture.edges), result = buildGalaxy(input);
+  // No frame: measure the solver itself, before any widening to the canvas.
+  const input = { ...inputFor(fixture.nodes, fixture.edges), width: 0, height: 0 }, result = buildGalaxy(input);
   verify(input, result);
   const P = result.positions, D = new Map(input.nodes.map(n => [n.id, n.diameter]));
   const rim = input.edges.filter(e => e.source !== e.target).map(e => Math.hypot(P[e.source].x-P[e.target].x, P[e.source].y-P[e.target].y) - D.get(e.source)/2 - D.get(e.target)/2).sort((a,b)=>a-b);
@@ -409,4 +410,17 @@ test("arrowheads scale with their line and stay clearly visible", () => {
     assert.ok(Math.abs(head(0.6, zoom) - 5.2) < 0.01, "thin link: a 5 px head at any zoom");
     assert.ok(Math.abs(head(3.6, zoom) - 11.2) < 0.01, "thick link: an 11 px head");
   }
+});
+
+test("a round arrangement is widened towards a wide canvas, by at most 1.8x, without overlaps", () => {
+  const { fillFrame } = require(base + "galaxyGeometry.ts");
+  const nodes = new Map(["a","b","c","d"].map(id => [id, { id, diameter: 20, labelWidth: 10 }]));
+  const positions = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, c: { x: 0, y: 100 }, d: { x: 100, y: 100 } };
+  fillFrame(positions, nodes, 1600, 600);
+  assert.ok(Math.abs((positions.b.x - positions.a.x) - 180) < 1e-9, "capped at 1.8x");
+  assert.equal(positions.c.y - positions.a.y, 100, "height untouched");
+  const input = inputFor(fixture.nodes, fixture.edges), result = buildGalaxy({ ...input, width: 1600, height: 600 });
+  verify(input, result);
+  const xs = Object.values(result.positions).map(p => p.x), ys = Object.values(result.positions).map(p => p.y);
+  assert.ok((Math.max(...xs) - Math.min(...xs)) / (Math.max(...ys) - Math.min(...ys)) > 1.5, "the arrangement uses the wide frame");
 });

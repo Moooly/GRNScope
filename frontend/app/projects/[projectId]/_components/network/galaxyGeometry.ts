@@ -260,7 +260,30 @@ export function layoutGalaxy(input: GalaxyInput, neighborhoods: Record<string, s
     groups.push({ ids, w: maxX - minX + 32, h: maxY - minY + 32 });
   }
   packGroups(groups, positions, input.width / Math.max(1, input.height));
+  fillFrame(positions, byId, input.width, input.height);
   return positions;
+}
+
+/** Use the frame's shape. A roughly round arrangement in a wide canvas leaves
+ * empty bands at both sides, so the arrangement is widened (or heightened)
+ * towards the frame's proportions, by at most 1.8x. Widening only lengthens
+ * distances, so it cannot create an overlap. */
+export function fillFrame(positions: Record<string, Point>, nodes: Map<string, GalaxyNode>, width: number, height: number, limit = 1.8) {
+  const ids = Object.keys(positions);
+  if (ids.length < 3 || !(width > 0) || !(height > 0)) return;
+  const r = (id: string) => (nodes.get(id)?.diameter ?? 0) / 2;
+  const x1 = Math.min(...ids.map(id => positions[id].x - r(id))), x2 = Math.max(...ids.map(id => positions[id].x + r(id)));
+  const y1 = Math.min(...ids.map(id => positions[id].y - r(id))), y2 = Math.max(...ids.map(id => positions[id].y + r(id)));
+  const w = Math.max(1, x2 - x1), h = Math.max(1, y2 - y1);
+  const frame = width / height, shape = w / h;
+  const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+  if (shape < frame) {
+    const k = Math.min(limit, frame / shape);
+    ids.forEach(id => { positions[id].x = cx + (positions[id].x - cx) * k; });
+  } else if (shape > frame) {
+    const k = Math.min(limit, shape / frame);
+    ids.forEach(id => { positions[id].y = cy + (positions[id].y - cy) * k; });
+  }
 }
 
 /** Localized stress majorization (Gansner, Koren & North 2004). Ideal

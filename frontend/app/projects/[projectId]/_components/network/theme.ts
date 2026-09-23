@@ -19,5 +19,5 @@ export const NETWORK_SCALE = {
 } as const;
 /** Visible gap between the rims of two connected genes, in model units. Every
  * spring in the force layout aims for this same length. */
-export const EDGE_GAP = 80;
+export const EDGE_GAP = 100;
 export type NetworkTheme = typeof NETWORK_THEME;
