@@ -85,3 +85,9 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
   - **Linking**: selecting a gene in the network narrows the table and shows "Selected SRY · 14 links · regulates 12, regulated by 2 · Focus ✕". Hovering a row emphasises that link and labels it on the canvas. Clicking a row selects the link and shows its full details (evidence, confidence, methods, direction and sign agreement) in the panel.
   - CSV download of the current tab and selection.
 - The Comparison tab's consensus table is untouched for now; remove it once the panel is accepted.
+
+## Update: one ink, tip = sign, dash = direction (2026-09-23)
+- Every link uses one colour: Soft `#565E66`, Contrast `#4A4F55`.
+- Directed: activation = solid line with arrowhead, repression = solid line with bar, sign unknown = solid plain line.
+- Undirected: the same tips on a **dashed** line, with the tip at the listed target (the candidate regulator's target in the ranking). The dash keeps its on-screen rhythm at every zoom (`dashPattern`).
+- Key, filter line, table glyphs, help text and export follow. The key shows "┄ direction unknown" when such links exist.

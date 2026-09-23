@@ -39,7 +39,9 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
       "curve-style": (e: EdgeSingular) => e.data("routeDistances") ? "unbundled-bezier" : "bezier",
       "control-point-distances": (e: EdgeSingular) => e.data("routeDistances") ?? [0],
       "control-point-weights": (e: EdgeSingular) => e.data("routeWeights") ?? [0.5],
-      "edge-distances": "node-position", "line-cap": "butt", "line-color": color, "line-style": "solid",
+      "edge-distances": "node-position", "line-cap": "butt", "line-color": color,
+      "line-style": (e: EdgeSingular) => e.data("dashed") ? "dashed" : "solid",
+      "line-dash-pattern": ((e: EdgeSingular) => e.data("dashPattern") ?? [5, 4]) as unknown as number[],
       width: "data(width)", opacity: (e: EdgeSingular) => e.data("inkOpacity"), "overlay-opacity": 0,
       // Tip = direction, drawn only at a resolved regulated end. Arrowhead =
       // activation, flat bar = repression, hollow arrowhead = sign unknown.

@@ -43,6 +43,8 @@ export function applyPresentation(cy: Core, force = false) {
     cy.edges().forEach(e => {
       const px = stepWidth(Number(e.data("widthStep")));
       e.data("width", px / zoom);
+      // Dashes keep the same on-screen rhythm at every zoom.
+      if (e.data("dashed")) e.data("dashPattern", [(4 + px) / zoom, (3 + px * 0.6) / zoom]);
       e.data("arrowScale", arrowScaleFor(px, zoom));
       // A link that passes under an unrelated gene is drawn a little lighter,
       // so it is not mistaken for ending there.

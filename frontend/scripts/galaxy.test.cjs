@@ -95,25 +95,25 @@ test("direction, evidence and topology updates keep their meaning", () => {
   const elements=galaxyElements(nodes,edges);
   const data=id=>elements.find(e=>e.data.id===id).data;
 
-  // The glyph states the EFFECT; where it sits states what is known about
-  // direction. A resolved direction puts one mark on the regulated end.
+  // Tip shape = effect, line style = direction (2026-09-23 scheme).
   assert.equal(data("reverse").sourceTip,"tee");
   assert.equal(data("reverse").targetTip,"none");
+  assert.equal(data("reverse").dashed,0,"a resolved direction is a solid line");
 
-  // Unresolved direction must not look like bidirectional regulation.
+  // Unresolved direction keeps the effect glyph but the line is dashed.
+  assert.equal(data("undirected").targetTip,"triangle");
   assert.equal(data("undirected").sourceTip,"none");
-  assert.equal(data("undirected").targetTip,"none");
-  assert.equal(data("undirected").sign,1);
+  assert.equal(data("undirected").dashed,1);
 
-  // Direction without an effect still marks the regulated end, hollow, because
-  // there is a direction to state even though there is no effect to state.
-  assert.equal(data("unsignedDirected").targetTip,"triangle");
+  // Direction without an effect: a plain solid line, no tip.
+  assert.equal(data("unsignedDirected").targetTip,"none");
   assert.equal(data("unsignedDirected").sourceTip,"none");
-  assert.equal(data("unsignedDirected").arrowFill,"hollow");
+  assert.equal(data("unsignedDirected").dashed,0);
 
-  // Neither effect nor direction: nothing to say, so nothing is drawn.
+  // Neither effect nor direction: a plain dashed line.
   assert.equal(data("unverified").sourceTip,"none");
   assert.equal(data("unverified").targetTip,"none");
+  assert.equal(data("unverified").dashed,1);
   assert.equal(data("unverified").confidence,null);
   assert.notEqual(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,edges,"circular"));
   assert.notEqual(galaxySignature(nodes,edges,"force"),galaxySignature(nodes,[edges[0],{...edges[1],target:nodes[2].id},edges[2]],"force"));
@@ -276,24 +276,25 @@ test("opacity encodes bootstrap confidence only: bridges, zoom and missing value
   assert.equal(labels.size,0,"captions and controls reserve their own space");
 });
 
-test("an unsigned relationship is never coloured as an activation", () => {
-  // Colour is the sign channel and it has three values, not two. Before this,
-  // "not repression" was drawn teal, so an edge whose sign no method resolved
-  // was pixel-identical to a confirmed activation -- and since that case also
-  // draws no end glyph, there was nothing at all to tell them apart.
+test("every link has one ink; sign is the tip and direction the line style", () => {
   const nodes=fixture.nodes.slice(0,3);
   const edge=fixture.edges[0];
   const edges=[
-    {...edge,key:"up",sign:1,direction:0},
-    {...edge,key:"down",sign:-1,direction:0},
-    {...edge,key:"nosign",sign:0,direction:0},
+    {...edge,key:"up",sign:1,direction:1},
+    {...edge,key:"down",sign:-1,direction:1},
+    {...edge,key:"nosign",sign:0,direction:1},
+    {...edge,key:"upUndirected",sign:1,direction:0},
   ];
   const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,edges),style:buildNetworkStylesheet()});
   try {
     const colour=id=>cy.$id(id).style("line-color");
-    assert.notEqual(colour("nosign"),colour("up"),"unsigned must not read as activation");
-    assert.notEqual(colour("nosign"),colour("down"),"unsigned must not read as repression");
-    assert.notEqual(colour("up"),colour("down"));
+    assert.equal(colour("up"),colour("down")); assert.equal(colour("up"),colour("nosign"));
+    assert.equal(cy.$id("up").style("target-arrow-shape"),"triangle");
+    assert.equal(cy.$id("down").style("target-arrow-shape"),"tee");
+    assert.equal(cy.$id("nosign").style("target-arrow-shape"),"none","an unsigned link is a plain line, never an activation");
+    assert.equal(cy.$id("up").style("line-style"),"solid");
+    assert.equal(cy.$id("upUndirected").style("line-style"),"dashed");
+    assert.equal(cy.$id("upUndirected").style("target-arrow-shape"),"triangle");
   } finally {cy.destroy();}
 });
 

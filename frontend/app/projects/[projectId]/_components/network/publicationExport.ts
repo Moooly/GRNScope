@@ -56,7 +56,7 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       `Filters: ${context.filters || "None"}${context.focus ? ` · Neighborhood: ${context.focus}` : ""}`,
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
       `${T === PALETTES.soft ? "Blue" : "Orange"} circles are transcription factors; ${T === PALETTES.soft ? "mint" : "grey"} circles are other genes. Node diameter runs linearly (1:10) from the smallest to the largest value of ${sizeBy === "out" ? "the number of displayed genes each gene regulates" : sizeBy === "in" ? "the number of displayed regulators of each gene" : "displayed connections"}. Layout distance represents connectivity, not biological distance; connected genes are drawn a fixed rim-to-rim distance apart where the topology allows; in dense networks each gene is placed by its three strongest links. Links passing under an unrelated gene are drawn lighter.`,
-      `${T === PALETTES.soft ? "Teal" : "Blue"} = activation (arrowhead), ${T === PALETTES.soft ? "clay" : "red"} = repression (bar), grey = sign unknown (hollow arrowhead). A tip marks the regulated gene; no tip means the direction was not resolved.`,
+      "All links share one colour. Arrowhead = activation, bar = repression, no tip = sign unknown. A solid line has a resolved direction (the tip marks the regulated gene); a dashed line has no resolved direction (the tip sits at the listed target).",
       ...(split ? ["Each gene is split by the direction of its displayed links, in its own colour: dark = regulates, light = regulated by, pale = direction unknown."] : []),
       `Line width: ${widthBy === "support" ? "number of selected methods reporting the relationship" : "evidence (per-target rank, 0–1)"}.${hasConfidence ? " Opacity: bootstrap confidence (≥ 0.8 solid, 0.5–0.8 45%, < 0.5 15%); relationships without a verified value are solid." : ""}`,
       ...(pins.length ? [`Pinned labels: ${pins.join(", ")}`] : []),
@@ -82,8 +82,8 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     type Part = { w: number; draw: Mark };
     const txt = (value: string, color: string = T.label): Part => ({ w: tw(value), draw: (x, y) => { add("text", { x, y: y + KEY * 0.36, fill: color, "font-family": "Arial, Helvetica, sans-serif", "font-size": KEY }, value); } });
     const mark = (w: number, draw: Mark): Part => ({ w, draw });
-    const directed = shownEdges.some(e => Number(e.data("direction")) !== 0);
     const unsigned = shownEdges.some(e => Number(e.data("sign")) === 0);
+    const undirectedShown = shownEdges.some(e => Number(e.data("direction")) === 0);
     const undirected = source.edges().some(e => Number(e.data("direction")) === 0);
     const swatch = (color: string): Part => mark(12, (x, y) => { add("rect", { x, y: y - 6, width: 12, height: 12, rx: 2, fill: color }); });
     const [low, high] = widthEnds(widthBy, methodCount);
@@ -94,9 +94,10 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
         add("path", { d: `M${x + 9} ${y}L${x + 17.5} ${y + 2.8}A9 9 0 0 1 ${x + 2.1} ${y + 5.8}Z`, fill: T.pieTF[1] });
         add("path", { d: `M${x + 9} ${y}L${x + 2.1} ${y + 5.8}A9 9 0 0 1 ${x + 9} ${y - 9}Z`, fill: T.pieTF[2] });
       }), swatch(T.pieTF[0]), txt("regulates"), swatch(T.pieTF[1]), txt("regulated by"), ...(undirected ? [swatch(T.pieTF[2]), txt("unknown")] : [])]] : []),
-      [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h${directed ? 20 : 30}`, stroke: T.activates, "stroke-width": 1.6 }); if (directed) add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: T.activates }); }), txt("Activates"),
-       mark(28, (x, y) => { add("path", { d: directed ? `M${x} ${y}h26m0-7v14` : `M${x} ${y}h28`, stroke: T.represses, "stroke-width": 1.8, fill: "none" }); }), txt("Represses"),
-       ...(unsigned ? [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h${directed ? 20 : 30}`, stroke: T.unknown, "stroke-width": 1.6 }); if (directed) add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: "#fff", stroke: T.unknown, "stroke-width": 1.2 }); }), txt("Sign unknown")] : [])],
+      [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h20`, stroke: T.activates, "stroke-width": 1.6 }); add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: T.activates }); }), txt("Activates"),
+       mark(28, (x, y) => { add("path", { d: `M${x} ${y}h26m0-7v14`, stroke: T.represses, "stroke-width": 1.8, fill: "none" }); }), txt("Represses"),
+       ...(unsigned ? [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h30`, stroke: T.unknown, "stroke-width": 1.6 }); }), txt("Sign unknown")] : []),
+       ...(undirectedShown ? [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h30`, stroke: T.unknown, "stroke-width": 1.6, "stroke-dasharray": "5 4" }); }), txt("Direction unknown")] : [])],
       [txt(widthBy === "support" ? "Methods" : "Evidence", "#8a969c"), txt(low), mark(88, (x, y) => { WIDTH_STEPS.forEach((w, i) => add("path", { d: `M${x + 2 + i * 22.5} ${y}h16`, stroke: "#333", "stroke-width": w })); }), txt(high)],
       ...(hasConfidence ? [[txt("Confidence", "#8a969c"), txt("<0.5"), mark(66, (x, y) => { [...CONFIDENCE_OPACITY].reverse().forEach((o, i) => add("path", { d: `M${x + 2 + i * 22} ${y}h16`, stroke: "#333", "stroke-width": 2.6, opacity: o })); }), txt("≥0.8")]] : []),
     ];

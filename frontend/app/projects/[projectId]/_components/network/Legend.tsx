@@ -62,6 +62,10 @@ export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount
       <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill={T.pieTF[1]}/><path d="M7 7V.5A6.5 6.5 0 1 1 1.4 10.3Z" fill={T.pieTF[0]}/></svg>
       <span>dark regulates · light regulated by{hasUndirected ? " · pale unknown" : ""}</span>
     </span>}
+    {hasUndirected && <span className="key-group" title="A solid line has a resolved direction and its tip marks the regulated gene. A dashed line has no resolved direction.">
+      <svg width="24" height="8" aria-hidden="true"><path d="M1 4H23" stroke={T.activates} strokeWidth="1.6" strokeDasharray="4 3"/></svg>
+      <span>direction unknown</span>
+    </span>}
     <span className="key-group" title={widthTip}>{support ? "Width = method support" : "Width = evidence"}</span>
     {counts?.hasConfidence && <span className="key-group" title={fadeTip}>Fade = low confidence</span>}
   </div>;

@@ -9,7 +9,9 @@ export const NETWORK_THEME = {
   nodeMuted: "#e6f2ed", link: "#588f89", linkMuted: "#dde6e4",
   label: "#33433e", labelHalo: "#ffffff",
   accent: "#33433e", accentSoft: "#eef3f1",
-  activates: "#588f89", represses: "#b77d66", unknown: "#a3aba8",
+  // One ink for every link (2026-09-23): sign is carried by the tip shape
+  // alone, direction by solid vs dashed.
+  activates: "#565e66", represses: "#565e66", unknown: "#565e66",
 } as const;
 export const NETWORK_SCALE = {
   nodeMinModel: 20, nodeMaxModel: 200,
@@ -46,7 +48,7 @@ export const PALETTES: Record<PaletteName, Palette> = {
   soft: SOFT,
   contrast: {
     ground: "#ffffff", node: "#d9d9d9", tf: "#d9913a", label: "#1a1a1a", accent: "#1a1a1a",
-    activates: "#2166ac", represses: "#b2182b", unknown: "#b5b5b5",
+    activates: "#4a4f55", represses: "#4a4f55", unknown: "#4a4f55",
     pieTF: ["#b8732a", "#e8b779", "#f5e1c6"], pieGene: ["#9a9a9a", "#d1d1d1", "#ececec"],
     nodeMin: 10,
   },

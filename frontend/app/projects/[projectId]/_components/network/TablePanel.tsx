@@ -86,10 +86,12 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
   const arrow = (on: boolean, desc: boolean) => on ? <span aria-hidden="true">{desc ? " ▾" : " ▴"}</span> : null;
 
   const glyph = (r: Row) => {
-    const col = r.edge.sign === 1 ? T.activates : r.edge.sign === -1 ? T.represses : T.unknown;
-    if (!r.directed) return <svg width="20" height="10" aria-label="direction unknown"><path d="M1 5H19" stroke={col} strokeWidth="1.8"/></svg>;
-    if (r.edge.sign === -1) return <svg width="20" height="10" aria-label="represses"><path d="M1 5H18M18 .5V9.5" stroke={col} strokeWidth="1.8" fill="none"/></svg>;
-    return <svg width="20" height="10" aria-label={r.edge.sign === 1 ? "activates" : "regulates, sign unknown"}><path d="M1 5H12" stroke={col} strokeWidth="1.8"/><path d="M11 1L19 5L11 9Z" fill={r.edge.sign === 1 ? col : "#fff"} stroke={col} strokeWidth={r.edge.sign === 1 ? 0 : 1}/></svg>;
+    // Same scheme as the network: tip = sign, dashed = direction unknown.
+    const col = T.activates, dash = r.directed ? undefined : "3 2.5";
+    const what = `${r.edge.sign === 1 ? "activates" : r.edge.sign === -1 ? "represses" : "sign unknown"}${r.directed ? "" : ", direction unknown"}`;
+    if (r.edge.sign === -1) return <svg width="20" height="10" aria-label={what}><path d="M1 5H18" stroke={col} strokeWidth="1.6" strokeDasharray={dash}/><path d="M18 .5V9.5" stroke={col} strokeWidth="1.8"/></svg>;
+    if (r.edge.sign === 1) return <svg width="20" height="10" aria-label={what}><path d="M1 5H12" stroke={col} strokeWidth="1.6" strokeDasharray={dash}/><path d="M11 1L19 5L11 9Z" fill={col}/></svg>;
+    return <svg width="20" height="10" aria-label={what}><path d="M1 5H19" stroke={col} strokeWidth="1.6" strokeDasharray={dash}/></svg>;
   };
 
   const download = () => {

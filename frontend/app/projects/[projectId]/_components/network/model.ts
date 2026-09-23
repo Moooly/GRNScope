@@ -52,9 +52,12 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
     }),
     ...edges.map(e => {
       const directed = hasDirection(e);
-      // Tip = direction (at the regulated end); tip shape and colour = sign.
+      // Tip shape = sign (arrowhead activation, bar repression, none unknown);
+      // line style = direction (solid resolved, dashed not resolved). Every
+      // link has the same ink. An undirected link carries its tip at the
+      // listed target, i.e. the candidate regulator's target in the ranking.
       // Unsigned-but-directed gets a hollow arrowhead; undirected gets no tip.
-      const tip = e.sign === -1 ? "tee" : "triangle";
+      const tip = e.sign === -1 ? "tee" : e.sign === 1 ? "triangle" : "none";
       const evidence = edgeMetric(e, "evidence", 1) ?? 0;
       const confidence = edgeMetric(e, "confidence", 1);
       const widthStep = widthBy === "support" ? supportStep(e.count, methodCount) : evidenceStep(evidence);
@@ -62,8 +65,9 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
       return { data: { id: e.key, source: e.source, target: e.target, sign: e.sign,
         direction: directed ? e.direction : 0,
         sourceTip: directed && e.direction === -1 ? tip : "none",
-        targetTip: directed && e.direction === 1 ? tip : "none",
-        arrowFill: e.sign === 0 ? "hollow" : "filled",
+        targetTip: !directed || e.direction === 1 ? tip : "none",
+        arrowFill: "filled",
+        dashed: directed ? 0 : 1,
         evidence, confidence, support: e.count,
         widthStep, confidenceBand: band,
         width: WIDTH_STEPS[widthStep],
