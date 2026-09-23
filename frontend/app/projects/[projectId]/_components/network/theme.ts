@@ -31,10 +31,28 @@ export type Palette = {
    * genes stay visible circles. */
   nodeMin: number;
 };
-export const PALETTE: Palette = {
+const SOFT: Palette = {
   ground: NETWORK_THEME.ground, node: NETWORK_THEME.node, tf: NETWORK_THEME.tf, label: NETWORK_THEME.label, accent: NETWORK_THEME.accent,
   activates: NETWORK_THEME.activates, represses: NETWORK_THEME.represses, unknown: NETWORK_THEME.unknown,
   pieTF: ["#8faed0", "#c9d8ea", "#e6edf6"], pieGene: ["#95c4b3", "#c8e2d8", "#e6f2ed"],
   nodeMin: 24,
 };
+
+/** Two palettes, switchable in Display while the boss chooses.
+ * "soft": blue TFs, mint genes, teal/clay links (the original look).
+ * "contrast": amber TFs, grey genes, ColorBrewer blue/red links. */
+export type PaletteName = "soft" | "contrast";
+export const PALETTES: Record<PaletteName, Palette> = {
+  soft: SOFT,
+  contrast: {
+    ground: "#ffffff", node: "#d9d9d9", tf: "#d9913a", label: "#1a1a1a", accent: "#1a1a1a",
+    activates: "#2166ac", represses: "#b2182b", unknown: "#b5b5b5",
+    pieTF: ["#b8732a", "#e8b779", "#f5e1c6"], pieGene: ["#9a9a9a", "#d1d1d1", "#ececec"],
+    nodeMin: 10,
+  },
+};
+export const PALETTE_LABELS: Record<PaletteName, string> = { soft: "Soft", contrast: "Contrast" };
+export const DEFAULT_PALETTE: PaletteName = "soft";
+/** Default palette, for code that does not follow the switch. */
+export const PALETTE: Palette = SOFT;
 export type NetworkTheme = typeof NETWORK_THEME;

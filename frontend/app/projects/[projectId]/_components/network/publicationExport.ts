@@ -1,6 +1,6 @@
 import cytoscape, { type Core } from "cytoscape";
 import type { NetworkFigureContext } from "../networkFigureExport";
-import { PALETTE } from "./theme";
+import { PALETTES, DEFAULT_PALETTE, type PaletteName } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyPresentation } from "./presentation";
 import { CONFIDENCE_OPACITY, EFFECT_NOTE, WIDTH_STEPS, widthEnds, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./encoding";
@@ -17,7 +17,7 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
   host.setAttribute("aria-hidden", "true");
   document.body.appendChild(host);
   let graph: Core | undefined;
-  const T = PALETTE;
+  const T = PALETTES[(source.scratch("palette") ?? DEFAULT_PALETTE) as PaletteName];
   try {
     graph = cytoscape({ container: host, style: buildNetworkStylesheet(T),
       elements: source.elements().filter(element => !element.data("effectHidden")).map(element => ({ data: { ...element.data(), label: "" }, ...(element.isNode() ? { position: { ...element.position() } } : {}) })),
@@ -55,8 +55,8 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
       `Filters: ${context.filters || "None"}${context.focus ? ` · Neighborhood: ${context.focus}` : ""}`,
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
-      `Orange circles are transcription factors; grey circles are other genes. Node diameter runs linearly (1:10) from the smallest to the largest value of ${sizeBy === "out" ? "the number of displayed genes each gene regulates" : sizeBy === "in" ? "the number of displayed regulators of each gene" : "displayed connections"}. Layout distance represents connectivity, not biological distance; connected genes are drawn a fixed rim-to-rim distance apart where the topology allows; in dense networks each gene is placed by its three strongest links. Links passing under an unrelated gene are drawn lighter.`,
-      "Blue = activation (arrowhead), red = repression (bar), grey = sign unknown (hollow arrowhead). A tip marks the regulated gene; no tip means the direction was not resolved.",
+      `${T === PALETTES.soft ? "Blue" : "Orange"} circles are transcription factors; ${T === PALETTES.soft ? "mint" : "grey"} circles are other genes. Node diameter runs linearly (1:10) from the smallest to the largest value of ${sizeBy === "out" ? "the number of displayed genes each gene regulates" : sizeBy === "in" ? "the number of displayed regulators of each gene" : "displayed connections"}. Layout distance represents connectivity, not biological distance; connected genes are drawn a fixed rim-to-rim distance apart where the topology allows; in dense networks each gene is placed by its three strongest links. Links passing under an unrelated gene are drawn lighter.`,
+      `${T === PALETTES.soft ? "Teal" : "Blue"} = activation (arrowhead), ${T === PALETTES.soft ? "clay" : "red"} = repression (bar), grey = sign unknown (hollow arrowhead). A tip marks the regulated gene; no tip means the direction was not resolved.`,
       ...(split ? ["Each gene is split by the direction of its displayed links, in its own colour: dark = regulates, light = regulated by, pale = direction unknown."] : []),
       `Line width: ${widthBy === "support" ? "number of selected methods reporting the relationship" : "evidence (per-target rank, 0–1)"}.${hasConfidence ? " Opacity: bootstrap confidence (≥ 0.8 solid, 0.5–0.8 45%, < 0.5 15%); relationships without a verified value are solid." : ""}`,
       ...(pins.length ? [`Pinned labels: ${pins.join(", ")}`] : []),

@@ -1,6 +1,6 @@
 "use client";
 
-import { PALETTE as T } from "./theme";
+import { PALETTES, DEFAULT_PALETTE, type PaletteName } from "./theme";
 import {
   CONFIDENCE_LABELS, EVIDENCE_LABELS, WIDTH_STEPS, supportLabels,
   type EdgeWidthBy, type EffectFilter, type FigureCounts,
@@ -13,11 +13,13 @@ type FilterProps = {
   signCounts: { activation: number; repression: number; unknown: number };
   effect: EffectFilter;
   onEffectChange: (effect: EffectFilter) => void;
+  palette?: PaletteName;
 };
 
 /** "Links  63 all · → 39 activation · ⊣ 24 repression": each count is the
  * filter for those links. The selected part is shaded, "all" by default. */
-export function NetworkLinkFilter({ relationships, signCounts, effect, onEffectChange }: FilterProps) {
+export function NetworkLinkFilter({ relationships, signCounts, effect, onEffectChange, palette = DEFAULT_PALETTE }: FilterProps) {
+  const T = PALETTES[palette];
   const part = (value: EffectFilter, content: React.ReactNode, title: string, empty = false) => {
     const active = effect === value;
     return <button type="button" className={`key-part${active ? " is-on" : ""}${effect !== "all" && !active ? " is-dim" : ""}`}
@@ -39,11 +41,13 @@ type KeyProps = {
   widthBy: EdgeWidthBy;
   methodCount: number;
   counts?: FigureCounts;
+  palette?: PaletteName;
 };
 
 /** One short line under the network: only what the picture can't say itself.
  * Exact steps and counts are in the tooltips. */
-export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts }: KeyProps) {
+export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE }: KeyProps) {
+  const T = PALETTES[palette];
   const support = widthBy === "support" && methodCount > 1;
   const steps = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
   const widthTip = [support ? "Line width: number of selected methods reporting the link" : "Line width: evidence (per-target rank, 0–1)",

@@ -25,6 +25,7 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas, { fitNetwork } from "./network/NetworkCanvas";
 import { NetworkKey, NetworkLinkFilter } from "./network/Legend";
+import { DEFAULT_PALETTE, PALETTE_LABELS, type PaletteName } from "./network/theme";
 import { NODE_SIZE_OPTIONS, figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
@@ -220,6 +221,8 @@ export default function NetworkVisualizationSection(props: Props) {
   const [effect, setEffect] = useState<EffectFilter>("all");
   // Display menu: occasional adjustments, out of the way until needed.
   const [spacing, setSpacing] = useState(100);
+  // Temporary: both palettes stay available until the boss chooses.
+  const [figurePalette, setFigurePalette] = useState<PaletteName>(DEFAULT_PALETTE);
   const [layoutNonce, setLayoutNonce] = useState(0);
   const [displayOpen, setDisplayOpen] = useState(false);
   const displayMenuRef = useRef<HTMLDivElement | null>(null);
@@ -471,6 +474,11 @@ export default function NetworkVisualizationSection(props: Props) {
                           <option value="support" disabled={selectedAlgorithmIds.length <= 1}>Method support</option>
                         </select>
                       </label>
+                      <label>Palette
+                        <select value={figurePalette} onChange={(event) => setFigurePalette(event.target.value as PaletteName)} title="Colour palette (temporary, while the two are compared)">
+                          {(Object.keys(PALETTE_LABELS) as PaletteName[]).map((key) => <option key={key} value={key}>{PALETTE_LABELS[key]}</option>)}
+                        </select>
+                      </label>
                       <label>Spacing
                         <span className="display-range">
                           <input type="range" min="100" max="250" step="25" value={spacing} onChange={(event) => setSpacing(Number(event.target.value))} aria-label="Network spacing" />
@@ -623,6 +631,7 @@ export default function NetworkVisualizationSection(props: Props) {
             }}
             effect={effectiveEffect}
             onEffectChange={setEffect}
+            palette={figurePalette}
           />
         ) : (
         <NetworkLegend
@@ -683,6 +692,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 effect={effectiveEffect}
                 spacing={spacing}
                 layoutNonce={layoutNonce}
+                palette={figurePalette}
               />
             ) : (
               <NetworkGraph
@@ -738,6 +748,7 @@ export default function NetworkVisualizationSection(props: Props) {
             widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
             methodCount={selectedAlgorithmIds.length}
             counts={figureKeyCounts}
+            palette={figurePalette}
           />
         )}
         {showHelp && (

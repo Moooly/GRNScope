@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core } from "cytoscape";
 import { buildCircularPositions, buildConcentricPositions, buildHierarchicalPositions } from "../networkGraphLayouts";
 import type { NetworkGraphProps } from "../networkGraphTypes";
-import { NETWORK_SCALE, PALETTE } from "./theme";
+import { NETWORK_SCALE, PALETTES, DEFAULT_PALETTE } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
 import { applyLabelBudget } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
@@ -128,7 +128,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const sizeBy: NodeSizeBy = hasDirected ? props.sizeBy ?? "all" : "all";
   const widthBy: EdgeWidthBy = props.widthBy ?? "evidence";
   const methodCount = props.methodCount ?? 1;
-  const nodeMin = PALETTE.nodeMin;
+  const nodeMin = PALETTES[props.palette ?? DEFAULT_PALETTE].nodeMin;
   const options = useMemo(() => ({ sizeBy, widthBy, methodCount, nodeMin }), [sizeBy, widthBy, methodCount, nodeMin]);
   const signature = useMemo(() => galaxySignature(props.nodes, props.edges, props.layout, sizeBy), [props.nodes, props.edges, props.layout, sizeBy]);
   const elements = useMemo(() => galaxyElements(props.nodes, props.edges, options), [props.nodes, props.edges, options]);
@@ -136,13 +136,14 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   useEffect(() => {
     if (!containerRef.current) return;
     const cy = cytoscape({
-      container: containerRef.current, elements: [], style: buildNetworkStylesheet(),
+      container: containerRef.current, elements: [], style: buildNetworkStylesheet(PALETTES[latest.current.palette ?? DEFAULT_PALETTE]),
       layout: { name: "preset" }, minZoom: NETWORK_SCALE.minZoom, maxZoom: NETWORK_SCALE.maxZoom,
       pixelRatio: "auto", textureOnViewport: false, motionBlur: false,
       selectionType: "single", boxSelectionEnabled: false,
     });
     coreRef.current = cy;
     cy.scratch("galaxy", true);
+    cy.scratch("palette", latest.current.palette ?? DEFAULT_PALETTE);
     // Straight links; only parallel or reciprocal records get separate lanes.
     cy.scratch("curvedLinks", false);
     latest.current.onGraphReady?.(cy);
@@ -188,7 +189,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     workerRef.current?.terminate();
     const id = ++revision.current;
     const directedNow = latest.current.edges.some(e => hasDirection(e));
-    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1, nodeMin: PALETTE.nodeMin } as const;
+    const optionsNow = { sizeBy: directedNow ? latest.current.sizeBy ?? "all" : "all", widthBy: latest.current.widthBy ?? "evidence", methodCount: latest.current.methodCount ?? 1, nodeMin: PALETTES[latest.current.palette ?? DEFAULT_PALETTE].nodeMin } as const;
     const next = galaxyElements(latest.current.nodes, latest.current.edges, optionsNow);
     const hasNodes = latest.current.nodes.length > 0;
     busy.current = hasNodes;
@@ -293,6 +294,16 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     if (!cy || cy.destroyed() || busy.current) return;
     applyEffect(cy, props.effect ?? "all");
   }, [props.effect, elements]);
+
+  // Palette comparison: restyle in place, nothing moves.
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy || cy.destroyed()) return;
+    const palette = props.palette ?? DEFAULT_PALETTE;
+    if (cy.scratch("palette") === palette) return;
+    cy.scratch("palette", palette);
+    cy.style(buildNetworkStylesheet(PALETTES[palette]));
+  }, [props.palette]);
 
   // Spacing and Reset layout are driven from the Display menu.
   useEffect(() => {
