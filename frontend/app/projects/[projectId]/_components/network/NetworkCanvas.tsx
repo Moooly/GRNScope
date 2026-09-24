@@ -81,6 +81,25 @@ function stopFlow(cy: Core) {
 /** Genes glide to a new arrangement instead of jumping. A gene that was on
  * screen starts where the reader last saw it; a new gene grows out from the
  * middle of the figure. The camera is already at its final fit. */
+type HoverTip = { x: number; y: number; from: string; to: string; mark: string; evidence: string };
+
+/** A hovered link (on the canvas or as a table row) is put in focus: every
+ * other link and gene fades, the link turns dark and thick, its two genes keep
+ * full strength with bold names, and a label names it. */
+function focusEdge(cy: Core, edge: cytoscape.EdgeSingular | null): HoverTip | null {
+  cy.elements(".focus-dim, .focus-end, .focus-edge").removeClass("focus-dim focus-end focus-edge");
+  if (!edge || edge.removed()) return null;
+  const ends = edge.connectedNodes();
+  edge.addClass("focus-edge"); ends.addClass("focus-end");
+  cy.elements().not(edge).not(ends).addClass("focus-dim");
+  const a = edge.source().renderedPosition(), b = edge.target().renderedPosition();
+  const reversed = Number(edge.data("direction")) === -1;
+  const sign = Number(edge.data("sign"));
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
+    from: reversed ? edge.target().id() : edge.source().id(), to: reversed ? edge.source().id() : edge.target().id(),
+    mark: Number(edge.data("direction")) === 0 ? "—" : sign === -1 ? "⊣" : "→", evidence: Number(edge.data("evidence")).toFixed(2) };
+}
+
 function glide(cy: Core, previous: Map<string, Point>, done: () => void) {
   // A background tab does not animate; place the genes directly there.
   if (prefersReducedMotion() || cy.nodes().length > 1500 || document.hidden) { done(); return; }
@@ -116,6 +135,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const [error, setError] = useState("");
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
   const [pins, setPins] = useState<string[]>([]);
+  const [hoverTip, setHoverTip] = useState<HoverTip | null>(null);
   const stopWorker = useCallback(() => {
     ++revision.current;
     workerRef.current?.terminate();
@@ -150,8 +170,10 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
     cy.on("tap", e => { if (e.target === cy) { latest.current.onSelectGene(null); latest.current.onSelectEdge(null); } });
-    cy.on("mouseover", "node, edge", e => { e.target.addClass("hovered"); startFlow(cy, e.target); applyLabelBudget(cy); });
-    cy.on("mouseout", "node, edge", e => { e.target.removeClass("hovered"); stopFlow(cy); applyLabelBudget(cy); });
+    cy.on("mouseover", "node", e => { e.target.addClass("hovered"); startFlow(cy, e.target); applyLabelBudget(cy); });
+    cy.on("mouseout", "node", e => { e.target.removeClass("hovered"); stopFlow(cy); applyLabelBudget(cy); });
+    cy.on("mouseover", "edge", e => { e.target.addClass("hovered"); setHoverTip(focusEdge(cy, e.target)); applyLabelBudget(cy); });
+    cy.on("mouseout", "edge", e => { e.target.removeClass("hovered"); setHoverTip(focusEdge(cy, null)); applyLabelBudget(cy); });
     let frame = 0;
     cy.on("zoom pan", () => {
       cancelAnimationFrame(frame);
@@ -305,23 +327,12 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     cy.style(buildNetworkStylesheet(PALETTES[palette]));
   }, [props.palette]);
 
-  // A hovered table row lights up its link and labels it.
-  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; from: string; to: string; mark: string; evidence: string } | null>(null);
+  // A hovered table row puts its link in focus, as hovering it on the canvas does.
   useEffect(() => {
     const cy = coreRef.current;
     if (!cy || cy.destroyed()) return;
-    cy.edges(".row-hover").removeClass("row-hover");
     const edge = props.hoveredEdgeKey ? cy.$id(props.hoveredEdgeKey) : cy.collection();
-    let tip: typeof hoverTip = null;
-    if (edge.nonempty() && edge.isEdge()) {
-      edge.addClass("row-hover");
-      const a = edge.source().renderedPosition(), b = edge.target().renderedPosition();
-      const reversed = Number(edge.data("direction")) === -1;
-      const sign = Number(edge.data("sign"));
-      tip = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
-        from: reversed ? edge.target().id() : edge.source().id(), to: reversed ? edge.source().id() : edge.target().id(),
-        mark: Number(edge.data("direction")) === 0 ? "—" : sign === -1 ? "⊣" : "→", evidence: Number(edge.data("evidence")).toFixed(3) };
-    }
+    const tip = focusEdge(cy, edge.nonempty() && edge.isEdge() ? edge : null);
     queueMicrotask(() => setHoverTip(tip));
   }, [props.hoveredEdgeKey]);
 
@@ -371,7 +382,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
-    {hoverTip && <div className="galaxy-hover-tip" style={{ left: hoverTip.x, top: hoverTip.y }}><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · {hoverTip.evidence}</div>}
+    {hoverTip && <div className="galaxy-hover-tip" style={{ left: hoverTip.x, top: hoverTip.y }}><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · evidence {hoverTip.evidence}</div>}
     {(selected || visiblePins.length > 0) && <div className="galaxy-controls" aria-label="Label pins">
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label

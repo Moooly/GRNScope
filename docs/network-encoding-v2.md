@@ -42,7 +42,8 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Colours**: TF amber `#D9913A` (further from repression red), other genes `#D9D9D9`.
 - **Group shading**: tried and removed on 2026-09-23 because it looked too busy.
 - **Smooth transitions**: after a new arrangement, genes glide from where the reader last saw them (520 ms); new genes grow out from the centre (620 ms). Skipped for reduced-motion users, networks over 1,500 genes and background tabs.
-- **Hover flow**: hovering a gene or link makes dashes drift from regulator to target along its directed links. Screen-only.
+- **Hover flow**: hovering a gene makes dashes drift from regulator to target along its directed links. Screen-only.
+- **Link hover = focus** (2026-09-23, option B of `Claude outputs/edge-hover-proposals.png`): hovering a link on the canvas, or its row in the table, fades every other link (10 %) and gene (35 %), draws the link near-black `#1F2A33` at ≥3.2 px on a white casing, keeps its two genes full with bold names, and shows a label "*SRY* ⊣ *CTNNB1* · evidence 0.66". The old ×1.6 width with flowing dashes was too subtle with one link ink. Screen-only.
 - **Curved links**: tried and removed on 2026-09-23. Links are straight again; only parallel or reciprocal records get separate lanes. The curved mode is still in `routeGalaxy` (`curved: true`) but nothing turns it on.
 - `npm run test:network`: 41 pass.
 
@@ -82,7 +83,7 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
   - **Links**: regulator, effect glyph (link colour; hollow when the sign is unknown, plain line when undirected), target, evidence (number and bar), confidence, methods. Every column sorts. The first 300 rows are shown with a "Show all" button. A row's tooltip gives direction agreement and method names.
   - **Genes**: gene (TF dot), targets, regulators, unknown, links, sortable.
   - It shares the Links filter and Results Settings with the network, so the counts always match.
-  - **Linking**: selecting a gene in the network narrows the table and shows "Selected SRY · 14 links · regulates 12, regulated by 2 · Focus ✕". Hovering a row emphasises that link and labels it on the canvas. Clicking a row selects the link and shows its full details (evidence, confidence, methods, direction and sign agreement) in the panel.
+  - **Linking**: selecting a gene in the network narrows the table and shows "Selected SRY · 14 links · regulates 12, regulated by 2 · Focus ✕". Hovering a row puts that link in focus on the canvas, exactly as hovering the link does. Clicking a row selects the link and shows its full details (evidence, confidence, methods, direction and sign agreement) in the panel.
   - CSV download of the current tab and selection.
 - The Comparison tab's consensus table is untouched for now; remove it once the panel is accepted.
 

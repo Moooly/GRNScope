@@ -1440,5 +1440,5 @@
 .tp-bar { display: inline-block; height: 5px; margin-left: 6px; border-radius: 2px; background: #a9c3b9; vertical-align: middle; }
 .tp-more { display: block; margin: 8px auto 12px; border: 1px solid #d5dbdf; border-radius: 5px; background: #fff; padding: 4px 10px; font: inherit; color: #3f4a50; cursor: pointer; }
 .tp-foot { display: flex; justify-content: space-between; align-items: center; padding: 7px 14px; border-top: 1px solid #eef1f3; color: #8a969c; font-size: 11px; }
-.galaxy-hover-tip { position: absolute; z-index: 5; transform: translate(-50%, -130%); pointer-events: none; background: #1f2a30; color: #fff; font-size: 11px; padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
+.galaxy-hover-tip { position: absolute; z-index: 5; transform: translate(-50%, -130%); pointer-events: none; background: #1f2a30; color: #fff; font-size: 12px; padding: 4px 9px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.18); white-space: nowrap; }
 .galaxy-hover-tip i { font-style: italic; }

@@ -445,6 +445,26 @@ test("genes are split by link direction in their own colour, only when the view 
   } finally { cy.destroy(); }
 });
 
+test("a hovered link is put in focus: dark, thick, on a white casing, with everything else faded", () => {
+  const nodes=[{id:"TF",isTF:true},{id:"A",isTF:false},{id:"B",isTF:false}];
+  const e=(key,source,target)=>({key,source,target,score:0.6,confidence:0,count:1,rank:1,supportingAlgorithms:[],direction:1,directionConfidence:1,directionCoverage:1,sign:-1,signConfidence:1,signCoverage:1});
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,[e("1","TF","A"),e("2","TF","B")]),style:buildNetworkStylesheet()});
+  try {
+    const link=cy.$id("1"), other=cy.$id("2");
+    link.addClass("focus-edge"); link.connectedNodes().addClass("focus-end");
+    cy.elements().not(link).not(link.connectedNodes()).addClass("focus-dim");
+    assert.equal(link.style("line-color"),"rgb(31,42,51)");
+    assert.equal(link.style("target-arrow-color"),"rgb(31,42,51)");
+    assert.ok(parseFloat(link.style("width"))>=3.2, "at least 3.2 px wide");
+    assert.equal(Number(link.style("opacity")),1);
+    assert.equal(Number(link.style("underlay-opacity")),1, "white casing separates it from crossing links");
+    assert.ok(Number(other.style("opacity"))<=0.1, "other links fade");
+    assert.ok(Number(cy.$id("B").style("opacity"))<=0.35, "unrelated genes fade");
+    assert.equal(Number(cy.$id("A").style("opacity")),1, "its genes stay full");
+    assert.equal(cy.$id("A").style("font-weight"),"700", "its genes' names are bold");
+  } finally { cy.destroy(); }
+});
+
 test("the links filter keeps genes in place, hides other effects and fades genes left without links", () => {
   const { passesEffect } = require(base + "encoding.ts");
   assert.ok(passesEffect(1,"activation") && !passesEffect(-1,"activation") && passesEffect(-1,"repression") && passesEffect(0,"unknown") && passesEffect(-1,"all"));

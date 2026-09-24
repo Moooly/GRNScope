@@ -1,6 +1,9 @@
 import type { StylesheetJson, EdgeSingular, NodeSingular } from "cytoscape";
 import { PALETTE, type Palette } from "./theme";
 
+/** Ink of a hovered link. */
+const FOCUS_INK = "#1f2a33";
+
 export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
   // Three sign states, three colours: activation blue, repression red, and a
   // light grey for relationships no method could sign, so an unsigned record is
@@ -66,5 +69,16 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
     { selector: "edge.flowing", style: { "line-style": "dashed" } },
     { selector: "node.muted", style: { opacity: 0.25, "text-opacity": 0.2 } },
     { selector: "edge.muted", style: { opacity: 0.06 } },
+    // Hovered link in focus (canvas or table row): the rest fades, the link
+    // turns near-black and thick on a white casing, its genes stay full.
+    { selector: "edge.focus-dim", style: { opacity: 0.1 } },
+    { selector: "node.focus-dim", style: { opacity: 0.35, "text-opacity": 0.35 } },
+    { selector: "node.focus-end", style: { opacity: 1, "text-opacity": 1, "font-weight": 700, "min-zoomed-font-size": 0, "z-index": 30 } },
+    { selector: "edge.focus-edge", style: {
+      "line-color": FOCUS_INK, "source-arrow-color": FOCUS_INK, "target-arrow-color": FOCUS_INK,
+      width: (e: EdgeSingular) => Math.max(3.2, Number(e.data("width")) * 2.2),
+      opacity: 1, "z-index": 40,
+      "underlay-color": "#ffffff", "underlay-opacity": 1, "underlay-padding": 2.5,
+    } },
   ];
 }
