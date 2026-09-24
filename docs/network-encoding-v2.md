@@ -48,7 +48,7 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - `npm run test:network`: 41 pass.
 
 ## Update: more spread, fill the frame (2026-09-23)
-- Target rim-to-rim link length raised from 80 to 100 units (`EDGE_GAP`).
+- Target rim-to-rim link length raised from 80 to 100 units (`EDGE_GAP`), then to 130 (2026-09-23, "spread the network a little more").
 - `fillFrame`: after layout, the arrangement is stretched towards the canvas's proportions, up to 1.8×. A round network in a wide canvas now uses the horizontal space. Stretching only lengthens distances, so it can't create overlaps. The frame shape is read when the layout is computed; after resizing the window, press Reset layout to refit.
 
 ## Update: legend v3 (2026-09-23)
