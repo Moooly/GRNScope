@@ -295,6 +295,20 @@ export default function NetworkVisualizationSection(props: Props) {
   const hasUnsignedLinks = edges.some((e) => e.sign === 0);
   const effectiveEffect: EffectFilter = effect === "unknown" && !hasUnsignedLinks ? "all" : effect;
   const visibleEdges = useMemo(() => edges.filter((e) => passesEffect(e.sign, effectiveEffect)), [edges, effectiveEffect]);
+  const linkFilter = (variant: "line" | "chips") => (
+    <NetworkLinkFilter
+      relationships={edges.length}
+      signCounts={{
+        activation: edges.filter((e) => e.sign === 1).length,
+        repression: edges.filter((e) => e.sign === -1).length,
+        unknown: edges.filter((e) => e.sign === 0).length,
+      }}
+      effect={effectiveEffect}
+      onEffectChange={setEffect}
+      palette={figurePalette}
+      variant={variant}
+    />
+  );
   const figureKeyCounts = useMemo(() => {
     const degrees = nodeDegrees(edges)[effectiveSizeBy];
     const effectiveWidth: EdgeWidthBy = selectedAlgorithmIds.length > 1 ? widthBy : "evidence";
@@ -650,17 +664,8 @@ export default function NetworkVisualizationSection(props: Props) {
           </p>
         )}
         {useNewCanvas && networkLayout !== "circos" ? (
-          <NetworkLinkFilter
-            relationships={edges.length}
-            signCounts={{
-              activation: edges.filter((e) => e.sign === 1).length,
-              repression: edges.filter((e) => e.sign === -1).length,
-              unknown: edges.filter((e) => e.sign === 0).length,
-            }}
-            effect={effectiveEffect}
-            onEffectChange={setEffect}
-            palette={figurePalette}
-          />
+          // With the side panel open the filter lives at the top of the panel.
+          tableOpen ? null : linkFilter("line")
         ) : (
         <NetworkLegend
           appearance={activeAppearance}
@@ -763,6 +768,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 onHoverEdge={setHoveredEdgeKey}
                 onHide={() => { setTableOpen(false); setHoveredEdgeKey(null); }}
                 onFocus={(id) => { focus(id); clearSelection(); }}
+                filter={linkFilter("chips")}
                 palette={figurePalette}
               />
             </>

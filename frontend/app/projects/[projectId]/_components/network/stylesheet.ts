@@ -62,7 +62,7 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
     { selector: "node.hovered", style: { "min-zoomed-font-size": 0, "z-index": 30 } },
     { selector: "node.traced", style: {
       "min-zoomed-font-size": 0,
-      "underlay-color": T.accent, "underlay-opacity": 0.14, "underlay-padding": 6, "z-index": 30,
+      "underlay-color": T.accent, "underlay-opacity": 0.14, "underlay-padding": 6, "underlay-shape": "ellipse", "z-index": 30,
     } },
     { selector: "node.traced-neighbour", style: { "min-zoomed-font-size": 0, "z-index": 20 } },
     { selector: "edge.traced-neighbour", style: { opacity: (e: EdgeSingular) => Math.max(0.6, Number(e.data("inkOpacity")) || 1) } },

@@ -14,11 +14,13 @@ type FilterProps = {
   effect: EffectFilter;
   onEffectChange: (effect: EffectFilter) => void;
   palette?: PaletteName;
+  /** "line": the line above the network; "chips": pills at the top of the side panel. */
+  variant?: "line" | "chips";
 };
 
 /** "Links  63 all · → 39 activation · ⊣ 24 repression": each count is the
  * filter for those links. The selected part is shaded, "all" by default. */
-export function NetworkLinkFilter({ relationships, signCounts, effect, onEffectChange, palette = DEFAULT_PALETTE }: FilterProps) {
+export function NetworkLinkFilter({ relationships, signCounts, effect, onEffectChange, palette = DEFAULT_PALETTE, variant = "line" }: FilterProps) {
   const T = PALETTES[palette];
   const part = (value: EffectFilter, content: React.ReactNode, title: string, empty = false) => {
     const active = effect === value;
@@ -26,12 +28,15 @@ export function NetworkLinkFilter({ relationships, signCounts, effect, onEffectC
       aria-pressed={active} disabled={empty} title={active ? (value === "all" ? "Showing every link; click a count to show only those links" : "Show every link") : title}
       onClick={() => onEffectChange(active ? "all" : value)}>{content}</button>;
   };
-  return <div className="figure-filter" aria-label="Links shown">
-    <span className="key-label">Links</span>
-    {part("all", <><b>{relationships.toLocaleString()}</b> all</>, "Show every link")}
-    {part("activation", <><svg width="20" height="10" aria-hidden="true"><path d="M1 5H13" stroke={T.activates} strokeWidth="1.6"/><path d="M12 1.5L19 5L12 8.5Z" fill={T.activates}/></svg><b>{signCounts.activation.toLocaleString()}</b> activation</>, "Show only activation links", signCounts.activation === 0)}
-    {part("repression", <><svg width="18" height="10" aria-hidden="true"><path d="M1 5H16M16 .5V9.5" stroke={T.represses} strokeWidth="1.8" fill="none"/></svg><b>{signCounts.repression.toLocaleString()}</b> repression</>, "Show only repression links", signCounts.repression === 0)}
-    {signCounts.unknown > 0 && part("unknown", <><svg width="18" height="10" aria-hidden="true"><path d="M1 5H17" stroke={T.unknown} strokeWidth="1.6"/></svg><b>{signCounts.unknown.toLocaleString()}</b> sign unknown</>, "Show only links whose sign is unknown")}
+  const chips = variant === "chips";
+  const label = (count: number, word: string) => chips ? <>{word[0].toUpperCase() + word.slice(1)} <b>{count.toLocaleString()}</b></> : <><b>{count.toLocaleString()}</b> {word}</>;
+  const ink = chips ? "currentColor" : undefined;
+  return <div className={`figure-filter${chips ? " is-chips" : ""}`} aria-label="Links shown">
+    {!chips && <span className="key-label">Links</span>}
+    {part("all", label(relationships, "all"), "Show every link")}
+    {part("activation", <><svg width="20" height="10" aria-hidden="true"><path d="M1 5H13" stroke={ink ?? T.activates} strokeWidth="1.6"/><path d="M12 1.5L19 5L12 8.5Z" fill={ink ?? T.activates}/></svg>{label(signCounts.activation, "activation")}</>, "Show only activation links", signCounts.activation === 0)}
+    {part("repression", <><svg width="18" height="10" aria-hidden="true"><path d="M1 5H16M16 .5V9.5" stroke={ink ?? T.represses} strokeWidth="1.8" fill="none"/></svg>{label(signCounts.repression, "repression")}</>, "Show only repression links", signCounts.repression === 0)}
+    {signCounts.unknown > 0 && part("unknown", <><svg width="18" height="10" aria-hidden="true"><path d="M1 5H17" stroke={ink ?? T.unknown} strokeWidth="1.6"/></svg>{label(signCounts.unknown, "sign unknown")}</>, "Show only links whose sign is unknown")}
   </div>;
 }
 
