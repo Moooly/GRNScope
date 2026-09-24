@@ -1392,7 +1392,8 @@
 .figure-filter .key-part:disabled { cursor: default; opacity: 0.45; }
 .figure-filter .key-part:focus-visible { outline: 2px solid #1b75a6; outline-offset: 1px; }
 .figure-filter svg, .figure-key-line svg { display: block; flex: none; }
-.figure-key-line { display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; padding: 10px 24px 12px; border-top: 1px solid #eef1f3; font-size: 11.5px; color: #4a5559; }
+.figure-key-line { display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; padding: 10px 24px; border-top: 1px solid #eef1f3; font-size: 11.5px; color: #4a5559; }
+.figure-key-line .key-group .key-item + .key-item { margin-left: 6px; }
 .figure-key-line .key-group { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border-left: 1px solid #e6eaed; white-space: nowrap; cursor: default; }
 .figure-key-line .key-group:first-child { padding-left: 0; border-left: 0; }
 .figure-key-line .key-item { display: inline-flex; align-items: center; gap: 5px; }

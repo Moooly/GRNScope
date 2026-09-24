@@ -664,8 +664,27 @@ export default function NetworkVisualizationSection(props: Props) {
           </p>
         )}
         {useNewCanvas && networkLayout !== "circos" ? (
-          // With the side panel open the filter lives at the top of the panel.
-          tableOpen ? null : linkFilter("line")
+          <>
+            {/* Key on top. With the side panel open the filter lives in the
+                panel, so the key names the link tips itself; with the panel
+                hidden the filter line below it shows the tips with counts. */}
+            {nodes.length > 0 && (
+              <NetworkKey
+                directionSplit={edges.some((e) => hasDirection(e))}
+                hasUndirected={edges.some((e) => !hasDirection(e))}
+                widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
+                methodCount={selectedAlgorithmIds.length}
+                counts={figureKeyCounts}
+                palette={figurePalette}
+                signs={tableOpen ? {
+                  activation: visibleEdges.some((e) => e.sign === 1),
+                  repression: visibleEdges.some((e) => e.sign === -1),
+                  unknown: visibleEdges.some((e) => e.sign === 0),
+                } : undefined}
+              />
+            )}
+            {tableOpen ? null : linkFilter("line")}
+          </>
         ) : (
         <NetworkLegend
           appearance={activeAppearance}
@@ -802,16 +821,6 @@ export default function NetworkVisualizationSection(props: Props) {
           />
           )}
         </div>
-        {useNewCanvas && networkLayout !== "circos" && nodes.length > 0 && (
-          <NetworkKey
-            directionSplit={edges.some((e) => hasDirection(e))}
-            hasUndirected={edges.some((e) => !hasDirection(e))}
-            widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
-            methodCount={selectedAlgorithmIds.length}
-            counts={figureKeyCounts}
-            palette={figurePalette}
-          />
-        )}
         {showHelp && (
           <NetworkHelpModal
             galaxy={useNewCanvas && networkLayout !== "circos"}

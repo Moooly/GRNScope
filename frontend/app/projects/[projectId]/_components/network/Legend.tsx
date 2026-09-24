@@ -47,11 +47,14 @@ type KeyProps = {
   methodCount: number;
   counts?: FigureCounts;
   palette?: PaletteName;
+  /** Which link signs are drawn; each present one gets its tip in the key.
+   * Omit when the filter line above already shows the tips with their counts. */
+  signs?: { activation: boolean; repression: boolean; unknown: boolean };
 };
 
-/** One short line under the network: only what the picture can't say itself.
+/** One short line above the network: only what the picture can't say itself.
  * Exact steps and counts are in the tooltips. */
-export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE }: KeyProps) {
+export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE, signs }: KeyProps) {
   const T = PALETTES[palette];
   const support = widthBy === "support" && methodCount > 1;
   const steps = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
@@ -63,6 +66,11 @@ export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount
       <span className="key-item"><svg width="11" height="11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5" fill={T.tf} /></svg>TF</span>
       <span className="key-item"><svg width="11" height="11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5" fill={T.node} /></svg>Other gene</span>
     </span>
+    {signs && (signs.activation || signs.repression || signs.unknown) && <span className="key-group" title="The tip at the regulated gene shows the sign of the link.">
+      {signs.activation && <span className="key-item"><svg width="22" height="10" aria-hidden="true"><path d="M1 5H14" stroke={T.activates} strokeWidth="1.6"/><path d="M13 1.5L21 5L13 8.5Z" fill={T.activates}/></svg>activation</span>}
+      {signs.repression && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H18M18 .5V9.5" stroke={T.represses} strokeWidth="1.8" fill="none"/></svg>repression</span>}
+      {signs.unknown && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H19" stroke={T.unknown} strokeWidth="1.6"/></svg>sign unknown</span>}
+    </span>}
     {directionSplit && <span className="key-group" title="Each gene is split by the direction of its links, in its own colour.">
       <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill={T.pieTF[1]}/><path d="M7 7V.5A6.5 6.5 0 1 1 1.4 10.3Z" fill={T.pieTF[0]}/></svg>
       <span>dark regulates · light regulated by{hasUndirected ? " · pale unknown" : ""}</span>
