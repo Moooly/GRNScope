@@ -38,8 +38,11 @@ const SOFT: Palette = {
   ground: NETWORK_THEME.ground, node: NETWORK_THEME.node, tf: NETWORK_THEME.tf, label: NETWORK_THEME.label, accent: NETWORK_THEME.accent,
   activates: NETWORK_THEME.activates, represses: NETWORK_THEME.represses, unknown: NETWORK_THEME.unknown,
   // Chosen for print: blue/yellow survives every colour-blindness type and
-  // greyscale; the sand-yellow and the tints stay visible on white paper.
-  pieTF: ["#7fa6db", "#bcd0ec", "#dce6f5"], pieGene: ["#ebcb7a", "#f4e0ae", "#f9edcf"],
+  // greyscale. Each class shows its own swatch in its usual role: TFs mostly
+  // regulate (out slice = #7FA6DB), other genes are mostly regulated (in
+  // slice = #EBCB7A), so a gene that also regulates gets a deeper ochre. The
+  // palest slice stays >14 dE from white.
+  pieTF: ["#7fa6db", "#b5cbea", "#d6e2f4"], pieGene: ["#cfa13c", "#ebcb7a", "#f6e5b8"],
   // Previous manual experiment (kept for reference): node #A68A64 / #93A8A1,
   // TF #56B4E9, pies all one colour (no visible direction split).
   nodeMin: 24,
