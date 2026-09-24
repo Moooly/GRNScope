@@ -222,8 +222,6 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
   // ---- Overview --------------------------------------------------------
   const overview = () => {
     const tfCount = nodes.filter(n => n.isTF).length;
-    const signed = edges.filter(e => e.sign !== 0).length;
-    const act = edges.filter(e => e.sign === 1).length;
     const lo = edges.length ? Math.min(0.9, Math.floor(Math.min(...edges.map(e => e.score)) * 10) / 10) : 0;
     const steps = Math.max(1, Math.round((1 - lo) * 10));
     const bins = Array.from({ length: steps }, () => 0);
@@ -231,12 +229,9 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     const peak = Math.max(1, ...bins);
     const top = [...genes].sort((a, b) => (anyDirected ? b.targets - a.targets : b.total - a.total) || a.id.localeCompare(b.id)).slice(0, 6).filter(g => (anyDirected ? g.targets : g.total) > 0);
     const topMax = Math.max(1, ...top.map(g => anyDirected ? g.targets : g.total));
+    // No headline numbers here: the tabs already count links and genes, and
+    // the filter chips count links by sign.
     return <div className="tp-card">
-      <div className="tp-stats">
-        {stat(nodes.length.toLocaleString(), `genes · ${plural(tfCount, "TF")}`)}
-        {stat(edges.length.toLocaleString(), "links")}
-        {stat(signed ? `${Math.round((act / signed) * 100)}%` : "—", "activation")}
-      </div>
       {edges.length > 0 && <section className="tp-section">
         <h4>Evidence of displayed links</h4>
         <div className="tp-hist" role="img" aria-label="Number of links by evidence">
@@ -247,7 +242,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         <div className="tp-hist-axis">{Array.from({ length: steps + 1 }, (_, i) => <span key={i}>{(lo + i / 10).toFixed(1)}</span>)}</div>
       </section>}
       {top.length > 0 && <section className="tp-section">
-        <h4>Top {anyDirected ? "regulators · targets" : "hubs · links"}</h4>
+        <h4>Top {anyDirected ? "regulators by targets" : "hubs by links"}{tfCount > 0 ? ` · ${plural(tfCount, "TF")} in view` : ""}</h4>
         <table><tbody>{top.map(g => {
           const v = anyDirected ? g.targets : g.total;
           return <tr key={g.id} onClick={() => onSelectGene(g.id)} title={`Open ${g.id}`}>
