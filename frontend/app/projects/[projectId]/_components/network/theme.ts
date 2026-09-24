@@ -4,9 +4,9 @@
  * fills and exist only so older consumers keep compiling. */
 export const NETWORK_THEME = {
   ground: "#ffffff",
-  // Node colours from the boss's swatches (2026-09-23): blue TFs, yellow genes.
-  node: "#fbdd85", nodeRim: "#fbdd85",
-  tf: "#80a6e2", tfRim: "#80a6e2",
+  // Node colours: blue TFs, sand-yellow genes (publication pick, 2026-09-23).
+  node: "#ebcb7a", nodeRim: "#ebcb7a",
+  tf: "#7fa6db", tfRim: "#7fa6db",
   nodeMuted: "#e6f2ed", link: "#588f89", linkMuted: "#dde6e4",
   label: "#33433e", labelHalo: "#ffffff",
   accent: "#33433e", accentSoft: "#eef3f1",
@@ -37,12 +37,16 @@ export type Palette = {
 const SOFT: Palette = {
   ground: NETWORK_THEME.ground, node: NETWORK_THEME.node, tf: NETWORK_THEME.tf, label: NETWORK_THEME.label, accent: NETWORK_THEME.accent,
   activates: NETWORK_THEME.activates, represses: NETWORK_THEME.represses, unknown: NETWORK_THEME.unknown,
-  pieTF: ["#80a6e2", "#c0d3f1", "#e4ecf9"], pieGene: ["#fbdd85", "#fdedbd", "#fef7e2"],
+  // Chosen for print: blue/yellow survives every colour-blindness type and
+  // greyscale; the sand-yellow and the tints stay visible on white paper.
+  pieTF: ["#7fa6db", "#bcd0ec", "#dce6f5"], pieGene: ["#ebcb7a", "#f4e0ae", "#f9edcf"],
+  // Previous manual experiment (kept for reference): node #A68A64 / #93A8A1,
+  // TF #56B4E9, pies all one colour (no visible direction split).
   nodeMin: 24,
 };
 
 /** Two palettes, switchable in Display while the boss chooses.
- * "soft": blue TFs (#80A6E2), yellow genes (#FBDD85), one grey link ink.
+ * "soft": blue TFs (#7FA6DB), sand-yellow genes (#EBCB7A), one grey link ink.
  * "contrast": amber TFs, grey genes, ColorBrewer blue/red links. */
 export type PaletteName = "soft" | "contrast";
 export const PALETTES: Record<PaletteName, Palette> = {

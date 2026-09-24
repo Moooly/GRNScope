@@ -441,7 +441,7 @@ test("genes are split by link direction in their own colour, only when the view 
   try {
     assert.equal(cy.$id("TF").style("border-width"),"0px");
     assert.notEqual(cy.$id("TF").style("pie-1-background-color"), cy.$id("A").style("pie-1-background-color"), "TFs and other genes keep their own hue");
-    assert.equal(cy.$id("TF").style("pie-1-background-color"), "rgb(128,166,226)", "the darkest slice is the TF's own blue");
+    assert.equal(cy.$id("TF").style("pie-1-background-color"), "rgb(127,166,219)", "the darkest slice is the TF's own blue");
   } finally { cy.destroy(); }
 });
 
