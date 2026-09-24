@@ -108,3 +108,47 @@ export function placeLinkLabel(tip: LinkLabelGeometry, w: number, h: number, bou
     top: Math.min(Math.max(best.top, margin), Math.max(margin, bounds.height - h - margin)),
   };
 }
+
+type Segment = { x1: number; y1: number; x2: number; y2: number };
+/** A gene as rendered: centre, radius, its links and its partner genes. */
+export type GeneLabelGeometry = { x: number; y: number; r: number; links: Segment[]; genes: Circle[] };
+
+/** Length of a segment inside a box (Liang-Barsky clipping). */
+function lengthInside(s: Segment, left: number, top: number, w: number, h: number) {
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+  let t0 = 0, t1 = 1;
+  for (const [p, q] of [[-dx, s.x1 - left], [dx, left + w - s.x1], [-dy, s.y1 - top], [dy, top + h - s.y1]] as const) {
+    if (p === 0) { if (q < 0) return 0; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return 0; t0 = Math.max(t0, t); } else { if (t < t0) return 0; t1 = Math.min(t1, t); }
+  }
+  return t1 > t0 ? (t1 - t0) * Math.hypot(dx, dy) : 0;
+}
+
+/** Top-left corner for a w×h label next to a hovered gene: tried above first,
+ * then round the gene, on the spot that covers the least of the gene's links
+ * and partners and stays inside the canvas. */
+export function placeGeneLabel(gene: GeneLabelGeometry, w: number, h: number, bounds: { width: number; height: number }) {
+  const margin = 6, gap = 8;
+  const angles = [-90, -60, -120, -30, -150, 0, 180, 30, 150, 60, 120, 90];
+  let best = { left: 0, top: 0, cost: Infinity };
+  angles.forEach((deg, rank) => {
+    for (const push of [1, 1.3]) {
+      const a = deg * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
+      const d = (gene.r + gap + Math.abs(ux) * w / 2 + Math.abs(uy) * h / 2) * push;
+      const left = gene.x + ux * d - w / 2, top = gene.y + uy * d - h / 2;
+      const outside = Math.max(0, margin - left) + Math.max(0, left + w - bounds.width + margin) + Math.max(0, margin - top) + Math.max(0, top + h - bounds.height + margin);
+      const covered = gene.links.reduce((sum, s) => sum + lengthInside(s, left - 3, top - 3, w + 6, h + 6), 0);
+      const genes = gene.genes.reduce((sum, c) => {
+        const dx = Math.max(left - c.x, 0, c.x - (left + w)), dy = Math.max(top - c.y, 0, c.y - (top + h));
+        return sum + Math.max(0, c.r + 3 - Math.hypot(dx, dy));
+      }, 0);
+      const cost = outside * 4 + covered + genes * 2 + rank * 1.5 + (push - 1) * 60;
+      if (cost < best.cost) best = { left, top, cost };
+    }
+  });
+  return {
+    left: Math.min(Math.max(best.left, margin), Math.max(margin, bounds.width - w - margin)),
+    top: Math.min(Math.max(best.top, margin), Math.max(margin, bounds.height - h - margin)),
+  };
+}

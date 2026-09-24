@@ -11,7 +11,7 @@ const { galaxyElements, galaxySignature, galaxyInput } = require(base + "model.t
 const { buildNetworkStylesheet } = require(base + "stylesheet.ts");
 const { nodeDiameter, applyPresentation } = require(base + "presentation.ts");
 const { exportNetworkFigure } = require(base + "../networkFigureExport.ts");
-const { planLabels, labelsOverlap, placeLinkLabel } = require(base + "labels.ts");
+const { planLabels, labelsOverlap, placeLinkLabel, placeGeneLabel } = require(base + "labels.ts");
 const { partitionSkeleton } = require(base + "neighborhoods.ts");
 const fixture = require("./network-branch-fixture.cjs");
 function inputFor(nodes, edges) {
@@ -480,6 +480,43 @@ test("a link's label sits beside the link, never on it, and stays in the canvas 
   const a={x:500,y:350},b={x:600,y:350};
   const box=placeLinkLabel(geometry(a,b,40,40),w,h,bounds);
   for (const c of [a,b]) { const dx=Math.max(box.left-c.x,0,c.x-box.left-w),dy=Math.max(box.top-c.y,0,c.y-box.top-h); assert.ok(Math.hypot(dx,dy)>=40, "off the gene"); }
+});
+
+test("a hovered gene is put in focus: its links dark on a white casing, its partners full, the rest faded", () => {
+  const nodes=[{id:"TF",isTF:true},{id:"A",isTF:false},{id:"B",isTF:false}];
+  const e=(key,source,target)=>({key,source,target,score:0.6,confidence:0,count:1,rank:1,supportingAlgorithms:[],direction:1,directionConfidence:1,directionCoverage:1,sign:1,signConfidence:1,signCoverage:1});
+  const cy=cytoscape({headless:true,styleEnabled:true,elements:galaxyElements(nodes,[e("1","TF","A"),e("2","A","B")]),style:buildNetworkStylesheet()});
+  try {
+    const tf=cy.$id("TF"), links=tf.connectedEdges();
+    links.addClass("focus-link"); links.connectedNodes().addClass("focus-end");
+    cy.elements().not(links).not(links.connectedNodes()).addClass("focus-dim");
+    assert.equal(cy.$id("1").style("line-color"),"rgb(31,42,51)");
+    assert.ok(parseFloat(cy.$id("1").style("width"))>=2);
+    assert.equal(Number(cy.$id("1").style("underlay-opacity")),1);
+    assert.ok(Number(cy.$id("2").style("opacity"))<=0.1, "links of other genes fade");
+    assert.ok(Number(cy.$id("B").style("opacity"))<=0.35, "genes outside the neighbourhood fade");
+    assert.equal(cy.$id("A").style("font-weight"),"700");
+    tf.addClass("hovered");
+    assert.equal(Number(tf.style("underlay-opacity")),0, "no halo on the hovered gene");
+    assert.equal(cy.$id("1").style("line-style"),"solid", "no flowing dashes");
+  } finally { cy.destroy(); }
+});
+
+test("a gene's label sits next to the gene, off its links and partners, inside the canvas", () => {
+  const w=240,h=28,bounds={width:1200,height:700};
+  const hits=(box,s)=>{for(let t=0;t<=1;t+=0.01){const x=s.x1+(s.x2-s.x1)*t,y=s.y1+(s.y2-s.y1)*t;if(x>box.left&&x<box.left+w&&y>box.top&&y<box.top+h)return true;}return false;};
+  // Links fan out upwards: the label must not sit straight above.
+  const gene={x:600,y:400,r:30,links:[{x1:600,y1:400,x2:600,y2:100},{x1:600,y1:400,x2:450,y2:120},{x1:600,y1:400,x2:750,y2:120}],genes:[{x:600,y:100,r:20},{x:450,y:120,r:20},{x:750,y:120,r:20}]};
+  const box=placeGeneLabel(gene,w,h,bounds);
+  for (const s of gene.links) assert.ok(!hits(box,s), "label off the gene's links");
+  const dx=Math.max(box.left-600,0,600-box.left-w),dy=Math.max(box.top-400,0,400-box.top-h);
+  assert.ok(Math.hypot(dx,dy)>=30 && Math.hypot(dx,dy)<80, "off the gene but next to it");
+  // With nothing in the way the label goes straight above.
+  const free=placeGeneLabel({x:600,y:400,r:30,links:[],genes:[]},w,h,bounds);
+  assert.ok(free.top+h<=370 && Math.abs(free.left+w/2-600)<1, "above by default");
+  // At the top edge it stays inside.
+  const top=placeGeneLabel({x:600,y:20,r:15,links:[],genes:[]},w,h,bounds);
+  assert.ok(top.top>=6);
 });
 
 test("the links filter keeps genes in place, hides other effects and fades genes left without links", () => {

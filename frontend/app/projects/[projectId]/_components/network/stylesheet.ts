@@ -59,14 +59,14 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
       // Weak relationships underneath, strong ones on top.
       "z-index": (e: EdgeSingular) => Number(e.data("zIndex")) || 1,
     } },
-    { selector: "node.hovered, node.traced", style: {
+    { selector: "node.hovered", style: { "min-zoomed-font-size": 0, "z-index": 30 } },
+    { selector: "node.traced", style: {
       "min-zoomed-font-size": 0,
       "underlay-color": T.accent, "underlay-opacity": 0.14, "underlay-padding": 6, "z-index": 30,
     } },
     { selector: "node.traced-neighbour", style: { "min-zoomed-font-size": 0, "z-index": 20 } },
     { selector: "edge.traced-neighbour", style: { opacity: (e: EdgeSingular) => Math.max(0.6, Number(e.data("inkOpacity")) || 1) } },
     { selector: "edge.traced, edge.hovered, edge.row-hover", style: { width: (e: EdgeSingular) => Number(e.data("width")) * 1.6, opacity: 1, "z-index": 25 } },
-    { selector: "edge.flowing", style: { "line-style": "dashed" } },
     { selector: "node.muted", style: { opacity: 0.25, "text-opacity": 0.2 } },
     { selector: "edge.muted", style: { opacity: 0.06 } },
     // Hovered link in focus (canvas or table row): the rest fades, the link
@@ -79,6 +79,14 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
       width: (e: EdgeSingular) => Math.max(3.2, Number(e.data("width")) * 2.2),
       opacity: 1, "z-index": 40,
       "underlay-color": "#ffffff", "underlay-opacity": 1, "underlay-padding": 2.5,
+    } },
+    // Hovered gene in focus: its links dark on a white casing, a little
+    // lighter than a single hovered link because there are several.
+    { selector: "edge.focus-link", style: {
+      "line-color": FOCUS_INK, "source-arrow-color": FOCUS_INK, "target-arrow-color": FOCUS_INK,
+      width: (e: EdgeSingular) => Math.max(2, Number(e.data("width")) * 1.6),
+      opacity: 1, "z-index": 40,
+      "underlay-color": "#ffffff", "underlay-opacity": 1, "underlay-padding": 2,
     } },
   ];
 }

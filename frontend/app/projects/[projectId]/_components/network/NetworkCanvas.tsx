@@ -6,7 +6,7 @@ import { buildCircularPositions, buildConcentricPositions, buildHierarchicalPosi
 import type { NetworkGraphProps } from "../networkGraphTypes";
 import { NETWORK_SCALE, PALETTES, DEFAULT_PALETTE } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
-import { applyLabelBudget, placeLinkLabel, type LinkLabelGeometry } from "./labels";
+import { applyLabelBudget, placeGeneLabel, placeLinkLabel, type GeneLabelGeometry, type LinkLabelGeometry } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
@@ -52,45 +52,56 @@ function applyEffect(cy: Core, effect: EffectFilter) {
 
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
-/** Regulation flows along a hovered gene's directed links: dashes drift from
- * regulator to target. Screen-only; the exported figure never carries it. */
-function startFlow(cy: Core, target: cytoscape.NodeSingular | cytoscape.EdgeSingular) {
-  stopFlow(cy);
-  const edges = (target.isNode() ? target.connectedEdges() : target).filter(e => Number(e.data("direction")) !== 0);
-  if (edges.empty() || prefersReducedMotion()) return;
-  const zoom = cy.zoom();
-  edges.forEach(e => { e.style("line-dash-pattern", [7 / zoom, 5 / zoom]); });
-  edges.addClass("flowing");
-  let offset = 0, last = performance.now();
-  const tick = (now: number) => {
-    if (cy.destroyed()) return;
-    offset += (now - last) * 0.028 / cy.zoom(); last = now;
-    edges.forEach(e => { e.style("line-dash-offset", (Number(e.data("direction")) === -1 ? offset : -offset)); });
-    cy.scratch("flowFrame", requestAnimationFrame(tick));
-  };
-  cy.scratch("flowEdges", edges);
-  cy.scratch("flowFrame", requestAnimationFrame(tick));
-}
-function stopFlow(cy: Core) {
-  cancelAnimationFrame(Number(cy.scratch("flowFrame")) || 0);
-  const edges = cy.scratch("flowEdges") as cytoscape.EdgeCollection | undefined;
-  if (edges && !cy.destroyed()) { edges.removeClass("flowing"); edges.removeStyle("line-dash-offset line-dash-pattern"); }
-  cy.scratch("flowEdges", undefined);
+
+/** Hover label: text plus the rendered geometry of what is hovered, so the
+ * label can sit beside it instead of on top of it. */
+type HoverTip =
+  | (LinkLabelGeometry & { kind: "link"; from: string; to: string; mark: string; evidence: string })
+  | (GeneLabelGeometry & { kind: "gene"; gene: string; regulates: number; regulatedBy: number; unknown: number; partners: number });
+
+function clearFocus(cy: Core) {
+  cy.elements(".focus-dim, .focus-end, .focus-edge, .focus-link").removeClass("focus-dim focus-end focus-edge focus-link");
+  cy.scratch("focusTarget", undefined);
 }
 
-/** Link label: text plus the link's rendered geometry, so the label can sit
- * beside the link instead of on top of it. */
-type HoverTip = LinkLabelGeometry & { from: string; to: string; mark: string; evidence: string };
+/** A hovered gene is put in focus, in the same language as a hovered link: the
+ * gene, its partners and its links stay; everything else fades; its links turn
+ * dark on a white casing; a label counts whom it regulates and is regulated by. */
+function focusGene(cy: Core, node: cytoscape.NodeSingular | null): HoverTip | null {
+  clearFocus(cy);
+  if (!node || node.removed()) return null;
+  const links = node.connectedEdges().filter(e => !e.data("effectHidden")) as unknown as cytoscape.EdgeCollection;
+  const partners = links.connectedNodes();
+  const others = partners.not(node) as unknown as cytoscape.NodeCollection;
+  links.addClass("focus-link"); partners.addClass("focus-end"); node.addClass("focus-end");
+  cy.elements().not(links).not(partners).not(node).addClass("focus-dim");
+  cy.scratch("focusTarget", node);
+  const out = new Set<string>(), inn = new Set<string>(), unknown = new Set<string>();
+  links.forEach(e => {
+    const other = e.source().same(node) ? e.target().id() : e.source().id();
+    const direction = Number(e.data("direction"));
+    if (direction === 0) { unknown.add(other); return; }
+    const regulator = direction === -1 ? e.target() : e.source();
+    (regulator.same(node) ? out : inn).add(other);
+  });
+  const p = node.renderedPosition();
+  return { kind: "gene", gene: node.id(), regulates: out.size, regulatedBy: inn.size, unknown: unknown.size,
+    partners: others.length,
+    x: p.x, y: p.y, r: node.renderedOuterWidth() / 2,
+    links: links.map(e => { const a = e.source().renderedPosition(), b = e.target().renderedPosition(); return { x1: a.x, y1: a.y, x2: b.x, y2: b.y }; }),
+    genes: others.map(n => ({ ...n.renderedPosition(), r: n.renderedOuterWidth() / 2 })) };
+}
 
 /** A hovered link (on the canvas or as a table row) is put in focus: every
  * other link and gene fades, the link turns dark and thick, its two genes keep
  * full strength with bold names, and a label names it. */
 function focusEdge(cy: Core, edge: cytoscape.EdgeSingular | null): HoverTip | null {
-  cy.elements(".focus-dim, .focus-end, .focus-edge").removeClass("focus-dim focus-end focus-edge");
+  clearFocus(cy);
   if (!edge || edge.removed()) return null;
   const ends = edge.connectedNodes();
   edge.addClass("focus-edge"); ends.addClass("focus-end");
   cy.elements().not(edge).not(ends).addClass("focus-dim");
+  cy.scratch("focusTarget", edge);
   const a = edge.source().renderedPosition(), b = edge.target().renderedPosition();
   const mid = edge.renderedMidpoint();
   const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -99,7 +110,7 @@ function focusEdge(cy: Core, edge: cytoscape.EdgeSingular | null): HoverTip | nu
   if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; }
   const reversed = Number(edge.data("direction")) === -1;
   const sign = Number(edge.data("sign"));
-  return { x: mid.x, y: mid.y, nx, ny, halfWidth: Math.max(3.2, Number(edge.data("width")) * 2.2) * cy.zoom() / 2,
+  return { kind: "link", x: mid.x, y: mid.y, nx, ny, halfWidth: Math.max(3.2, Number(edge.data("width")) * 2.2) * cy.zoom() / 2,
     ends: [{ ...a, r: edge.source().renderedOuterWidth() / 2 }, { ...b, r: edge.target().renderedOuterWidth() / 2 }],
     from: reversed ? edge.target().id() : edge.source().id(), to: reversed ? edge.source().id() : edge.target().id(),
     mark: Number(edge.data("direction")) === 0 ? "—" : sign === -1 ? "⊣" : "→", evidence: Number(edge.data("evidence")).toFixed(2) };
@@ -148,7 +159,10 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   useLayoutEffect(() => {
     const el = hoverTipRef.current, parent = el?.offsetParent as HTMLElement | null;
     if (!el || !hoverTip || !parent) return;
-    const { left, top } = placeLinkLabel(hoverTip, el.offsetWidth, el.offsetHeight, { width: parent.clientWidth, height: parent.clientHeight });
+    const bounds = { width: parent.clientWidth, height: parent.clientHeight };
+    const { left, top } = hoverTip.kind === "gene"
+      ? placeGeneLabel(hoverTip, el.offsetWidth, el.offsetHeight, bounds)
+      : placeLinkLabel(hoverTip, el.offsetWidth, el.offsetHeight, bounds);
     el.style.left = `${left}px`; el.style.top = `${top}px`; el.style.visibility = "visible";
   }, [hoverTip]);
   const stopWorker = useCallback(() => {
@@ -185,8 +199,8 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     cy.on("tap", "node", e => { latest.current.onSelectEdge(null); latest.current.onSelectGene(e.target.id()); });
     cy.on("tap", "edge", e => { latest.current.onSelectGene(null); latest.current.onSelectEdge(e.target.id()); });
     cy.on("tap", e => { if (e.target === cy) { latest.current.onSelectGene(null); latest.current.onSelectEdge(null); } });
-    cy.on("mouseover", "node", e => { e.target.addClass("hovered"); startFlow(cy, e.target); applyLabelBudget(cy); });
-    cy.on("mouseout", "node", e => { e.target.removeClass("hovered"); stopFlow(cy); applyLabelBudget(cy); });
+    cy.on("mouseover", "node", e => { e.target.addClass("hovered"); setHoverTip(focusGene(cy, e.target)); applyLabelBudget(cy); });
+    cy.on("mouseout", "node", e => { e.target.removeClass("hovered"); setHoverTip(focusGene(cy, null)); applyLabelBudget(cy); });
     cy.on("mouseover", "edge", e => { e.target.addClass("hovered"); setHoverTip(focusEdge(cy, e.target)); applyLabelBudget(cy); });
     cy.on("mouseout", "edge", e => { e.target.removeClass("hovered"); setHoverTip(focusEdge(cy, null)); applyLabelBudget(cy); });
     let frame = 0;
@@ -195,6 +209,9 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
       frame = requestAnimationFrame(() => {
         if (cy.destroyed() || busy.current) return;
         applyPresentation(cy);
+        // Keep the hover label beside what is hovered while the view moves.
+        const focused = cy.scratch("focusTarget") as cytoscape.NodeSingular | cytoscape.EdgeSingular | undefined;
+        if (focused && !focused.removed()) setHoverTip(focused.isNode() ? focusGene(cy, focused) : focusEdge(cy, focused as cytoscape.EdgeSingular));
       });
     });
     cy.on("dragpan scrollzoom", () => cy.scratch("galaxyCameraTouched", true));
@@ -212,7 +229,6 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     });
     observer.observe(containerRef.current);
     return () => {
-      stopFlow(cy);
       stopWorker();
       observer.disconnect(); cancelAnimationFrame(frame);
       latest.current.onGraphReady?.(null);
@@ -397,7 +413,11 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
-    {hoverTip && <div ref={hoverTipRef} className="galaxy-hover-tip" style={{ left: 0, top: 0, visibility: "hidden" }}><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · evidence {hoverTip.evidence}</div>}
+    {hoverTip && <div ref={hoverTipRef} className="galaxy-hover-tip" style={{ left: 0, top: 0, visibility: "hidden" }}>{hoverTip.kind === "link"
+      ? <><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · evidence {hoverTip.evidence}</>
+      : <><i>{hoverTip.gene}</i>{hoverTip.regulates + hoverTip.regulatedBy > 0
+        ? <> · regulates {hoverTip.regulates} · regulated by {hoverTip.regulatedBy}{hoverTip.unknown > 0 && <> · {hoverTip.unknown} direction unknown</>}</>
+        : <> · {hoverTip.partners} {hoverTip.partners === 1 ? "partner" : "partners"}</>}</>}</div>}
     {(selected || visiblePins.length > 0) && <div className="galaxy-controls" aria-label="Label pins">
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label
