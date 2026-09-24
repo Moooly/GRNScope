@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/opening-cut.test.cjs",
+    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/opening-cut.test.cjs scripts/paper-export.test.cjs",
     "compare:network": "node scripts/compare-network-layouts.cjs"
   },
   "dependencies": {
@@ -16,9 +16,12 @@
     "cytoscape-cose-bilkent": "^4.1.0",
     "cytoscape-fcose": "^2.2.0",
     "cytoscape-svg": "^0.4.0",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
     "next": "16.2.2",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "svg2pdf.js": "^2.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -39,6 +39,7 @@ import {
 } from "./networkVisualEncoding";
 import type { AggregatedEdge, NodeInfo } from "../_lib/types";
 import type { NetworkFigureContext } from "./networkFigureExport";
+import { paperFileBase, type PaperContext } from "./network/paperData";
 import "./networkWorkspace.css";
 
 type Layout = "force" | "hierarchical" | "concentric" | "circular" | "circos";
@@ -68,6 +69,8 @@ type Props = {
   scopeLabel: string;
   filterChips?: ReactNode;
   filterSummary: string;
+  projectName?: string;
+  projectId?: string;
 };
 
 const layoutOptions = [
@@ -345,6 +348,57 @@ export default function NetworkVisualizationSection(props: Props) {
     setIsExportConfirmOpen(false);
   };
 
+  // Download for a paper: the figure (183 mm, print units), the supplementary
+  // workbook, the figure legend, or all of them in one ZIP.
+  const [legendCopied, setLegendCopied] = useState(false);
+  const paperContext = (): PaperContext => ({
+    projectName: props.projectName ?? "network", projectId: props.projectId ?? "",
+    methods: selectedAlgorithmIds, filters: props.filterSummary, scope: scopeLabel,
+    focus: isolatedGene, effect: effectiveEffect, palette: figurePalette, sizeBy,
+    widthBy: selectedAlgorithmIds.length > 1 ? widthBy : "evidence",
+  });
+  const downloadPaper = async (what: "pdf" | "svg" | "png" | "xlsx" | "csv" | "zip") => {
+    const graph = coreRef.current;
+    setExporting(true);
+    setExportError("");
+    try {
+      if (!graph || graph.destroyed() || !graph.elements().length) throw new Error("There is no network to export.");
+      if (graph.scratch("galaxyBusy")) throw new Error("The network is still arranging. Please wait a moment and try again.");
+      const ctx = paperContext(), base = paperFileBase(ctx);
+      const figures = await import("./network/paperExport");
+      const data = await import("./network/paperData");
+      if (what === "pdf") data.saveBlob(await figures.paperFigurePdf(graph), `${base}-figure.pdf`);
+      else if (what === "svg") data.saveBlob(figures.paperFigureSvg(graph), `${base}-figure.svg`);
+      else if (what === "png") data.saveBlob(await figures.paperFigurePng(graph), `${base}-figure.png`);
+      else if (what === "xlsx") data.saveBlob(await data.supplementaryWorkbook(nodes, visibleEdges, ctx), `${base}-table.xlsx`);
+      else if (what === "csv") data.saveBlob(new Blob([data.linksCsv(visibleEdges)], { type: "text/csv;charset=utf-8" }), `${base}-links.csv`);
+      else {
+        const { default: JSZip } = await import("jszip");
+        const zip = new JSZip();
+        zip.file(`${base}-figure.pdf`, await figures.paperFigurePdf(graph));
+        zip.file(`${base}-figure.svg`, figures.paperFigureSvg(graph));
+        zip.file(`${base}-figure.png`, await figures.paperFigurePng(graph));
+        zip.file(`${base}-table.xlsx`, await data.supplementaryWorkbook(nodes, visibleEdges, ctx));
+        zip.file(`${base}-links.csv`, data.linksCsv(visibleEdges));
+        zip.file(`${base}-figure-legend.txt`, `${data.figureLegend(nodes, visibleEdges, ctx)}\n`);
+        data.saveBlob(await zip.generateAsync({ type: "blob", compression: "DEFLATE" }), `${base}.zip`);
+      }
+      closeExportConfirm();
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Could not export. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+  const copyLegend = async () => {
+    const { figureLegend } = await import("./network/paperData");
+    const text = figureLegend(nodes, visibleEdges, paperContext());
+    try { await navigator.clipboard.writeText(text); }
+    catch { setExportError("Could not copy to the clipboard. Please allow clipboard access and try again."); return; }
+    setLegendCopied(true);
+    setTimeout(() => setLegendCopied(false), 2400);
+  };
+
   useEffect(() => {
     if (!isExportConfirmOpen) return;
 
@@ -590,7 +644,31 @@ export default function NetworkVisualizationSection(props: Props) {
                     ▾
                   </span>
                 </button>
-                {isExportConfirmOpen && (
+                {isExportConfirmOpen && useNewCanvas && networkLayout !== "circos" ? (
+                  <div className="dl-menu" role="dialog" aria-modal="false" aria-label="Download for a paper">
+                    <div className="dl-sec">
+                      <div className="dl-row"><div><div className="dl-t">Figure</div><div className="dl-d">The network as shown, 183 mm wide (two columns)</div></div></div>
+                      <div className="dl-fmts">
+                        <button type="button" className="dl-fmt is-rec" disabled={exporting} onClick={() => void downloadPaper("pdf")}><b>PDF</b><i>vector · recommended</i></button>
+                        <button type="button" className="dl-fmt" disabled={exporting} onClick={() => void downloadPaper("svg")}><b>SVG</b><i>editable text</i></button>
+                        <button type="button" className="dl-fmt" disabled={exporting} onClick={() => void downloadPaper("png")}><b>PNG</b><i>600 dpi</i></button>
+                      </div>
+                    </div>
+                    <div className="dl-sec">
+                      <div className="dl-row"><div><div className="dl-t">Supplementary table</div><div className="dl-d">Links, genes and how they were made</div></div>
+                        <div className="dl-pills"><button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("xlsx")}>XLSX</button><button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("csv")}>CSV</button></div></div>
+                    </div>
+                    <div className="dl-sec">
+                      <div className="dl-row"><div><div className="dl-t">Figure legend</div><div className="dl-d">{legendCopied ? "Copied — paste it under the figure" : "Ready-to-paste caption text"}</div></div>
+                        <button type="button" className={`dl-pill${legendCopied ? " is-done" : ""}`} onClick={() => void copyLegend()}>{legendCopied ? "✓ Copied" : "Copy"}</button></div>
+                    </div>
+                    <div className="dl-sec">
+                      <div className="dl-row"><div><div className="dl-t">Everything</div><div className="dl-d">Figure (PDF, SVG, PNG) + table + legend</div></div>
+                        <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("zip")}>ZIP</button></div>
+                    </div>
+                    {exporting && <div className="dl-busy">Preparing…</div>}
+                  </div>
+                ) : isExportConfirmOpen ? (
                   <div
                     className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white/98 p-2 text-slate-900 shadow-2xl shadow-slate-900/15 backdrop-blur-xl"
                     role="dialog"
@@ -640,7 +718,7 @@ export default function NetworkVisualizationSection(props: Props) {
                       </span>
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

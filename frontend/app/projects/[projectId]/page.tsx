@@ -2893,6 +2893,8 @@ useEffect(() => {
                   ) : (
                   <div className="min-w-0">
                       <NetworkVisualizationSection
+                      projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
+                      projectId={projectId ?? ""}
                       selectedAlgorithmIds={activeAlgorithmIds}
                       scopeLabel={availableResultScopes.find(scope => scope.id === selectedResultScopeId)?.label ?? selectedResultScopeId}
                       filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign stability ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}`}

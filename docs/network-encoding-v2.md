@@ -125,3 +125,19 @@ The fixed opening cut (evidence ≥ 0.5) gave 71 links for 19 genes and 422 for 
 - Name colour `#46524F` (was `#33433E`) so names sit behind the links.
 - Side panel: top regulators' names no longer bold.
 
+## Download for a paper (2026-09-23)
+Preview: `Claude outputs/download-{1-menu,2-figure-on-page,3-table}.png`. The user chose a fixed two-column width.
+- **Menu** (Download ▾, new canvas): Figure (PDF · recommended, SVG, PNG 600 dpi), Supplementary table (XLSX, CSV), Figure legend (Copy), Everything (ZIP). The old "Publication vector / Presentation image" items remain only for Circos and the legacy canvas.
+- **Figure** (`network/paperExport.ts`): drawn from the live network's positions and data in millimetres, always 183 mm wide (double column); the network is at most 170 mm tall. It holds the figure only, with no title or paragraph: the network and a one-line key that wraps between groups. Names are Arial 400 italic at 7 pt, the key is 6 pt, links are 0.5 / 0.75 / 1.25 / 2 pt, arrowheads scale with the line, reciprocal pairs get two lanes, and nothing is rounded. Genes with no shown link are left out. Names are all shown up to 60 genes; above that, a name is dropped rather than overlapping another. The key uses plain "<0.5 … 0.9–1" so the standard PDF fonts can set it.
+  - PDF: jsPDF + svg2pdf.js, page = figure size, vector. Arial is mapped to the standard Helvetica, which is not embedded.
+  - SVG: text stays live text (editable in Illustrator/Inkscape).
+  - PNG: 600 dpi (4,323 px wide), with a pHYs chunk so Word and journals place it at 183 mm.
+- **Table** (`network/paperData.ts`): an XLSX written directly (a JSZip of the SpreadsheetML parts, no spreadsheet library) with three sheets.
+  - Links: regulator, target, effect, direction_resolved, evidence 0.000, bootstrap_confidence, methods_agreeing, methods. Header is bold with a rule, frozen, and gene names are italic.
+  - Genes: gene, transcription_factor, targets, regulators, direction_unknown, links.
+  - About: project, export time, methods, scope, filters, column definitions and the figure legend.
+  - The CSV holds the Links sheet only. Both contain exactly the links and genes in the figure.
+- **Figure legend**: generated from the view: counts, the filters that actually cut, methods, focus/effect, and the colour, split, tip, width and confidence meanings for what is drawn. Copy puts it on the clipboard; the ZIP includes it as a .txt file.
+- **File names**: `<project>-network-<local date>-figure.pdf` etc.
+- **Tests**: `scripts/paper-export.test.cjs` (in `npm run test:network`, 58 pass). The PDF was checked by rendering it with pdftoppm: Helvetica, opacity and tips render correctly, and the MediaBox is 518.74 pt (183 mm).
+
