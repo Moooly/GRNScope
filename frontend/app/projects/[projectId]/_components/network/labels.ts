@@ -77,3 +77,34 @@ export function applyLabelBudget(cy: Core) {
     if (Object.entries(data).some(([key,value]) => n.data(key) !== value)) n.data(data);
   }));
 }
+
+type Circle = { x: number; y: number; r: number };
+/** A link as rendered: midpoint, unit normal, half its drawn width and its two genes. */
+export type LinkLabelGeometry = { x: number; y: number; nx: number; ny: number; halfWidth: number; ends: [Circle, Circle] };
+
+/** Top-left corner for a w×h label beside a link: pushed off the midpoint
+ * along the link's normal until the box clears the line, on whichever side
+ * keeps it inside the canvas and off the two genes. */
+export function placeLinkLabel(tip: LinkLabelGeometry, w: number, h: number, bounds: { width: number; height: number }) {
+  const margin = 6, gap = 8 + tip.halfWidth;
+  const clear = Math.abs(tip.nx) * w / 2 + Math.abs(tip.ny) * h / 2 + gap;
+  const overlapCircle = (left: number, top: number, c: Circle) => {
+    const dx = Math.max(left - c.x, 0, c.x - (left + w)), dy = Math.max(top - c.y, 0, c.y - (top + h));
+    return Math.max(0, c.r + 4 - Math.hypot(dx, dy));
+  };
+  let best = { left: 0, top: 0, cost: Infinity };
+  for (const push of [1, 1.6, 2.4]) {
+    for (const side of [1, -1]) {
+      const cx = tip.x + side * tip.nx * clear * push, cy = tip.y + side * tip.ny * clear * push;
+      const left = cx - w / 2, top = cy - h / 2;
+      const outside = Math.max(0, margin - left) + Math.max(0, left + w - bounds.width + margin) + Math.max(0, margin - top) + Math.max(0, top + h - bounds.height + margin);
+      const cost = outside * 4 + overlapCircle(left, top, tip.ends[0]) + overlapCircle(left, top, tip.ends[1]) + (push - 1) * 2;
+      if (cost < best.cost) best = { left, top, cost };
+    }
+    if (best.cost < 1) break;
+  }
+  return {
+    left: Math.min(Math.max(best.left, margin), Math.max(margin, bounds.width - w - margin)),
+    top: Math.min(Math.max(best.top, margin), Math.max(margin, bounds.height - h - margin)),
+  };
+}

@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core } from "cytoscape";
 import { buildCircularPositions, buildConcentricPositions, buildHierarchicalPositions } from "../networkGraphLayouts";
 import type { NetworkGraphProps } from "../networkGraphTypes";
 import { NETWORK_SCALE, PALETTES, DEFAULT_PALETTE } from "./theme";
 import { buildNetworkStylesheet } from "./stylesheet";
-import { applyLabelBudget } from "./labels";
+import { applyLabelBudget, placeLinkLabel, type LinkLabelGeometry } from "./labels";
 import { galaxyElements, galaxySignature, galaxyInput, galaxyInputFromElements } from "./model";
 import { applyPresentation } from "./presentation";
 import { applyNetworkSpacing, spacePresetPositions } from "./spacing";
@@ -78,10 +78,9 @@ function stopFlow(cy: Core) {
   cy.scratch("flowEdges", undefined);
 }
 
-/** Genes glide to a new arrangement instead of jumping. A gene that was on
- * screen starts where the reader last saw it; a new gene grows out from the
- * middle of the figure. The camera is already at its final fit. */
-type HoverTip = { x: number; y: number; from: string; to: string; mark: string; evidence: string };
+/** Link label: text plus the link's rendered geometry, so the label can sit
+ * beside the link instead of on top of it. */
+type HoverTip = LinkLabelGeometry & { from: string; to: string; mark: string; evidence: string };
 
 /** A hovered link (on the canvas or as a table row) is put in focus: every
  * other link and gene fades, the link turns dark and thick, its two genes keep
@@ -93,13 +92,22 @@ function focusEdge(cy: Core, edge: cytoscape.EdgeSingular | null): HoverTip | nu
   edge.addClass("focus-edge"); ends.addClass("focus-end");
   cy.elements().not(edge).not(ends).addClass("focus-dim");
   const a = edge.source().renderedPosition(), b = edge.target().renderedPosition();
+  const mid = edge.renderedMidpoint();
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  // Normal to the link, pointing up (or right for a vertical link) first.
+  let nx = -(b.y - a.y) / length, ny = (b.x - a.x) / length;
+  if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; }
   const reversed = Number(edge.data("direction")) === -1;
   const sign = Number(edge.data("sign"));
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
+  return { x: mid.x, y: mid.y, nx, ny, halfWidth: Math.max(3.2, Number(edge.data("width")) * 2.2) * cy.zoom() / 2,
+    ends: [{ ...a, r: edge.source().renderedOuterWidth() / 2 }, { ...b, r: edge.target().renderedOuterWidth() / 2 }],
     from: reversed ? edge.target().id() : edge.source().id(), to: reversed ? edge.source().id() : edge.target().id(),
     mark: Number(edge.data("direction")) === 0 ? "—" : sign === -1 ? "⊣" : "→", evidence: Number(edge.data("evidence")).toFixed(2) };
 }
 
+/** Genes glide to a new arrangement instead of jumping. A gene that was on
+ * screen starts where the reader last saw it; a new gene grows out from the
+ * middle of the figure. The camera is already at its final fit. */
 function glide(cy: Core, previous: Map<string, Point>, done: () => void) {
   // A background tab does not animate; place the genes directly there.
   if (prefersReducedMotion() || cy.nodes().length > 1500 || document.hidden) { done(); return; }
@@ -136,6 +144,13 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const [rendered, setRendered] = useState({ nodes: 0, edges: 0, neighborhoods: 0 });
   const [pins, setPins] = useState<string[]>([]);
   const [hoverTip, setHoverTip] = useState<HoverTip | null>(null);
+  const hoverTipRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = hoverTipRef.current, parent = el?.offsetParent as HTMLElement | null;
+    if (!el || !hoverTip || !parent) return;
+    const { left, top } = placeLinkLabel(hoverTip, el.offsetWidth, el.offsetHeight, { width: parent.clientWidth, height: parent.clientHeight });
+    el.style.left = `${left}px`; el.style.top = `${top}px`; el.style.visibility = "visible";
+  }, [hoverTip]);
   const stopWorker = useCallback(() => {
     ++revision.current;
     workerRef.current?.terminate();
@@ -382,7 +397,7 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     </div>
     {arranging && <div className="galaxy-status" role="status">Arranging neighborhoods…{rendered.nodes > 0 ? " Previous view shown." : ""}</div>}
     {error && <div className="galaxy-error" role="alert">{error}</div>}
-    {hoverTip && <div className="galaxy-hover-tip" style={{ left: hoverTip.x, top: hoverTip.y }}><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · evidence {hoverTip.evidence}</div>}
+    {hoverTip && <div ref={hoverTipRef} className="galaxy-hover-tip" style={{ left: 0, top: 0, visibility: "hidden" }}><i>{hoverTip.from}</i> {hoverTip.mark} <i>{hoverTip.to}</i> · evidence {hoverTip.evidence}</div>}
     {(selected || visiblePins.length > 0) && <div className="galaxy-controls" aria-label="Label pins">
       {selected && <button type="button" disabled={arranging} aria-pressed={pins.includes(selected)} onClick={() => setPins(current => current.includes(selected) ? current.filter(id => id !== selected) : [...current, selected])}>
         {pins.includes(selected) ? "Unpin" : "Pin"} {selected} label

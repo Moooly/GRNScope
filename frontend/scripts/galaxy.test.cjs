@@ -11,7 +11,7 @@ const { galaxyElements, galaxySignature, galaxyInput } = require(base + "model.t
 const { buildNetworkStylesheet } = require(base + "stylesheet.ts");
 const { nodeDiameter, applyPresentation } = require(base + "presentation.ts");
 const { exportNetworkFigure } = require(base + "../networkFigureExport.ts");
-const { planLabels, labelsOverlap } = require(base + "labels.ts");
+const { planLabels, labelsOverlap, placeLinkLabel } = require(base + "labels.ts");
 const { partitionSkeleton } = require(base + "neighborhoods.ts");
 const fixture = require("./network-branch-fixture.cjs");
 function inputFor(nodes, edges) {
@@ -463,6 +463,23 @@ test("a hovered link is put in focus: dark, thick, on a white casing, with every
     assert.equal(Number(cy.$id("A").style("opacity")),1, "its genes stay full");
     assert.equal(cy.$id("A").style("font-weight"),"700", "its genes' names are bold");
   } finally { cy.destroy(); }
+});
+
+test("a link's label sits beside the link, never on it, and stays in the canvas and off its genes", () => {
+  const w=220,h=28,bounds={width:1200,height:700};
+  const boxHitsLine=(box,a,b)=>{ for(let t=0;t<=1;t+=0.01){const x=a.x+(b.x-a.x)*t,y=a.y+(b.y-a.y)*t; if(x>box.left-3&&x<box.left+w+3&&y>box.top-3&&y<box.top+h+3) return true;} return false; };
+  const geometry=(a,b,ra=30,rb=30)=>{const L=Math.hypot(b.x-a.x,b.y-a.y);let nx=-(b.y-a.y)/L,ny=(b.x-a.x)/L;if(ny>0||(ny===0&&nx<0)){nx=-nx;ny=-ny;}return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,nx,ny,halfWidth:2,ends:[{...a,r:ra},{...b,r:rb}]};};
+  for (const [a,b] of [[{x:560,y:450},{x:880,y:320}],[{x:300,y:300},{x:700,y:300}],[{x:600,y:100},{x:600,y:600}],[{x:400,y:200},{x:700,y:520}]]) {
+    const box=placeLinkLabel(geometry(a,b),w,h,bounds);
+    assert.ok(!boxHitsLine(box,a,b), `label clear of ${JSON.stringify([a,b])}`);
+  }
+  // A link along the top edge: the label goes below instead of off-canvas.
+  const top=placeLinkLabel(geometry({x:300,y:20},{x:800,y:20}),w,h,bounds);
+  assert.ok(top.top>20, "flips below a link at the top edge");
+  // A short link between two big genes: the label does not cover either gene.
+  const a={x:500,y:350},b={x:600,y:350};
+  const box=placeLinkLabel(geometry(a,b,40,40),w,h,bounds);
+  for (const c of [a,b]) { const dx=Math.max(box.left-c.x,0,c.x-box.left-w),dy=Math.max(box.top-c.y,0,c.y-box.top-h); assert.ok(Math.hypot(dx,dy)>=40, "off the gene"); }
 });
 
 test("the links filter keeps genes in place, hides other effects and fades genes left without links", () => {
