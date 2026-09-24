@@ -1,5 +1,6 @@
 "use client";
 
+import { chooseOpeningEvidenceCut } from "./_lib/openingCut";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -49,8 +50,22 @@ import { clamp } from "./_lib/utils";
 const CONFIDENCE_STABILITY_TOP_K = 10;
 const MODAL_ANIMATION_MS = 480;
 // Number of strongest edges to reveal when a project detail page first opens.
-const INITIAL_VISIBLE_EDGE_TARGET = 10;
-const DEFAULT_EVIDENCE_THRESHOLD = 0.5;
+/** Results Settings a reader chose for a project, kept in this browser so the
+ * next visit opens where they left it instead of at the automatic cut. */
+type StoredResultSettings = { evidence: number; confidence: number; direction: number; sign: number; consensus: number };
+const resultSettingsKey = (projectId: string) => `grnscope:result-settings:${projectId}`;
+function readResultSettings(projectId: string): StoredResultSettings | null {
+  try {
+    const raw = window.localStorage.getItem(resultSettingsKey(projectId));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Partial<StoredResultSettings>;
+    const ok = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+    return ok(v.evidence) && ok(v.confidence) && ok(v.direction) && ok(v.sign) && ok(v.consensus) ? v as StoredResultSettings : null;
+  } catch { return null; }
+}
+function writeResultSettings(projectId: string, value: StoredResultSettings) {
+  try { window.localStorage.setItem(resultSettingsKey(projectId), JSON.stringify(value)); } catch { /* storage unavailable: nothing to remember */ }
+}
 // Shown for algorithm failures that aren't user-actionable (most are internal).
 const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
@@ -596,6 +611,9 @@ export default function ProjectDetailPage() {
   const [trajectoryRequestedGenes, setTrajectoryRequestedGenes] = useState<string[]>([]);
 
   const seededProjectIdRef = useRef<string | null>(null);
+  // Set when the reader changes a Results Setting; only then is it remembered.
+  const touchedResultSettingsRef = useRef(false);
+  const touchResultSettings = () => { touchedResultSettingsRef.current = true; };
   const networkGraphRef = useRef<Core | null>(null);
   const hasAppliedDemoDefaultsRef = useRef(false);
   const algorithmActionCloseTimeoutRef = useRef<number | null>(null);
@@ -1883,9 +1901,9 @@ export default function ProjectDetailPage() {
 
   const activeEdges = uncappedActiveEdges;
 
-  // First-open safety net: seed the result filters from each project's own edge
-  // distribution so the network and table always reveal a small, legible set of
-  // the strongest edges (~INITIAL_VISIBLE_EDGE_TARGET) instead of a blank canvas.
+  // First open: seed the result filters from each project's own edge
+  // distribution so the network opens on a small, legible set of the strongest
+  // edges (a size budget, not a fixed cut) instead of a hairball or a blank canvas.
   // Runs once per project, before the user touches any filter; afterwards their
   // adjustments are respected even when they filter everything out. Demo projects
   // keep their own curated defaults.
@@ -1904,25 +1922,28 @@ export default function ProjectDetailPage() {
     // methods and would seed a threshold far too low.
     if (candidatePool.length === 0 || isPreparingFinishedResults) return;
 
-    const sortedByEvidence = candidatePool
-      .filter((edge) => Number.isFinite(edge.score))
-      .sort((a, b) => b.score - a.score);
-    if (sortedByEvidence.length === 0) return;
+    // The reader's own settings from an earlier visit win over the automatic cut.
+    const stored = readResultSettings(projectId);
+    if (stored) {
+      setEvidenceThreshold(stored.evidence);
+      setConfidenceThreshold(stored.confidence);
+      setDirectionConfidenceThreshold(stored.direction);
+      setSignConfidenceThreshold(stored.sign);
+      setConsensusThreshold(stored.consensus);
+      setHasTouchedConsensusThreshold(true);
+      seededProjectIdRef.current = projectId;
+      return;
+    }
 
-    // Open the (complete) network at evidence >= 0.5: weak links stay out of
-    // the first view, and the reader can loosen the cut in Results Settings.
-    // Projects too weak to show a handful of links at 0.5 fall back to the
-    // strongest ~INITIAL_VISIBLE_EDGE_TARGET.
-    const targetIndex =
-      Math.min(INITIAL_VISIBLE_EDGE_TARGET, sortedByEvidence.length) - 1;
-    const passingDefault = sortedByEvidence.filter((edge) => edge.score >= DEFAULT_EVIDENCE_THRESHOLD).length;
-    const seedEvidenceThreshold = passingDefault >= INITIAL_VISIBLE_EDGE_TARGET
-      ? DEFAULT_EVIDENCE_THRESHOLD
-      : sortedByEvidence[targetIndex].score;
+    // Otherwise open at an evidence cut chosen from this project's own scores:
+    // the strongest links up to a readable size (see _lib/openingCut.ts).
+    const geneCount = new Set(candidatePool.flatMap((edge) => [edge.source, edge.target])).size;
+    const cut = chooseOpeningEvidenceCut(candidatePool.map((edge) => edge.score), geneCount);
+    if (!cut) return;
 
     // Evidence alone drives the initial count; relax the other axes so they
-    // don't undercut the target. The panel then honestly reflects what is shown.
-    setEvidenceThreshold(seedEvidenceThreshold);
+    // don't undercut it. The panel then honestly reflects what is shown.
+    setEvidenceThreshold(cut.threshold);
     setConfidenceThreshold(0);
     setDirectionConfidenceThreshold(0);
     setSignConfidenceThreshold(0);
@@ -1936,6 +1957,14 @@ export default function ProjectDetailPage() {
     standardizedAlgorithmEdgeRows,
     isPreparingFinishedResults,
   ]);
+
+  useEffect(() => {
+    if (isDemoProject || !projectId || !touchedResultSettingsRef.current) return;
+    writeResultSettings(projectId, {
+      evidence: evidenceThreshold, confidence: confidenceThreshold, direction: directionConfidenceThreshold,
+      sign: signConfidenceThreshold, consensus: consensusThreshold,
+    });
+  }, [isDemoProject, projectId, evidenceThreshold, confidenceThreshold, directionConfidenceThreshold, signConfidenceThreshold, consensusThreshold]);
 
   const geneCoordinateMap = useMemo(() => {
     const coordinates = new Map<string, GeneCoordinateInfo>();
@@ -2494,10 +2523,12 @@ useEffect(() => {
         }}
         evidenceThreshold={evidenceThreshold}
         onChangeEvidenceThreshold={(value) => {
+          touchResultSettings();
           setEvidenceThreshold(value);
         }}
         confidenceThreshold={confidenceThreshold}
         onChangeConfidenceThreshold={(value) => {
+          touchResultSettings();
           setConfidenceThreshold(value);
         }}
         confidenceRecoveryTopFraction={confidenceRecoveryTopFraction}
@@ -2506,15 +2537,18 @@ useEffect(() => {
         confidenceRecoveryUpdateError={confidenceRecoveryRankError}
         directionConfidenceThreshold={directionConfidenceThreshold}
         onChangeDirectionConfidenceThreshold={(value) => {
+          touchResultSettings();
           setDirectionConfidenceThreshold(value);
         }}
         signConfidenceThreshold={signConfidenceThreshold}
         onChangeSignConfidenceThreshold={(value) => {
+          touchResultSettings();
           setSignConfidenceThreshold(value);
         }}
         consensusThreshold={consensusThreshold}
         maxConsensusThreshold={Math.max(activeAlgorithmIds.length, 1)}
         onChangeConsensusThreshold={(value) => {
+          touchResultSettings();
           setHasTouchedConsensusThreshold(true);
           setConsensusThreshold(value);
         }}

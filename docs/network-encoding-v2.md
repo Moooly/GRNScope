@@ -104,3 +104,13 @@ Mockups: `Claude outputs/table-combo-A.png` (look) + `table-combo-B*.png` (behav
   - Gene selected → **gene card**: breadcrumb + ✕, 56 px pie, TF / Other gene tag, regulates / regulated by / strongest evidence, activation–repression split bar, "Regulates", "Regulated by" (and "Direction unknown") lists ranked by evidence, "Show only this neighbourhood", CSV of its links.
   - Link selected → **link card**: both genes as pies (click opens that gene), sign, evidence / bootstrap confidence / methods agree, direction, sign stability, method names.
   - **Links** and **Genes** tabs keep the full sortable tables and CSV.
+
+## Opening cut: adapted to each project (2026-09-23)
+The fixed opening cut (evidence ≥ 0.5) gave 71 links for 19 genes and 422 for 100 genes. Each project now opens at an evidence cut chosen from its own scores (`_lib/openingCut.ts`, used by the seeding effect in `page.tsx`):
+- **Budget**: about 1.5 links per gene, for at most 40 genes' worth; at least 12, at most 70 links (19 genes → 29, 100 genes → 60, 2,000 genes → 60).
+- **Cut**: the evidence value that keeps the strongest links up to the budget; moved to a natural gap in the scores (≥ 0.02) within ±20 % of the budget; rounded down to two decimals unless near-ties would flood the view. Never below 0.5; if fewer than 12 links reach 0.5, the strongest 12.
+- It is an ordinary "Evidence ≥ x" in Results Settings (confidence, direction, sign relaxed to 0, support 1, as before): no hidden trimming and no extra control on screen.
+- **Remembered**: once the reader changes any Results Setting, the five values are kept per project in this browser (`localStorage` key `grnscope:result-settings:<projectId>`) and restored on the next visit instead of the automatic cut. Demo projects keep their curated defaults.
+- Result on the real projects: 19 genes → 25 links (natural gap, all 19 genes); 100 genes → 58 links, 59 genes (was 422 links).
+- Tests: `scripts/opening-cut.test.cjs` (in `npm run test:network`).
+
