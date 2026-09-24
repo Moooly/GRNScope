@@ -37,7 +37,8 @@ export function applyPresentation(cy: Core, force = false) {
     cy.scratch("galaxyPresentationKey", key);
     cy.nodes().forEach(n => {
       const prominence = Math.max(0, Math.min(1, (Number(n.data("diameter")) - NODE_MIN) / (NODE_MAX - NODE_MIN)));
-      const font = exporting ? 15 + 9 * prominence : (count <= 40 ? 11 : 9.5) + 6 * prominence;
+      // Names grow only slightly with the gene, so big hubs do not shout.
+      const font = exporting ? 15 + 3 * prominence : (count <= 40 ? 11 : 9.5) + 2 * prominence;
       n.data("labelSize", font / zoom);
     });
     cy.edges().forEach(e => {

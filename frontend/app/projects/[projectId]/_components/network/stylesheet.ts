@@ -17,6 +17,8 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
       // The name sits inside the circle and may run past the rim of a small
       // node. Plain dark text, no halo.
       label: "data(label)", color: T.label,
+      // One light weight for every name (TF or not, hovered or not), so hub
+      // names do not compete with the links.
       "font-family": "Arial, Helvetica, sans-serif", "font-size": "data(labelSize)", "font-weight": 400,
       // Gene symbols are italic by convention, as in journal figures.
       "font-style": "italic",
@@ -37,7 +39,6 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
     // Links filter: hidden links leave the figure; genes left without any fade.
     { selector: "edge[?effectHidden]", style: { display: "none" } },
     { selector: "node[?effectFaded]", style: { opacity: 0.25 } },
-    { selector: "node[diameter > 60]", style: { "font-weight": 600 } },
     { selector: "edge", style: {
       "curve-style": (e: EdgeSingular) => e.data("routeDistances") ? "unbundled-bezier" : "bezier",
       "control-point-distances": (e: EdgeSingular) => e.data("routeDistances") ?? [0],
@@ -73,7 +74,7 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
     // turns near-black and thick on a white casing, its genes stay full.
     { selector: "edge.focus-dim", style: { opacity: 0.1 } },
     { selector: "node.focus-dim", style: { opacity: 0.35, "text-opacity": 0.35 } },
-    { selector: "node.focus-end", style: { opacity: 1, "text-opacity": 1, "font-weight": 700, "min-zoomed-font-size": 0, "z-index": 30 } },
+    { selector: "node.focus-end", style: { opacity: 1, "text-opacity": 1, "min-zoomed-font-size": 0, "z-index": 30 } },
     { selector: "edge.focus-edge", style: {
       "line-color": FOCUS_INK, "source-arrow-color": FOCUS_INK, "target-arrow-color": FOCUS_INK,
       width: (e: EdgeSingular) => Math.max(3.2, Number(e.data("width")) * 2.2),

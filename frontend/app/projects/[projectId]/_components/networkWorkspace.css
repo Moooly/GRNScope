@@ -1457,7 +1457,7 @@
 .tp-glyph, .tp td svg { display: block; flex: none; }
 .tp-gene { display: inline-flex; align-items: center; gap: 7px; }
 .tp-gene em { font-style: italic; }
-.tp-gene.is-strong em { font-weight: 600; }
+.tp-gene.is-strong em { font-weight: 400; }
 .tp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .tp-num { font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .tp-muted { color: #aab2bb; }

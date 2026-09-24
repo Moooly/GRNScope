@@ -8,7 +8,7 @@ export const NETWORK_THEME = {
   node: "#ebcb7a", nodeRim: "#ebcb7a",
   tf: "#7fa6db", tfRim: "#7fa6db",
   nodeMuted: "#e6f2ed", link: "#588f89", linkMuted: "#dde6e4",
-  label: "#33433e", labelHalo: "#ffffff",
+  label: "#46524f", labelHalo: "#ffffff",
   accent: "#33433e", accentSoft: "#eef3f1",
   // One ink for every link (2026-09-23): sign is carried by the tip shape
   // alone, direction by solid vs dashed.

@@ -60,7 +60,7 @@ export function applyLabelBudget(cy: Core) {
   const priority = (n: NodeSingular) => pinned.has(n.id()) ? 5 : n.hasClass("traced") || n.selected() ? 4 : n.hasClass("hovered") ? 3 : n.hasClass("traced-neighbour") ? 2 : n.data("layoutAnchor") ? 1 : 0;
   const candidates = nodes.map(n => {
     const font = Number(n.data("labelSize"))*zoom, text = String(n.data("fullLabel"));
-    if (measure) measure.font = `italic ${Number(n.data("diameter")) > 60 ? 600 : 400} ${font}px Arial`;
+    if (measure) measure.font = `italic 400 ${font}px Arial`;
     return { id: n.id(), ...n.renderedPosition(), radius: n.renderedOuterWidth()/2,
       width: (measure?.measureText(text).width ?? text.length*font*0.62)+2, height: font*1.2,
       degree: Number(n.data("degree")), priority: priority(n) };

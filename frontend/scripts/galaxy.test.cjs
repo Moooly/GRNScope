@@ -461,7 +461,7 @@ test("a hovered link is put in focus: dark, thick, on a white casing, with every
     assert.ok(Number(other.style("opacity"))<=0.1, "other links fade");
     assert.ok(Number(cy.$id("B").style("opacity"))<=0.35, "unrelated genes fade");
     assert.equal(Number(cy.$id("A").style("opacity")),1, "its genes stay full");
-    assert.equal(cy.$id("A").style("font-weight"),"700", "its genes' names are bold");
+    assert.equal(cy.$id("A").style("font-weight"),"400", "names keep the one light weight");
   } finally { cy.destroy(); }
 });
 
@@ -495,7 +495,7 @@ test("a hovered gene is put in focus: its links dark on a white casing, its part
     assert.equal(Number(cy.$id("1").style("underlay-opacity")),1);
     assert.ok(Number(cy.$id("2").style("opacity"))<=0.1, "links of other genes fade");
     assert.ok(Number(cy.$id("B").style("opacity"))<=0.35, "genes outside the neighbourhood fade");
-    assert.equal(cy.$id("A").style("font-weight"),"700");
+    assert.equal(cy.$id("A").style("font-weight"),"400");
     tf.addClass("hovered");
     assert.equal(Number(tf.style("underlay-opacity")),0, "no halo on the hovered gene");
     assert.equal(cy.$id("1").style("line-style"),"solid", "no flowing dashes");

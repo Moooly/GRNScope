@@ -119,3 +119,9 @@ The fixed opening cut (evidence ≥ 0.5) gave 71 links for 19 genes and 422 for 
 - With the side panel open (the link filter is then in the panel), the key adds the link tips: "→ activation", "⊣ repression" and, when present, "— sign unknown" — only for signs actually drawn.
 - With the panel hidden, the filter line (which already shows the tips with their counts) sits under the key, and the key leaves the tips out.
 
+## Gene names: one light weight (2026-09-23)
+- Every gene name on the canvas uses the same weight (Arial 400, italic): no bold for large genes (was 600 above 60 units) or for hovered neighbourhoods (was 700). Hover focus is carried by fading alone.
+- Names grow only slightly with the gene: 11–13 px on screen (was 11–17), 15–18 px in exported figures (was 15–24).
+- Name colour `#46524F` (was `#33433E`) so names sit behind the links.
+- Side panel: top regulators' names no longer bold.
+
