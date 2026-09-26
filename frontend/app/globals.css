@@ -404,3 +404,13 @@ body {
     transform: translateX(100%);
   }
 }
+
+/* Method agreement: the detail panel fades in whenever its selection changes. */
+@keyframes agreementDetailIn {
+  from { opacity: 0.35; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+.agreement-detail { animation: agreementDetailIn 220ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .agreement-detail { animation: none; }
+}

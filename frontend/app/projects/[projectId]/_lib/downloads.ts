@@ -30,6 +30,12 @@ export function downloadCsv(
 
 function serializedSvg(svg: SVGSVGElement) {
   const clone = svg.cloneNode(true) as SVGSVGElement;
+  // Screen-only marks (hover bands, selection outlines) never reach a file.
+  clone.querySelectorAll("[data-ui]").forEach((node) => node.remove());
+  // Selection colours revert to the figure's plain colours in exports.
+  clone.querySelectorAll<SVGElement>("[data-export-fill]").forEach((node) => node.setAttribute("fill", node.dataset.exportFill ?? ""));
+  clone.querySelectorAll<SVGElement>("[data-export-stroke]").forEach((node) => node.setAttribute("stroke", node.dataset.exportStroke ?? ""));
+  clone.querySelectorAll<SVGElement>("[data-export-weight]").forEach((node) => node.setAttribute("font-weight", node.dataset.exportWeight ?? ""));
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   clone.style.fontFamily = WEBSITE_FONT_FAMILY;
 

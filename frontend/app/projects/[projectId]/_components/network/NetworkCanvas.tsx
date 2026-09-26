@@ -182,6 +182,22 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
   const signature = useMemo(() => galaxySignature(props.nodes, props.edges, props.layout, sizeBy), [props.nodes, props.edges, props.layout, sizeBy]);
   const elements = useMemo(() => galaxyElements(props.nodes, props.edges, options), [props.nodes, props.edges, options]);
 
+  // Scrolling over the network scrolls the page; only a pinch (trackpad pinch
+  // arrives as a ctrl+wheel event) or Ctrl/⌘+wheel zooms. Mouse users have the
+  // −/+/Fit buttons. A window capture listener runs before Cytoscape's own
+  // wheel handler, so stopping plain wheel events here keeps them from zooming
+  // while leaving the browser's default page scroll untouched.
+  useEffect(() => {
+    const onWheel = (event: WheelEvent) => {
+      const el = containerRef.current;
+      if (!el || !(event.target instanceof Node) || !el.contains(event.target)) return;
+      if (event.ctrlKey || event.metaKey) return;
+      event.stopPropagation();
+    };
+    window.addEventListener("wheel", onWheel, { capture: true, passive: true });
+    return () => window.removeEventListener("wheel", onWheel, { capture: true });
+  }, []);
+
   useEffect(() => {
     if (!containerRef.current) return;
     const cy = cytoscape({

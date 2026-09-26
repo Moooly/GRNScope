@@ -2620,9 +2620,9 @@ useEffect(() => {
         </div>
       ) : null}
       <section className="relative overflow-x-clip overflow-y-visible bg-[#f7fbff]">
-        {/* The network view uses the full page width, so the figure and its
-          * table can sit side by side; other views keep the reading width. */}
-        <div className={`relative mx-auto px-6 py-10 lg:px-10 ${resultsHubView === "network" ? "max-w-[2400px]" : "max-w-[1180px]"}`}>
+        {/* Every results view uses the full page width, matching the network
+          * view (figure and table side by side). */}
+        <div className="relative mx-auto max-w-[2400px] px-6 py-10 lg:px-10">
           <ProjectHeader
             projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
             projectId={projectId}
@@ -2877,13 +2877,6 @@ useEffect(() => {
                       algorithmMetaMap={algorithmMetaMap}
                       algorithmResults={algorithmResults}
                       activeAlgorithmIds={activeAlgorithmIds}
-                      edgeExplorerRows={
-                        activeAlgorithmIds.length >= 2
-                          ? consensusCandidateRows
-                          : activeAlgorithmIds.length === 1
-                            ? standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? []
-                            : []
-                      }
                       selectedResultScopeId={selectedResultScopeId}
                       tasks={allJobTasks}
                       visualizationContext={visualizationContext}

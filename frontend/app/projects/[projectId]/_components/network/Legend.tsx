@@ -3,7 +3,7 @@
 import { PALETTES, DEFAULT_PALETTE, type PaletteName } from "./theme";
 import {
   CONFIDENCE_LABELS, EVIDENCE_LABELS, WIDTH_STEPS, supportLabels,
-  type EdgeWidthBy, type EffectFilter, type FigureCounts,
+  NODE_SIZE_OPTIONS, type EdgeWidthBy, type EffectFilter, type FigureCounts, type NodeSizeBy,
 } from "./encoding";
 
 const plural = (n: number, one: string) => `${n.toLocaleString()} ${n === 1 ? one : `${one}s`}`;
@@ -50,36 +50,72 @@ type KeyProps = {
   /** Which link signs are drawn; each present one gets its tip in the key.
    * Omit when the filter line above already shows the tips with their counts. */
   signs?: { activation: boolean; repression: boolean; unknown: boolean };
+  /** On-screen only: the key doubles as the node-size and line-width picker.
+   * Downloaded figures draw their own plain key, so no control reaches them. */
+  sizeBy?: NodeSizeBy;
+  onSizeByChange?: (sizeBy: NodeSizeBy) => void;
+  /** Targets/Regulators need directed links. */
+  sizeChoice?: boolean;
+  onWidthByChange?: (widthBy: EdgeWidthBy) => void;
 };
+
+/** Plain words for the size picker: what a bigger circle means. */
+const SIZE_WORDS: Record<NodeSizeBy, string> = { all: "connections", out: "genes it regulates", in: "its regulators" };
 
 /** One short line above the network: only what the picture can't say itself.
  * Exact steps and counts are in the tooltips. */
-export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE, signs }: KeyProps) {
+export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE, signs, sizeBy, onSizeByChange, sizeChoice = true, onWidthByChange }: KeyProps) {
   const T = PALETTES[palette];
   const support = widthBy === "support" && methodCount > 1;
   const steps = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
   const widthTip = [support ? "Line width: number of selected methods reporting the link" : "Line width: evidence (per-target rank, 0–1)",
     ...WIDTH_STEPS.map((_, i) => steps[i] ? `${steps[i]}${counts ? `: ${plural(counts.width[i], "link")}` : ""}` : "").filter(Boolean)].join("\n");
   const fadeTip = ["Opacity: bootstrap confidence", ...CONFIDENCE_LABELS.map((label, i) => `${label}${counts ? `: ${plural(counts.confidence[i], "link")}` : ""}`), "Links without a verified value are drawn solid."].join("\n");
-  return <div className="figure-key-line" aria-label="Network key">
-    <span className="key-group">
-      <span className="key-item"><svg width="11" height="11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5" fill={T.tf} /></svg>TF</span>
-      <span className="key-item"><svg width="11" height="11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5" fill={T.node} /></svg>Other gene</span>
-    </span>
-    {signs && (signs.activation || signs.repression || signs.unknown) && <span className="key-group" title="The tip at the regulated gene shows the sign of the link.">
-      {signs.activation && <span className="key-item"><svg width="22" height="10" aria-hidden="true"><path d="M1 5H14" stroke={T.activates} strokeWidth="1.6"/><path d="M13 1.5L21 5L13 8.5Z" fill={T.activates}/></svg>activation</span>}
-      {signs.repression && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H18M18 .5V9.5" stroke={T.represses} strokeWidth="1.8" fill="none"/></svg>repression</span>}
-      {signs.unknown && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H19" stroke={T.unknown} strokeWidth="1.6"/></svg>sign unknown</span>}
-    </span>}
-    {directionSplit && <span className="key-group" title="Each gene is split by the direction of its links, in its own colour.">
-      <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill={T.pieTF[1]}/><path d="M7 7V.5A6.5 6.5 0 1 1 1.4 10.3Z" fill={T.pieTF[0]}/></svg>
-      <span>dark regulates · light regulated by{hasUndirected ? " · pale unknown" : ""}</span>
-    </span>}
-    {hasUndirected && <span className="key-group" title="A solid line has a resolved direction and its tip marks the regulated gene. A dashed line has no resolved direction.">
-      <svg width="24" height="8" aria-hidden="true"><path d="M1 4H23" stroke={T.activates} strokeWidth="1.6" strokeDasharray="4 3"/></svg>
-      <span>direction unknown</span>
-    </span>}
-    <span className="key-group" title={widthTip}>{support ? "Width = method support" : "Width = evidence"}</span>
-    {counts?.hasConfidence && <span className="key-group" title={fadeTip}>Fade = low confidence</span>}
+  const controls = Boolean((sizeBy && onSizeByChange) || onWidthByChange);
+  return <div className="figure-key-line">
+    {/* What the marks mean: plain text, nothing clickable. */}
+    <div className="key-static" aria-label="Network key">
+      <span className="key-group">
+        <span className="key-item"><svg width="11" height="11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5" fill={T.tf} /></svg>TF</span>
+        <span className="key-item"><svg width="11" height="11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5" fill={T.node} /></svg>Other gene</span>
+      </span>
+      {signs && (signs.activation || signs.repression || signs.unknown) && <span className="key-group" title="The tip at the regulated gene shows the sign of the link.">
+        {signs.activation && <span className="key-item"><svg width="22" height="10" aria-hidden="true"><path d="M1 5H14" stroke={T.activates} strokeWidth="1.6"/><path d="M13 1.5L21 5L13 8.5Z" fill={T.activates}/></svg>activation</span>}
+        {signs.repression && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H18M18 .5V9.5" stroke={T.represses} strokeWidth="1.8" fill="none"/></svg>repression</span>}
+        {signs.unknown && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H19" stroke={T.unknown} strokeWidth="1.6"/></svg>sign unknown</span>}
+      </span>}
+      {directionSplit && <span className="key-group" title="Each gene is split by the direction of its links, in its own colour.">
+        <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill={T.pieTF[1]}/><path d="M7 7V.5A6.5 6.5 0 1 1 1.4 10.3Z" fill={T.pieTF[0]}/></svg>
+        <span>dark regulates · light regulated by{hasUndirected ? " · pale unknown" : ""}</span>
+      </span>}
+      {hasUndirected && <span className="key-group" title="A solid line has a resolved direction and its tip marks the regulated gene. A dashed line has no resolved direction.">
+        <svg width="24" height="8" aria-hidden="true"><path d="M1 4H23" stroke={T.activates} strokeWidth="1.6" strokeDasharray="4 3"/></svg>
+        <span>direction unknown</span>
+      </span>}
+      {!onWidthByChange && <span className="key-group" title={widthTip}>{support ? "Line width: methods agreeing" : "Line width: evidence score"}</span>}
+      {counts?.hasConfidence && <span className="key-group" title={fadeTip}>
+        <svg width="30" height="8" aria-hidden="true">{[0.2, 0.5, 1].map((o, i) => <path key={i} d={`M${1 + i * 10} 4h8`} stroke={T.activates} strokeWidth="2" opacity={o}/>)}</svg>
+        <span>faded = low confidence</span>
+      </span>}
+    </div>
+    {/* How the figure is drawn: same row, right after the key. Each picker
+      * shows its own small-to-large scale; only the value is clickable-looking. */}
+    {controls && <div className="key-controls" role="group" aria-label="Figure settings">
+      {sizeBy && onSizeByChange && <label className="key-control" title={NODE_SIZE_OPTIONS[sizeBy].help}>
+        <svg width="20" height="12" aria-hidden="true"><circle cx="3.5" cy="8" r="2.5" fill={T.node}/><circle cx="13" cy="6" r="5.5" fill={T.node}/></svg>
+        <span className="key-control-name">Node size</span>
+        <select value={sizeBy} onChange={event => onSizeByChange(event.target.value as NodeSizeBy)} aria-label="Node size">
+          {(Object.keys(NODE_SIZE_OPTIONS) as NodeSizeBy[]).map(key => <option key={key} value={key} disabled={key !== "all" && !sizeChoice}>{SIZE_WORDS[key]}</option>)}
+        </select>
+      </label>}
+      {onWidthByChange && <label className="key-control" title={widthTip}>
+        <svg width="20" height="12" aria-hidden="true"><path d="M1 10L19 10" stroke="#5f6b72" strokeWidth=".8"/><path d="M1 6H19" stroke="#5f6b72" strokeWidth="1.6"/><path d="M1 2H19" stroke="#5f6b72" strokeWidth="2.6"/></svg>
+        <span className="key-control-name">Line width</span>
+        <select value={support ? "support" : "evidence"} onChange={event => onWidthByChange(event.target.value as EdgeWidthBy)} aria-label="Line width">
+          <option value="evidence">evidence score</option>
+          <option value="support" disabled={methodCount <= 1}>methods agreeing</option>
+        </select>
+      </label>}
+    </div>}
   </div>;
 }

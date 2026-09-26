@@ -2,13 +2,14 @@
 
 import {
   Fragment,
+  forwardRef,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -23,8 +24,8 @@ import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
 import DownloadMenu from "./DownloadMenu";
-import NetworkHelpModal from "./NetworkHelpModal";
-import { WEBSITE_FONT_FAMILY } from "../_lib/downloads";
+import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, clusterMethods, formatRank, heatmapPlotTop, rankRegulators, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
+import { downloadSvg as downloadSvgFile, downloadSvgPng } from "../_lib/downloads";
 
 export type VisualizationContext = {
   trajectory?: TrajectoryData;
@@ -54,7 +55,6 @@ type ResultsInsightsSectionProps = {
   algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
   algorithmResults: Record<string, AlgorithmStoredResult>;
   activeAlgorithmIds: string[];
-  edgeExplorerRows: AggregatedEdge[];
   selectedResultScopeId: string;
   tasks: ProjectTask[];
   visualizationContext: VisualizationContext | null;
@@ -95,38 +95,7 @@ function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
   URL.revokeObjectURL(url);
 }
 
-function downloadSvg(filename: string, svg: string) {
-  const url = URL.createObjectURL(
-    new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-  );
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
-function downloadSvgElement(element: SVGSVGElement, filename: string) {
-  const clone = element.cloneNode(true) as SVGSVGElement;
-  const viewBox = clone.viewBox.baseVal;
-  const width = viewBox.width || Math.ceil(element.getBoundingClientRect().width);
-  const height = viewBox.height || Math.ceil(element.getBoundingClientRect().height);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("width", String(width));
-  clone.setAttribute("height", String(height));
-  clone.setAttribute("font-family", WEBSITE_FONT_FAMILY);
-  const background = document.createElementNS(
-    "http://www.w3.org/2000/svg",
-    "rect",
-  );
-  background.setAttribute("width", "100%");
-  background.setAttribute("height", "100%");
-  background.setAttribute("fill", "#ffffff");
-  clone.insertBefore(background, clone.firstChild);
-  downloadSvg(filename, new XMLSerializer().serializeToString(clone));
-}
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
@@ -160,7 +129,7 @@ function Panel({
             <h3 className="text-lg font-extrabold text-slate-950">{title}</h3>
             {titleAction}
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+          <p className="mt-1 text-sm leading-6 text-slate-600">
             {description}
           </p>
         </div>
@@ -392,7 +361,6 @@ type ComparisonMode = "topology" | "direction" | "sign";
 type AgreementMetric = "jaccard" | "rbo" | "spearman";
 type AgreementDisplay = "matrix" | "overlap";
 type PairDetailGroup = "shared" | "first" | "second";
-type EdgeExplorerSort = "confidence" | "evidence" | "support" | "edge";
 
 type SetIntersection = {
   key: string;
@@ -418,9 +386,6 @@ const COMPARISON_MODE_LABELS: Record<ComparisonMode, string> = {
   sign: "Direction + sign",
 };
 
-const METHOD_AGREEMENT_ROW_LIMIT = 6;
-const METHOD_AGREEMENT_LABEL_WIDTH = 154;
-const METHOD_AGREEMENT_COLUMN_WIDTH = 128;
 const SET_INTERSECTION_SEPARATOR = "\u0000";
 const UPSET_INTERSECTION_LIMIT = 10;
 
@@ -461,547 +426,6 @@ function buildSetIntersections(
       second.edges.length - first.edges.length ||
       second.members.length - first.members.length ||
       first.members.join(" ").localeCompare(second.members.join(" ")),
-  );
-}
-
-const VENN_COLORS = ["#087ead", "#0f9f8f", "#7c5ce7"];
-const UPSET_METHOD_COLORS = [
-  "#22c55e",
-  "#3b82f6",
-  "#f59e0b",
-  "#ef4444",
-  "#a855f7",
-  "#14b8a6",
-  "#f97316",
-  "#ec4899",
-  "#84cc16",
-  "#06b6d4",
-  "#eab308",
-  "#8b5cf6",
-  "#10b981",
-  "#f43f5e",
-  "#6366f1",
-  "#65a30d",
-];
-
-function getUpSetMethodColor(index: number) {
-  if (index < UPSET_METHOD_COLORS.length) {
-    return UPSET_METHOD_COLORS[index];
-  }
-  const hue = (index * 137.508) % 360;
-  return `hsl(${hue} 72% 52%)`;
-}
-
-function escapeSvgText(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function createUpSetDownloadSvg(
-  algorithmIds: string[],
-  intersections: SetIntersection[],
-) {
-  const padding = 28;
-  const gap = 28;
-  const setPanelWidth = 340;
-  const columnWidth = 72;
-  const rowHeight = 52;
-  const matrixWidth = Math.max(intersections.length * columnWidth, 420);
-  const rightX = padding + setPanelWidth + gap;
-  const rightWidth = matrixWidth + 40;
-  const barBaseline = 220;
-  const membershipTitleY = 276;
-  const matrixTop = 304;
-  const width = rightX + rightWidth + padding;
-  const height = matrixTop + algorithmIds.length * rowHeight + 36;
-  const maxIntersectionSize = Math.max(
-    1,
-    ...intersections.map((intersection) => intersection.edges.length),
-  );
-  const setSummaries = algorithmIds.map((algorithmId) => ({
-    algorithmId,
-    count: intersections
-      .filter((intersection) => intersection.members.includes(algorithmId))
-      .reduce((total, intersection) => total + intersection.edges.length, 0),
-  }));
-  const maxSetSize = Math.max(
-    1,
-    ...setSummaries.map((summary) => summary.count),
-  );
-  const colorFor = (algorithmId: string) =>
-    getUpSetMethodColor(Math.max(0, algorithmIds.indexOf(algorithmId)));
-
-  const setRows = setSummaries
-    .map((summary, rowIndex) => {
-      const rowTop = matrixTop + rowIndex * rowHeight;
-      const centerY = rowTop + rowHeight / 2;
-      const barWidth = (summary.count / maxSetSize) * 126;
-      return `${
-        rowIndex % 2 === 1
-          ? `<rect x="${padding + 12}" y="${rowTop}" width="${setPanelWidth - 24}" height="${rowHeight}" rx="8" fill="#ffffff"/>`
-          : ""
-      }<text x="${padding + 54}" y="${centerY + 4}" text-anchor="end" fill="#475569" font-size="12" font-weight="700">${summary.count.toLocaleString()}</text><rect x="${padding + 70}" y="${centerY - 8}" width="126" height="16" rx="8" fill="#e2e8f0"/><rect x="${padding + 70}" y="${centerY - 8}" width="${barWidth}" height="16" rx="8" fill="${colorFor(summary.algorithmId)}"/><text x="${padding + 212}" y="${centerY + 5}" fill="#334155" font-size="14" font-weight="700">${escapeSvgText(summary.algorithmId)}</text>`;
-    })
-    .join("");
-
-  const matrixRows = algorithmIds
-    .map((algorithmId, rowIndex) => {
-      const rowTop = matrixTop + rowIndex * rowHeight;
-      return rowIndex % 2 === 1
-        ? `<rect x="${rightX + 12}" y="${rowTop}" width="${rightWidth - 24}" height="${rowHeight}" rx="8" fill="#ffffff"/>`
-        : "";
-    })
-    .join("");
-
-  const connectors = intersections
-    .map((intersection, columnIndex) => {
-      const includedIndexes = algorithmIds
-        .map((algorithmId, index) =>
-          intersection.members.includes(algorithmId) ? index : -1,
-        )
-        .filter((index) => index >= 0);
-      if (includedIndexes.length < 2) return "";
-      const x = rightX + 20 + columnIndex * columnWidth + columnWidth / 2;
-      const top = matrixTop + includedIndexes[0] * rowHeight + rowHeight / 2;
-      const bottom =
-        matrixTop +
-        includedIndexes[includedIndexes.length - 1] * rowHeight +
-        rowHeight / 2;
-      return `<line x1="${x}" x2="${x}" y1="${top}" y2="${bottom}" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>`;
-    })
-    .join("");
-
-  const columns = intersections
-    .map((intersection, columnIndex) => {
-      const x = rightX + 20 + columnIndex * columnWidth + columnWidth / 2;
-      const barHeight = Math.max(
-        8,
-        (intersection.edges.length / maxIntersectionSize) * 112,
-      );
-      const circles = algorithmIds
-        .map((algorithmId, rowIndex) => {
-          const y = matrixTop + rowIndex * rowHeight + rowHeight / 2;
-          const included = intersection.members.includes(algorithmId);
-          return `<line x1="${x - 20}" x2="${x + 20}" y1="${y}" y2="${y}" stroke="#e2e8f0" stroke-width="2"/><circle cx="${x}" cy="${y}" r="18" fill="${included ? colorFor(algorithmId) : "#e2e8f0"}" stroke="${included ? colorFor(algorithmId) : "#d6dee8"}" stroke-width="1"/>`;
-        })
-        .join("");
-      return `<text x="${x}" y="${barBaseline - barHeight - 10}" text-anchor="middle" fill="#1e293b" font-size="12" font-weight="800">${intersection.edges.length.toLocaleString()}</text><rect x="${x - 22}" y="${barBaseline - barHeight}" width="44" height="${barHeight}" rx="10" fill="url(#intersection-bar)"/>${circles}`;
-    })
-    .join("");
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeSvgText(WEBSITE_FONT_FAMILY)}"><defs><linearGradient id="intersection-bar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0f9f8f"/><stop offset="1" stop-color="#67d7e8"/></linearGradient></defs><rect width="100%" height="100%" fill="#ffffff"/><rect x="${padding}" y="${membershipTitleY - 30}" width="${setPanelWidth}" height="${height - membershipTitleY + 2}" rx="18" fill="#f8fafc" stroke="#e2e8f0"/><rect x="${rightX}" y="${padding}" width="${rightWidth}" height="${height - padding * 2}" rx="18" fill="#f8fafc" stroke="#e2e8f0"/><text x="${padding + 20}" y="${membershipTitleY}" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1.8">SET SIZE</text><text x="${rightX + 20}" y="56" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1.8">INTERSECTION SIZE</text><line x1="${rightX + 20}" x2="${rightX + 20 + matrixWidth}" y1="${barBaseline}" y2="${barBaseline}" stroke="#cbd5e1"/><line x1="${rightX + 20}" x2="${rightX + 20 + matrixWidth}" y1="${membershipTitleY - 24}" y2="${membershipTitleY - 24}" stroke="#e2e8f0"/><text x="${rightX + 20}" y="${membershipTitleY}" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1.8">MEMBERSHIP</text>${setRows}${matrixRows}${connectors}${columns}</svg>`;
-}
-
-function VennDiagram({
-  algorithmIds,
-  intersections,
-  diagramRef,
-}: {
-  algorithmIds: string[];
-  intersections: SetIntersection[];
-  diagramRef: RefObject<HTMLDivElement | null>;
-}) {
-  const countFor = (...members: string[]) =>
-    intersections.find(
-      (intersection) =>
-        intersection.key === setIntersectionKey(members),
-    )?.edges.length ?? 0;
-
-  if (algorithmIds.length === 2) {
-    const [first, second] = algorithmIds;
-    const firstOnly = countFor(first);
-    const secondOnly = countFor(second);
-    const shared = countFor(first, second);
-    return (
-      <div>
-        <div
-          ref={diagramRef}
-          className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5"
-        >
-          <svg
-            viewBox="0 0 640 360"
-            className="mx-auto block h-auto w-full max-w-[42rem]"
-            role="img"
-            aria-labelledby="method-venn-title method-venn-description"
-          >
-            <title id="method-venn-title">Exact edge overlap between two methods</title>
-            <desc id="method-venn-description">
-              Two overlapping circles show edges unique to each method and edges
-              shared by both methods.
-            </desc>
-            <circle cx="250" cy="180" r="110" fill={VENN_COLORS[0]} fillOpacity="0.2" stroke={VENN_COLORS[0]} strokeOpacity="0.6" strokeWidth="3" />
-            <circle cx="390" cy="180" r="110" fill={VENN_COLORS[1]} fillOpacity="0.2" stroke={VENN_COLORS[1]} strokeOpacity="0.6" strokeWidth="3" />
-            <text x="210" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{first}</text>
-            <text x="430" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{second}</text>
-            {firstOnly > 0 ? <text x="205" y="188" textAnchor="middle" fill="#075f83" fontSize="26" fontWeight="700">{firstOnly.toLocaleString()}</text> : null}
-            {shared > 0 ? <text x="320" y="188" textAnchor="middle" fill="#0f172a" fontSize="26" fontWeight="800">{shared.toLocaleString()}</text> : null}
-            {secondOnly > 0 ? <text x="435" y="188" textAnchor="middle" fill="#087c70" fontSize="26" fontWeight="700">{secondOnly.toLocaleString()}</text> : null}
-          </svg>
-        </div>
-        <p className="mt-1 text-center text-xs leading-5 text-slate-500">
-          Circle areas are illustrative; labels show exact edge counts.
-        </p>
-      </div>
-    );
-  }
-
-  const [first, second, third] = algorithmIds;
-  const firstOnly = countFor(first);
-  const secondOnly = countFor(second);
-  const thirdOnly = countFor(third);
-  const firstSecond = countFor(first, second);
-  const firstThird = countFor(first, third);
-  const secondThird = countFor(second, third);
-  const allThree = countFor(first, second, third);
-  return (
-    <div>
-      <div
-        ref={diagramRef}
-        className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5"
-      >
-        <svg
-          viewBox="0 0 700 470"
-          className="mx-auto block h-auto w-full max-w-[44rem]"
-          role="img"
-          aria-labelledby="method-venn-title method-venn-description"
-        >
-          <title id="method-venn-title">Exact edge overlap among three methods</title>
-          <desc id="method-venn-description">
-            Three overlapping circles show every exact combination of shared and
-            method-specific edges.
-          </desc>
-          <circle cx="290" cy="185" r="122" fill={VENN_COLORS[0]} fillOpacity="0.2" stroke={VENN_COLORS[0]} strokeOpacity="0.6" strokeWidth="3" />
-          <circle cx="410" cy="185" r="122" fill={VENN_COLORS[1]} fillOpacity="0.2" stroke={VENN_COLORS[1]} strokeOpacity="0.6" strokeWidth="3" />
-          <circle cx="350" cy="290" r="122" fill={VENN_COLORS[2]} fillOpacity="0.18" stroke={VENN_COLORS[2]} strokeOpacity="0.55" strokeWidth="3" />
-          <text x="235" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{first}</text>
-          <text x="465" y="52" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{second}</text>
-          <text x="350" y="446" textAnchor="middle" fill="#334155" fontSize="16" fontWeight="700">{third}</text>
-          {firstOnly > 0 ? <text x="238" y="172" textAnchor="middle" fill="#075f83" fontSize="24" fontWeight="700">{firstOnly.toLocaleString()}</text> : null}
-          {secondOnly > 0 ? <text x="462" y="172" textAnchor="middle" fill="#087c70" fontSize="24" fontWeight="700">{secondOnly.toLocaleString()}</text> : null}
-          {thirdOnly > 0 ? <text x="350" y="346" textAnchor="middle" fill="#6842c2" fontSize="24" fontWeight="700">{thirdOnly.toLocaleString()}</text> : null}
-          {firstSecond > 0 ? <text x="350" y="146" textAnchor="middle" fill="#0f172a" fontSize="22" fontWeight="700">{firstSecond.toLocaleString()}</text> : null}
-          {firstThird > 0 ? <text x="286" y="266" textAnchor="middle" fill="#0f172a" fontSize="22" fontWeight="700">{firstThird.toLocaleString()}</text> : null}
-          {secondThird > 0 ? <text x="414" y="266" textAnchor="middle" fill="#0f172a" fontSize="22" fontWeight="700">{secondThird.toLocaleString()}</text> : null}
-          {allThree > 0 ? <text x="350" y="230" textAnchor="middle" fill="#0f172a" fontSize="24" fontWeight="800">{allThree.toLocaleString()}</text> : null}
-        </svg>
-      </div>
-      <p className="mt-1 text-center text-xs leading-5 text-slate-500">
-        Counts are exclusive to each region. Circle areas are illustrative.
-      </p>
-    </div>
-  );
-}
-
-function UpSetDiagram({
-  algorithmIds,
-  intersections,
-  diagramRef,
-  visibleCount,
-  onVisibleCountChange,
-}: {
-  algorithmIds: string[];
-  intersections: SetIntersection[];
-  diagramRef: RefObject<HTMLDivElement | null>;
-  visibleCount: number;
-  onVisibleCountChange: (value: number) => void;
-}) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const visibleIntersections = intersections.slice(0, visibleCount);
-  const selectedIntersection =
-    intersections.find((intersection) => intersection.key === selectedKey) ??
-    null;
-  const methodColors = new Map(
-    algorithmIds.map((algorithmId, index) => [
-      algorithmId,
-      getUpSetMethodColor(index),
-    ]),
-  );
-  const setSummaries = algorithmIds.map((algorithmId) => ({
-    algorithmId,
-    count: intersections
-      .filter((intersection) => intersection.members.includes(algorithmId))
-      .reduce((total, intersection) => total + intersection.edges.length, 0),
-  }));
-  const maxSetSize = Math.max(
-    1,
-    ...setSummaries.map((summary) => summary.count),
-  );
-  const columnWidth = 72;
-  const rowHeight = 52;
-  const setPanelWidth = 340;
-  const matrixWidth = Math.max(
-    visibleIntersections.length * columnWidth,
-    420,
-  );
-  const barAreaHeight = 164;
-  const maxCount = Math.max(
-    1,
-    ...visibleIntersections.map((intersection) => intersection.edges.length),
-  );
-
-  const intersectionLabel = (intersection: SetIntersection) => {
-    if (intersection.members.length === algorithmIds.length) {
-      return `All ${algorithmIds.length} methods`;
-    }
-    if (intersection.members.length === 1) {
-      return `${intersection.members[0]} only`;
-    }
-    return intersection.members.join(" + ");
-  };
-
-  const selectIntersection = (key: string) => {
-    setSelectedKey((current) => (current === key ? null : key));
-  };
-
-  return (
-    <div>
-      <div ref={diagramRef} className="overflow-x-auto bg-white pb-2">
-        <div
-          className="mx-auto grid w-max items-end gap-6"
-          style={{
-            gridTemplateColumns: `${setPanelWidth}px ${matrixWidth + 40}px`,
-          }}
-        >
-          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-              Set size
-            </p>
-            <div className="mt-4">
-              {setSummaries.map((summary, rowIndex) => {
-                const color = methodColors.get(summary.algorithmId);
-                return (
-                  <div
-                    key={summary.algorithmId}
-                    className={`grid items-center gap-4 rounded-lg pr-2 ${
-                      rowIndex % 2 === 1 ? "bg-white" : "bg-transparent"
-                    }`}
-                    style={{
-                      gridTemplateColumns: "48px minmax(0, 1fr) 112px",
-                      height: `${rowHeight}px`,
-                    }}
-                  >
-                    <span className="text-right text-xs font-bold tabular-nums text-slate-600">
-                      {summary.count.toLocaleString()}
-                    </span>
-                    <span className="h-4 overflow-hidden rounded-full bg-slate-200/80">
-                      <span
-                        className="block h-full rounded-full"
-                        style={{
-                          width: `${(summary.count / maxSetSize) * 100}%`,
-                          background: color,
-                        }}
-                      />
-                    </span>
-                    <span
-                      className="truncate text-sm font-bold text-slate-700"
-                      title={summary.algorithmId}
-                    >
-                      {summary.algorithmId}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-              Intersection size
-            </p>
-            <div
-              className="mt-4 grid items-end border-b border-slate-300"
-              style={{
-                gridTemplateColumns: `repeat(${visibleIntersections.length}, ${columnWidth}px)`,
-                height: `${barAreaHeight}px`,
-                width: `${matrixWidth}px`,
-              }}
-            >
-              {visibleIntersections.map((intersection) => {
-                const isSelected = selectedIntersection?.key === intersection.key;
-                const isHovered = hoveredKey === intersection.key;
-                const barHeight = Math.max(
-                  8,
-                  (intersection.edges.length / maxCount) * 112,
-                );
-                return (
-                  <button
-                    key={`bar-${intersection.key}`}
-                    type="button"
-                    aria-pressed={isSelected}
-                    aria-label={`${intersectionLabel(intersection)}, ${plural(
-                      intersection.edges.length,
-                      "edge",
-                    )}`}
-                    onMouseEnter={() => setHoveredKey(intersection.key)}
-                    onMouseLeave={() => setHoveredKey(null)}
-                    onFocus={() => setHoveredKey(intersection.key)}
-                    onBlur={() => setHoveredKey(null)}
-                    onClick={() => selectIntersection(intersection.key)}
-                    className="flex h-full flex-col items-center justify-end gap-2 rounded-t-xl outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087ead]/40"
-                  >
-                    <span className="text-xs font-extrabold tabular-nums text-slate-800">
-                      {intersection.edges.length.toLocaleString()}
-                    </span>
-                    <span
-                      className={`w-11 rounded-t-[0.8rem] transition ${
-                        isSelected || isHovered ? "opacity-100" : "opacity-85"
-                      }`}
-                      style={{
-                        height: `${barHeight}px`,
-                        background:
-                          "linear-gradient(to top, #0f9f8f, #67d7e8)",
-                        boxShadow: isSelected
-                          ? "0 0 0 3px rgba(8,126,173,0.18)"
-                          : "inset 0 0 0 1px rgba(8,126,173,0.12)",
-                      }}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 border-t border-slate-200 pt-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                Membership
-              </p>
-              <div className="relative mt-4" style={{ width: `${matrixWidth}px` }}>
-                {visibleIntersections.map((intersection, columnIndex) => {
-                  const includedIndexes = algorithmIds
-                    .map((algorithmId, index) =>
-                      intersection.members.includes(algorithmId) ? index : -1,
-                    )
-                    .filter((index) => index >= 0);
-                  if (includedIndexes.length < 2) return null;
-                  const top = includedIndexes[0] * rowHeight + rowHeight / 2;
-                  const bottom =
-                    includedIndexes[includedIndexes.length - 1] * rowHeight +
-                    rowHeight / 2;
-                  return (
-                    <span
-                      key={`connector-${intersection.key}`}
-                      className="pointer-events-none absolute z-0 w-1 rounded-full bg-slate-400/70"
-                      style={{
-                        left: `${columnIndex * columnWidth + columnWidth / 2 - 2}px`,
-                        top: `${top}px`,
-                        height: `${bottom - top}px`,
-                      }}
-                    />
-                  );
-                })}
-
-                {algorithmIds.map((algorithmId, rowIndex) => {
-                  const color = methodColors.get(algorithmId);
-                  return (
-                    <div
-                      key={algorithmId}
-                      className={`grid items-center rounded-lg ${
-                        rowIndex % 2 === 1 ? "bg-white" : "bg-transparent"
-                      }`}
-                      style={{
-                        gridTemplateColumns: `repeat(${visibleIntersections.length}, ${columnWidth}px)`,
-                        height: `${rowHeight}px`,
-                      }}
-                    >
-                      {visibleIntersections.map((intersection) => {
-                        const included = intersection.members.includes(algorithmId);
-                        const isSelected =
-                          selectedIntersection?.key === intersection.key;
-                        const isHovered = hoveredKey === intersection.key;
-                        return (
-                          <button
-                            key={`${algorithmId}-${intersection.key}`}
-                            type="button"
-                            aria-label={`${algorithmId} is ${
-                              included ? "included in" : "not included in"
-                            } ${intersectionLabel(intersection)}`}
-                            onMouseEnter={() => setHoveredKey(intersection.key)}
-                            onMouseLeave={() => setHoveredKey(null)}
-                            onFocus={() => setHoveredKey(intersection.key)}
-                            onBlur={() => setHoveredKey(null)}
-                            onClick={() => selectIntersection(intersection.key)}
-                            className="relative z-10 flex h-full items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087ead]/40"
-                          >
-                            <span className="absolute left-1/2 top-1/2 h-0.5 w-10 -translate-x-1/2 -translate-y-1/2 bg-slate-200" />
-                            <span
-                              className="relative h-9 w-9 rounded-full border transition"
-                              style={{
-                                background: included ? color : "#e2e8f0",
-                                borderColor: included ? color : "#d6dee8",
-                                boxShadow:
-                                  isSelected || isHovered
-                                    ? "0 0 0 3px rgba(8,126,173,0.16)"
-                                    : included
-                                      ? `inset 0 0 0 1px ${color}33`
-                                      : "none",
-                              }}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs leading-5 text-slate-500">
-        <p>Select a column to inspect its exact intersection.</p>
-        {intersections.length > UPSET_INTERSECTION_LIMIT ? (
-          <button
-            type="button"
-            onClick={() =>
-              onVisibleCountChange(
-                visibleCount >= intersections.length
-                  ? UPSET_INTERSECTION_LIMIT
-                  : Math.min(intersections.length, visibleCount + 10),
-              )
-            }
-            className="font-bold text-[#087ead] transition hover:text-[#06688f] focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-          >
-            {visibleCount >= intersections.length
-              ? `Show top ${UPSET_INTERSECTION_LIMIT}`
-              : `Show ${Math.min(10, intersections.length - visibleCount)} more`}
-          </button>
-        ) : null}
-      </div>
-      {selectedIntersection ? (
-        <section
-          aria-live="polite"
-          className="mt-3 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] px-4 py-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h5 className="text-sm font-extrabold text-slate-900">
-              {intersectionLabel(selectedIntersection)}
-            </h5>
-            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold tabular-nums text-[#087ead]">
-              {plural(selectedIntersection.edges.length, "edge")}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {selectedIntersection.edges.slice(0, 8).map((edge) => (
-              <span
-                key={edge}
-                className="max-w-60 truncate rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
-                title={edge}
-              >
-                {edge}
-              </span>
-            ))}
-            {selectedIntersection.edges.length > 8 ? (
-              <span className="px-1 py-1 text-xs font-semibold text-slate-500">
-                +{selectedIntersection.edges.length - 8} more
-              </span>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-    </div>
   );
 }
 
@@ -1415,62 +839,31 @@ function uniqueRankedKeys(
   return keys;
 }
 
+/**
+ * The rows ranked before the method's top-K cut-off, grouped by comparison
+ * key (a reverse edge ranked after the cut-off is not part of the network).
+ */
+function topRowsByKey(rows: AggregatedEdge[], mode: ComparisonMode, topK: number) {
+  const byKey = new Map<string, AggregatedEdge[]>();
+  const sorted = [...rows].sort((a, b) => a.rank - b.rank || b.confidence - a.confidence);
+  for (const edge of sorted) {
+    const key = comparisonKey(edge, mode);
+    const list = byKey.get(key);
+    if (list) list.push(edge);
+    else if (byKey.size < topK) byKey.set(key, [edge]);
+    else break;
+  }
+  return byKey;
+}
+
+const SIGN_SYMBOL: Record<number, string> = { 1: "+", [-1]: "−", 0: "·" };
+
 function jaccardSimilarity(a: string[], b: string[]) {
   const first = new Set(a);
   const second = new Set(b);
   const intersection = [...first].filter((key) => second.has(key)).length;
   const union = new Set([...first, ...second]).size;
   return union ? intersection / union : 0;
-}
-
-/**
- * Cheap seriation: grow a chain from the most-similar pair, repeatedly adding
- * whichever method is closest to either end. Puts methods that agree next to
- * each other so the matrix shows blocks instead of an arbitrary order.
- */
-function seriateBySimilarity(
-  ids: string[],
-  similarityOf: (first: string, second: string) => number,
-) {
-  if (ids.length < 3) return ids;
-  let seed: [string, string] | null = null;
-  let bestScore = -Infinity;
-  for (let i = 0; i < ids.length; i += 1) {
-    for (let j = i + 1; j < ids.length; j += 1) {
-      const score = similarityOf(ids[i], ids[j]);
-      if (score > bestScore) {
-        bestScore = score;
-        seed = [ids[i], ids[j]];
-      }
-    }
-  }
-  if (!seed) return ids;
-  const order = [seed[0], seed[1]];
-  const remaining = new Set(ids.filter((id) => !order.includes(id)));
-  while (remaining.size) {
-    let pick: string | null = null;
-    let pickScore = -Infinity;
-    let prepend = false;
-    for (const id of remaining) {
-      const toStart = similarityOf(id, order[0]);
-      if (toStart > pickScore) {
-        pickScore = toStart;
-        pick = id;
-        prepend = true;
-      }
-      const toEnd = similarityOf(id, order[order.length - 1]);
-      if (toEnd > pickScore) {
-        pickScore = toEnd;
-        pick = id;
-        prepend = false;
-      }
-    }
-    if (!pick) break;
-    if (prepend) order.unshift(pick);
-    else order.push(pick);
-    remaining.delete(pick);
-  }
-  return order;
 }
 
 function rankBiasedOverlap(a: string[], b: string[], persistence = 0.9) {
@@ -1561,6 +954,29 @@ function correlation(first: number[], second: number[]) {
   return denominator ? covariance / denominator : null;
 }
 
+type RunPair = { first: string; second: string; rho: number };
+
+/** Top-K cut-offs for edge-level reproducibility. Kept small on purpose:
+ * beyond ~the number of edges each run selects, every algorithm's recovery
+ * falls together and the comparison stops meaning anything. */
+const TOP_EDGE_CUTOFFS = [10, 25, 50];
+
+/** Mean bootstrap recovery (share of runs that select the edge) of an
+ * algorithm's top-K edges by rank. Shows whether the edges people actually
+ * read are reproducible, which the whole-ranking ρ can understate. */
+function topEdgeRecovery(edges: { rank?: number; score: number; confidence?: number }[]) {
+  const ranked = edges
+    .filter((edge) => typeof edge.confidence === "number" && Number.isFinite(edge.confidence))
+    .slice()
+    .sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || b.score - a.score);
+  return TOP_EDGE_CUTOFFS.map((k) => ({
+    k,
+    value: ranked.length >= k
+      ? ranked.slice(0, k).reduce((sum, edge) => sum + (edge.confidence as number), 0) / k
+      : null,
+  }));
+}
+
 function legacyRunStability(
   edges: NonNullable<ReturnType<typeof selectedResultForScope>>["edges"],
 ) {
@@ -1587,6 +1003,7 @@ function legacyRunStability(
     ]),
   );
   const values: number[] = [];
+  const runPairs: RunPair[] = [];
   const valuesByRun = new Map(runIds.map((runId) => [runId, [] as number[]]));
   for (let firstIndex = 0; firstIndex < runIds.length; firstIndex += 1) {
     for (
@@ -1600,6 +1017,7 @@ function legacyRunStability(
       );
       if (value !== null) {
         values.push(value);
+        runPairs.push({ first: runIds[firstIndex], second: runIds[secondIndex], rho: value });
         valuesByRun.get(runIds[firstIndex])?.push(value);
         valuesByRun.get(runIds[secondIndex])?.push(value);
       }
@@ -1610,6 +1028,8 @@ function legacyRunStability(
   return {
     runCount: runIds.length,
     pairCount: values.length,
+    pairRhos: values,
+    runPairs,
     medianRho: median(values),
     madRho:
       values.reduce((sum, value) => sum + Math.abs(value - mean), 0) /
@@ -1624,6 +1044,301 @@ function legacyRunStability(
   };
 }
 
+/** Tukey box-plot statistics (quartiles by linear interpolation). */
+function boxStats(values: number[]) {
+  const v = values.slice().sort((a, b) => a - b);
+  const q = (p: number) => {
+    const i = (v.length - 1) * p;
+    const lo = Math.floor(i);
+    return v[lo] + (v[Math.min(lo + 1, v.length - 1)] - v[lo]) * (i - lo);
+  };
+  const q1 = q(0.25), med = q(0.5), q3 = q(0.75), fence = 1.5 * (q3 - q1);
+  return {
+    q1, med, q3,
+    lo: v.find((x) => x >= q1 - fence) ?? v[0],
+    hi: [...v].reverse().find((x) => x <= q3 + fence) ?? v[v.length - 1],
+  };
+}
+
+type StabilityPlotRow = {
+  algorithmId: string;
+  pairRhos: number[];
+  runPairs: RunPair[];
+  runAgreement: { runId: string; rho: number | null }[];
+  topRecovery: { k: number; value: number | null }[];
+  medianRho: number | null;
+  runCount: number;
+  stoppedEarly: boolean;
+  earlyStoppingEnabled: boolean;
+};
+
+/** Repeat-run stability: a journal-style box plot (one box per algorithm,
+ * sorted by median; every pairwise ρ between two runs as a grey point; open
+ * boxes, black median). It fills the panel width at a fixed text size; each
+ * algorithm name carries its run count and how the runs ended underneath.
+ * The SVG is also the PNG download. */
+const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>(
+  function StabilityBoxPlot({ rows }, ref) {
+    const [hovered, setHovered] = useState<string | null>(null);
+    const [boxWidth, setBoxWidth] = useState(0);
+    const observed = useRef<ResizeObserver | null>(null);
+    const measure = useCallback((node: HTMLDivElement | null) => {
+      observed.current?.disconnect();
+      if (!node) return;
+      setBoxWidth(node.clientWidth);
+      observed.current = new ResizeObserver(([entry]) => setBoxWidth(Math.round(entry.contentRect.width)));
+      observed.current.observe(node);
+    }, []);
+    const plotted = rows.filter((row) => row.pairRhos.length > 0 || row.medianRho !== null);
+    if (!plotted.length) {
+      return <p className="py-6 text-sm text-slate-500">No repeat-run correlations are available for these results.</p>;
+    }
+    const font = "Arial, Helvetica, sans-serif";
+    const INK = "#000", GREY = "#9aa3ab", HIGHLIGHT = "#087ead";
+    const left = 64, right = 16, top = 30, plotH = 300;
+    // One SVG unit = one screen pixel, so text stays the same size at any width.
+    // Fixed column width, as in a journal figure: wide enough for a horizontal
+    // algorithm name, independent of how wide the panel is. Very narrow panels
+    // fall back to rotated labels in tighter columns.
+    const slot = Math.max(56, Math.min(96, ((boxWidth || 900) - left - right) / plotted.length));
+    const horizontal = slot >= 92;
+    const labelH = horizontal ? 58 : 96;
+    const width = left + plotted.length * slot + right;
+    // b: top-edge recovery strip, aligned under the boxes.
+    const hasStrip = plotted.some((row) => row.topRecovery.some((cell) => cell.value !== null));
+    const rowH = 24;
+    const stripTop = top + plotH + 4 + 46;
+    const labelBase = hasStrip ? stripTop + TOP_EDGE_CUTOFFS.length * rowH + 2 : top + plotH + 4;
+    const height = labelBase + labelH;
+    const summaries = plotted.map((row) => {
+      const values = row.pairRhos.length ? row.pairRhos : [row.medianRho as number];
+      return {
+        row,
+        values,
+        stats: boxStats(values),
+        min: Math.min(...values),
+        max: Math.max(...values),
+        outcome: row.stoppedEarly ? "stopped early" : row.earlyStoppingEnabled ? "ran to cap" : "fixed plan",
+      };
+    });
+    const lowest = Math.min(...summaries.map((item) => item.min));
+    const step = 1 - lowest > 0.3 ? 0.1 : 0.05;
+    let yMin = Math.floor((lowest - step * 0.4) / step) * step;
+    // Correlations are bounded: only go below zero when a value actually is.
+    if (lowest >= 0) yMin = Math.max(0, yMin);
+    yMin = Math.max(-1, yMin);
+    const yMax = 1;
+    const y = (value: number) => top + ((yMax - value) / (yMax - yMin)) * plotH;
+    const ticks: number[] = [];
+    for (let t = Math.ceil(yMin / step - 1e-9) * step; t <= yMax + 1e-9; t += step) ticks.push(Number(t.toFixed(2)) || 0);
+    const axisY = top + plotH + 4;
+    return (
+      <div ref={measure} className="min-w-0 overflow-x-auto" onMouseLeave={() => setHovered(null)}>
+          <svg
+            ref={ref}
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-label="(a) Box plot of pairwise Spearman correlation between repeat runs per algorithm; (b) mean bootstrap recovery of each algorithm's top 10, 25 and 50 edges"
+            width={width}
+            height={height}
+            style={{ display: "block", margin: "0 auto" }}
+            fontFamily={font}
+          >
+            <rect x="0" y="0" width={width} height={height} fill="#ffffff" />
+            <text x="4" y="16" fontSize="15" fontWeight="700" fill={INK}>a</text>
+            <text x="22" y="16" fontSize="10.5" fill="#6b7580">Whole-ranking agreement between runs</text>
+            {hasStrip && (
+              <>
+                <text x="4" y={stripTop - 14} fontSize="15" fontWeight="700" fill={INK}>b</text>
+                <text x="22" y={stripTop - 14} fontSize="10.5" fill="#6b7580">Top-edge recovery across runs</text>
+                {TOP_EDGE_CUTOFFS.map((k, i) => (
+                  <text key={k} x={left - 8} y={stripTop + i * rowH + rowH / 2} fontSize="10.5" textAnchor="end" dominantBaseline="middle" fill={INK}>top {k}</text>
+                ))}
+              </>
+            )}
+            <line x1={left} x2={left} y1={top} y2={axisY} stroke={INK} strokeWidth="0.8" />
+            {ticks.map((t) => (
+              <g key={t}>
+                <line x1={left - 4} x2={left} y1={y(t)} y2={y(t)} stroke={INK} strokeWidth="0.8" />
+                <text x={left - 7} y={y(t)} fontSize="11" textAnchor="end" dominantBaseline="middle" fill={INK}>{t.toFixed(step < 0.1 ? 2 : 1)}</text>
+              </g>
+            ))}
+            <text transform={`translate(16 ${top + plotH / 2}) rotate(-90)`} fontSize="11.5" textAnchor="middle" fill={INK}>Pairwise Spearman ρ</text>
+            <line x1={left} x2={width - right} y1={axisY} y2={axisY} stroke={INK} strokeWidth="0.8" />
+            {summaries.map(({ row, values, stats, min, max, outcome }, index) => {
+              const cx = left + slot * (index + 0.5);
+              const half = Math.min(slot * 0.28, 22);
+              // Many run pairs: smaller, lighter points so the box stays readable.
+              const dense = values.length > 40;
+              const on = hovered === row.algorithmId;
+              const ink = on ? HIGHLIGHT : INK;
+              return (
+                <g key={row.algorithmId} onMouseEnter={() => setHovered(row.algorithmId)} data-hl={on ? "" : undefined}>
+                  <title>{`${row.algorithmId}\nmedian ρ ${stats.med.toFixed(3)} · IQR ${stats.q1.toFixed(3)}–${stats.q3.toFixed(3)}\nrange ${min.toFixed(3)}–${max.toFixed(3)}\n${row.runCount} runs · ${values.length} run pairs · ${outcome}`}</title>
+                  <rect x={cx - slot / 2} y={top} width={slot} height={plotH} fill={on ? HIGHLIGHT : "transparent"} fillOpacity={on ? 0.05 : 0} data-hl-bg="" />
+                  {values.map((value, i) => {
+                    // Deterministic jitter so points don't move between renders.
+                    const jitter = ((((i + 1) * 0.618034) % 1) - 0.5) * half * 1.1;
+                    return <circle key={i} cx={cx + jitter} cy={y(value)} r={dense ? 1.4 : 2.1} fill={GREY} fillOpacity={dense ? 0.55 : 1} />;
+                  })}
+                  <line x1={cx} x2={cx} y1={y(stats.hi)} y2={y(stats.q3)} stroke={ink} strokeWidth="0.8" />
+                  <line x1={cx} x2={cx} y1={y(stats.q1)} y2={y(stats.lo)} stroke={ink} strokeWidth="0.8" />
+                  <line x1={cx - half * 0.45} x2={cx + half * 0.45} y1={y(stats.hi)} y2={y(stats.hi)} stroke={ink} strokeWidth="0.8" />
+                  <line x1={cx - half * 0.45} x2={cx + half * 0.45} y1={y(stats.lo)} y2={y(stats.lo)} stroke={ink} strokeWidth="0.8" />
+                  <rect x={cx - half} y={y(stats.q3)} width={half * 2} height={Math.max(0.5, y(stats.q1) - y(stats.q3))} fill="none" stroke={ink} strokeWidth={on ? 1.4 : 0.8} />
+                  <line x1={cx - half} x2={cx + half} y1={y(stats.med)} y2={y(stats.med)} stroke={ink} strokeWidth="1.8" />
+                  <line x1={cx} x2={cx} y1={axisY} y2={axisY + 4} stroke={INK} strokeWidth="0.8" />
+                  {hasStrip && row.topRecovery.map((cell, i) => {
+                    const cellW = Math.min(slot - 4, 120);
+                    const yTop = stripTop + i * rowH;
+                    return (
+                      <g key={cell.k}>
+                        <title>{cell.value === null ? `${row.algorithmId}: fewer than ${cell.k} ranked edges` : `${row.algorithmId}: top ${cell.k} edges recovered in ${Math.round(cell.value * 100)}% of runs on average`}</title>
+                        <rect data-cell="" x={cx - cellW / 2} y={yTop + 1} width={cellW} height={rowH - 2} fill={cell.value === null ? "#f8fafc" : rhoColor(cell.value)} />
+                        <text x={cx} y={yTop + rowH / 2} fontSize="10.5" textAnchor="middle" dominantBaseline="middle"
+                          fill={cell.value !== null && cell.value > 0.6 ? "#ffffff" : "#1f2a33"}>{cell.value === null ? "—" : `${Math.round(cell.value * 100)}%`}</text>
+                      </g>
+                    );
+                  })}
+                  {horizontal ? (
+                    <>
+                      <text x={cx} y={labelBase + 16} fontSize="11.5" textAnchor="middle" fill={ink} data-name="">{row.algorithmId}</text>
+                      <text x={cx} y={labelBase + 31} fontSize="10" textAnchor="middle" fill="#6b7580">{row.runCount ? `${row.runCount} runs` : ""}</text>
+                      <text x={cx} y={labelBase + 44} fontSize="10" textAnchor="middle" fill={outcome === "ran to cap" ? "#b45309" : "#8a949c"}>{outcome}</text>
+                    </>
+                  ) : (
+                    <text transform={`translate(${cx + 4} ${labelBase + 10}) rotate(-45)`} fontSize="11.5" textAnchor="end" fill={ink} data-name="">
+                      {row.algorithmId}
+                      <tspan fill="#8a949c" fontSize="10">{row.runCount ? ` · ${row.runCount} runs` : ""}</tspan>
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+      </div>
+    );
+  },
+);
+
+/** Five-stop sequential blue, light (low) to dark (high), for 0–1 values. */
+function rhoColor(t: number) {
+  const stops = [[239, 245, 250], [198, 219, 239], [107, 174, 214], [33, 113, 181], [8, 48, 107]];
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(x));
+  const f = x - i;
+  const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+
+/** Per-algorithm repeat-run stability for the selected result scope, sorted
+ * by median ρ (highest first). Shared by the Comparison stability panel and
+ * the Benchmark stability-vs-accuracy scatter. */
+export function buildStabilityRows(
+  algorithmResults: Record<string, AlgorithmStoredResult>,
+  activeAlgorithmIds: string[],
+  selectedResultScopeId: string,
+) {
+  const built = activeAlgorithmIds.map((algorithmId) => {
+    const selected = selectedResultForScope(
+      algorithmResults[algorithmId],
+      selectedResultScopeId,
+    );
+    const summary = selected?.confidenceSummary;
+    const isGenuineBootstrap =
+      summary?.resampling_scheme === "cell_bootstrap_with_replacement_v1" &&
+      summary?.sampling_with_replacement === true;
+    const repeat = summary?.repeat_run_stability;
+    const earlyStopping = summary?.early_stopping;
+    const fallback = repeat ? null : legacyRunStability(selected?.edges ?? []);
+    const pairValuesByRun = new Map<string, number[]>();
+    const repeatPairRhos: number[] = [];
+    const repeatRunPairs: RunPair[] = [];
+    for (const pair of repeat?.pairs ?? []) {
+      const firstRun = String(pair.first_run ?? "").trim();
+      const secondRun = String(pair.second_run ?? "").trim();
+      const rho = numericValue(pair.rho);
+      if (!firstRun || !secondRun || rho === null) continue;
+      repeatPairRhos.push(rho);
+      repeatRunPairs.push({ first: firstRun, second: secondRun, rho });
+      if (!pairValuesByRun.has(firstRun)) pairValuesByRun.set(firstRun, []);
+      if (!pairValuesByRun.has(secondRun)) pairValuesByRun.set(secondRun, []);
+      pairValuesByRun.get(firstRun)?.push(rho);
+      pairValuesByRun.get(secondRun)?.push(rho);
+    }
+    const runAgreement = pairValuesByRun.size
+      ? [...pairValuesByRun.entries()]
+          .map(([runId, values]) => ({
+            runId,
+            rho: values.length ? median(values) : null,
+          }))
+          .sort((first, second) => {
+            const firstNumber = Number(first.runId.split("-").at(-1));
+            const secondNumber = Number(second.runId.split("-").at(-1));
+            return (
+              firstNumber - secondNumber ||
+              first.runId.localeCompare(second.runId)
+            );
+          })
+      : (fallback?.runAgreement ?? []);
+    const runCount =
+      numericValue(summary?.bootstrap_runs) ??
+      numericValue(repeat?.run_count) ??
+      fallback?.runCount ??
+      0;
+    const usableRunCount =
+      numericValue(repeat?.usable_run_count) ??
+      numericValue(repeat?.run_count) ??
+      fallback?.runCount ??
+      runCount;
+    const medianRho =
+      numericValue(repeat?.median_rho) ?? fallback?.medianRho ?? null;
+    const madRho =
+      numericValue(repeat?.mad_rho) ?? fallback?.madRho ?? null;
+    const stopRho =
+      numericValue(earlyStopping?.stop_rho) ??
+      numericValue(summary?.stop_rho) ??
+      0.95;
+    const stopStreak =
+      numericValue(earlyStopping?.stop_streak) ??
+      numericValue(summary?.stop_streak) ??
+      2;
+    const earlyStoppingEnabled =
+      earlyStopping?.enabled === true ||
+      summary?.early_stopping_enabled === true;
+
+    // Every pairwise ρ between two runs: the points of the box plot.
+    const pairRhos = repeatPairRhos.length
+      ? repeatPairRhos
+      : (fallback?.pairRhos ?? []);
+    return {
+      algorithmId,
+      runAgreement,
+      pairRhos,
+      topRecovery: topEdgeRecovery(selected?.edges ?? []),
+      runPairs: repeatRunPairs.length ? repeatRunPairs : (fallback?.runPairs ?? []),
+      runCount,
+      usableRunCount,
+      medianRho,
+      madRho,
+      stopRho,
+      stopStreak,
+      stoppedEarly: earlyStopping?.stopped_early === true,
+      isGenuineBootstrap,
+      earlyStoppingEnabled,
+    };
+  });
+  return built.slice().sort((a, b) => {
+    if (a.medianRho === null && b.medianRho === null) return 0;
+    if (a.medianRho === null) return 1;
+    if (b.medianRho === null) return -1;
+    return b.medianRho - a.medianRho;
+  });
+}
+
+export type StabilityRow = ReturnType<typeof buildStabilityRows>[number];
+
 function RepeatRunStabilityPanel({
   algorithmResults,
   activeAlgorithmIds,
@@ -1635,92 +1350,10 @@ function RepeatRunStabilityPanel({
 }) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  const rows = useMemo(() => {
-    const built = activeAlgorithmIds.map((algorithmId) => {
-      const selected = selectedResultForScope(
-        algorithmResults[algorithmId],
-        selectedResultScopeId,
-      );
-      const summary = selected?.confidenceSummary;
-      const isGenuineBootstrap =
-        summary?.resampling_scheme === "cell_bootstrap_with_replacement_v1" &&
-        summary?.sampling_with_replacement === true;
-      const repeat = summary?.repeat_run_stability;
-      const earlyStopping = summary?.early_stopping;
-      const fallback = repeat ? null : legacyRunStability(selected?.edges ?? []);
-      const pairValuesByRun = new Map<string, number[]>();
-      for (const pair of repeat?.pairs ?? []) {
-        const firstRun = String(pair.first_run ?? "").trim();
-        const secondRun = String(pair.second_run ?? "").trim();
-        const rho = numericValue(pair.rho);
-        if (!firstRun || !secondRun || rho === null) continue;
-        if (!pairValuesByRun.has(firstRun)) pairValuesByRun.set(firstRun, []);
-        if (!pairValuesByRun.has(secondRun)) pairValuesByRun.set(secondRun, []);
-        pairValuesByRun.get(firstRun)?.push(rho);
-        pairValuesByRun.get(secondRun)?.push(rho);
-      }
-      const runAgreement = pairValuesByRun.size
-        ? [...pairValuesByRun.entries()]
-            .map(([runId, values]) => ({
-              runId,
-              rho: values.length ? median(values) : null,
-            }))
-            .sort((first, second) => {
-              const firstNumber = Number(first.runId.split("-").at(-1));
-              const secondNumber = Number(second.runId.split("-").at(-1));
-              return (
-                firstNumber - secondNumber ||
-                first.runId.localeCompare(second.runId)
-              );
-            })
-        : (fallback?.runAgreement ?? []);
-      const runCount =
-        numericValue(summary?.bootstrap_runs) ??
-        numericValue(repeat?.run_count) ??
-        fallback?.runCount ??
-        0;
-      const usableRunCount =
-        numericValue(repeat?.usable_run_count) ??
-        numericValue(repeat?.run_count) ??
-        fallback?.runCount ??
-        runCount;
-      const medianRho =
-        numericValue(repeat?.median_rho) ?? fallback?.medianRho ?? null;
-      const madRho =
-        numericValue(repeat?.mad_rho) ?? fallback?.madRho ?? null;
-      const stopRho =
-        numericValue(earlyStopping?.stop_rho) ??
-        numericValue(summary?.stop_rho) ??
-        0.95;
-      const stopStreak =
-        numericValue(earlyStopping?.stop_streak) ??
-        numericValue(summary?.stop_streak) ??
-        2;
-      const earlyStoppingEnabled =
-        earlyStopping?.enabled === true ||
-        summary?.early_stopping_enabled === true;
-
-      return {
-        algorithmId,
-        runAgreement,
-        runCount,
-        usableRunCount,
-        medianRho,
-        madRho,
-        stopRho,
-        stopStreak,
-        stoppedEarly: earlyStopping?.stopped_early === true,
-        isGenuineBootstrap,
-        earlyStoppingEnabled,
-      };
-    });
-    return built.slice().sort((a, b) => {
-      if (a.medianRho === null && b.medianRho === null) return 0;
-      if (a.medianRho === null) return 1;
-      if (b.medianRho === null) return -1;
-      return b.medianRho - a.medianRho;
-    });
-  }, [activeAlgorithmIds, algorithmResults, selectedResultScopeId]);
+  const rows = useMemo(
+    () => buildStabilityRows(algorithmResults, activeAlgorithmIds, selectedResultScopeId),
+    [activeAlgorithmIds, algorithmResults, selectedResultScopeId],
+  );
 
   const uniformRule =
     rows.length > 0 &&
@@ -1731,19 +1364,7 @@ function RepeatRunStabilityPanel({
       ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
       : null;
   const stabilityDescription =
-    "Median rank agreement across bootstrap runs; higher values mean more consistent results.";
-  const validRhos = rows
-    .map((row) => row.medianRho)
-    .filter((rho): rho is number => rho !== null);
-  const lowestRho = validRhos.length ? Math.min(...validRhos) : 0;
-  const plotMin = Math.max(
-    -1,
-    Math.min(0.9, Math.floor((lowestRho - 0.04) * 10) / 10),
-  );
-  const plotMidpoint = (plotMin + 1) / 2;
-  const plotPosition = (rho: number) =>
-    Math.max(0, Math.min(100, ((rho - plotMin) / (1 - plotMin)) * 100));
-
+    "(a) Each point is the rank correlation between two bootstrap runs over the whole edge ranking. (b) How often the top-ranked edges are recovered across runs — the edges you would actually read.";
   const handleDownloadCsv = () => {
     const maximumRunCount = Math.max(
       0,
@@ -1764,6 +1385,7 @@ function RepeatRunStabilityPanel({
         "stopped_early",
         "stop_rho",
         "required_consecutive_checks",
+        ...TOP_EDGE_CUTOFFS.map((k) => `top_${k}_edge_mean_recovery`),
         ...runHeaders,
       ],
       ...rows.map((row) => [
@@ -1776,6 +1398,7 @@ function RepeatRunStabilityPanel({
         row.stoppedEarly ? "yes" : "no",
         row.stopRho,
         row.stopStreak,
+        ...row.topRecovery.map((cell) => (cell.value === null ? "" : cell.value)),
         ...Array.from({ length: maximumRunCount }, (_, index) => {
           const rho = row.runAgreement[index]?.rho;
           return rho === null || rho === undefined ? "" : rho;
@@ -1784,218 +1407,50 @@ function RepeatRunStabilityPanel({
     ]);
   };
 
+  const figureRef = useRef<SVGSVGElement | null>(null);
   const handleDownloadPng = () => {
-    const width = 1600;
-    const margin = 56;
-    const tableY = margin;
-    const headerHeight = 58;
-    const rowHeight = 64;
-    const axisHeight = 38;
-    const tableHeight = headerHeight + rows.length * rowHeight + axisHeight;
-    const height = tableY + tableHeight + 84;
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.scale(scale, scale);
-
-    const roundedRect = (
-      x: number,
-      y: number,
-      rectWidth: number,
-      rectHeight: number,
-      radius: number,
-    ) => {
-      const safeRadius = Math.min(radius, rectWidth / 2, rectHeight / 2);
-      context.beginPath();
-      context.moveTo(x + safeRadius, y);
-      context.lineTo(x + rectWidth - safeRadius, y);
-      context.quadraticCurveTo(
-        x + rectWidth,
-        y,
-        x + rectWidth,
-        y + safeRadius,
-      );
-      context.lineTo(x + rectWidth, y + rectHeight - safeRadius);
-      context.quadraticCurveTo(
-        x + rectWidth,
-        y + rectHeight,
-        x + rectWidth - safeRadius,
-        y + rectHeight,
-      );
-      context.lineTo(x + safeRadius, y + rectHeight);
-      context.quadraticCurveTo(
-        x,
-        y + rectHeight,
-        x,
-        y + rectHeight - safeRadius,
-      );
-      context.lineTo(x, y + safeRadius);
-      context.quadraticCurveTo(x, y, x + safeRadius, y);
-      context.closePath();
-    };
-
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, width, height);
-
-    const tableX = margin;
-    const tableWidth = width - margin * 2;
-    roundedRect(tableX, tableY, tableWidth, tableHeight, 18);
-    context.fillStyle = "#ffffff";
-    context.fill();
-    context.strokeStyle = "#dbe4ee";
-    context.lineWidth = 1.5;
-    context.stroke();
-
-    const algorithmX = tableX + 26;
-    const plotStart = tableX + 370;
-    const plotEnd = tableX + 1110;
-    const medianX = tableX + 1150;
-    const runsX = tableX + 1355;
-    context.fillStyle = "#f8fafc";
-    roundedRect(tableX + 1, tableY + 1, tableWidth - 2, headerHeight, 17);
-    context.fill();
-    context.fillStyle = "#475569";
-    context.font = `700 14px ${WEBSITE_FONT_FAMILY}`;
-    const headerBaseline = tableY + 35;
-    context.fillText("Algorithm", algorithmX, headerBaseline);
-    context.fillText(
-      "Repeat-run correlation (ρ)",
-      plotStart,
-      headerBaseline,
-    );
-    context.fillText("Median ρ", medianX, headerBaseline);
-    context.fillText("Bootstrap runs", runsX, headerBaseline);
-
-    rows.forEach((row, index) => {
-      const rowTop = tableY + headerHeight + index * rowHeight;
-      const centerY = rowTop + rowHeight / 2;
-      context.strokeStyle = "#e8eef5";
-      context.lineWidth = 1;
-      context.beginPath();
-      context.moveTo(tableX, rowTop);
-      context.lineTo(tableX + tableWidth, rowTop);
-      context.stroke();
-
-      context.fillStyle = "#0f172a";
-      context.font = `700 17px ${WEBSITE_FONT_FAMILY}`;
-      context.fillText(row.algorithmId, algorithmX, centerY + 6);
-
-      context.strokeStyle = "#dbe4ee";
-      context.lineWidth = 1.5;
-      context.beginPath();
-      context.moveTo(plotStart, centerY);
-      context.lineTo(plotEnd, centerY);
-      context.stroke();
-      [plotStart, (plotStart + plotEnd) / 2, plotEnd].forEach((x) => {
-        context.beginPath();
-        context.moveTo(x, centerY - 8);
-        context.lineTo(x, centerY + 8);
-        context.stroke();
-      });
-
-      if (row.medianRho !== null) {
-        const medianPosition =
-          plotStart + (plotEnd - plotStart) * (plotPosition(row.medianRho) / 100);
-        if (row.madRho !== null) {
-          const deviationStart =
-            plotStart +
-            (plotEnd - plotStart) *
-              (plotPosition(row.medianRho - row.madRho) / 100);
-          const deviationEnd =
-            plotStart +
-            (plotEnd - plotStart) *
-              (plotPosition(row.medianRho + row.madRho) / 100);
-          context.strokeStyle = "#8fc4d8";
-          context.lineWidth = 6;
-          context.lineCap = "round";
-          context.beginPath();
-          context.moveTo(deviationStart, centerY);
-          context.lineTo(Math.max(deviationStart + 2, deviationEnd), centerY);
-          context.stroke();
-          context.lineCap = "butt";
-        }
-        context.beginPath();
-        context.arc(medianPosition, centerY, 8, 0, Math.PI * 2);
-        context.fillStyle = "#087ead";
-        context.fill();
-        context.strokeStyle = "#ffffff";
-        context.lineWidth = 3;
-        context.stroke();
-      }
-
-      context.fillStyle = "#0f172a";
-      context.font = `800 18px ${WEBSITE_FONT_FAMILY}`;
-      context.fillText(
-        row.medianRho === null ? "—" : row.medianRho.toFixed(3),
-        medianX,
-        centerY + 6,
-      );
-      context.fillStyle = "#475569";
-      context.font = `600 15px ${WEBSITE_FONT_FAMILY}`;
-      context.fillText(
-        row.runCount ? plural(row.runCount, "run") : "—",
-        runsX,
-        centerY + 5,
-      );
+    const svg = figureRef.current;
+    if (!svg) return;
+    const box = svg.viewBox.baseVal;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(box.width));
+    clone.setAttribute("height", String(box.height));
+    clone.querySelectorAll("title").forEach((node) => node.remove());
+    // The figure is the plain plot: drop hover/selection highlighting.
+    clone.querySelectorAll("[data-hl-bg]").forEach((node) => node.setAttribute("fill-opacity", "0"));
+    clone.querySelectorAll("[data-hl] line, [data-hl] rect:not([data-hl-bg]):not([data-cell])").forEach((node) => {
+      node.setAttribute("stroke", "#000");
+      node.setAttribute("stroke-width", node.getAttribute("stroke-width") === "1.4" ? "0.8" : node.getAttribute("stroke-width") ?? "0.8");
     });
-
-    const axisTop = tableY + headerHeight + rows.length * rowHeight;
-    context.strokeStyle = "#dbe4ee";
-    context.beginPath();
-    context.moveTo(tableX, axisTop);
-    context.lineTo(tableX + tableWidth, axisTop);
-    context.stroke();
-    context.fillStyle = "#94a3b8";
-    context.font = `500 13px ${WEBSITE_FONT_FAMILY}`;
-    context.textAlign = "left";
-    context.fillText(plotMin.toFixed(2), plotStart, axisTop + 24);
-    context.textAlign = "center";
-    context.fillText(
-      plotMidpoint.toFixed(2),
-      (plotStart + plotEnd) / 2,
-      axisTop + 24,
-    );
-    context.textAlign = "right";
-    context.fillText("1.00", plotEnd, axisTop + 24);
-    context.textAlign = "left";
-
-    const legendY = axisTop + 68;
-    context.strokeStyle = "#8fc4d8";
-    context.lineWidth = 6;
-    context.lineCap = "round";
-    context.beginPath();
-    context.moveTo(tableX, legendY - 4);
-    context.lineTo(tableX + 46, legendY - 4);
-    context.stroke();
-    context.lineCap = "butt";
-    context.fillStyle = "#475569";
-    context.font = `600 13px ${WEBSITE_FONT_FAMILY}`;
-    context.fillText("Mean absolute deviation", tableX + 58, legendY);
-
-    context.beginPath();
-    context.arc(tableX + 277, legendY - 4, 7, 0, Math.PI * 2);
-    context.fillStyle = "#087ead";
-    context.fill();
-    context.strokeStyle = "#ffffff";
-    context.lineWidth = 2.5;
-    context.stroke();
-    context.fillStyle = "#475569";
-    context.fillText("Median correlation", tableX + 293, legendY);
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "repeat-run-stability.png";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    clone.querySelectorAll("[data-hl] text[data-name]").forEach((node) => node.setAttribute("fill", "#000"));
+    const source = new XMLSerializer().serializeToString(clone);
+    const image = new Image();
+    const url = URL.createObjectURL(new Blob([source], { type: "image/svg+xml;charset=utf-8" }));
+    image.onload = () => {
+      const scale = 4; // ~300 dpi at a single-column print width
+      const canvas = document.createElement("canvas");
+      canvas.width = box.width * scale;
+      canvas.height = box.height * scale;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
-    }, "image/png");
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = "repeat-run-stability.png";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(href);
+      }, "image/png");
+    };
+    image.src = url;
   };
 
   return (
@@ -2020,9 +1475,9 @@ function RepeatRunStabilityPanel({
             ariaLabel="Download repeat-run stability"
             items={[
               {
-                label: "Table image",
+                label: "Figure",
                 format: "PNG",
-                description: "Presentation-ready view of the current table.",
+                description: "Publication-style box plot of every run pair.",
                 onSelect: handleDownloadPng,
               },
               {
@@ -2035,98 +1490,7 @@ function RepeatRunStabilityPanel({
           />
         }
       >
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <div className="grn-table-header-grid hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem] items-center gap-4 border-b border-slate-200 px-4 py-2.5 md:grid">
-            <span>Algorithm</span>
-            <span>
-              Median pairwise Spearman <span className="normal-case">ρ</span>
-            </span>
-            <span />
-            <span>Bootstrap runs</span>
-          </div>
-          <div className="divide-y divide-slate-100">
-          {rows.map((row) => {
-          const rhoPosition =
-            row.medianRho === null ? null : plotPosition(row.medianRho);
-          const deviationStart =
-            row.medianRho === null || row.madRho === null
-              ? null
-              : plotPosition(row.medianRho - row.madRho);
-          const deviationEnd =
-            row.medianRho === null || row.madRho === null
-              ? null
-              : plotPosition(row.medianRho + row.madRho);
-          // Answers the stop rule explained in the help modal, which the
-          // plotted median cannot answer on its own.
-          const stopOutcome = row.stoppedEarly
-            ? { label: "stopped early", tone: "text-slate-400" }
-            : row.earlyStoppingEnabled
-              ? { label: "ran to cap", tone: "text-amber-600" }
-              : row.isGenuineBootstrap
-                ? { label: "fixed plan", tone: "text-slate-400" }
-                : null;
-          return (
-              <div
-                key={row.algorithmId}
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 bg-white px-4 py-2.5 text-left md:grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem] md:gap-4"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
-                  {row.algorithmId}
-                </span>
-                <span className="relative hidden h-5 md:block">
-                  <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-slate-200" />
-                  <span className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-slate-200" />
-                  <span className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-slate-200" />
-                  <span className="absolute right-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-slate-200" />
-                  {deviationStart !== null && deviationEnd !== null ? (
-                    <span
-                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#8fc4d8]"
-                      style={{
-                        left: `${deviationStart}%`,
-                        width: `${Math.max(0.5, deviationEnd - deviationStart)}%`,
-                      }}
-                      title="Mean absolute deviation"
-                    />
-                  ) : null}
-                  {rhoPosition !== null ? (
-                    <span
-                      className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#087ead] shadow-sm"
-                      style={{ left: `${rhoPosition}%` }}
-                    />
-                  ) : null}
-                </span>
-                <span className="whitespace-nowrap text-sm font-extrabold tabular-nums text-slate-900">
-                  {row.medianRho === null
-                    ? "—"
-                    : row.medianRho.toFixed(3)}
-                </span>
-                <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-slate-600">
-                  {row.runCount || "—"}
-                  {stopOutcome ? (
-                    <span className={`ml-1.5 font-medium ${stopOutcome.tone}`}>
-                      · {stopOutcome.label}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-            );
-          })}
-          </div>
-          <div className="hidden grid-cols-[minmax(8rem,0.7fr)_minmax(16rem,1.8fr)_8rem_9rem] items-center gap-4 border-t border-slate-200 bg-slate-50/50 px-4 py-2 md:grid">
-            <span />
-            <span className="relative block h-3 text-[10px] font-medium text-slate-400">
-              <span className="absolute left-0 tabular-nums">
-                {plotMin.toFixed(2)}
-              </span>
-              <span className="absolute left-1/2 -translate-x-1/2 tabular-nums">
-                {plotMidpoint.toFixed(2)}
-              </span>
-              <span className="absolute right-0 tabular-nums">1.00</span>
-            </span>
-            <span />
-            <span />
-          </div>
-        </div>
+        <StabilityBoxPlot ref={figureRef} rows={rows} />
       </Panel>
       {isHelpOpen && typeof document !== "undefined" ? (
         <RepeatRunStabilityHelpModal
@@ -2138,1017 +1502,17 @@ function RepeatRunStabilityPanel({
   );
 }
 
-const EDGE_EXPLORER_PAGE_SIZE = 20;
-
-function EdgeExplorerSettingsMenu({
-  sort,
-  minimumSupport,
-  methodCount,
-  onSortChange,
-  onMinimumSupportChange,
-}: {
-  sort: EdgeExplorerSort;
-  minimumSupport: number;
-  methodCount: number;
-  onSortChange: (value: EdgeExplorerSort) => void;
-  onMinimumSupportChange: (value: number) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  const sortLabels: Record<EdgeExplorerSort, string> = {
-    confidence: "Confidence",
-    evidence: "Evidence",
-    support: "Support",
-    edge: "Gene name",
-  };
-  const comparesMethods = methodCount > 1;
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setIsOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setIsOpen((current) => !current)}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-label={`Edge explorer settings: ${sortLabels[sort]}${
-          comparesMethods
-            ? `, ${minimumSupport} or more supporting methods`
-            : ""
-        }`}
-        className={`inline-flex h-10 items-center gap-2 rounded-full border bg-white px-4 text-sm font-semibold transition ${
-          isOpen
-            ? "border-[#1b75a6]/40 text-[#1b75a6] ring-4 ring-[#1b75a6]/[0.06]"
-            : "border-slate-200 text-slate-600 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
-        }`}
-      >
-        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
-          <path
-            d="M4 6h5m3 0h4M4 14h3m3 0h6"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <circle cx="10.5" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="8.5" cy="14" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-        <span className="whitespace-nowrap">
-          {sortLabels[sort]}
-          {comparesMethods ? ` · ≥${minimumSupport}` : ""}
-        </span>
-        <svg
-          viewBox="0 0 16 16"
-          className={`h-3.5 w-3.5 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="m3.5 6 4.5 4 4.5-4"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-      {isOpen ? (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-40 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/15"
-        >
-          <SettingsSegmentGroup
-            label="Rank edges by"
-            value={sort}
-            options={[
-              { value: "confidence", label: "Confidence" },
-              { value: "evidence", label: "Evidence" },
-              { value: "support", label: "Support" },
-              { value: "edge", label: "Gene name" },
-            ]}
-            onChange={(value) => onSortChange(value as EdgeExplorerSort)}
-          />
-          {comparesMethods ? (
-            <div className="mt-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                Minimum method support
-              </p>
-              <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-lg bg-slate-100 p-1">
-                {Array.from({ length: methodCount }).map((_, index) => {
-                  const value = index + 1;
-                  const isActive = minimumSupport === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => onMinimumSupportChange(value)}
-                      aria-pressed={isActive}
-                      className={`rounded-md px-2 py-1.5 text-xs font-semibold transition ${
-                        isActive
-                          ? "bg-white text-[#1b75a6] shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      {value}+
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-            <span className="text-xs font-medium text-slate-400">
-              {comparesMethods
-                ? "Independent of Network filters"
-                : "Uses the complete saved ranking"}
-            </span>
-            <button
-              type="button"
-              disabled={sort === "confidence" && minimumSupport === 1}
-              onClick={() => {
-                onSortChange("confidence");
-                onMinimumSupportChange(1);
-              }}
-              className="text-xs font-semibold text-slate-500 transition hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:text-slate-300"
-            >
-              Restore defaults
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ConsensusEdgeExplorer({
-  rows,
-  activeAlgorithmIds,
-}: {
-  rows: AggregatedEdge[];
-  activeAlgorithmIds: string[];
-}) {
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<EdgeExplorerSort>("confidence");
-  const [minimumSupport, setMinimumSupport] = useState(1);
-  const [page, setPage] = useState(1);
-  const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
-  const [methodEvidencePopover, setMethodEvidencePopover] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
-  const methodEvidenceButtonRef = useRef<HTMLButtonElement | null>(null);
-  const methodEvidencePopoverRef = useRef<HTMLDivElement | null>(null);
-  const methodCount = Math.max(1, activeAlgorithmIds.length);
-  const comparesMethods = activeAlgorithmIds.length >= 2;
-
-  const filteredRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return rows
-      .filter((edge) => edge.count >= minimumSupport)
-      .filter(
-        (edge) =>
-          !normalizedQuery ||
-          edge.source.toLowerCase().includes(normalizedQuery) ||
-          edge.target.toLowerCase().includes(normalizedQuery) ||
-          edge.supportingAlgorithms.some((algorithmId) =>
-            algorithmId.toLowerCase().includes(normalizedQuery),
-          ),
-      )
-      .sort((first, second) => {
-        if (sort === "edge") {
-          return (
-            first.source.localeCompare(second.source) ||
-            first.target.localeCompare(second.target)
-          );
-        }
-        if (sort === "support") {
-          return (
-            second.count - first.count ||
-            second.confidence - first.confidence ||
-            first.rank - second.rank
-          );
-        }
-        if (sort === "evidence") {
-          return (
-            second.score - first.score ||
-            second.confidence - first.confidence ||
-            first.rank - second.rank
-          );
-        }
-        return (
-          second.confidence - first.confidence ||
-          second.score - first.score ||
-          first.rank - second.rank
-        );
-      });
-  }, [minimumSupport, query, rows, sort]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredRows.length / EDGE_EXPLORER_PAGE_SIZE),
-  );
-  const safePage = Math.min(page, totalPages);
-  const visibleRows = filteredRows.slice(
-    (safePage - 1) * EDGE_EXPLORER_PAGE_SIZE,
-    safePage * EDGE_EXPLORER_PAGE_SIZE,
-  );
-  // Ranks arrive as midranks, so a four-way tie for positions 1-4 reads as
-  // "2.5" and the table looks like it starts at 2.5. Recover the tie block from
-  // the group size and show it as a range instead.
-  const rankGroupSizes = useMemo(() => {
-    const counts = new Map<number, number>();
-    for (const edge of rows) {
-      counts.set(edge.rank, (counts.get(edge.rank) ?? 0) + 1);
-    }
-    return counts;
-  }, [rows]);
-
-  const formatRank = (rank: number) => {
-    const size = rankGroupSizes.get(rank) ?? 1;
-    const start = Math.round(rank - (size - 1) / 2);
-    const end = Math.round(rank + (size - 1) / 2);
-    return start === end ? `${start}` : `${start}–${end}`;
-  };
-
-  const selectedEdge =
-    filteredRows.find((edge) => edge.key === selectedEdgeKey) ?? null;
-  const methodEvidenceRows = useMemo(
-    () =>
-      selectedEdge
-        ? activeAlgorithmIds
-            .map((algorithmId) => ({
-              algorithmId,
-              evidence: selectedEdge.perAlgorithmScores[algorithmId] ?? 0,
-              supports:
-                selectedEdge.supportingAlgorithms.includes(algorithmId),
-            }))
-            .sort(
-              (first, second) =>
-                Number(second.supports) - Number(first.supports) ||
-                second.evidence - first.evidence ||
-                first.algorithmId.localeCompare(second.algorithmId),
-            )
-        : [],
-    [activeAlgorithmIds, selectedEdge],
-  );
-  const previewMethodEvidenceRows = methodEvidenceRows.slice(0, 3);
-  const remainingMethodCount = Math.max(0, methodEvidenceRows.length - 3);
-  const title =
-    comparesMethods
-      ? "Consensus edge explorer"
-      : "Ranked edge explorer";
-  const exportPrefix = comparesMethods ? "consensus" : "ranked";
-
-  const changeMinimumSupport = (value: number) => {
-    setMinimumSupport(value);
-    setPage(1);
-    setSelectedEdgeKey(null);
-    setMethodEvidencePopover(null);
-  };
-  const changeSort = (value: EdgeExplorerSort) => {
-    setSort(value);
-    setPage(1);
-  };
-
-  useEffect(() => {
-    if (!methodEvidencePopover) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (
-        methodEvidenceButtonRef.current?.contains(target) ||
-        methodEvidencePopoverRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setMethodEvidencePopover(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMethodEvidencePopover(null);
-    };
-    const handleViewportChange = () => setMethodEvidencePopover(null);
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-    };
-  }, [methodEvidencePopover]);
-  const handleExport = () =>
-    downloadCsv(`${exportPrefix}-edge-explorer.csv`, [
-      [
-        comparesMethods ? "consensus_rank" : "rank",
-        "source",
-        "target",
-        comparesMethods ? "consensus_evidence" : "evidence",
-        "bootstrap_confidence",
-        "bootstrap_scheme",
-        "bootstrap_selected_samples",
-        "bootstrap_samples",
-        "evidence_ci_lower",
-        "evidence_ci_upper",
-        "method_support",
-        "supporting_methods",
-        "direction",
-        "direction_confidence",
-        "sign",
-        "sign_stability",
-        "sign_coverage",
-        "signed_bootstrap_recoveries",
-        "sign_agreeing_recoveries",
-        "bootstrap_positive_probability",
-        "bootstrap_negative_probability",
-      ],
-      ...filteredRows.map((edge) => [
-        edge.rank,
-        edge.source,
-        edge.target,
-        edge.score.toFixed(3),
-        edge.confidence.toFixed(3),
-        edge.bootstrapVerified
-          ? "cell_bootstrap_with_replacement_v1"
-          : "legacy_subsampling",
-        edge.bootstrapSelectedRuns ?? "",
-        edge.bootstrapRunCount ?? "",
-        edge.evidenceCiLower?.toFixed(3) ?? "",
-        edge.evidenceCiUpper?.toFixed(3) ?? "",
-        edge.count,
-        edge.supportingAlgorithms.join("; "),
-        edge.direction === 0 ? "unknown" : "source_to_target",
-        edge.directionConfidence?.toFixed(3) ?? "",
-        edge.sign > 0
-          ? "activation"
-          : edge.sign < 0
-            ? "repression"
-            : "unsigned",
-        edge.signConfidence?.toFixed(3) ?? "",
-        edge.signCoverage.toFixed(3),
-        edge.bootstrapSignedSelectedRuns ?? "",
-        edge.bootstrapSignAgreeingRuns ?? "",
-        edge.bootstrapPositiveProbability?.toFixed(3) ?? "",
-        edge.bootstrapNegativeProbability?.toFixed(3) ?? "",
-      ]),
-    ]);
-
-  return (
-    <>
-      <Panel
-      title={title}
-      titleAction={
-        <button
-          type="button"
-          onClick={() => setIsHelpOpen(true)}
-          aria-label={`How to read the ${title.toLowerCase()}`}
-          aria-haspopup="dialog"
-          aria-controls="consensus-edge-explorer-help-title"
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-        >
-          ?
-        </button>
-      }
-      description={
-        comparesMethods
-          ? "Explore combined evidence across methods."
-          : "Explore the complete ranked edge evidence from the selected method."
-      }
-      aside={
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-          <div className="relative min-w-48 flex-1 sm:flex-none">
-            <svg
-              viewBox="0 0 20 20"
-              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              fill="none"
-              aria-hidden="true"
-            >
-              <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-              <path
-                d="m13.5 13.5 3 3"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-            <input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-                setSelectedEdgeKey(null);
-                setMethodEvidencePopover(null);
-              }}
-              placeholder="Search edges"
-              aria-label={comparesMethods ? "Search consensus edges" : "Search ranked edges"}
-              className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10 sm:w-52"
-            />
-          </div>
-          <EdgeExplorerSettingsMenu
-            sort={sort}
-            minimumSupport={minimumSupport}
-            methodCount={methodCount}
-            onSortChange={changeSort}
-            onMinimumSupportChange={changeMinimumSupport}
-          />
-          <DownloadMenu
-            ariaLabel={`Download ${title.toLowerCase()}`}
-            items={[
-              {
-                label: "Complete edge table",
-                format: "CSV",
-                description: "Exports all matching rows, not only this page.",
-                onSelect: handleExport,
-              },
-            ]}
-          />
-        </div>
-      }
-    >
-      {visibleRows.length ? (
-        <>
-          <div className="overflow-hidden rounded-xl border border-slate-200">
-            <div className="max-h-[42rem] overflow-auto">
-              <table
-                className={`w-full table-fixed text-left text-sm ${
-                  comparesMethods ? "min-w-[62rem]" : "min-w-[46rem]"
-                }`}
-              >
-                <colgroup>
-                  <col className="w-[5rem]" />
-                  <col className={comparesMethods ? "w-[28%]" : "w-[45%]"} />
-                  {comparesMethods ? <col className="w-[10%]" /> : null}
-                  <col className={comparesMethods ? "w-[10%]" : "w-[13%]"} />
-                  {comparesMethods ? <col className="w-[10%]" /> : null}
-                  <col className="w-[14%]" />
-                  <col className="w-[17%]" />
-                  <col className="w-[5%]" />
-                </colgroup>
-                <thead className="grn-table-header sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
-                  <tr>
-                    <th className="px-4 py-3 text-center">Rank</th>
-                    <th className="px-4 py-3">Regulation</th>
-                    {comparesMethods ? (
-                      <th
-                        className="cursor-help px-4 py-3 text-center"
-                        title="Mean normalized edge evidence across the selected methods."
-                      >
-                        Evidence
-                      </th>
-                    ) : null}
-                    <th
-                      className="cursor-help px-4 py-3 text-center"
-                      title={
-                        comparesMethods
-                          ? "Median genuine bootstrap recovery across supporting methods. Legacy results are identified in each row."
-                          : "Percentage of with-replacement cell-bootstrap samples that recovered this edge."
-                      }
-                    >
-                      Bootstrap confidence
-                    </th>
-                    {comparesMethods ? (
-                      <th className="px-4 py-3 text-center">Support</th>
-                    ) : null}
-                    <th
-                      className="cursor-help px-4 py-3 text-center"
-                      title="Confidence that the displayed source-to-target orientation is correct."
-                    >
-                      Direction confidence
-                    </th>
-                    <th
-                      className="cursor-help px-4 py-3 text-center"
-                      title="Predicted activation or repression, followed by agreement with that sign across signed bootstrap recoveries when available."
-                    >
-                      Regulatory sign
-                    </th>
-                    <th className="px-4 py-3 text-center">
-                      <span className="sr-only">Details</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {visibleRows.map((edge) => {
-                    const isSelected = edge.key === selectedEdgeKey;
-                    const detailId = `edge-evidence-${edge.key.replace(
-                      /[^a-zA-Z0-9_-]/g,
-                      "-",
-                    )}`;
-                    const toggleSelected = () => {
-                      setSelectedEdgeKey(isSelected ? null : edge.key);
-                      setMethodEvidencePopover(null);
-                    };
-                    const annotation =
-                      edge.sign > 0
-                        ? "Activation"
-                        : edge.sign < 0
-                          ? "Repression"
-                          : edge.direction === 0
-                            ? "Undirected"
-                            : "Unsigned";
-                    const signConfidencePercent =
-                      edge.sign !== 0 && edge.signConfidence !== null
-                        ? Math.round(edge.signConfidence * 100)
-                        : null;
-                    const directionConfidencePercent =
-                      edge.directionConfidence === null
-                        ? null
-                        : Math.round(edge.directionConfidence * 100);
-                    // The arrow always shows the plurality orientation, and
-                    // directionConfidence is |net vote| / denominator — a margin,
-                    // so a low value means the reporting methods are split, not
-                    // that the reverse wins. Coverage separates "split" from
-                    // "no method reported a direction at all".
-                    const directionCoveragePercent = Math.round(
-                      edge.directionCoverage * 100,
-                    );
-                    const directionUnsupported =
-                      directionConfidencePercent === null ||
-                      edge.directionCoverage < 0.5;
-                    const directionSplit =
-                      !directionUnsupported &&
-                      directionConfidencePercent !== null &&
-                      directionConfidencePercent < 50;
-                    const directionUncertain =
-                      !directionUnsupported &&
-                      directionConfidencePercent !== null &&
-                      directionConfidencePercent >= 50 &&
-                      directionConfidencePercent < 80;
-                    return (
-                      <Fragment key={edge.key}>
-                        <tr
-                          tabIndex={0}
-                          aria-expanded={isSelected}
-                          aria-controls={detailId}
-                          onClick={toggleSelected}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              toggleSelected();
-                            }
-                          }}
-                          className={`cursor-pointer transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087ead]/35 ${
-                            isSelected
-                              ? "bg-[#f2f9fc]"
-                              : "hover:bg-slate-50"
-                          }`}
-                        >
-                          <td className="whitespace-nowrap px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-400">
-                            {formatRank(edge.rank)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className="font-extrabold text-slate-900"
-                              title={
-                                directionSplit
-                                  ? `Direction unresolved: methods reporting direction are close to evenly split (${directionConfidencePercent}% margin)`
-                                  : directionUnsupported
-                                    ? `Only ${directionCoveragePercent}% of the supporting evidence comes from direction-aware methods`
-                                    : undefined
-                              }
-                            >
-                              {edge.source}
-                              <span
-                                className={`px-2 ${
-                                  directionSplit
-                                    ? "text-amber-600"
-                                    : directionUnsupported || directionUncertain
-                                      ? "text-slate-400"
-                                      : "text-[#087ead]"
-                                }`}
-                              >
-                                {directionUnsupported || directionSplit ? "⇢" : "→"}
-                              </span>
-                              {edge.target}
-                            </span>
-                          </td>
-                          {comparesMethods ? (
-                            <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-600">
-                              {edge.score.toFixed(3)}
-                            </td>
-                          ) : null}
-                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-700">
-                            <span
-                              title={
-                                edge.bootstrapVerified
-                                  ? edge.bootstrapSelectedRuns !== undefined &&
-                                    edge.bootstrapRunCount !== undefined
-                                    ? `Recovered in ${edge.bootstrapSelectedRuns} of ${edge.bootstrapRunCount} bootstrap samples`
-                                    : "Median bootstrap recovery across supporting methods"
-                                  : "Legacy subsampling result; rerun to calculate genuine bootstrap confidence"
-                              }
-                            >
-                              {edge.bootstrapVerified
-                                ? `${Math.round(edge.confidence * 100)}%`
-                                : `${edge.confidence.toFixed(3)} legacy`}
-                            </span>
-                          </td>
-                          {comparesMethods ? (
-                            <td className="px-4 py-3 text-center">
-                              <span className="inline-flex min-w-14 items-center justify-center rounded-full bg-sky-50 px-2 py-1 text-[11px] font-extrabold text-[#087ead]">
-                                {edge.count}/{methodCount}
-                              </span>
-                            </td>
-                          ) : null}
-                          <td className="px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-700">
-                            {directionUnsupported ? (
-                              <span
-                                className="font-medium text-slate-400"
-                                title={`Only ${directionCoveragePercent}% of the supporting evidence comes from direction-aware methods`}
-                              >
-                                no direction data
-                              </span>
-                            ) : directionSplit ? (
-                              <span
-                                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700"
-                                title="Direction unresolved: the methods reporting direction are close to evenly split"
-                              >
-                                <svg
-                                  viewBox="0 0 16 16"
-                                  className="h-3 w-3 shrink-0"
-                                  aria-hidden="true"
-                                >
-                                  <path
-                                    d="M8 2.5 15 14H1L8 2.5Z"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinejoin="round"
-                                  />
-                                  <path
-                                    d="M8 6.5v3.2"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                  />
-                                  <circle cx="8" cy="11.6" r="0.7" fill="currentColor" />
-                                </svg>
-                                {directionConfidencePercent}%
-                              </span>
-                            ) : (
-                              `${directionConfidencePercent}%`
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                                edge.sign > 0
-                                  ? "bg-sky-50 text-[#0072B2]"
-                                  : edge.sign < 0
-                                    ? "bg-orange-50 text-[#D55E00]"
-                                    : "bg-slate-100 text-slate-600"
-                              }`}
-                            >
-                              {annotation}
-                              {signConfidencePercent !== null
-                                ? ` · ${signConfidencePercent}%`
-                                : edge.sign !== 0
-                                  ? " · no stability data"
-                                  : ""}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className="inline-flex h-8 w-8 items-center justify-center text-slate-400"
-                              aria-hidden="true"
-                            >
-                              <svg
-                                viewBox="0 0 16 16"
-                                className={`h-4 w-4 transition-transform ${
-                                  isSelected ? "rotate-180" : ""
-                                }`}
-                                fill="none"
-                                aria-hidden="true"
-                              >
-                                <path
-                                  d="m3.5 6 4.5 4 4.5-4"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            </span>
-                          </td>
-                        </tr>
-                        {isSelected && selectedEdge ? (
-                          <tr>
-                            <td
-                              id={detailId}
-                              colSpan={comparesMethods ? 8 : 6}
-                              className="bg-slate-50/60 px-4 py-3"
-                            >
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                                <div className="flex w-full flex-wrap items-center gap-1.5">
-                                  <span className="mr-1 font-semibold text-slate-500">
-                                    Method evidence
-                                  </span>
-                                  {previewMethodEvidenceRows.map(
-                                    (method, methodIndex) => (
-                                      <Fragment key={method.algorithmId}>
-                                        {methodIndex > 0 ? (
-                                          <span
-                                            className="mx-1 h-4 w-px bg-slate-200"
-                                            aria-hidden="true"
-                                          />
-                                        ) : null}
-                                        <span className="inline-flex min-w-0 items-baseline gap-2">
-                                          <strong
-                                            className={`max-w-32 truncate font-bold ${
-                                              method.supports
-                                                ? "text-slate-600"
-                                                : "text-slate-400"
-                                            }`}
-                                            title={method.algorithmId}
-                                          >
-                                            {method.algorithmId}
-                                          </strong>
-                                          <span
-                                            className={`tabular-nums ${
-                                              method.supports
-                                                ? "font-extrabold text-[#087ead]"
-                                                : "font-semibold text-slate-400"
-                                            }`}
-                                          >
-                                            {method.supports
-                                              ? method.evidence.toFixed(3)
-                                              : "No support"}
-                                          </span>
-                                        </span>
-                                      </Fragment>
-                                    ),
-                                  )}
-                                  {remainingMethodCount > 0 ? (
-                                    <>
-                                      <span
-                                        className="mx-1 h-4 w-px bg-slate-200"
-                                        aria-hidden="true"
-                                      />
-                                      <button
-                                        ref={methodEvidenceButtonRef}
-                                        type="button"
-                                        aria-haspopup="dialog"
-                                        aria-controls="method-evidence-popover"
-                                        aria-expanded={Boolean(
-                                          methodEvidencePopover,
-                                        )}
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          if (methodEvidencePopover) {
-                                            setMethodEvidencePopover(null);
-                                            return;
-                                          }
-                                          const rect =
-                                            event.currentTarget.getBoundingClientRect();
-                                          const width = Math.min(
-                                            352,
-                                            window.innerWidth - 32,
-                                          );
-                                          const estimatedHeight = Math.min(
-                                            320,
-                                            64 +
-                                              Math.ceil(
-                                                methodEvidenceRows.length / 2,
-                                              ) *
-                                                40,
-                                          );
-                                          const left = Math.min(
-                                            window.innerWidth - width - 16,
-                                            Math.max(16, rect.right - width),
-                                          );
-                                          const top =
-                                            window.innerHeight - rect.bottom >=
-                                            estimatedHeight + 12
-                                              ? rect.bottom + 8
-                                              : Math.max(
-                                                  16,
-                                                  rect.top -
-                                                    estimatedHeight -
-                                                    8,
-                                                );
-                                          setMethodEvidencePopover({
-                                            top,
-                                            left,
-                                            width,
-                                          });
-                                        }}
-                                        className="rounded-full px-2 py-1 font-bold text-[#087ead] transition hover:bg-sky-50"
-                                      >
-                                        +{remainingMethodCount} more
-                                      </button>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1 py-1 text-xs">
-            <p className="font-semibold text-slate-500">
-              <span className="font-bold text-slate-700">
-                {plural(filteredRows.length, "matching edge")}
-              </span>
-              <span className="mx-2 text-slate-300" aria-hidden="true">
-                ·
-              </span>
-              Page {safePage} of {totalPages}
-            </p>
-            <div className="flex items-center gap-2">
-              <div
-                className="inline-flex h-9 items-stretch overflow-hidden rounded-full border border-slate-200 bg-white"
-                role="group"
-                aria-label="Edge explorer pagination"
-              >
-                <button
-                  type="button"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  disabled={safePage === 1}
-                  className="inline-flex w-9 items-center justify-center text-slate-500 transition hover:bg-[#f2f9fc] hover:text-[#087ead] disabled:cursor-not-allowed disabled:text-slate-300"
-                  aria-label="Previous page"
-                  title="Previous page"
-                >
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="m9.5 4-4 4 4 4"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-                <span className="inline-flex min-w-16 items-center justify-center border-x border-slate-200 px-2 font-bold tabular-nums text-slate-600">
-                  {safePage} / {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
-                  disabled={safePage === totalPages}
-                  className="inline-flex w-9 items-center justify-center text-slate-500 transition hover:bg-[#f2f9fc] hover:text-[#087ead] disabled:cursor-not-allowed disabled:text-slate-300"
-                  aria-label="Next page"
-                  title="Next page"
-                >
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="m6.5 4 4 4-4 4"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
-          <p className="text-sm font-bold text-slate-800">
-            No edges match these controls
-          </p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Clear the search or choose a lower minimum support.
-          </p>
-        </div>
-      )}
-      </Panel>
-      {isHelpOpen && typeof document !== "undefined" ? (
-        <NetworkHelpModal onClose={() => setIsHelpOpen(false)} />
-      ) : null}
-      {methodEvidencePopover && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              id="method-evidence-popover"
-              ref={methodEvidencePopoverRef}
-              role="dialog"
-              aria-label="All method evidence"
-              className="fixed z-[100] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/15"
-              style={{
-                top: methodEvidencePopover.top,
-                left: methodEvidencePopover.left,
-                width: methodEvidencePopover.width,
-              }}
-            >
-              <div className="flex items-center justify-between gap-3 px-1 pb-2">
-                <div>
-                  <p className="text-sm font-extrabold text-slate-900">
-                    Method evidence
-                  </p>
-                  <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                    {plural(methodEvidenceRows.length, "selected method")}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMethodEvidencePopover(null)}
-                  aria-label="Close method evidence"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="m4 4 8 8m0-8-8 8"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-              <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
-                {methodEvidenceRows.map((method) => (
-                  <div
-                    key={method.algorithmId}
-                    className={`flex min-w-0 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs ${
-                      method.supports ? "bg-slate-50" : "bg-slate-50/60"
-                    }`}
-                  >
-                    <span
-                      className={`truncate font-bold ${
-                        method.supports ? "text-slate-700" : "text-slate-400"
-                      }`}
-                      title={method.algorithmId}
-                    >
-                      {method.algorithmId}
-                    </span>
-                    <span
-                      className={`shrink-0 tabular-nums ${
-                        method.supports
-                          ? "font-extrabold text-[#087ead]"
-                          : "font-semibold text-slate-400"
-                      }`}
-                    >
-                      {method.supports
-                        ? method.evidence.toFixed(3)
-                        : "No support"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
-  );
-}
-
 function AgreementView({
   algorithmEdgeRows,
   algorithmMetaMap,
   algorithmResults,
   activeAlgorithmIds,
-  edgeExplorerRows,
   selectedResultScopeId,
 }: {
   algorithmEdgeRows: Record<string, AggregatedEdge[]>;
   algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
   algorithmResults: Record<string, AlgorithmStoredResult>;
   activeAlgorithmIds: string[];
-  edgeExplorerRows: AggregatedEdge[];
   selectedResultScopeId: string;
 }) {
   const [topK, setTopK] = useState(100);
@@ -3157,7 +1521,6 @@ function AgreementView({
   const [agreementDisplay, setAgreementDisplay] =
     useState<AgreementDisplay>("matrix");
   const [isAgreementHelpOpen, setIsAgreementHelpOpen] = useState(false);
-  const overlapDiagramRef = useRef<HTMLDivElement | null>(null);
   const [upsetVisibleCount, setUpSetVisibleCount] = useState(
     UPSET_INTERSECTION_LIMIT,
   );
@@ -3234,263 +1597,61 @@ function AgreementView({
     [similarityMatrix],
   );
 
-  const orderedAlgorithmIds = useMemo(
-    () => seriateBySimilarity(eligibleAlgorithmIds, pairSimilarity),
+  // Rows and columns follow average-linkage clustering on 1 − similarity; the
+  // tree is drawn beside the heatmap and the UpSet rows use the same order.
+  const agreementTree = useMemo(
+    () => clusterMethods(eligibleAlgorithmIds, pairSimilarity),
     [eligibleAlgorithmIds, pairSimilarity],
   );
-  const handleDownloadOverlapSvg = () => {
-    const filename = `method-overlap-${overlapLabel.toLowerCase()}-${mode}-top-${topK}.svg`;
-    if (eligibleAlgorithmIds.length <= 3) {
-      const svg = overlapDiagramRef.current?.querySelector("svg");
-      if (svg) downloadSvgElement(svg, filename);
-      return;
-    }
-    downloadSvg(
-      filename,
-      createUpSetDownloadSvg(
-        orderedAlgorithmIds,
-        setIntersections.slice(0, upsetVisibleCount),
-      ),
-    );
-  };
-  const [showAllAgreementRows, setShowAllAgreementRows] = useState(false);
-  const shouldCollapseAgreementRows =
-    orderedAlgorithmIds.length > METHOD_AGREEMENT_ROW_LIMIT;
-  const visibleAgreementRowIds = shouldCollapseAgreementRows && !showAllAgreementRows
-    ? orderedAlgorithmIds.slice(0, METHOD_AGREEMENT_ROW_LIMIT)
-    : orderedAlgorithmIds;
-
-  // Colour is scaled to the off-diagonal values actually present. The diagonal
-  // is structurally 1 for every method, so including it would push every real
-  // value into a narrow, indistinguishable band of the ramp.
-  const agreementDomain = useMemo(() => {
-    const values = [...similarityMatrix.values()];
-    if (!values.length) return { min: 0, max: 1, span: 1 };
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = max - min;
-    return { min, max, span: span > 1e-6 ? span : 0 };
-  }, [similarityMatrix]);
-
-  const agreementFill = (value: number) => {
-    const ratio =
-      agreementDomain.span === 0
-        ? 0.5
-        : (value - agreementDomain.min) / agreementDomain.span;
-    // Capped at 0.85 so the darkest cell still clears 5:1 against slate-900 text.
-    return `rgba(8, 126, 173, ${0.12 + Math.max(0, Math.min(1, ratio)) * 0.73})`;
-  };
-
-  const handleDownloadAgreementPng = () => {
-    if (!orderedAlgorithmIds.length) return;
-
-    const width = 1600;
-    const margin = 56;
-    const tableY = margin;
-    const labelWidth = 220;
-    const headerHeight = 64;
-    const rowHeight = 64;
-    const cellGap = 6;
-    const tableWidth = width - margin * 2;
-    const cellWidth = (tableWidth - labelWidth) / orderedAlgorithmIds.length;
-    const tableHeight = headerHeight + orderedAlgorithmIds.length * rowHeight;
-    const height = tableY + tableHeight + 92;
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.scale(scale, scale);
-
-    const roundedRect = (
-      x: number,
-      y: number,
-      rectWidth: number,
-      rectHeight: number,
-      radius: number,
-    ) => {
-      const safeRadius = Math.min(radius, rectWidth / 2, rectHeight / 2);
-      context.beginPath();
-      context.moveTo(x + safeRadius, y);
-      context.lineTo(x + rectWidth - safeRadius, y);
-      context.quadraticCurveTo(
-        x + rectWidth,
-        y,
-        x + rectWidth,
-        y + safeRadius,
-      );
-      context.lineTo(x + rectWidth, y + rectHeight - safeRadius);
-      context.quadraticCurveTo(
-        x + rectWidth,
-        y + rectHeight,
-        x + rectWidth - safeRadius,
-        y + rectHeight,
-      );
-      context.lineTo(x + safeRadius, y + rectHeight);
-      context.quadraticCurveTo(
-        x,
-        y + rectHeight,
-        x,
-        y + rectHeight - safeRadius,
-      );
-      context.lineTo(x, y + safeRadius);
-      context.quadraticCurveTo(x, y, x + safeRadius, y);
-      context.closePath();
-    };
-
-    const fitLabel = (label: string, maximumWidth: number) => {
-      if (context.measureText(label).width <= maximumWidth) return label;
-      let fitted = label;
-      while (
-        fitted.length > 1 &&
-        context.measureText(`${fitted}…`).width > maximumWidth
-      ) {
-        fitted = fitted.slice(0, -1);
-      }
-      return `${fitted}…`;
-    };
-
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, width, height);
-    context.textBaseline = "middle";
-
-    context.fillStyle = "#f8fafc";
-    roundedRect(
-      margin + cellGap / 2,
-      tableY + cellGap / 2,
-      labelWidth - cellGap,
-      headerHeight - cellGap,
-      10,
-    );
-    context.fill();
-    context.fillStyle = "#475569";
-    context.font = `700 14px ${WEBSITE_FONT_FAMILY}`;
-    context.textAlign = "left";
-    context.fillText("Algorithm", margin + 18, tableY + headerHeight / 2);
-
-    orderedAlgorithmIds.forEach((algorithmId, columnIndex) => {
-      const cellX = margin + labelWidth + columnIndex * cellWidth;
-      context.fillStyle = "#f8fafc";
-      roundedRect(
-        cellX + cellGap / 2,
-        tableY + cellGap / 2,
-        cellWidth - cellGap,
-        headerHeight - cellGap,
-        10,
-      );
-      context.fill();
-      context.fillStyle = "#475569";
-      context.font = `700 13px ${WEBSITE_FONT_FAMILY}`;
-      context.textAlign = "center";
-      context.fillText(
-        fitLabel(algorithmId, cellWidth - 20),
-        cellX + cellWidth / 2,
-        tableY + headerHeight / 2,
-      );
-    });
-
-    orderedAlgorithmIds.forEach((rowId, rowIndex) => {
-      const rowTop = tableY + headerHeight + rowIndex * rowHeight;
-      context.fillStyle = "#475569";
-      context.font = `700 14px ${WEBSITE_FONT_FAMILY}`;
-      context.textAlign = "left";
-      context.fillText(
-        fitLabel(rowId, labelWidth - 30),
-        margin + 18,
-        rowTop + rowHeight / 2,
-      );
-
-      orderedAlgorithmIds.forEach((columnId, columnIndex) => {
-        if (columnIndex > rowIndex) return;
-        const cellX = margin + labelWidth + columnIndex * cellWidth;
-        const boxX = cellX + cellGap / 2;
-        const boxY = rowTop + cellGap / 2;
-        const boxWidth = cellWidth - cellGap;
-        const boxHeight = rowHeight - cellGap;
-
-        context.fillStyle =
-          rowId === columnId
-            ? "#f1f5f9"
-            : agreementFill(pairSimilarity(rowId, columnId));
-        roundedRect(boxX, boxY, boxWidth, boxHeight, 10);
-        context.fill();
-
-        if (rowId !== columnId) {
-          context.fillStyle = "#0f172a";
-          context.font = `800 14px ${WEBSITE_FONT_FAMILY}`;
-          context.textAlign = "center";
-          context.fillText(
-            pairSimilarity(rowId, columnId).toFixed(3),
-            cellX + cellWidth / 2,
-            rowTop + rowHeight / 2,
-          );
-        }
-      });
-    });
-
-    const footerY = tableY + tableHeight + 48;
-    context.fillStyle = "#64748b";
-    context.font = `600 13px ${WEBSITE_FONT_FAMILY}`;
-    context.textAlign = "left";
-    context.fillText(
-      `Top ${topK.toLocaleString()} · ${AGREEMENT_METRIC_SHORT_LABELS[metric]} · ${COMPARISON_MODE_LABELS[mode]}`,
-      margin,
-      footerY,
-    );
-
-    const legendRight = margin + tableWidth;
-    const gradientWidth = 180;
-    const gradientEnd = legendRight - 38;
-    const gradientStart = gradientEnd - gradientWidth;
-    context.font = `600 12px ${WEBSITE_FONT_FAMILY}`;
-    context.fillStyle = "#64748b";
-    context.textAlign = "right";
-    context.fillText(
-      agreementDomain.min.toFixed(2),
-      gradientStart - 12,
-      footerY,
-    );
-    const gradient = context.createLinearGradient(
-      gradientStart,
-      footerY,
-      gradientEnd,
-      footerY,
-    );
-    gradient.addColorStop(0, "rgba(8, 126, 173, 0.12)");
-    gradient.addColorStop(1, "rgba(8, 126, 173, 0.85)");
-    context.fillStyle = gradient;
-    roundedRect(gradientStart, footerY - 5, gradientWidth, 10, 5);
-    context.fill();
-    context.fillStyle = "#64748b";
-    context.textAlign = "left";
-    context.fillText(
-      agreementDomain.max.toFixed(2),
-      gradientEnd + 12,
-      footerY,
-    );
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `method-agreement-${metric}-${mode}-top-${topK}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, "image/png");
-  };
-
-  const selectedPair = useMemo(
+  const orderedAlgorithmIds = useMemo(
+    () => agreementTree?.members ?? eligibleAlgorithmIds,
+    [agreementTree, eligibleAlgorithmIds],
+  );
+  const heatmapSvgRef = useRef<SVGSVGElement | null>(null);
+  const overlapSvgRef = useRef<SVGSVGElement | null>(null);
+  const [showAgreementValues, setShowAgreementValues] = useState(true);
+  const [upsetByDegree, setUpsetByDegree] = useState(false);
+  const [selectedIntersectionKey, setSelectedIntersectionKey] = useState<string | null>(null);
+  // The detail panel is never empty: it starts on the most similar pair and on
+  // the largest intersection shared by two or more methods.
+  const selectedIntersection =
+    setIntersections.find((item) => item.key === selectedIntersectionKey) ??
+    setIntersections[0] ??
+    null;
+  const rankLookup = useMemo(
     () =>
-      requestedPair &&
-      eligibleAlgorithmIds.includes(requestedPair[0]) &&
-      eligibleAlgorithmIds.includes(requestedPair[1])
-        ? requestedPair
-        : null,
-    [eligibleAlgorithmIds, requestedPair],
+      new Map(
+        [...rankedKeys].map(([id, keys]) => [id, new Map(keys.map((key, index) => [key, index + 1]))]),
+      ),
+    [rankedKeys],
+  );
+  const handleDownloadOverlap = (format: "svg" | "png") => {
+    const svg = overlapSvgRef.current;
+    if (!svg) return;
+    const filename = `method-overlap-${overlapLabel.toLowerCase()}-${mode}-top-${topK}.${format}`;
+    if (format === "svg") downloadSvgFile(svg, filename);
+    else void downloadSvgPng(svg, filename, 3);
+  };
+  const handleDownloadAgreementPng = () => {
+    const svg = heatmapSvgRef.current;
+    if (!svg) return;
+    void downloadSvgPng(svg, `method-agreement-${metric}-${mode}-top-${topK}.png`, 3);
+  };
+
+  // Default selection: the first off-diagonal cell (first two methods in the
+  // heatmap order), at the top-left corner where the eye starts reading.
+  const defaultPair = useMemo<[string, string] | null>(
+    () => (orderedAlgorithmIds.length >= 2 ? [orderedAlgorithmIds[1], orderedAlgorithmIds[0]] : null),
+    [orderedAlgorithmIds],
+  );
+  const isDefaultPair = !(
+    requestedPair &&
+    eligibleAlgorithmIds.includes(requestedPair[0]) &&
+    eligibleAlgorithmIds.includes(requestedPair[1])
+  );
+  const selectedPair = useMemo(
+    () => (isDefaultPair ? defaultPair : requestedPair),
+    [isDefaultPair, defaultPair, requestedPair],
   );
 
   const pairDetails = useMemo(() => {
@@ -3509,31 +1670,104 @@ function AgreementView({
     };
   }, [rankedKeys, selectedPair]);
 
-  const pairDetailGroups = pairDetails
-    ? [
-        {
-          key: "shared" as const,
-          label: "Shared",
-          values: pairDetails.shared,
-          dotClass: "bg-teal-500",
-        },
-        {
-          key: "first" as const,
-          label: `${pairDetails.firstId} only`,
-          values: pairDetails.firstOnly,
-          dotClass: "bg-sky-500",
-        },
-        {
-          key: "second" as const,
-          label: `${pairDetails.secondId} only`,
-          values: pairDetails.secondOnly,
-          dotClass: "bg-violet-500",
-        },
-      ]
-    : [];
-  const activePairDetailGroup =
-    pairDetailGroups.find((group) => group.key === pairDetailGroup) ??
-    pairDetailGroups[0];
+  // Sign and direction agreement for the selected pair, from each method's own
+  // top-K rows: a shared edge "agrees in sign" when both methods give it the
+  // same nonzero sign; a gene pair "agrees in direction" when both directed
+  // methods link it with the same orientation(s).
+  const pairEvidence = useMemo(() => {
+    if (!pairDetails) return null;
+    const { firstId, secondId } = pairDetails;
+    const first = topRowsByKey(algorithmEdgeRows[firstId] ?? [], mode, topK);
+    const second = topRowsByKey(algorithmEdgeRows[secondId] ?? [], mode, topK);
+    const signIn = (rows: Map<string, AggregatedEdge[]>, key: string) => rows.get(key)?.[0]?.sign ?? 0;
+    const hasSigns = (rows: Map<string, AggregatedEdge[]>) => [...rows.values()].some((list) => list.some((edge) => edge.sign !== 0));
+    const firstSigned = hasSigns(first);
+    const secondSigned = hasSigns(second);
+    let signCompared = 0;
+    let signSame = 0;
+    pairDetails.shared.forEach((key) => {
+      const a = signIn(first, key);
+      const b = signIn(second, key);
+      if (a && b) {
+        signCompared += 1;
+        if (a === b) signSame += 1;
+      }
+    });
+    const bothDirected = (algorithmMetaMap.get(firstId)?.directed ?? true) && (algorithmMetaMap.get(secondId)?.directed ?? true);
+    const orientations = (rows: Map<string, AggregatedEdge[]>) => {
+      const byPair = new Map<string, Set<string>>();
+      rows.forEach((list) =>
+        list.forEach((edge) => {
+          if (edge.source === edge.target) return;
+          const pair = [edge.source, edge.target].sort().join("\u0000");
+          const set = byPair.get(pair) ?? new Set<string>();
+          set.add(`${edge.source}\u0000${edge.target}`);
+          byPair.set(pair, set);
+        }),
+      );
+      return byPair;
+    };
+    let directionCompared = 0;
+    let directionSame = 0;
+    if (bothDirected) {
+      const a = orientations(first);
+      const b = orientations(second);
+      a.forEach((set, pair) => {
+        const other = b.get(pair);
+        if (!other) return;
+        directionCompared += 1;
+        if (set.size === other.size && [...set].every((value) => other.has(value))) directionSame += 1;
+      });
+    }
+    return {
+      firstSign: (key: string) => signIn(first, key),
+      secondSign: (key: string) => signIn(second, key),
+      showSigns: firstSigned || secondSigned,
+      bothSigned: firstSigned && secondSigned,
+      signCompared,
+      signSame,
+      bothDirected,
+      directionCompared,
+      directionSame,
+    };
+  }, [algorithmEdgeRows, algorithmMetaMap, mode, pairDetails, topK]);
+
+  // Key regulators: genes ranked by out-degree (directed) or degree
+  // (undirected) in each method's top-K edges, columns in heatmap order.
+  const regulatorRows = useMemo(
+    () =>
+      rankRegulators(
+        orderedAlgorithmIds,
+        (id) => algorithmEdgeRows[id] ?? [],
+        (id) => algorithmMetaMap.get(id)?.directed ?? true,
+        topK,
+      ),
+    [algorithmEdgeRows, algorithmMetaMap, orderedAlgorithmIds, topK],
+  );
+  const regulatorDirected = orderedAlgorithmIds.map((id) => algorithmMetaMap.get(id)?.directed ?? true);
+  const [requestedGene, setRequestedGene] = useState<string | null>(null);
+  const selectedRegulator =
+    regulatorRows.find((row) => row.gene === requestedGene) ?? regulatorRows[0] ?? null;
+  const isDefaultRegulator = !regulatorRows.some((row) => row.gene === requestedGene);
+  const regulatorSvgRef = useRef<SVGSVGElement | null>(null);
+  const regulatorCsvRows = () => [
+    ["gene", ...orderedAlgorithmIds.map((id) => `rank_${id}`), ...orderedAlgorithmIds.map((id) => `links_${id}`), "median_rank"],
+    ...regulatorRows.map((row) => [
+      row.gene,
+      ...row.ranks.map((rank) => rank ?? ""),
+      ...row.links,
+      formatRank(row.median),
+    ]),
+  ];
+  const handleDownloadRegulators = (format: "svg" | "png") => {
+    const svg = regulatorSvgRef.current;
+    if (!svg) return;
+    const filename = `key-regulators-top-${topK}.${format}`;
+    if (format === "svg") downloadSvgFile(svg, filename);
+    else void downloadSvgPng(svg, filename, 3);
+  };
+  const percent = (value: number, total: number) => `${Math.round((value / total) * 100)}%`;
+
   const selectedPairScore = pairDetails
     ? similarity(pairDetails.firstId, pairDetails.secondId)
     : null;
@@ -3587,9 +1821,9 @@ function AgreementView({
                 agreementDisplay === "matrix"
                   ? [
                       {
-                        label: "Matrix image",
+                        label: "Heatmap figure",
                         format: "PNG",
-                        description: "Current matrix, settings, and color scale.",
+                        description: "Clustered heatmap with its tree, at print resolution.",
                         onSelect: handleDownloadAgreementPng,
                       },
                       {
@@ -3616,11 +1850,16 @@ function AgreementView({
                     ]
                   : [
                       {
-                        label: `${overlapLabel} diagram`,
+                        label: `${overlapLabel} figure`,
+                        format: "PNG",
+                        description: "The figure as shown, at print resolution.",
+                        onSelect: () => handleDownloadOverlap("png"),
+                      },
+                      {
+                        label: `${overlapLabel} figure`,
                         format: "SVG",
-                        description:
-                          "Current diagram, intersection sizes, and method membership.",
-                        onSelect: handleDownloadOverlapSvg,
+                        description: "Editable vector version.",
+                        onSelect: () => handleDownloadOverlap("svg"),
                       },
                       {
                         label: "Intersection data",
@@ -3695,149 +1934,133 @@ function AgreementView({
             <div id="method-agreement-view" role="tabpanel">
             {agreementDisplay === "matrix" ? (
               <>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+              <div className="min-w-0">
             <div className="overflow-x-auto">
-              <table
-                className="w-full border-separate border-spacing-1.5"
-                style={{
-                  minWidth: `${METHOD_AGREEMENT_LABEL_WIDTH + orderedAlgorithmIds.length * METHOD_AGREEMENT_COLUMN_WIDTH}px`,
-                  tableLayout: "fixed",
-                }}
-              >
-                <thead className="grn-table-header">
-                  <tr>
-                    <th
-                      className="sticky left-0 z-30 rounded-l-lg bg-slate-50 px-3 py-2.5"
-                      style={{
-                        width: METHOD_AGREEMENT_LABEL_WIDTH,
-                      }}
-                    />
-                    {orderedAlgorithmIds.map((algorithmId) => (
-                      <th
-                        key={algorithmId}
-                        className="truncate px-3 py-2.5 text-center"
-                        style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
-                        title={algorithmId}
-                      >
-                        {algorithmId}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleAgreementRowIds.map((rowId) => {
-                    const rowIndex = orderedAlgorithmIds.indexOf(rowId);
-                    return (
-                    <tr key={rowId}>
-                      <th
-                        className="sticky left-0 z-20 truncate bg-white pr-3 text-left text-xs font-bold text-slate-600"
-                        style={{
-                          width: METHOD_AGREEMENT_LABEL_WIDTH,
-                        }}
-                        title={rowId}
-                      >
-                        {rowId}
-                      </th>
-                      {orderedAlgorithmIds.map((columnId, columnIndex) => {
-                        // Symmetric, so the upper half is redundant rather than
-                        // missing: leave it empty instead of marking it "—".
-                        if (columnIndex > rowIndex) {
-                          return (
-                            <td
-                              key={columnId}
-                              className="h-12"
-                              style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
-                            />
-                          );
-                        }
-                        // The diagonal is 1 by construction; show it as the
-                        // matrix's spine, not as a result.
-                        if (rowId === columnId) {
-                          return (
-                            <td
-                              key={columnId}
-                              style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
-                            >
-                              <div
-                                className="h-12 w-full rounded-lg bg-slate-100"
-                                title={`${rowId} compared with itself`}
-                              />
-                            </td>
-                          );
-                        }
-                        const value = pairSimilarity(rowId, columnId);
-                        const isSelected =
-                          selectedPair?.[0] === columnId &&
-                          selectedPair?.[1] === rowId;
-                        return (
-                          <td
-                            key={columnId}
-                            style={{ width: METHOD_AGREEMENT_COLUMN_WIDTH }}
-                          >
-                            <button
-                              type="button"
-                              aria-pressed={isSelected}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setRequestedPair(null);
-                                  return;
-                                }
-                                setPairDetailGroup("shared");
-                                setRequestedPair([columnId, rowId]);
-                              }}
-                              className={`h-12 w-full rounded-lg text-center text-xs font-extrabold text-slate-900 transition ${
-                                isSelected
-                                  ? "ring-2 ring-[#087ead] ring-offset-2"
-                                  : "ring-offset-2 hover:ring-2 hover:ring-[#087ead]/40"
-                              }`}
-                              style={{ backgroundColor: agreementFill(value) }}
-                              title={`${rowId} vs ${columnId}: ${value.toFixed(3)}`}
-                            >
-                              {value.toFixed(3)}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-              {shouldCollapseAgreementRows ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAllAgreementRows((visible) => !visible)}
-                  aria-expanded={showAllAgreementRows}
-                  className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#087ead] transition hover:text-[#06688f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-                >
-                  {showAllAgreementRows
-                    ? "Show fewer rows"
-                    : `Show all rows (${orderedAlgorithmIds.length})`}
-                  <span aria-hidden="true" className="text-sm leading-none">
-                    {showAllAgreementRows ? "▴" : "▾"}
-                  </span>
-                </button>
-              ) : (
-                <span />
-              )}
-              {/* Scaled to the values present, so the shading is readable. */}
-              <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-                <span className="tabular-nums">
-                  {agreementDomain.min.toFixed(2)}
-                </span>
-                <span
-                  className="h-2.5 w-28 rounded-full"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, rgba(8,126,173,0.12), rgba(8,126,173,0.85))",
+              {agreementTree ? (
+                <AgreementHeatmap
+                  svgRef={heatmapSvgRef}
+                  tree={agreementTree}
+                  similarity={pairSimilarity}
+                  sizeOf={(id) => rankedKeys.get(id)?.length ?? 0}
+                  topK={topK}
+                  metricLabel={AGREEMENT_METRIC_SHORT_LABELS[metric]}
+                  showValues={showAgreementValues}
+                  selectedPair={selectedPair}
+                  onSelectPair={(pair) => {
+                    if (pair) setPairDetailGroup("shared");
+                    setRequestedPair(pair);
                   }}
-                  aria-hidden="true"
                 />
-                <span className="tabular-nums">
-                  {agreementDomain.max.toFixed(2)}
-                </span>
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <p>
+                Selected pair outlined; click any cell to compare another pair. Rows and columns ordered by
+                average-linkage clustering on 1 − {AGREEMENT_METRIC_SHORT_LABELS[metric]}.
+              </p>
+              <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
+                <input
+                  id="agreement-show-values"
+                  type="checkbox"
+                  checked={showAgreementValues}
+                  onChange={(event) => setShowAgreementValues(event.target.checked)}
+                  className="accent-[#087ead]"
+                />
+                Show values
+              </label>
+            </div>
               </div>
+              {pairDetails ? (
+                <AgreementDetailPanel
+                  eyebrow="Selected pair"
+                  plotTop={heatmapPlotTop(orderedAlgorithmIds)}
+                  selectionKey={pairDetails.firstId + "|" + pairDetails.secondId}
+                  title={`${pairDetails.firstId} × ${pairDetails.secondId}`}
+                  subtitle={`Top ${topK.toLocaleString()} edges · ${COMPARISON_MODE_LABELS[mode]}`}
+                  stats={[
+                    { label: AGREEMENT_METRIC_SHORT_LABELS[metric], value: (selectedPairScore ?? 0).toFixed(2) },
+                    { label: "Shared", value: pairDetails.shared.length.toLocaleString() },
+                    { label: "Distinct", value: (pairDetails.shared.length + pairDetails.firstOnly.length + pairDetails.secondOnly.length).toLocaleString() },
+                  ]}
+                  proportion={[
+                    { label: `${pairDetails.firstId} only`, count: pairDetails.firstOnly.length, tone: "left" },
+                    { label: "Shared", count: pairDetails.shared.length, tone: "core" },
+                    { label: `${pairDetails.secondId} only`, count: pairDetails.secondOnly.length, tone: "right" },
+                  ]}
+                  secondaryStats={
+                    pairEvidence
+                      ? [
+                          {
+                            label: "Same sign",
+                            value: pairEvidence.signCompared ? percent(pairEvidence.signSame, pairEvidence.signCompared) : "–",
+                            note: pairEvidence.signCompared
+                              ? `${pairEvidence.signSame} of ${pairEvidence.signCompared} shared edges with a sign`
+                              : pairEvidence.bothSigned
+                                ? "No shared edge with a sign"
+                                : "Not applicable: unsigned method",
+                          },
+                          {
+                            label: "Same direction",
+                            value: pairEvidence.directionCompared ? percent(pairEvidence.directionSame, pairEvidence.directionCompared) : "–",
+                            note: !pairEvidence.bothDirected
+                              ? "Not applicable: undirected method"
+                              : pairEvidence.directionCompared
+                                ? `${pairEvidence.directionSame} of ${pairEvidence.directionCompared} gene pairs linked by both`
+                                : "No gene pair linked by both",
+                          },
+                        ]
+                      : undefined
+                  }
+                  extraHeader={pairEvidence?.showSigns ? "Sign" : undefined}
+                  groups={[
+                    { key: "shared", label: "Shared", rows: pairDetails.shared },
+                    { key: "first", label: `${pairDetails.firstId} only`, rows: pairDetails.firstOnly },
+                    { key: "second", label: `${pairDetails.secondId} only`, rows: pairDetails.secondOnly },
+                  ].map((group) => ({
+                    ...group,
+                    rows: group.rows.map((edge) => ({
+                      edge,
+                      ranks: [rankLookup.get(pairDetails.firstId)?.get(edge) ?? null, rankLookup.get(pairDetails.secondId)?.get(edge) ?? null],
+                      extra: pairEvidence?.showSigns
+                        ? (() => {
+                            const a = pairEvidence.firstSign(edge);
+                            const b = pairEvidence.secondSign(edge);
+                            return {
+                              text: `${SIGN_SYMBOL[a]} / ${SIGN_SYMBOL[b]}`,
+                              warn: !!a && !!b && a !== b,
+                              title: `${pairDetails.firstId}: ${a > 0 ? "activation" : a < 0 ? "repression" : "no sign"} · ${pairDetails.secondId}: ${b > 0 ? "activation" : b < 0 ? "repression" : "no sign"}`,
+                            };
+                          })()
+                        : undefined,
+                    })),
+                  }))}
+                  activeGroup={pairDetailGroup}
+                  onGroupChange={(key) => setPairDetailGroup(key as PairDetailGroup)}
+                  rankHeaders={[pairDetails.firstId, pairDetails.secondId]}
+                  onReset={isDefaultPair ? undefined : () => setRequestedPair(null)}
+                  resetLabel="Reset"
+                  onDownload={() =>
+                    downloadCsv(`pair-${pairDetails.firstId}-${pairDetails.secondId}-top-${topK}.csv`, [
+                      ["group", "edge", `rank_${pairDetails.firstId}`, `rank_${pairDetails.secondId}`, `sign_${pairDetails.firstId}`, `sign_${pairDetails.secondId}`],
+                      ...[
+                        ["shared", pairDetails.shared],
+                        [`${pairDetails.firstId}_only`, pairDetails.firstOnly],
+                        [`${pairDetails.secondId}_only`, pairDetails.secondOnly],
+                      ].flatMap(([group, edges]) =>
+                        (edges as string[]).map((edge) => [
+                          group as string,
+                          edge,
+                          rankLookup.get(pairDetails.firstId)?.get(edge) ?? "",
+                          rankLookup.get(pairDetails.secondId)?.get(edge) ?? "",
+                          pairEvidence?.firstSign(edge) ?? 0,
+                          pairEvidence?.secondSign(edge) ?? 0,
+                        ]),
+                      ),
+                    ])
+                  }
+                />
+              ) : null}
             </div>
             {omittedAlgorithmIds.length ? (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
@@ -3847,166 +2070,6 @@ function AgreementView({
                   : "These methods do not report direction."}
               </p>
             ) : null}
-            {pairDetails && activePairDetailGroup ? (
-              <section
-                className="mt-5 border-t border-slate-200 pt-5"
-                aria-label={`${pairDetails.firstId} and ${pairDetails.secondId} comparison details`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#087ead]">
-                      Pair inspection
-                    </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <h4 className="text-base font-extrabold text-slate-950">
-                        {pairDetails.firstId} vs {pairDetails.secondId}
-                      </h4>
-                      <span className="inline-flex items-center rounded-full bg-[#f2f9fc] px-2.5 py-1 text-xs font-bold tabular-nums text-[#087ead]">
-                        {selectedPairScore?.toFixed(3)}{" "}
-                        {AGREEMENT_METRIC_SHORT_LABELS[metric]}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Top {topK.toLocaleString()} ·{" "}
-                      {COMPARISON_MODE_LABELS[mode]}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <DownloadMenu
-                      label="Download"
-                      ariaLabel="Download algorithm pair comparison"
-                      items={[
-                        {
-                          label: "Pair comparison",
-                          format: "CSV",
-                          onSelect: () =>
-                            downloadCsv("algorithm-pair-comparison.csv", [
-                          ["group", "edge"],
-                          ...pairDetails.shared.map((key) => ["shared", key]),
-                          ...pairDetails.firstOnly.map((key) => [
-                            `${pairDetails.firstId}_only`,
-                            key,
-                          ]),
-                          ...pairDetails.secondOnly.map((key) => [
-                            `${pairDetails.secondId}_only`,
-                            key,
-                          ]),
-                            ]),
-                        },
-                      ]}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setRequestedPair(null)}
-                      aria-label="Close comparison details"
-                      title="Close comparison details"
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead]"
-                    >
-                      <svg
-                        viewBox="0 0 16 16"
-                        className="h-3.5 w-3.5"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="m4 4 8 8m0-8-8 8"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  className="mt-4 flex w-full rounded-xl bg-slate-100 p-1"
-                  role="tablist"
-                  aria-label="Pair comparison edge groups"
-                >
-                  {pairDetailGroups.map((group) => {
-                    const isActive = group.key === activePairDetailGroup.key;
-                    return (
-                      <button
-                        key={group.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        aria-controls="pair-inspection-edge-list"
-                        onClick={() => setPairDetailGroup(group.key)}
-                        className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition ${
-                          isActive
-                            ? "bg-white text-slate-900 shadow-sm"
-                            : "text-slate-500 hover:text-slate-700"
-                        }`}
-                      >
-                        <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${group.dotClass}`}
-                        />
-                        <span className="truncate">{group.label}</span>
-                        <span
-                          className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
-                            isActive
-                              ? "bg-[#f2f9fc] text-[#087ead]"
-                              : "bg-white/80 text-slate-500"
-                          }`}
-                        >
-                          {group.values.length}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div
-                  id="pair-inspection-edge-list"
-                  role="tabpanel"
-                  className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2 w-2 rounded-full ${activePairDetailGroup.dotClass}`}
-                      />
-                      <h5 className="text-sm font-extrabold text-slate-900">
-                        {activePairDetailGroup.label}
-                      </h5>
-                    </div>
-                    <p className="text-xs font-medium text-slate-400">
-                      {activePairDetailGroup.values.length > 50
-                        ? `Showing first 50 of ${activePairDetailGroup.values.length.toLocaleString()}`
-                        : plural(
-                            activePairDetailGroup.values.length,
-                            "edge",
-                          )}
-                    </p>
-                  </div>
-                  {activePairDetailGroup.values.length ? (
-                    <div className="mt-2 grid max-h-52 gap-x-6 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-                      {activePairDetailGroup.values
-                        .slice(0, 50)
-                        .map((key) => (
-                          <div
-                            key={key}
-                            className="flex min-w-0 items-center gap-2 border-b border-slate-100 py-2 text-xs font-semibold text-slate-700"
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${activePairDetailGroup.dotClass}`}
-                            />
-                            <span className="truncate" title={key}>
-                              {key}
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  ) : (
-                    <p className="py-6 text-center text-sm text-slate-500">
-                      No edges in this group.
-                    </p>
-                  )}
-                </div>
-              </section>
-            ) : null}
               </>
             ) : (
               <section
@@ -4015,19 +2078,122 @@ function AgreementView({
               >
                 {setIntersections.length ? (
                   eligibleAlgorithmIds.length <= 3 ? (
-                    <VennDiagram
-                      algorithmIds={eligibleAlgorithmIds}
-                      intersections={setIntersections}
-                      diagramRef={overlapDiagramRef}
-                    />
+                    <div>
+                      <EulerDiagram
+                        svgRef={overlapSvgRef}
+                        methods={eligibleAlgorithmIds}
+                        intersections={setIntersections}
+                      />
+                      <p className="mt-2 text-center text-xs text-slate-500">
+                        Circle and overlap areas are proportional to edge counts; each region shows its count and share of all edges in the diagram.
+                      </p>
+                    </div>
                   ) : (
-                    <UpSetDiagram
-                      algorithmIds={orderedAlgorithmIds}
-                      intersections={setIntersections}
-                      diagramRef={overlapDiagramRef}
-                      visibleCount={upsetVisibleCount}
-                      onVisibleCountChange={setUpSetVisibleCount}
-                    />
+                    <div>
+                      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
+                        <span>Order bars by</span>
+                        <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Order intersections by">
+                          {([false, true] as const).map((degree) => (
+                            <button
+                              key={String(degree)}
+                              type="button"
+                              aria-pressed={upsetByDegree === degree}
+                              onClick={() => setUpsetByDegree(degree)}
+                              className={`rounded-md px-2.5 py-1 transition ${upsetByDegree === degree ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                            >
+                              {degree ? "number of methods" : "size"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+                        <div className="min-w-0">
+                      <div className="overflow-x-auto">
+                        <UpSetPlot
+                          svgRef={overlapSvgRef}
+                          methodOrder={orderedAlgorithmIds}
+                          intersections={setIntersections}
+                          visibleCount={upsetVisibleCount}
+                          byDegree={upsetByDegree}
+                          selectedKey={selectedIntersection?.key ?? null}
+                          onSelect={setSelectedIntersectionKey}
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs leading-5 text-slate-500">
+                        <p>Selected group in blue. Click any bar to see its edges.</p>
+                        {setIntersections.length > UPSET_INTERSECTION_LIMIT ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setUpSetVisibleCount(
+                                upsetVisibleCount >= setIntersections.length
+                                  ? UPSET_INTERSECTION_LIMIT
+                                  : Math.min(setIntersections.length, upsetVisibleCount + 10),
+                              )
+                            }
+                            className="font-bold text-[#087ead] transition hover:text-[#06688f]"
+                          >
+                            {upsetVisibleCount >= setIntersections.length
+                              ? `Show top ${UPSET_INTERSECTION_LIMIT}`
+                              : `Show ${Math.min(10, setIntersections.length - upsetVisibleCount)} more`}
+                          </button>
+                        ) : null}
+                      </div>
+                        </div>
+                        {selectedIntersection ? (
+                          <AgreementDetailPanel
+                            eyebrow={selectedIntersectionKey ? "Selected group" : "Selected · largest group"}
+                            plotTop={upsetPlotTop(upsetByDegree)}
+                            selectionKey={selectedIntersection.key}
+                            title={
+                              selectedIntersection.members.length === 1
+                                ? `${selectedIntersection.members[0]} only`
+                                : selectedIntersection.members.length === eligibleAlgorithmIds.length
+                                  ? `All ${eligibleAlgorithmIds.length} methods`
+                                  : selectedIntersection.members.length > eligibleAlgorithmIds.length / 2
+                                    ? `All except ${eligibleAlgorithmIds.filter((id) => !selectedIntersection.members.includes(id)).join(", ")}`
+                                    : selectedIntersection.members.join(" · ")
+                            }
+                            subtitle={`Edges picked by exactly these ${selectedIntersection.members.length === 1 ? "method" : `${selectedIntersection.members.length} methods`}, top ${topK.toLocaleString()}`}
+                            stats={[
+                              { label: "Edges", value: selectedIntersection.edges.length.toLocaleString() },
+                              { label: "Methods", value: `${selectedIntersection.members.length} of ${eligibleAlgorithmIds.length}` },
+                              {
+                                label: "Of all edges",
+                                value: `${Math.round((selectedIntersection.edges.length / Math.max(1, setIntersections.reduce((sum, item) => sum + item.edges.length, 0))) * 100)}%`,
+                              },
+                            ]}
+                            groups={[
+                              {
+                                key: "edges",
+                                label: "Edges",
+                                rows: selectedIntersection.edges
+                                  .map((edge) => {
+                                    const ranks = selectedIntersection.members.map((id) => rankLookup.get(id)?.get(edge) ?? null);
+                                    const known = ranks.filter((rank): rank is number => rank !== null);
+                                    return { edge, ranks: [known.length ? Math.round(median(known)) : null, known.length ? Math.min(...known) : null] };
+                                  })
+                                  .sort((first, second) => (first.ranks[0] ?? Infinity) - (second.ranks[0] ?? Infinity)),
+                              },
+                            ]}
+                            activeGroup="edges"
+                            onGroupChange={() => undefined}
+                            rankHeaders={["Median", "Best"]}
+                            onReset={selectedIntersectionKey ? () => setSelectedIntersectionKey(null) : undefined}
+                            resetLabel="Back to largest"
+                            onDownload={() =>
+                              downloadCsv(`intersection-${selectedIntersection.members.join("-")}-top-${topK}.csv`, [
+                                ["edge", ...selectedIntersection.members.map((id) => `rank_${id}`)],
+                                ...selectedIntersection.edges.map((edge) => [
+                                  edge,
+                                  ...selectedIntersection.members.map((id) => rankLookup.get(id)?.get(edge) ?? ""),
+                                ]),
+                              ])
+                            }
+                          />
+                        ) : null}
+                      </div>
+                    </div>
                   )
                 ) : (
                   <EmptyState
@@ -4055,15 +2221,98 @@ function AgreementView({
         )}
       </Panel>
       ) : null}
+      {activeAlgorithmIds.length >= 2 && orderedAlgorithmIds.length >= 2 && regulatorRows.length ? (
+        <Panel
+          title="Key regulators across methods"
+          description={`Each cell is a gene's rank as a regulator in one method's top ${topK.toLocaleString()} edges (1 = most links). Methods often agree more on which regulators matter than on single edges.`}
+          aside={
+            <DownloadMenu
+              ariaLabel="Download key regulators"
+              items={[
+                { label: "Regulator figure", format: "PNG", description: "The figure as shown, at print resolution.", onSelect: () => handleDownloadRegulators("png") },
+                { label: "Regulator figure", format: "SVG", description: "Editable vector version.", onSelect: () => handleDownloadRegulators("svg") },
+                {
+                  label: "Regulator ranks",
+                  format: "CSV",
+                  description: "Rank and link count per method for the genes shown.",
+                  onSelect: () => downloadCsv(`key-regulators-top-${topK}.csv`, regulatorCsvRows()),
+                },
+              ]}
+            />
+          }
+        >
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+            <div className="min-w-0">
+              <div className="overflow-x-auto">
+                <RegulatorHeatmap
+                  svgRef={regulatorSvgRef}
+                  methods={orderedAlgorithmIds}
+                  directed={regulatorDirected}
+                  rows={regulatorRows}
+                  topK={topK}
+                  selectedGene={selectedRegulator?.gene ?? null}
+                  onSelect={setRequestedGene}
+                />
+              </div>
+              <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+                Darker = ranked higher; blank = no edge in that method&apos;s top {topK.toLocaleString()}. Directed methods rank genes by
+                targets, undirected ones{regulatorDirected.some((value) => !value) ? ` (${orderedAlgorithmIds.filter((_, index) => !regulatorDirected[index]).join(", ")})` : ""} by
+                all connections. Rows sorted by median rank; columns follow the agreement heatmap. Top-edge limit is set in Method agreement.
+              </p>
+            </div>
+            {selectedRegulator ? (
+              <AgreementDetailPanel
+                eyebrow={isDefaultRegulator ? "Selected · top regulator" : "Selected regulator"}
+                plotTop={regulatorPlotTop(orderedAlgorithmIds)}
+                selectionKey={selectedRegulator.gene}
+                title={selectedRegulator.gene}
+                subtitle={`Top ${topK.toLocaleString()} edges per method`}
+                stats={[
+                  { label: "Median rank", value: formatRank(selectedRegulator.median) },
+                  { label: "Ranked by", value: `${selectedRegulator.rankedBy} of ${orderedAlgorithmIds.length}` },
+                  {
+                    label: "Best rank",
+                    value: String(Math.min(...selectedRegulator.ranks.map((rank) => rank ?? Infinity))).replace("Infinity", "–"),
+                  },
+                ]}
+                groups={[
+                  {
+                    key: "methods",
+                    label: "Methods",
+                    rows: orderedAlgorithmIds
+                      .map((id, index) => ({ edge: id, ranks: [selectedRegulator.ranks[index], selectedRegulator.links[index] || null] }))
+                      .sort((first, second) => (first.ranks[0] ?? Infinity) - (second.ranks[0] ?? Infinity)),
+                  },
+                ]}
+                activeGroup="methods"
+                onGroupChange={() => undefined}
+                firstHeader="Method"
+                monoFirst={false}
+                rankHeaders={["Rank", "Links"]}
+                footnote="Links = targets (directed) or connections (undirected)"
+                onReset={isDefaultRegulator ? undefined : () => setRequestedGene(null)}
+                resetLabel="Back to top"
+                onDownload={() =>
+                  downloadCsv(`regulator-${selectedRegulator.gene}-top-${topK}.csv`, [
+                    ["method", "directed", "rank", "links"],
+                    ...orderedAlgorithmIds.map((id, index) => [
+                      id,
+                      regulatorDirected[index] ? "yes" : "no",
+                      selectedRegulator.ranks[index] ?? "",
+                      selectedRegulator.links[index],
+                    ]),
+                  ])
+                }
+              />
+            ) : null}
+          </div>
+        </Panel>
+      ) : null}
       {isAgreementHelpOpen && typeof document !== "undefined" ? (
         <MethodAgreementHelpModal
           onClose={() => setIsAgreementHelpOpen(false)}
         />
       ) : null}
-      <ConsensusEdgeExplorer
-        rows={edgeExplorerRows}
-        activeAlgorithmIds={activeAlgorithmIds}
-      />
     </div>
   );
 }
@@ -4074,7 +2323,6 @@ export default function ResultsInsightsSection({
   algorithmMetaMap,
   algorithmResults,
   activeAlgorithmIds,
-  edgeExplorerRows,
   selectedResultScopeId,
   tasks,
   visualizationContext,
@@ -4088,7 +2336,6 @@ export default function ResultsInsightsSection({
         algorithmMetaMap={algorithmMetaMap}
         algorithmResults={algorithmResults}
         activeAlgorithmIds={activeAlgorithmIds}
-        edgeExplorerRows={edgeExplorerRows}
         selectedResultScopeId={selectedResultScopeId}
       />
     );
@@ -4103,7 +2350,7 @@ export default function ResultsInsightsSection({
     );
   }
   return (
-    <BenchmarkInsights
+    <BenchmarkWithStability
       groundTruth={visualizationContext?.ground_truth}
       loading={isContextLoading}
       algorithmMetaMap={algorithmMetaMap}
@@ -4113,4 +2360,19 @@ export default function ResultsInsightsSection({
       tasks={tasks}
     />
   );
+}
+
+/** Benchmark tab with the repeat-run stability it plots against accuracy. */
+function BenchmarkWithStability(props: Omit<ComponentProps<typeof BenchmarkInsights>, "stability">) {
+  const { algorithmResults, activeAlgorithmIds, selectedResultScopeId } = props;
+  const stability = useMemo(
+    () =>
+      buildStabilityRows(algorithmResults, activeAlgorithmIds, selectedResultScopeId).map((row) => ({
+        algorithmId: row.algorithmId,
+        medianRho: row.medianRho,
+        runCount: row.runCount,
+      })),
+    [algorithmResults, activeAlgorithmIds, selectedResultScopeId],
+  );
+  return <BenchmarkInsights {...props} stability={stability} />;
 }

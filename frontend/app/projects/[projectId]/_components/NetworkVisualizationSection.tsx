@@ -25,8 +25,8 @@ import NetworkLegend from "./NetworkLegend";
 import { openingEdgeBudget, selectOpeningEdges } from "./networkOpeningView";
 import NetworkCanvas, { fitNetwork } from "./network/NetworkCanvas";
 import { NetworkKey, NetworkLinkFilter } from "./network/Legend";
-import { DEFAULT_PALETTE, PALETTE_LABELS, type PaletteName } from "./network/theme";
-import { NODE_SIZE_OPTIONS, figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
+import { DEFAULT_PALETTE, type PaletteName } from "./network/theme";
+import { figureCounts, passesEffect, type EdgeWidthBy, type EffectFilter, type NodeSizeBy } from "./network/encoding";
 import { nodeDegrees } from "./network/model";
 import { NetworkViewCountsProvider, type NetworkViewCounts } from "./networkViewCounts";
 import NetworkInspectorPanel from "./network/Inspector";
@@ -223,15 +223,12 @@ export default function NetworkVisualizationSection(props: Props) {
   const [sizeBy, setSizeBy] = useState<NodeSizeBy>("all");
   const [widthBy, setWidthBy] = useState<EdgeWidthBy>("evidence");
   const [effect, setEffect] = useState<EffectFilter>("all");
-  // Display menu: occasional adjustments, out of the way until needed.
-  const [spacing, setSpacing] = useState(100);
-  // Temporary: both palettes stay available until the boss chooses.
-  const [figurePalette, setFigurePalette] = useState<PaletteName>(DEFAULT_PALETTE);
+  // Palette and spacing are fixed; node size and line width are chosen in the key.
+  const figurePalette: PaletteName = DEFAULT_PALETTE;
   const [layoutNonce, setLayoutNonce] = useState(0);
-  const [displayOpen, setDisplayOpen] = useState(false);
   // Side-by-side table: open by default, resizable, can be hidden.
   const [tableOpen, setTableOpen] = useState(true);
-  const [tableWidth, setTableWidth] = useState(480);
+  const [tableWidth, setTableWidth] = useState(420);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
   const splitRef = useRef<HTMLDivElement | null>(null);
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -243,15 +240,6 @@ export default function NetworkVisualizationSection(props: Props) {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
-  const displayMenuRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!displayOpen) return;
-    const close = (event: MouseEvent) => { if (!displayMenuRef.current?.contains(event.target as Node)) setDisplayOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setDisplayOpen(false); };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
-  }, [displayOpen]);
   // The rebuilt canvas is what the project page shows. The previous renderer
   // is still here, reachable with ?canvas=legacy, because the inspector,
   // Circos, figure export and the trajectory and perturbation views all reach
@@ -532,48 +520,6 @@ export default function NetworkVisualizationSection(props: Props) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {useNewCanvas && networkLayout !== "circos" && (
-                <div ref={displayMenuRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setDisplayOpen((open) => !open)}
-                    aria-expanded={displayOpen}
-                    aria-haspopup="dialog"
-                    className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                  >
-                    Display <span aria-hidden="true">▾</span>
-                  </button>
-                  {displayOpen && (
-                    <div className="display-menu" role="dialog" aria-label="Display options">
-                      <label>Node size
-                        <select value={effectiveSizeBy} onChange={(event) => setSizeBy(event.target.value as NodeSizeBy)} title={NODE_SIZE_OPTIONS[effectiveSizeBy].help}>
-                          {(Object.keys(NODE_SIZE_OPTIONS) as NodeSizeBy[]).map((key) => (
-                            <option key={key} value={key} disabled={key !== "all" && !edges.some((e) => hasDirection(e))}>{NODE_SIZE_OPTIONS[key].label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>Line width
-                        <select value={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"} onChange={(event) => setWidthBy(event.target.value as EdgeWidthBy)}>
-                          <option value="evidence">Evidence</option>
-                          <option value="support" disabled={selectedAlgorithmIds.length <= 1}>Method support</option>
-                        </select>
-                      </label>
-                      <label>Palette
-                        <select value={figurePalette} onChange={(event) => setFigurePalette(event.target.value as PaletteName)} title="Colour palette (temporary, while the two are compared)">
-                          {(Object.keys(PALETTE_LABELS) as PaletteName[]).map((key) => <option key={key} value={key}>{PALETTE_LABELS[key]}</option>)}
-                        </select>
-                      </label>
-                      <label>Spacing
-                        <span className="display-range">
-                          <input type="range" min="100" max="250" step="25" value={spacing} onChange={(event) => setSpacing(Number(event.target.value))} aria-label="Network spacing" />
-                          <output>{spacing}%</output>
-                        </span>
-                      </label>
-                      <button type="button" className="display-link" onClick={() => { setLayoutNonce((n) => n + 1); setDisplayOpen(false); }} title="Recompute the arrangement, e.g. after dragging genes">Reset layout</button>
-                    </div>
-                  )}
-                </div>
-              )}
               {tableMode && (
                 <button
                   type="button"
@@ -620,6 +566,17 @@ export default function NetworkVisualizationSection(props: Props) {
                       title="Fit view"
                     >
                       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
+                    </button>
+                  )}
+                  {useNewCanvas && (
+                    <button
+                      type="button"
+                      onClick={() => setLayoutNonce((n) => n + 1)}
+                      className="inline-flex h-full w-10 items-center justify-center border-l border-slate-200 text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                      aria-label="Reset layout"
+                      title="Reset layout: recompute the arrangement, e.g. after dragging genes"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M11.6 4.2A5.2 5.2 0 1 0 12.2 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12.4 1.2v3.4H9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                   )}
                 </div>
@@ -754,6 +711,10 @@ export default function NetworkVisualizationSection(props: Props) {
                 methodCount={selectedAlgorithmIds.length}
                 counts={figureKeyCounts}
                 palette={figurePalette}
+                sizeBy={effectiveSizeBy}
+                onSizeByChange={setSizeBy}
+                sizeChoice={edges.some((e) => hasDirection(e))}
+                onWidthByChange={setWidthBy}
                 signs={tableOpen ? {
                   activation: visibleEdges.some((e) => e.sign === 1),
                   repression: visibleEdges.some((e) => e.sign === -1),
@@ -778,7 +739,7 @@ export default function NetworkVisualizationSection(props: Props) {
           className={tableMode
             ? "grn-stage grn-split"
             : `grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
-          style={tableMode ? { gridTemplateColumns: tableOpen ? `minmax(0, 1fr) 7px min(${tableWidth}px, 45%)` : "minmax(0, 1fr)" } : undefined}
+          style={tableMode ? { gridTemplateColumns: tableOpen ? `minmax(0, 1fr) 7px min(${tableWidth}px, 40%)` : "minmax(0, 1fr)" } : undefined}
         >
           <div className="grn-graph-region">
             {!nodes.length ? (
@@ -824,7 +785,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSizeByChange={setSizeBy}
                 onWidthByChange={setWidthBy}
                 effect={effectiveEffect}
-                spacing={spacing}
+                spacing={100}
                 layoutNonce={layoutNonce}
                 palette={figurePalette}
                 hoveredEdgeKey={hoveredEdgeKey}

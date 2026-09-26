@@ -156,7 +156,7 @@ function Panel({
             {titleAction}
           </div>
           {description ? (
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+            <p className="mt-1 text-sm leading-6 text-slate-600">
               {description}
             </p>
           ) : null}
@@ -2043,6 +2043,189 @@ function PathBreakdown({
   );
 }
 
+export type StabilityPoint = { algorithmId: string; medianRho: number | null; runCount: number };
+
+/** Average ranks (ties share the mean rank), for Spearman's r. */
+function averageRanks(values: number[]) {
+  const order = values.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value);
+  const ranks = new Array<number>(values.length);
+  for (let i = 0; i < order.length; ) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1].value === order[i].value) j += 1;
+    for (let k = i; k <= j; k += 1) ranks[order[k].index] = (i + j) / 2 + 1;
+    i = j + 1;
+  }
+  return ranks;
+}
+
+function spearman(first: number[], second: number[]) {
+  if (first.length < 3) return null;
+  const a = averageRanks(first), b = averageRanks(second);
+  const mean = (a.length + 1) / 2;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    num += (a[i] - mean) * (b[i] - mean);
+    da += (a[i] - mean) ** 2;
+    db += (b[i] - mean) ** 2;
+  }
+  return da && db ? num / Math.sqrt(da * db) : null;
+}
+
+/** Stability (median pairwise ρ between bootstrap runs) against accuracy
+ * (AUPRC ratio on the reference network): one dot per algorithm. Top-right
+ * is both repeatable and accurate. The pairing follows BEELINE, which reports
+ * stability next to accuracy. */
+function StabilityAccuracyPanel({ rows, stability }: { rows: BenchmarkRow[]; stability: StabilityPoint[] }) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const byId = new Map(stability.map((item) => [item.algorithmId, item]));
+  const points = rows
+    .map((row) => ({ id: row.algorithmId, x: byId.get(row.algorithmId)?.medianRho ?? null, y: row.auprcRatio, runs: byId.get(row.algorithmId)?.runCount ?? 0 }))
+    .filter((point): point is { id: string; x: number; y: number; runs: number } => point.x !== null && Number.isFinite(point.y));
+  if (points.length < 2) return null;
+
+  const W = 560, H = 380, L = 58, R = 110, T = 14, B = 46;
+  const pw = W - L - R, ph = H - T - B;
+  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+  const xMin = Math.max(-1, Math.min(0.9, Math.floor((Math.min(...xs) - 0.03) * 10) / 10));
+  const xMax = 1;
+  const yMin = Math.min(0.9, Math.floor((Math.min(...ys) - 0.03) * 10) / 10);
+  const yMax = Math.max(1.1, Math.ceil((Math.max(...ys) + 0.03) * 10) / 10);
+  const sx = (v: number) => L + ((v - xMin) / (xMax - xMin)) * pw;
+  const sy = (v: number) => T + ((yMax - v) / (yMax - yMin)) * ph;
+  const tickStep = (span: number) => (span > 1 ? 0.2 : 0.1);
+  const ticks = (lo: number, hi: number) => {
+    const step = tickStep(hi - lo), out: number[] = [];
+    for (let t = Math.ceil(lo / step - 1e-9) * step; t <= hi + 1e-9; t += step) out.push(Number(t.toFixed(2)) || 0);
+    return out;
+  };
+  const r = spearman(xs, ys);
+
+  // Greedy label placement: right, left, above, below — first spot that
+  // overlaps neither another label nor a dot.
+  type Box = { x: number; y: number; w: number; h: number };
+  const hit = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const dots: Box[] = points.map((p) => ({ x: sx(p.x) - 4, y: sy(p.y) - 4, w: 8, h: 8 }));
+  const placed: Box[] = [];
+  const labels = [...points].sort((a, b) => b.y - a.y).map((p) => {
+    const cx = sx(p.x), cy = sy(p.y), w = p.id.length * 6.1, h = 11;
+    const options = [
+      { x: cx + 7, y: cy - h / 2, anchor: "start" as const },
+      { x: cx - 7 - w, y: cy - h / 2, anchor: "end" as const },
+      { x: cx - w / 2, y: cy - h - 6, anchor: "middle" as const },
+      { x: cx - w / 2, y: cy + 6, anchor: "middle" as const },
+      { x: cx + 7, y: cy - h - 3, anchor: "start" as const },
+      { x: cx + 7, y: cy + 3, anchor: "start" as const },
+    ];
+    const choice = options.find((o) => {
+      const box = { x: o.x, y: o.y, w, h };
+      return box.x >= L - 40 && box.x + w <= W - 4 && !placed.some((b) => hit(b, box)) && !dots.some((d) => hit(d, box));
+    }) ?? options[0];
+    placed.push({ x: choice.x, y: choice.y, w, h });
+    const tx = choice.anchor === "start" ? choice.x : choice.anchor === "end" ? choice.x + w : choice.x + w / 2;
+    return { id: p.id, tx, ty: choice.y + h / 2, anchor: choice.anchor };
+  });
+
+  const download = async (format: "png" | "svg") => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.querySelectorAll("title").forEach((node) => node.remove());
+    clone.querySelectorAll("[data-hl]").forEach((node) => {
+      if (node.tagName === "circle") node.setAttribute("fill", "#000");
+      else node.setAttribute("fill", "#333");
+    });
+    if (format === "svg") downloadSvg(clone, "stability-vs-accuracy.svg");
+    else await downloadSvgPng(clone, "stability-vs-accuracy.png", 4);
+  };
+
+  return (
+    <Panel
+      title="Stability vs accuracy"
+      description="Each dot is one algorithm: how consistent it is across bootstrap runs (left to right) against how well it recovers the reference network (bottom to top)."
+      aside={
+        <DownloadMenu
+          ariaLabel="Download stability vs accuracy"
+          items={[
+            { label: "Figure", format: "PNG", description: "Scatter plot at print resolution.", onSelect: () => void download("png") },
+            { label: "Figure", format: "SVG", description: "Editable vector version.", onSelect: () => void download("svg") },
+          ]}
+        />
+      }
+    >
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${W} ${H}`}
+          className="block w-full lg:max-w-[720px]"
+          fontFamily="Arial, Helvetica, sans-serif"
+          role="img"
+          aria-label="Scatter of repeat-run stability against AUPRC ratio, one dot per algorithm"
+          onMouseLeave={() => setHovered(null)}
+        >
+          <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
+          {/* random predictor */}
+          {yMin < 1 && yMax > 1 && (
+            <>
+              <line x1={L} x2={L + pw} y1={sy(1)} y2={sy(1)} stroke="#8a949c" strokeWidth="0.8" strokeDasharray="4 3" />
+              <text x={L + pw} y={sy(1) - 4} fontSize="10" textAnchor="end" fill="#8a949c">random predictor</text>
+            </>
+          )}
+          <line x1={L} x2={L} y1={T} y2={T + ph} stroke="#000" strokeWidth="0.8" />
+          <line x1={L} x2={L + pw} y1={T + ph} y2={T + ph} stroke="#000" strokeWidth="0.8" />
+          {ticks(yMin, yMax).map((t) => (
+            <g key={`y${t}`}>
+              <line x1={L - 4} x2={L} y1={sy(t)} y2={sy(t)} stroke="#000" strokeWidth="0.8" />
+              <text x={L - 7} y={sy(t)} fontSize="11" textAnchor="end" dominantBaseline="middle">{t.toFixed(1)}</text>
+            </g>
+          ))}
+          {ticks(xMin, xMax).map((t) => (
+            <g key={`x${t}`}>
+              <line x1={sx(t)} x2={sx(t)} y1={T + ph} y2={T + ph + 4} stroke="#000" strokeWidth="0.8" />
+              <text x={sx(t)} y={T + ph + 16} fontSize="11" textAnchor="middle">{t.toFixed(1)}</text>
+            </g>
+          ))}
+          <text x={L + pw / 2} y={H - 8} fontSize="11.5" textAnchor="middle">Stability · median pairwise Spearman ρ</text>
+          <text transform={`translate(16 ${T + ph / 2}) rotate(-90)`} fontSize="11.5" textAnchor="middle">Accuracy · AUPRC ratio</text>
+          {points.map((p) => {
+            const on = hovered === p.id;
+            return (
+              <g key={p.id} onMouseEnter={() => setHovered(p.id)}>
+                <title>{`${p.id}\nstability ρ ${p.x.toFixed(3)} (${p.runs} runs)\nAUPRC ratio ${p.y.toFixed(3)}×`}</title>
+                <circle cx={sx(p.x)} cy={sy(p.y)} r="10" fill="transparent" />
+                <circle cx={sx(p.x)} cy={sy(p.y)} r={on ? 5 : 4} fill={on ? "#087ead" : "#000"} data-hl={on ? "" : undefined} />
+              </g>
+            );
+          })}
+          {labels.map((label) => {
+            const on = hovered === label.id;
+            return (
+              <text key={label.id} x={label.tx} y={label.ty} fontSize="10" textAnchor={label.anchor} dominantBaseline="middle"
+                fill={on ? "#087ead" : "#333"} fontWeight={on ? 700 : 400} data-hl={on ? "" : undefined}
+                onMouseEnter={() => setHovered(label.id)}>{label.id}</text>
+            );
+          })}
+          {r !== null && (
+            <text x={L + pw} y={T + ph - 8} fontSize="10.5" textAnchor="end" fill="#333">Spearman r = {r.toFixed(2)}</text>
+          )}
+        </svg>
+        <div className="max-w-sm space-y-3 text-sm leading-6 text-slate-600">
+          <p className="font-bold text-slate-900">How to read it</p>
+          <p><span className="font-semibold text-slate-800">Top right</span>: repeatable and accurate — the most trustworthy networks.</p>
+          <p><span className="font-semibold text-slate-800">Bottom right</span>: consistent but inaccurate — the same answer every run, not matching the reference.</p>
+          <p><span className="font-semibold text-slate-800">Top left</span>: accurate on average, but individual runs vary.</p>
+          <p><span className="font-semibold text-slate-800">Below the dashed line</span>: no better than random on this reference.</p>
+          {r !== null && (
+            <p className="text-xs text-slate-500">
+              Spearman r = {r.toFixed(2)} across {points.length} algorithms: {r >= 0.3 ? "more stable algorithms tend to be more accurate here" : r <= -0.3 ? "more stable algorithms tend to be less accurate here" : "stability and accuracy are largely unrelated here"}.
+            </p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 export default function BenchmarkInsights({
   groundTruth,
   loading,
@@ -2051,6 +2234,7 @@ export default function BenchmarkInsights({
   activeAlgorithmIds,
   selectedResultScopeId,
   tasks,
+  stability = [],
 }: {
   groundTruth: GroundTruthContext | undefined;
   loading: boolean;
@@ -2059,6 +2243,8 @@ export default function BenchmarkInsights({
   activeAlgorithmIds: string[];
   selectedResultScopeId: string;
   tasks: ProjectTask[];
+  /** Repeat-run stability per algorithm (from the Comparison tab's data). */
+  stability?: StabilityPoint[];
 }) {
   const prChartRef = useRef<HTMLDivElement | null>(null);
   const rocChartRef = useRef<HTMLDivElement | null>(null);
@@ -2578,6 +2764,8 @@ export default function BenchmarkInsights({
           onClose={() => setIsBenchmarkHelpOpen(false)}
         />
       ) : null}
+
+      <StabilityAccuracyPanel rows={rows} stability={stability} />
 
       {/* Curve charts are square, so pairing them uses the width the square gives up. */}
       <Panel

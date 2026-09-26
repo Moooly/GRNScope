@@ -1643,7 +1643,7 @@ export default function TrajectoryInsights({
               ?
             </button>
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+          <p className="mt-1 text-sm leading-6 text-slate-600">
             {mode === "cells"
               ? `${trajectory.embedding?.method ?? "2D"} view of cells colored from early to late pseudotime.`
               : "Compare relative gene-expression shapes across pseudotime."}
