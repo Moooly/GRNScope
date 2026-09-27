@@ -2,11 +2,9 @@
 
 import {
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
-  type RefObject,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -18,14 +16,29 @@ import type {
   ProjectTask,
 } from "../_lib/types";
 import {
+  auprcUncertainty,
   benchmarkEdgeKey,
   computeBeelineBenchmarkMetrics,
+  consensusEdges,
+  type AuprcUncertainty,
+  type BeelineRankedEdge,
   normalizeReferenceSign,
   type BenchmarkCurvePoint,
   type ReferenceSign,
 } from "../_lib/benchmark";
 import { downloadSvg, downloadSvgPng } from "../_lib/downloads";
 import DownloadMenu from "./DownloadMenu";
+import {
+  CurveSmallMultiples,
+  DIRECTION_COLORS,
+  MotifHeatmap,
+  PATH_COLORS,
+  RuntimeScatter,
+  StackedBars,
+  SummaryHeatmap,
+  overallRanks,
+  type FigureRow,
+} from "./BenchmarkFigures";
 
 type GroundTruthContext = {
   available: boolean;
@@ -83,21 +96,10 @@ type BenchmarkRow = {
   directionAware: boolean;
   motifs: MotifCounts | null;
   pathCounts: PathCounts | null;
+  rankedEdges: BeelineRankedEdge[];
+  /** Top-K predictions (K = reference size) that link a reference gene pair. */
+  directionSign: { pairs: number; rightDirection: number; signCompared: number; rightSign: number };
 };
-// Okabe-Ito, extended to eight — the same set the trajectory charts use. The
-// previous palette paired #087ead with #0891b2 and pink/orange/green, which are
-// hard to separate under the common colour-vision deficiencies. That matters
-// here because overlapping PR curves are told apart by hue alone.
-const PALETTE = [
-  "#0072b2",
-  "#d55e00",
-  "#009e73",
-  "#cc79a7",
-  "#e69f00",
-  "#56b4e9",
-  "#5d3a9b",
-  "#7a4900",
-];
 
 function edgeKey(source: string, target: string) {
   return benchmarkEdgeKey(source, target);
@@ -402,13 +404,15 @@ function BenchmarkSummaryHelpModal({
           </section>
 
           <section className="mt-5 border-t border-slate-100 pt-5">
-            <h4 className="font-extrabold text-slate-900">Reading and downloading the table</h4>
+            <h4 className="font-extrabold text-slate-900">Reading and downloading the summary</h4>
             <p className="mt-2">
-              Click a metric header to sort descending. Ratio columns show the multiple of
-              their baseline in large type and the raw metric underneath; AUROC shows its
-              distance from 0.500. The CSV download preserves the raw metrics, ratios,
-              selected-edge counts, directionality, runtime, and evaluation-universe counts
-              for every displayed method in the current result scope.
+              Methods are ranked by their mean rank over AUPRC ratio, early precision ratio
+              and AUROC (the bar on the left). In each column, circle size and shade compare
+              the methods: larger and darker is better. Grey dots mark values no better than
+              random; n/a means the method reports no edges of that kind. The Consensus row is
+              the rank average of all selected methods, as in DREAM5. Hover a circle for the
+              exact value. The CSV keeps the raw metrics, ratios, confidence intervals,
+              p-values, selected-edge counts, directionality, stability and runtime.
             </p>
           </section>
         </div>
@@ -565,10 +569,11 @@ function CurvePerformanceHelpModal({
           <section className="mt-5 border-t border-slate-100 pt-5">
             <h4 className="font-extrabold text-slate-900">Interaction and downloads</h4>
             <p className="mt-2">
-              Hover a curve or select a method in the shared legend to highlight it in
-              both plots. PNG and SVG downloads restore every method to full visibility
-              and include a color-keyed metric legend. The PR export preserves the chosen
-              recall range; the CSV contains every plotted point for both curve types.
+              Each small panel shows one method in black (the consensus in blue) with every
+              other method in light grey behind it, so each curve can be read on its own and
+              against the field. Switch between precision–recall and ROC at the top. PNG and
+              SVG download the panels as shown; the CSV contains every plotted point for both
+              curve types.
             </p>
           </section>
         </div>
@@ -775,9 +780,9 @@ function AdditionalBenchmarkHelpModal({
                 <h4 className="font-extrabold text-slate-900">Reading and downloading the bars</h4>
                 <p className="mt-2">
                   Each bar is normalized to 100% of that method&apos;s selected predictions;
-                  segment width is its share of the bar. Hover a segment for the exact
-                  count and percentage. The PNG includes category definitions, the
-                  top-K/tie rule, and counts inside segments that are wide enough. The CSV
+                  segment width is its share of the bar, from exact reference edges (black)
+                  to wrong predictions with no reference path (lightest grey). Hover a segment
+                  for the exact count and percentage. The CSV
                   preserves every path-length bin separately, including paths of 4, 5, and
                   more than 5 steps.
                 </p>
@@ -788,58 +793,6 @@ function AdditionalBenchmarkHelpModal({
       </section>
     </div>,
     document.body,
-  );
-}
-
-type BenchmarkSortKey =
-  | "auprcRatio"
-  | "earlyPrecisionRatio"
-  | "auroc"
-  | "activationEpr"
-  | "inhibitionEpr";
-
-/** Header that explains its metric and both shows and controls the table sort. */
-function SortableMetricHeader({
-  children,
-  sortKey,
-  activeSort,
-  onSort,
-}: {
-  children: ReactNode;
-  sortKey: BenchmarkSortKey;
-  activeSort: BenchmarkSortKey;
-  onSort: (key: BenchmarkSortKey) => void;
-}) {
-  const isActive = activeSort === sortKey;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(sortKey)}
-      className={`group/sort inline-flex items-center gap-1.5 whitespace-nowrap text-left uppercase transition ${
-        isActive ? "text-slate-900" : "hover:text-slate-700"
-      }`}
-      title={`Sort by ${typeof children === "string" ? children : "this metric"}`}
-    >
-      <span>{children}</span>
-      <svg
-        viewBox="0 0 16 16"
-        className={`h-3 w-3 shrink-0 transition ${
-          isActive
-            ? "text-[#087ead]"
-            : "text-slate-300 group-hover/sort:text-slate-400"
-        }`}
-        fill="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M8 3.5v9M4.5 9l3.5 3.5L11.5 9"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
   );
 }
 
@@ -875,6 +828,8 @@ function motifCounts(edges: Array<{ source: string; target: string }>): MotifCou
     mutualInteractions,
   };
 }
+
+const CONSENSUS_ID = "Consensus";
 
 function resultEdgesForScope(
   result: AlgorithmStoredResult | undefined,
@@ -1015,1033 +970,43 @@ function benchmarkAlgorithm({
     directionAware: methodSupportsDirection,
     motifs: motifCounts(motifNetwork),
     pathCounts,
+    rankedEdges: metrics.rankedEdges,
+    directionSign: directionSignCounts(metrics.rankedEdges, truth, truthSigns),
   };
 }
 
-function LineChart({
-  series,
-  xLabel,
-  yLabel,
-  randomBaseline,
-  diagonalBaseline = false,
-  earlyRegionMax,
-  caption,
-  showLegend = true,
-  focusedSeries: controlledFocus,
-  onFocusedSeriesChange,
-}: {
-  series: Array<{
-    name: string;
-    points: CurvePoint[];
-    summary?: string;
-  }>;
-  xLabel: string;
-  yLabel: string;
-  randomBaseline?: number;
-  diagonalBaseline?: boolean;
-  /** When set, offers a toggle that zooms the x axis to [0, earlyRegionMax]. */
-  earlyRegionMax?: number;
-  caption?: string;
-  /** Off when a shared legend sits outside the chart. */
-  showLegend?: boolean;
-  /** Controlled so sibling charts can highlight the same method together. */
-  focusedSeries?: string | null;
-  onFocusedSeriesChange?: (name: string | null) => void;
-}) {
-  const [uncontrolledFocus, setUncontrolledFocus] = useState<string | null>(null);
-  const focusedSeries =
-    controlledFocus !== undefined ? controlledFocus : uncontrolledFocus;
-  const setFocusedSeries = (name: string | null) => {
-    if (onFocusedSeriesChange) onFocusedSeriesChange(name);
-    else setUncontrolledFocus(name);
-  };
-  const [zoomEarly, setZoomEarly] = useState(false);
-  const plotClipId = useId().replace(/:/g, "");
-  const [hoveredPoint, setHoveredPoint] = useState<{
-    series: string;
-    point: CurvePoint;
-    color: string;
-  } | null>(null);
-  // Precision and recall are the same kind of quantity on the same range, so
-  // the plot area is square: a unit on x covers the same distance as on y.
-  // This also puts the ROC "random classifier" diagonal back at a true 45deg.
-  const plotSize = 340;
-  const left = 56;
-  const right = 20;
-  const top = 18;
-  const bottom = 44;
-  const width = plotSize + left + right;
-  const height = plotSize + top + bottom;
-  const points = series.flatMap((item) => item.points);
-  if (!points.length) {
-    return (
-      <EmptyState
-        title="No curve data"
-        detail="The selected methods do not contain ranked edges for this scope."
-      />
-    );
-  }
-  const xMax =
-    zoomEarly && earlyRegionMax !== undefined ? earlyRegionMax : 1;
-  const xPosition = (value: number) => left + (value / xMax) * plotSize;
-  const yPosition = (value: number) => top + (1 - value) * plotSize;
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
-  // Nice round ticks for whatever x range is showing.
-  const xTicks = (() => {
-    if (xMax >= 1) return ticks;
-    const target = xMax / 5;
-    const magnitude = 10 ** Math.floor(Math.log10(target));
-    const step =
-      [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= target) ??
-      target;
-    const out: number[] = [];
-    for (let value = 0; value <= xMax + 1e-9; value += step) {
-      out.push(Number(value.toFixed(4)));
-    }
-    return out;
-  })();
-  const xTickDecimals = xMax >= 1 ? 2 : 3;
-  const hoveredX = hoveredPoint ? xPosition(hoveredPoint.point.x) : 0;
-  const hoveredY = hoveredPoint ? yPosition(hoveredPoint.point.y) : 0;
-  const tooltipWidth = 206;
-  const tooltipHeight = 52;
-  const tooltipX = hoveredPoint
-    ? hoveredX + tooltipWidth + 16 > width - right
-      ? Math.max(left, hoveredX - tooltipWidth - 12)
-      : hoveredX + 12
-    : 0;
-  const tooltipY = hoveredPoint
-    ? hoveredY - tooltipHeight - 12 < top
-      ? hoveredY + 12
-      : hoveredY - tooltipHeight - 12
-    : 0;
-  const exportLegendItems = [
-    ...series.map((item, index) => ({
-      name: item.name,
-      summary: item.summary,
-      color: PALETTE[index % PALETTE.length],
-      dashed: false,
-    })),
-    ...(randomBaseline !== undefined
-      ? [{
-          name: "Random precision",
-          summary: "Baseline " + randomBaseline.toFixed(3),
-          color: "#5fc8bd",
-          dashed: true,
-        }]
-      : []),
-    ...(diagonalBaseline
-      ? [{
-          name: "Random classifier",
-          summary: "Chance diagonal",
-          color: "#94a3b8",
-          dashed: true,
-        }]
-      : []),
-  ];
-  const exportLegendColumns = Math.min(2, exportLegendItems.length);
-  const exportLegendRows = Math.ceil(
-    exportLegendItems.length / Math.max(1, exportLegendColumns),
-  );
-  const exportLegendExtraHeight = 34 + exportLegendRows * 34;
-  const exportLegendColumnWidth =
-    (width - left - right) / Math.max(1, exportLegendColumns);
-
-  return (
-    <div className="relative">
-      {/* Fixed height so a chart with a zoom toggle still aligns with one without. */}
-      <div className="mb-2 flex min-h-9 flex-wrap items-center justify-between gap-2">
-        {caption ? (
-          <p className="text-xs font-bold text-slate-700">{caption}</p>
-        ) : (
-          <span />
-        )}
-        {earlyRegionMax !== undefined ? (
-          <div
-            className="inline-flex overflow-hidden rounded-full border border-slate-200 text-[11px] font-semibold"
-            role="group"
-            aria-label={`${xLabel} range`}
-          >
-            {[
-              { label: "Full range", value: false },
-              {
-                label: `Early ${xLabel.toLowerCase()} (0–${earlyRegionMax})`,
-                value: true,
-              },
-            ].map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                aria-pressed={zoomEarly === option.value}
-                onClick={() => setZoomEarly(option.value)}
-                className={`px-3 py-1.5 transition ${
-                  zoomEarly === option.value
-                    ? "bg-[#f2f9fc] text-[#087ead]"
-                    : "bg-white text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        role="img"
-        aria-label={`${yLabel} by ${xLabel}`}
-      >
-        {ticks.map((tick) => (
-          <g key={`y-${tick}`}>
-            <line
-              x1={left}
-              x2={width - right}
-              y1={yPosition(tick)}
-              y2={yPosition(tick)}
-              stroke="#e2e8f0"
-            />
-            <text
-              x={left - 10}
-              y={yPosition(tick) + 4}
-              textAnchor="end"
-              fill="#64748b"
-              fontSize="11"
-              fontWeight="600"
-            >
-              {tick.toFixed(2)}
-            </text>
-          </g>
-        ))}
-        {xTicks.map((tick) => (
-          <g key={`x-${tick}`}>
-            <line
-              x1={xPosition(tick)}
-              x2={xPosition(tick)}
-              y1={height - bottom}
-              y2={height - bottom + 5}
-              stroke="#94a3b8"
-            />
-            <text
-              x={xPosition(tick)}
-              y={height - bottom + 19}
-              textAnchor="middle"
-              fill="#64748b"
-              fontSize="11"
-              fontWeight="600"
-            >
-              {Number(tick.toFixed(xTickDecimals))}
-            </text>
-          </g>
-        ))}
-        <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="#94a3b8" />
-        <line
-          x1={left}
-          x2={width - right}
-          y1={height - bottom}
-          y2={height - bottom}
-          stroke="#94a3b8"
-        />
-        {/* Value is shown as a chip above the chart, so the line needs no label. */}
-        {randomBaseline !== undefined ? (
-          <line
-            x1={left}
-            x2={width - right}
-            y1={yPosition(randomBaseline)}
-            y2={yPosition(randomBaseline)}
-            stroke="#5fc8bd"
-            strokeDasharray="5 5"
-          />
-        ) : null}
-        {diagonalBaseline ? (
-          <line
-            x1={xPosition(0)}
-            x2={xPosition(1)}
-            y1={yPosition(0)}
-            y2={yPosition(1)}
-            stroke="#94a3b8"
-            strokeDasharray="5 5"
-          />
-        ) : null}
-        <defs>
-          <clipPath id={plotClipId}>
-            <rect
-              x={left}
-              y={top}
-              width={width - left - right}
-              height={height - top - bottom}
-            />
-          </clipPath>
-        </defs>
-        <g clipPath={`url(#${plotClipId})`}>
-        {series.map((item, index) => {
-          const isDimmed =
-            focusedSeries !== null && focusedSeries !== item.name;
-          const color = PALETTE[index % PALETTE.length];
-          const path = item.points
-            .map(
-              (point, pointIndex) =>
-                `${pointIndex ? "L" : "M"} ${xPosition(point.x)} ${yPosition(point.y)}`,
-            )
-            .join(" ");
-          return (
-            <path
-              key={item.name}
-              data-export-curve
-              d={path}
-              fill="none"
-              stroke={color}
-              strokeWidth={focusedSeries === item.name ? "4" : "2.75"}
-              opacity={isDimmed ? 0.16 : 1}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              className="cursor-pointer transition-opacity"
-              onPointerEnter={() => setFocusedSeries(item.name)}
-              onPointerLeave={() => {
-                setFocusedSeries(null);
-                setHoveredPoint(null);
-              }}
-            />
-          );
-        })}
-        {series.flatMap((item, index) => {
-          const color = PALETTE[index % PALETTE.length];
-          const step = Math.max(1, Math.ceil(item.points.length / 45));
-          return item.points
-            .filter((_, pointIndex) => pointIndex % step === 0)
-            .map((point, pointIndex) => (
-              <circle
-                key={`${item.name}-${pointIndex}`}
-                cx={xPosition(point.x)}
-                cy={yPosition(point.y)}
-                r="6"
-                fill="transparent"
-                className="cursor-crosshair"
-                onPointerEnter={() => {
-                  setFocusedSeries(item.name);
-                  setHoveredPoint({ series: item.name, point, color });
-                }}
-                onPointerLeave={() => setHoveredPoint(null)}
-              />
-            ));
-        })}
-        </g>
-        {hoveredPoint ? (
-          <g data-export-exclude pointerEvents="none">
-            <circle
-              cx={hoveredX}
-              cy={hoveredY}
-              r="4"
-              fill="white"
-              stroke={hoveredPoint.color}
-              strokeWidth="2"
-            />
-            {/* Light card, matching the tooltips on the trajectory charts. */}
-            <rect
-              x={tooltipX}
-              y={tooltipY}
-              width={tooltipWidth}
-              height={tooltipHeight}
-              rx="10"
-              fill="white"
-              stroke="#e2e8f0"
-            />
-            <circle
-              cx={tooltipX + 16}
-              cy={tooltipY + 17}
-              r="4"
-              fill={hoveredPoint.color}
-            />
-            <text
-              x={tooltipX + 26}
-              y={tooltipY + 21}
-              fill="#0f172a"
-              fontSize="11"
-              fontWeight="800"
-            >
-              {hoveredPoint.series}
-            </text>
-            <text
-              x={tooltipX + 12}
-              y={tooltipY + 40}
-              fill="#475569"
-              fontSize="10.5"
-              fontWeight="700"
-            >
-              {xLabel} {hoveredPoint.point.x.toFixed(3)}
-              <tspan fill="#cbd5e1"> · </tspan>
-              {yLabel} {hoveredPoint.point.y.toFixed(3)}
-            </text>
-          </g>
-        ) : null}
-        <text
-          x={(left + width - right) / 2}
-          y={height - 8}
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="12"
-          fontWeight="600"
-        >
-          {xLabel}
-        </text>
-        <text
-          x="14"
-          y={(top + height - bottom) / 2}
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="12"
-          fontWeight="600"
-          transform={`rotate(-90 14 ${(top + height - bottom) / 2})`}
-        >
-          {yLabel}
-        </text>
-        <g
-          data-export-only
-          data-export-extra-height={exportLegendExtraHeight}
-          style={{ display: "none" }}
-          aria-label="Chart legend"
-        >
-          <line
-            x1={left}
-            x2={width - right}
-            y1={height + 8}
-            y2={height + 8}
-            stroke="#e2e8f0"
-          />
-          {exportLegendItems.map((item, index) => {
-            const column = index % exportLegendColumns;
-            const row = Math.floor(index / exportLegendColumns);
-            const x = left + column * exportLegendColumnWidth;
-            const y = height + 34 + row * 34;
-            return (
-              <g key={`export-legend-${item.name}`} transform={`translate(${x} ${y})`}>
-                <line
-                  x1="0"
-                  x2="22"
-                  y1="-4"
-                  y2="-4"
-                  stroke={item.color}
-                  strokeWidth="3"
-                  strokeDasharray={item.dashed ? "5 4" : undefined}
-                  strokeLinecap="round"
-                />
-                <text x="30" y="0" fill="#334155" fontSize="10.5" fontWeight="700">
-                  {item.name}
-                </text>
-                {item.summary ? (
-                  <text x="30" y="14" fill="#64748b" fontSize="9.5" fontWeight="600">
-                    {item.summary}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-      {showLegend ? (
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {series.map((item, index) => (
-          <button
-            type="button"
-            key={item.name}
-            onClick={() =>
-              setFocusedSeries(focusedSeries === item.name ? null : item.name)
-            }
-            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-              focusedSeries === item.name
-                ? "border-[#087ead]/30 bg-[#f2f9fc] text-[#087ead]"
-                : focusedSeries
-                  ? "border-slate-200 text-slate-400"
-                  : "border-slate-200 text-slate-600 hover:border-[#087ead]/25"
-            }`}
-          >
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
-            />
-            {item.name}
-            {item.summary ? (
-              <span className="tabular-nums text-slate-400">{item.summary}</span>
-            ) : null}
-          </button>
-        ))}
-      </div>
-      ) : null}
-    </div>
-  );
+/** Direction and sign of the top-K predictions that touch a reference gene pair. */
+function directionSignCounts(
+  rankedEdges: BeelineRankedEdge[],
+  truth: Set<string>,
+  truthSigns: Map<string, ReferenceSign>,
+) {
+  const top = rankedEdges.filter((edge) => edge.score > 0).slice(0, truth.size);
+  let pairs = 0;
+  let rightDirection = 0;
+  let signCompared = 0;
+  let rightSign = 0;
+  top.forEach((ranked) => {
+    const key = edgeKey(ranked.source, ranked.target);
+    const reverse = edgeKey(ranked.target, ranked.source);
+    if (!truth.has(key) && !truth.has(reverse)) return;
+    pairs += 1;
+    if (!truth.has(key)) return;
+    rightDirection += 1;
+    const edge = ranked.edge as AlgorithmResultEdge;
+    const signedRuns = Number(edge.signed_selected_runs ?? 0);
+    const referenceSign = truthSigns.get(key) ?? 0;
+    if (!signedRuns || !referenceSign) return;
+    signCompared += 1;
+    const predicted = Number(edge.positive_selected_runs ?? 0) >= Number(edge.negative_selected_runs ?? 0) ? 1 : -1;
+    if (predicted === referenceSign) rightSign += 1;
+  });
+  return { pairs, rightDirection, signCompared, rightSign };
 }
 
-function RatioMetric({
-  ratio,
-  metric,
-  rawValue,
-}: {
-  ratio: number | null;
-  metric: string;
-  rawValue: number | null;
-}) {
-  if (ratio === null || !Number.isFinite(ratio)) {
-    return (
-      <div className="py-1 text-sm font-semibold text-slate-300">
-        —
-      </div>
-    );
-  }
 
-  return (
-    <div
-      title={`${metric} ratio: ${ratio.toFixed(3)}×; ${metric}: ${
-        rawValue === null ? "not available" : rawValue.toFixed(3)
-      }`}
-      className="py-1 tabular-nums"
-    >
-      <p className="text-base font-extrabold text-slate-800">
-        {ratio.toFixed(3)}×
-      </p>
-      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-        {metric} {rawValue === null ? "—" : rawValue.toFixed(3)}
-      </p>
-    </div>
-  );
-}
 
-function MotifRecovery({
-  rows,
-  reference,
-}: {
-  rows: BenchmarkRow[];
-  reference: MotifCounts;
-}) {
-  const motifs = [
-    {
-      key: "feedbackLoops" as const,
-      label: "Feedback loops",
-      note: "A→B→C→A",
-    },
-    {
-      key: "feedForwardLoops" as const,
-      label: "Feed-forward loops",
-      note: "A→B, A→C, B→C",
-    },
-    {
-      key: "mutualInteractions" as const,
-      label: "Mutual interactions",
-      note: "A↔B",
-    },
-  ];
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200">
-        <table className="w-full min-w-[46rem] table-fixed border-collapse">
-          <thead className="grn-table-header">
-            <tr className="text-left">
-              <th className="w-[22%] border-b border-slate-200 px-4 py-3">
-                Algorithm
-              </th>
-            {motifs.map((motif) => (
-                <th
-                  key={motif.key}
-                  className="border-b border-l border-slate-200 px-4 py-3"
-                >
-                  <span className="block">
-                    {motif.label}
-                  </span>
-                  <span className="mt-0.5 block text-[10px] font-medium normal-case tracking-normal text-slate-400">
-                    {motif.note}
-                  </span>
-                </th>
-            ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.algorithmId} className="last:[&>*]:border-b-0">
-                <th className="border-b border-slate-100 px-4 py-4 text-left text-sm font-extrabold text-slate-800">
-                  {row.algorithmId}
-                </th>
-                {motifs.map((motif) => {
-                  const predicted = row.motifs?.[motif.key] ?? null;
-                  const referenceCount = reference[motif.key];
-                  const ratio =
-                    predicted !== null && referenceCount > 0
-                      ? predicted / referenceCount
-                      : null;
-                  return (
-                    <td
-                      key={motif.key}
-                      className="border-b border-l border-slate-100 px-4 py-4"
-                    >
-                      <p className="text-base font-extrabold tabular-nums text-slate-800">
-                        {ratio === null ? "—" : `${ratio.toFixed(3)}×`}
-                      </p>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-    </div>
-  );
-}
 
-function PathBreakdown({
-  rows,
-  referenceEdgeCount,
-  exportSvgRef,
-}: {
-  rows: BenchmarkRow[];
-  referenceEdgeCount: number;
-  exportSvgRef: RefObject<SVGSVGElement | null>;
-}) {
-  const colors = {
-    truePositive: "#087ead",
-    path2: "#72c9be",
-    path3: "#eab35e",
-    path4Plus: "#dc6b5d",
-    noPath: "#cbd5e1",
-  };
-  const [hoveredSegment, setHoveredSegment] = useState<{
-    algorithmId: string;
-    key: keyof typeof colors;
-    label: string;
-    value: number;
-    percentage: number;
-    start: number;
-    position: number;
-  } | null>(null);
-  const labels: Array<{
-    key: "path2" | "path3" | "path4Plus" | "noPath";
-    label: string;
-    value: (counts: PathCounts) => number;
-  }> = [
-    {
-      key: "path2",
-      label: "Incorrect · 2 steps",
-      value: (counts) => counts.path2,
-    },
-    {
-      key: "path3",
-      label: "Incorrect · 3 steps",
-      value: (counts) => counts.path3,
-    },
-    {
-      key: "path4Plus",
-      label: "Incorrect · 4+ steps",
-      value: (counts) =>
-        counts.path4 + counts.path5 + counts.pathMoreThan5,
-    },
-    {
-      key: "noPath",
-      label: "Incorrect · no path",
-      value: (counts) => counts.noPath,
-    },
-  ];
-  const exportWidth = 1100;
-  const exportHeaderHeight = 50;
-  const exportRowHeight = 42;
-  const exportBarX = 210;
-  const exportBarWidth = 850;
-  const exportBarHeight = 16;
-  const exportLegendY = exportHeaderHeight + rows.length * exportRowHeight + 28;
-  const exportHeight = exportLegendY + 148;
-  const exportClipPrefix = useId().replace(/:/g, "");
-  const exportLegendItems = [
-    {
-      key: "truePositive" as const,
-      label: "Exact reference edge",
-      detail: "Predicted source→target is present in the reference",
-    },
-    {
-      key: "path2" as const,
-      label: "Incorrect · 2 steps",
-      detail: "Shortest directed reference path has 2 edges",
-    },
-    {
-      key: "path3" as const,
-      label: "Incorrect · 3 steps",
-      detail: "Shortest directed reference path has 3 edges",
-    },
-    {
-      key: "path4Plus" as const,
-      label: "Incorrect · 4+ steps",
-      detail: "Shortest directed reference path has at least 4 edges",
-    },
-    {
-      key: "noPath" as const,
-      label: "Incorrect · no path",
-      detail: "No directed reference path connects source to target",
-    },
-  ];
-  return (
-    <div>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200">
-        <div className="min-w-[40rem]">
-          <div className="grn-table-header-grid grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-200 px-4 py-2.5 text-center">
-            <span>Algorithm</span>
-            <span>Top predictions</span>
-          </div>
-          {rows.map((row, rowIndex) => {
-            const pathCounts = row.pathCounts;
-            if (!pathCounts) {
-              return (
-                <div
-                  key={row.algorithmId}
-                  className="grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-100 px-4 py-3 text-center last:border-b-0"
-                >
-                  <span className="truncate text-sm font-extrabold text-slate-800">
-                    {row.algorithmId}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-400">
-                    Path statistics unavailable
-                  </span>
-                </div>
-              );
-            }
-            const falsePositiveTotal = labels.reduce(
-              (sum, item) => sum + item.value(pathCounts),
-              0,
-            );
-            const selectedTotal =
-              pathCounts.truePositive + falsePositiveTotal;
-            const segments: Array<{
-              key: keyof typeof colors;
-              label: string;
-              value: number;
-            }> = [
-              {
-                key: "truePositive",
-                label: "Correct reference edge",
-                value: pathCounts.truePositive,
-              },
-              ...labels.map((item) => ({
-                key: item.key,
-                label: item.label,
-                value: item.value(pathCounts),
-              })),
-            ];
-            let accumulatedPercentage = 0;
-            const positionedSegments = segments.map((item) => {
-              const percentage =
-                selectedTotal > 0
-                  ? (item.value / selectedTotal) * 100
-                  : 0;
-              const start = accumulatedPercentage;
-              const position =
-                accumulatedPercentage + percentage / 2;
-              accumulatedPercentage += percentage;
-              return {
-                ...item,
-                percentage,
-                start,
-                position: Math.max(7, Math.min(93, position)),
-              };
-            });
-            const activeSegment =
-              hoveredSegment?.algorithmId === row.algorithmId
-                ? hoveredSegment
-                : null;
-            return (
-              <div
-                key={row.algorithmId}
-                className={`relative grid grid-cols-[10rem_1fr] items-center gap-4 border-b border-slate-100 px-4 py-3 text-center last:border-b-0 ${
-                  activeSegment ? "z-20" : "z-0"
-                }`}
-              >
-                <span className="truncate text-sm font-extrabold text-slate-800">
-                  {row.algorithmId}
-                </span>
-                <div className="relative mx-auto h-4 w-full max-w-[64rem]">
-                  <div
-                    className="flex h-4 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70"
-                    aria-label={`${row.algorithmId}: ${pathCounts.truePositive} of ${selectedTotal} predictions exactly match the reference; ${falsePositiveTotal} are incorrect`}
-                  >
-                    {positionedSegments.map((item) =>
-                      item.value > 0 ? (
-                        <button
-                          type="button"
-                          key={item.key}
-                          style={{
-                            width: `${item.percentage}%`,
-                            backgroundColor: colors[item.key],
-                          }}
-                          aria-label={`${item.label}: ${item.value} predicted edges, ${item.percentage.toFixed(1)}% of selected predictions`}
-                          className={`h-full cursor-help transition-opacity duration-75 focus-visible:z-10 focus-visible:outline-none ${
-                            activeSegment ? "opacity-60" : ""
-                          }`}
-                          onPointerEnter={() =>
-                            setHoveredSegment({
-                              algorithmId: row.algorithmId,
-                              key: item.key,
-                              label: item.label,
-                              value: item.value,
-                              percentage: item.percentage,
-                              start: item.start,
-                              position: item.position,
-                            })
-                          }
-                          onPointerLeave={() => setHoveredSegment(null)}
-                          onFocus={() =>
-                            setHoveredSegment({
-                              algorithmId: row.algorithmId,
-                              key: item.key,
-                              label: item.label,
-                              value: item.value,
-                              percentage: item.percentage,
-                              start: item.start,
-                              position: item.position,
-                            })
-                          }
-                          onBlur={() => setHoveredSegment(null)}
-                        />
-                      ) : null,
-                    )}
-                  </div>
-                  {activeSegment ? (
-                    <div
-                      className="pointer-events-none absolute -top-0.5 z-10 h-5 rounded-[0.3rem] ring-2 ring-white shadow-[0_2px_8px_rgba(15,23,42,0.18)]"
-                      style={{
-                        left: `${activeSegment.start}%`,
-                        width: `${activeSegment.percentage}%`,
-                        backgroundColor: colors[activeSegment.key],
-                      }}
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  {activeSegment ? (
-                    <div
-                      className={`pointer-events-none absolute z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-left shadow-lg shadow-slate-900/10 ${
-                        rowIndex === rows.length - 1
-                          ? "bottom-6"
-                          : "top-6"
-                      }`}
-                      style={{ left: `${activeSegment.position}%` }}
-                      role="tooltip"
-                    >
-                      <p className="text-[11px] font-extrabold text-slate-800">
-                        {activeSegment.label}
-                      </p>
-                      <p className="mt-0.5 text-[10px] font-semibold tabular-nums text-slate-500">
-                        {activeSegment.value} predicted edges ·{" "}
-                        {activeSegment.percentage.toFixed(1)}%
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-          <span
-            className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: colors.truePositive }}
-          />
-          Exact reference edge
-        </span>
-        {labels.map((item) => (
-          <span
-            key={item.key}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500"
-          >
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: colors[item.key] }}
-            />
-            {item.label}
-          </span>
-        ))}
-      </div>
-      <svg
-        ref={exportSvgRef}
-        viewBox={"0 0 " + exportWidth + " " + exportHeight}
-        className="hidden"
-        role="img"
-        aria-label="Top predictions classified by exact reference match and shortest directed reference-path length"
-      >
-        <defs>
-          {rows.map((row, index) => (
-            <clipPath key={row.algorithmId} id={exportClipPrefix + "-" + index}>
-              <rect
-                x={exportBarX}
-                y={exportHeaderHeight + index * exportRowHeight + 13}
-                width={exportBarWidth}
-                height={exportBarHeight}
-                rx={exportBarHeight / 2}
-              />
-            </clipPath>
-          ))}
-        </defs>
-        <rect x="0" y="0" width={exportWidth} height={exportHeaderHeight} fill="#f8fafc" />
-        <text x="36" y="31" fill="#64748b" fontSize="12" fontWeight="700">
-          ALGORITHM
-        </text>
-        <text
-          x={exportBarX + exportBarWidth / 2}
-          y="31"
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="12"
-          fontWeight="700"
-        >
-          TOP PREDICTIONS · SHARE OF SELECTED EDGES
-        </text>
-        {rows.map((row, index) => {
-          const y = exportHeaderHeight + index * exportRowHeight;
-          const counts = row.pathCounts;
-          const exportSegments = counts
-            ? [
-                {
-                  key: "truePositive" as const,
-                  value: counts.truePositive,
-                },
-                { key: "path2" as const, value: counts.path2 },
-                { key: "path3" as const, value: counts.path3 },
-                {
-                  key: "path4Plus" as const,
-                  value:
-                    counts.path4 + counts.path5 + counts.pathMoreThan5,
-                },
-                { key: "noPath" as const, value: counts.noPath },
-              ]
-            : [];
-          const selectedTotal = exportSegments.reduce(
-            (sum, segment) => sum + segment.value,
-            0,
-          );
-          let accumulatedWidth = 0;
-          const positionedSegments = exportSegments.map((segment) => {
-            const width =
-              selectedTotal > 0
-                ? (segment.value / selectedTotal) * exportBarWidth
-                : 0;
-            const x = exportBarX + accumulatedWidth;
-            accumulatedWidth += width;
-            return { ...segment, x, width };
-          });
-          return (
-            <g key={row.algorithmId}>
-              <rect
-                x="0"
-                y={y}
-                width={exportWidth}
-                height={exportRowHeight}
-                fill={index % 2 === 0 ? "#ffffff" : "#fbfdff"}
-              />
-              <line
-                x1="0"
-                x2={exportWidth}
-                y1={y + exportRowHeight}
-                y2={y + exportRowHeight}
-                stroke="#e2e8f0"
-              />
-              <text x="36" y={y + 27} fill="#0f172a" fontSize="13" fontWeight="700">
-                {row.algorithmId}
-              </text>
-              {counts ? (
-                <>
-                  <rect
-                    x={exportBarX}
-                    y={y + 13}
-                    width={exportBarWidth}
-                    height={exportBarHeight}
-                    rx={exportBarHeight / 2}
-                    fill="#f1f5f9"
-                    stroke="#e2e8f0"
-                  />
-                  <g clipPath={"url(#" + exportClipPrefix + "-" + index + ")"}>
-                    {positionedSegments.map((segment) => (
-                      <rect
-                        key={segment.key}
-                        x={segment.x}
-                        y={y + 13}
-                        width={segment.width}
-                        height={exportBarHeight}
-                        fill={colors[segment.key]}
-                      />
-                    ))}
-                  </g>
-                  {positionedSegments.map((segment) =>
-                    segment.value > 0 && segment.width >= 30 ? (
-                      <text
-                        key={"count-" + segment.key}
-                        x={segment.x + segment.width / 2}
-                        y={y + 25}
-                        textAnchor="middle"
-                        fill={
-                          segment.key === "truePositive" ||
-                          segment.key === "path4Plus"
-                            ? "#ffffff"
-                            : "#334155"
-                        }
-                        fontSize="9"
-                        fontWeight="700"
-                      >
-                        {segment.value}
-                      </text>
-                    ) : null,
-                  )}
-              </>
-              ) : (
-                <text
-                  x={exportBarX}
-                  y={y + 27}
-                  fill="#94a3b8"
-                  fontSize="11"
-                  fontWeight="600"
-                >
-                  Path statistics unavailable
-                </text>
-              )}
-            </g>
-          );
-        })}
-        <line
-          x1="36"
-          x2={exportWidth - 36}
-          y1={exportLegendY - 14}
-          y2={exportLegendY - 14}
-          stroke="#e2e8f0"
-        />
-        {exportLegendItems.map((item, index) => {
-          const x = 36 + (index % 3) * 348;
-          const y = exportLegendY + Math.floor(index / 3) * 47;
-          return (
-            <g key={item.key}>
-              <circle cx={x + 5} cy={y + 5} r="5" fill={colors[item.key]} />
-              <text x={x + 18} y={y + 9} fill="#334155" fontSize="11" fontWeight="700">
-                {item.label}
-              </text>
-              <text x={x + 18} y={y + 25} fill="#64748b" fontSize="9.5" fontWeight="600">
-                {item.detail}
-              </text>
-            </g>
-          );
-        })}
-        <text
-          x="36"
-          y={exportLegendY + 112}
-          fill="#475569"
-          fontSize="10"
-          fontWeight="700"
-        >
-          Each bar starts from top K = {referenceEdgeCount} non-self predictions by |weight|;
-          all ties at the K-th score are included.
-        </text>
-        <text
-          x="36"
-          y={exportLegendY + 130}
-          fill="#64748b"
-          fontSize="10"
-          fontWeight="600"
-        >
-          Bars show within-method shares. Numbers inside sufficiently wide segments are edge counts.
-        </text>
-      </svg>
-    </div>
-  );
-}
 
 export type StabilityPoint = { algorithmId: string; medianRho: number | null; runCount: number };
 
@@ -2142,7 +1107,7 @@ function StabilityAccuracyPanel({ rows, stability }: { rows: BenchmarkRow[]; sta
   return (
     <Panel
       title="Stability vs accuracy"
-      description="Each dot is one algorithm: how consistent it is across bootstrap runs (left to right) against how well it recovers the reference network (bottom to top)."
+      description="Each dot is one method: how consistent it is across repeat runs against how well it recovers the reference."
       aside={
         <DownloadMenu
           ariaLabel="Download stability vs accuracy"
@@ -2153,11 +1118,11 @@ function StabilityAccuracyPanel({ rows, stability }: { rows: BenchmarkRow[]; sta
         />
       }
     >
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className="flex flex-col gap-4">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
-          className="block w-full lg:max-w-[720px]"
+          className="block w-full"
           fontFamily="Arial, Helvetica, sans-serif"
           role="img"
           aria-label="Scatter of repeat-run stability against AUPRC ratio, one dot per algorithm"
@@ -2209,12 +1174,13 @@ function StabilityAccuracyPanel({ rows, stability }: { rows: BenchmarkRow[]; sta
             <text x={L + pw} y={T + ph - 8} fontSize="10.5" textAnchor="end" fill="#333">Spearman r = {r.toFixed(2)}</text>
           )}
         </svg>
-        <div className="max-w-sm space-y-3 text-sm leading-6 text-slate-600">
-          <p className="font-bold text-slate-900">How to read it</p>
-          <p><span className="font-semibold text-slate-800">Top right</span>: repeatable and accurate — the most trustworthy networks.</p>
-          <p><span className="font-semibold text-slate-800">Bottom right</span>: consistent but inaccurate — the same answer every run, not matching the reference.</p>
-          <p><span className="font-semibold text-slate-800">Top left</span>: accurate on average, but individual runs vary.</p>
-          <p><span className="font-semibold text-slate-800">Below the dashed line</span>: no better than random on this reference.</p>
+        <div className="space-y-2 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">
+          <p>
+            <span className="font-semibold text-slate-800">Top right</span>: repeatable and accurate.{" "}
+            <span className="font-semibold text-slate-800">Bottom right</span>: consistent but not matching the reference.{" "}
+            <span className="font-semibold text-slate-800">Top left</span>: accurate on average, but runs vary.{" "}
+            <span className="font-semibold text-slate-800">Below the dashed line</span>: no better than random.
+          </p>
           {r !== null && (
             <p className="text-xs text-slate-500">
               Spearman r = {r.toFixed(2)} across {points.length} algorithms: {r >= 0.3 ? "more stable algorithms tend to be more accurate here" : r <= -0.3 ? "more stable algorithms tend to be less accurate here" : "stability and accuracy are largely unrelated here"}.
@@ -2246,26 +1212,19 @@ export default function BenchmarkInsights({
   /** Repeat-run stability per algorithm (from the Comparison tab's data). */
   stability?: StabilityPoint[];
 }) {
-  const prChartRef = useRef<HTMLDivElement | null>(null);
-  const rocChartRef = useRef<HTMLDivElement | null>(null);
-  const pathBreakdownExportRef = useRef<SVGSVGElement | null>(null);
-  const [benchmarkSort, setBenchmarkSort] =
-    useState<BenchmarkSortKey>("auprcRatio");
   const [isBenchmarkHelpOpen, setIsBenchmarkHelpOpen] = useState(false);
   const [isCurveHelpOpen, setIsCurveHelpOpen] = useState(false);
   const [additionalBenchmarkHelp, setAdditionalBenchmarkHelp] = useState<
     "motif" | "path" | null
   >(null);
-  // Shared by both curve charts so highlighting a method dims it in each.
-  const [curveFocus, setCurveFocus] = useState<string | null>(null);
-  const [curveLegendSort, setCurveLegendSort] = useState<"auprc" | "auroc">(
-    "auprc",
-  );
   const benchmark = useMemo(() => {
     const truthEdges = groundTruth?.edges ?? [];
     if (!truthEdges.length) {
       return {
         rows: [] as BenchmarkRow[],
+        consensus: null as BenchmarkRow | null,
+        candidateGenes: new Set<string>(),
+        truth: new Set<string>(),
         eligibleReferenceEdges: 0,
         uploadedReferenceEdges: 0,
         excludedReferenceEdges: 0,
@@ -2346,8 +1305,28 @@ export default function BenchmarkInsights({
         ),
       });
     });
+    // Rank-average consensus of every selected method (DREAM5).
+    const consensus =
+      rows.length >= 2
+        ? benchmarkAlgorithm({
+            algorithmId: CONSENSUS_ID,
+            edges: consensusEdges(rows.map((row) => row.rankedEdges), candidateGenes) as AlgorithmResultEdge[],
+            truth,
+            truthSigns,
+            possibleEdges,
+            runtimeSeconds: 0,
+            methodSupportsDirection: true,
+            candidateGenes,
+            motifEdges: consensusEdges(rows.map((row) => row.rankedEdges), candidateGenes) as AlgorithmResultEdge[],
+            motifReferenceEdgeCount,
+            pathStats: null,
+          })
+        : null;
     return {
       rows,
+      consensus,
+      candidateGenes,
+      truth,
       eligibleReferenceEdges: truth.size,
       uploadedReferenceEdges:
         groundTruth?.edge_count ?? truthEdges.length,
@@ -2368,6 +1347,30 @@ export default function BenchmarkInsights({
     selectedResultScopeId,
     tasks,
   ]);
+
+  // Bootstrap intervals and permutation p-values for every method and the
+  // consensus; deterministic (seeded) so they do not jump between renders.
+  const uncertainty = useMemo(() => {
+    const values = new Map<string, AuprcUncertainty>();
+    const all = benchmark.consensus ? [...benchmark.rows, benchmark.consensus] : benchmark.rows;
+    all.forEach((row, index) => {
+      const result = auprcUncertainty({
+        rankedEdges: row.rankedEdges,
+        truth: benchmark.truth,
+        candidateGenes: benchmark.candidateGenes,
+        seed: 17 + index,
+      });
+      if (result) values.set(row.algorithmId, result);
+    });
+    return values;
+  }, [benchmark]);
+  const summarySvgRef = useRef<SVGSVGElement | null>(null);
+  const curveSvgRef = useRef<SVGSVGElement | null>(null);
+  const runtimeSvgRef = useRef<SVGSVGElement | null>(null);
+  const motifSvgRef = useRef<SVGSVGElement | null>(null);
+  const pathSvgRef = useRef<SVGSVGElement | null>(null);
+  const directionSvgRef = useRef<SVGSVGElement | null>(null);
+  const [curveKind, setCurveKind] = useState<"pr" | "roc">("pr");
 
   if (loading) {
     return (
@@ -2406,33 +1409,9 @@ export default function BenchmarkInsights({
   }
 
   const rows = benchmark.rows;
-  const sortedRows = [...rows].sort((first, second) => {
-    const value = (row: BenchmarkRow) => row[benchmarkSort] ?? -Infinity;
-    return value(second) - value(first) || second.auprcRatio - first.auprcRatio;
-  });
   const signedMetricsAvailable = rows.some(
     (row) => row.activationEpr !== null || row.inhibitionEpr !== null,
   );
-  // Colour is taken from each method's position in `rows`, which is what the
-  // charts use, so re-sorting the legend can never desync swatch from curve.
-  const curveLegendColumns = (() => {
-    const entries = rows.map((row, index) => ({
-      algorithmId: row.algorithmId,
-      auprc: row.auprc,
-      auroc: row.auroc,
-      color: PALETTE[index % PALETTE.length],
-    }));
-    entries.sort((first, second) =>
-      curveLegendSort === "auroc"
-        ? second.auroc - first.auroc
-        : second.auprc - first.auprc,
-    );
-    const columnCount = Math.min(3, Math.max(1, Math.ceil(entries.length / 4)));
-    const perColumn = Math.ceil(entries.length / columnCount);
-    return Array.from({ length: columnCount }, (_, index) =>
-      entries.slice(index * perColumn, (index + 1) * perColumn),
-    ).filter((column) => column.length);
-  })();
   // Reference sign composition: without it, an inhibition EPR of 0.000x cannot
   // be told apart from "the reference barely contains inhibitory edges".
   const activationReferenceCount =
@@ -2441,49 +1420,80 @@ export default function BenchmarkInsights({
   const inhibitionReferenceCount =
     rows.find((row) => row.inhibitionReferenceCount !== null)
       ?.inhibitionReferenceCount ?? null;
-  const downloadChart = async (
-    container: HTMLDivElement | null,
-    filename: string,
-    format: "svg" | "png",
-  ) => {
-    const svg = container?.querySelector("svg");
-    if (!svg) throw new Error("The chart is not available to download.");
-    const exportSvg = svg.cloneNode(true) as SVGSVGElement;
-    exportSvg.querySelectorAll("[data-export-exclude]").forEach((node) => {
-      node.remove();
-    });
-    exportSvg.querySelectorAll<SVGPathElement>("[data-export-curve]").forEach((path) => {
-      path.setAttribute("opacity", "1");
-      path.setAttribute("stroke-width", "2.75");
-      path.removeAttribute("data-export-curve");
-    });
-    if (format === "svg") {
-      downloadSvg(exportSvg, `${filename}.svg`);
-    } else {
-      await downloadSvgPng(exportSvg, `${filename}.png`, 4);
-    }
+  const methodRows = rows;
+  const consensusRow = benchmark.consensus;
+  const stabilityOf = (id: string) => stability.find((item) => item.algorithmId === id)?.medianRho ?? null;
+  const toFigureRow = (row: BenchmarkRow, isConsensus = false): FigureRow => ({
+    id: row.algorithmId,
+    consensus: isConsensus,
+    auprcRatio: row.auprcRatio,
+    eprRatio: row.earlyPrecisionRatio,
+    auroc: row.auroc,
+    activation: row.activationEpr,
+    // A method with no inhibitory predictions at all reports 0; show n/a instead.
+    inhibition: row.inhibitionEpr && row.inhibitionEpr > 0 ? row.inhibitionEpr : row.inhibitionEpr === null ? null : row.rankedEdges.some((edge) => Number((edge.edge as AlgorithmResultEdge).negative_selected_runs ?? 0) > 0) ? row.inhibitionEpr : null,
+    stability: isConsensus ? null : stabilityOf(row.algorithmId),
+    runtime: isConsensus ? null : row.runtimeSeconds,
+    ci: uncertainty.get(row.algorithmId)?.ci ?? null,
+    pValue: uncertainty.get(row.algorithmId)?.pValue ?? null,
+    pr: row.pr,
+    roc: row.roc,
+  });
+  const figureRows: FigureRow[] = [
+    ...methodRows.map((row) => toFigureRow(row)),
+    ...(consensusRow ? [toFigureRow(consensusRow, true)] : []),
+  ];
+  const ranks = overallRanks(figureRows);
+  const topRow =
+    [...methodRows].sort((a, b) => (ranks.get(a.algorithmId) ?? 0) - (ranks.get(b.algorithmId) ?? 0))[0] ?? methodRows[0];
+  const showStability = figureRows.some((row) => row.stability !== null);
+  const anyUncertainty = uncertainty.size > 0;
+  const firstUncertainty = [...uncertainty.values()][0];
+  const byAuprc = [...methodRows].sort((a, b) => b.auprcRatio - a.auprcRatio);
+  type FigureKey = "summary" | "curve" | "runtime" | "motif" | "path" | "direction";
+  const downloadFigure = async (key: FigureKey, filename: string, format: "svg" | "png") => {
+    const refs = {
+      summary: summarySvgRef,
+      curve: curveSvgRef,
+      runtime: runtimeSvgRef,
+      motif: motifSvgRef,
+      path: pathSvgRef,
+      direction: directionSvgRef,
+    };
+    const svg = refs[key].current;
+    if (!svg) throw new Error("The figure is not available to download.");
+    if (format === "svg") downloadSvg(svg, `${filename}.svg`);
+    else await downloadSvgPng(svg, `${filename}.png`, 3);
   };
+  const figureItems = (key: FigureKey, filename: string) => [
+    { label: "Figure", format: "PNG", description: "At print resolution.", onSelect: () => downloadFigure(key, filename, "png") },
+    { label: "Figure", format: "SVG", description: "Editable vector version.", onSelect: () => downloadFigure(key, filename, "svg") },
+  ];
+  const helpButton = (onClick: () => void, labelText: string, controls: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={labelText}
+      aria-haspopup="dialog"
+      aria-controls={controls}
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+    >
+      ?
+    </button>
+  );
+  const allRows = consensusRow ? [...methodRows, consensusRow] : methodRows;
+
   return (
     <div className="space-y-5">
       <Panel
         title="Benchmark summary"
-        titleAction={
-          <button
-            type="button"
-            onClick={() => setIsBenchmarkHelpOpen(true)}
-            aria-label="How to read the benchmark summary"
-            aria-haspopup="dialog"
-            aria-controls="benchmark-summary-help-title"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-          >
-            ?
-          </button>
-        }
-        description="How well each method recovers the uploaded reference network."
+        titleAction={helpButton(() => setIsBenchmarkHelpOpen(true), "How to read the benchmark summary", "benchmark-summary-help-title")}
+        description="How well each method recovers the uploaded reference network, ranked; values no better than random are grey."
         aside={
           <DownloadMenu
             ariaLabel="Download benchmark summary"
             items={[
+              ...figureItems("summary", "benchmark-summary"),
               {
                 label: "Complete benchmark table",
                 format: "CSV",
@@ -2498,8 +1508,12 @@ export default function BenchmarkInsights({
                       "possible_directed_interactions",
                       "reference_interactions",
                       "random_precision",
+                      "overall_rank",
                       "auprc",
                       "auprc_ratio",
+                      "auprc_ratio_ci_low",
+                      "auprc_ratio_ci_high",
+                      "permutation_p",
                       "early_precision",
                       "early_precision_ratio",
                       "early_precision_selected_edges",
@@ -2510,32 +1524,40 @@ export default function BenchmarkInsights({
                       "inhibition_epr",
                       "inhibition_selected_edges",
                       "auroc",
+                      "median_stability_rho",
                       "runtime_seconds",
                     ],
-                    ...rows.map((row) => [
-                      row.algorithmId,
-                      algorithmMetaMap.get(row.algorithmId)?.directed === false
-                        ? "undirected"
-                        : "directed",
-                      row.evaluatedEdges,
-                      benchmark.candidateGeneCount,
-                      benchmark.possibleEdges,
-                      benchmark.eligibleReferenceEdges,
-                      benchmark.randomBaseline.toFixed(6),
-                      row.auprc.toFixed(3),
-                      row.auprcRatio.toFixed(3),
-                      row.precisionAtK.toFixed(3),
-                      row.earlyPrecisionRatio.toFixed(3),
-                      row.earlyPrecisionSelectedCount,
-                      row.activationPrecision?.toFixed(3) ?? "",
-                      row.activationEpr?.toFixed(3) ?? "",
-                      row.activationSelectedCount ?? "",
-                      row.inhibitionPrecision?.toFixed(3) ?? "",
-                      row.inhibitionEpr?.toFixed(3) ?? "",
-                      row.inhibitionSelectedCount ?? "",
-                      row.auroc.toFixed(3),
-                      row.runtimeSeconds.toFixed(3),
-                    ]),
+                    ...allRows.map((row) => {
+                      const u = uncertainty.get(row.algorithmId);
+                      const isConsensus = row.algorithmId === CONSENSUS_ID;
+                      return [
+                        row.algorithmId,
+                        isConsensus ? "consensus" : algorithmMetaMap.get(row.algorithmId)?.directed === false ? "undirected" : "directed",
+                        row.evaluatedEdges,
+                        benchmark.candidateGeneCount,
+                        benchmark.possibleEdges,
+                        benchmark.eligibleReferenceEdges,
+                        benchmark.randomBaseline.toFixed(6),
+                        (ranks.get(row.algorithmId) ?? 0).toFixed(2),
+                        row.auprc.toFixed(3),
+                        row.auprcRatio.toFixed(3),
+                        u ? u.ci[0].toFixed(3) : "",
+                        u ? u.ci[1].toFixed(3) : "",
+                        u ? u.pValue.toFixed(4) : "",
+                        row.precisionAtK.toFixed(3),
+                        row.earlyPrecisionRatio.toFixed(3),
+                        row.earlyPrecisionSelectedCount,
+                        row.activationPrecision?.toFixed(3) ?? "",
+                        row.activationEpr?.toFixed(3) ?? "",
+                        row.activationSelectedCount ?? "",
+                        row.inhibitionPrecision?.toFixed(3) ?? "",
+                        row.inhibitionEpr?.toFixed(3) ?? "",
+                        row.inhibitionSelectedCount ?? "",
+                        row.auroc.toFixed(3),
+                        isConsensus ? "" : (stabilityOf(row.algorithmId)?.toFixed(3) ?? ""),
+                        isConsensus ? "" : row.runtimeSeconds.toFixed(3),
+                      ];
+                    }),
                   ]),
               },
             ]}
@@ -2544,211 +1566,41 @@ export default function BenchmarkInsights({
       >
         <p className="flex flex-wrap gap-x-2 gap-y-1 border-y border-slate-100 py-3 text-xs leading-5 text-slate-500">
           <span>
-            <strong className="font-bold text-slate-700">
-              {benchmark.candidateGeneCount.toLocaleString()}
-            </strong>{" "}
-            genes
+            <strong className="font-bold text-slate-700">{benchmark.candidateGeneCount.toLocaleString()}</strong> genes
           </span>
           <span aria-hidden="true">·</span>
           <span>
-            <strong className="font-bold text-slate-700">
-              {benchmark.possibleEdges.toLocaleString()}
-            </strong>{" "}
-            possible directed interactions
+            <strong className="font-bold text-slate-700">{benchmark.possibleEdges.toLocaleString()}</strong> possible directed interactions
           </span>
           <span aria-hidden="true">·</span>
           <span>
-            <strong className="font-bold text-slate-700">
-              {benchmark.eligibleReferenceEdges.toLocaleString()}
-            </strong>{" "}
-            reference interactions
-            {activationReferenceCount !== null ||
-            inhibitionReferenceCount !== null ? (
-              <>
-                {" ("}
-                {activationReferenceCount !== null
-                  ? `${activationReferenceCount.toLocaleString()} activating`
-                  : null}
-                {activationReferenceCount !== null &&
-                inhibitionReferenceCount !== null
-                  ? ", "
-                  : null}
-                {inhibitionReferenceCount !== null
-                  ? `${inhibitionReferenceCount.toLocaleString()} inhibitory`
-                  : null}
-                {")"}
-              </>
-            ) : null}
+            <strong className="font-bold text-slate-700">{benchmark.eligibleReferenceEdges.toLocaleString()}</strong> reference interactions
+            {activationReferenceCount !== null || inhibitionReferenceCount !== null
+              ? ` (${[
+                  activationReferenceCount !== null ? `${activationReferenceCount.toLocaleString()} activating` : null,
+                  inhibitionReferenceCount !== null ? `${inhibitionReferenceCount.toLocaleString()} inhibitory` : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ")})`
+              : ""}
           </span>
           <span aria-hidden="true">·</span>
           <span>
-            random precision{" "}
-            <strong className="font-bold text-slate-700">
-              {benchmark.randomBaseline.toFixed(3)}
-            </strong>
+            random precision <strong className="font-bold text-slate-700">{benchmark.randomBaseline.toFixed(3)}</strong>
           </span>
         </p>
-
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-          <div className="overflow-x-auto">
-            <table
-              className={`w-full table-fixed ${
-                signedMetricsAvailable ? "min-w-[65rem]" : "min-w-[43rem]"
-              }`}
-            >
-            <colgroup>
-              <col className="w-40" />
-              <col className="w-40" />
-              <col className="w-56" />
-              <col className="w-36" />
-              {signedMetricsAvailable ? (
-                <>
-                  <col className="w-44" />
-                  <col className="w-44" />
-                </>
-              ) : null}
-            </colgroup>
-            <thead className="grn-table-header sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
-              <tr>
-                <th className="sticky left-0 z-20 bg-slate-50 px-4 py-3 text-left shadow-[1px_0_0_0_#e2e8f0]">
-                  Algorithm
-                </th>
-                <th
-                  aria-sort={benchmarkSort === "auprcRatio" ? "descending" : "none"}
-                  className="px-4 py-3 text-left"
-                >
-                  <SortableMetricHeader
-                    sortKey="auprcRatio"
-                    activeSort={benchmarkSort}
-                    onSort={setBenchmarkSort}
-                  >
-                    AUPRC ratio
-                  </SortableMetricHeader>
-                </th>
-                <th
-                  aria-sort={
-                    benchmarkSort === "earlyPrecisionRatio" ? "descending" : "none"
-                  }
-                  className="px-4 py-3 text-left"
-                >
-                  <SortableMetricHeader
-                    sortKey="earlyPrecisionRatio"
-                    activeSort={benchmarkSort}
-                    onSort={setBenchmarkSort}
-                  >
-                    Early precision ratio
-                  </SortableMetricHeader>
-                </th>
-                <th
-                  aria-sort={benchmarkSort === "auroc" ? "descending" : "none"}
-                  className="px-4 py-3 text-left"
-                >
-                  <SortableMetricHeader
-                    sortKey="auroc"
-                    activeSort={benchmarkSort}
-                    onSort={setBenchmarkSort}
-                  >
-                    AUROC
-                  </SortableMetricHeader>
-                </th>
-                {signedMetricsAvailable ? (
-                  <>
-                    <th
-                      aria-sort={
-                        benchmarkSort === "activationEpr" ? "descending" : "none"
-                      }
-                      className="px-4 py-3 text-left"
-                    >
-                      <SortableMetricHeader
-                        sortKey="activationEpr"
-                        activeSort={benchmarkSort}
-                        onSort={setBenchmarkSort}
-                      >
-                        Activation EPR
-                      </SortableMetricHeader>
-                    </th>
-                    <th
-                      aria-sort={
-                        benchmarkSort === "inhibitionEpr" ? "descending" : "none"
-                      }
-                      className="px-4 py-3 text-left"
-                    >
-                      <SortableMetricHeader
-                        sortKey="inhibitionEpr"
-                        activeSort={benchmarkSort}
-                        onSort={setBenchmarkSort}
-                      >
-                        Inhibition EPR
-                      </SortableMetricHeader>
-                    </th>
-                  </>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {sortedRows.map((row) => (
-                <tr
-                  key={row.algorithmId}
-                  className="group text-sm text-slate-700 transition hover:bg-slate-50/70"
-                >
-                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left shadow-[1px_0_0_0_#f1f5f9] transition group-hover:bg-slate-50">
-                    <span className="font-extrabold text-slate-900">
-                      {row.algorithmId}
-                    </span>
-                  </th>
-                  <td className="px-4 py-2.5">
-                    <RatioMetric
-                      ratio={row.auprcRatio}
-                      metric="AUPRC"
-                      rawValue={row.auprc}
-                    />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <RatioMetric
-                      ratio={row.earlyPrecisionRatio}
-                      metric="EP"
-                      rawValue={row.precisionAtK}
-                    />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <div
-                      className="py-1 tabular-nums"
-                      title={`AUROC: ${row.auroc.toFixed(3)} (chance 0.500)`}
-                    >
-                      <p className="text-base font-extrabold text-slate-800">
-                        {row.auroc.toFixed(3)}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                        {row.auroc >= 0.5
-                          ? `+${(row.auroc - 0.5).toFixed(3)} vs chance`
-                          : `${(row.auroc - 0.5).toFixed(3)} vs chance`}
-                      </p>
-                    </div>
-                  </td>
-                  {signedMetricsAvailable ? (
-                    <>
-                      <td className="px-4 py-2.5">
-                        <RatioMetric
-                          ratio={row.activationEpr}
-                          metric="EP"
-                          rawValue={row.activationPrecision}
-                        />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <RatioMetric
-                          ratio={row.inhibitionEpr}
-                          metric="EP"
-                          rawValue={row.inhibitionPrecision}
-                        />
-                      </td>
-                    </>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-            </table>
-          </div>
+        <div className="mt-4">
+          <SummaryHeatmap rows={figureRows} showSigned={signedMetricsAvailable} showStability={showStability} svgRef={summarySvgRef} />
         </div>
+        <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+          Rank = mean rank over AUPRC ratio, early precision ratio and AUROC. Ratios are relative to a random predictor (1 = random).
+          Circle size and shade compare methods within each column; grey = no better than random; n/a = the method reports no such edges.
+          {consensusRow ? " Consensus = rank average of all selected methods (DREAM5 “wisdom of crowds”)." : ""}
+          {showStability ? " Stability = median Spearman ρ between repeat runs." : ""}
+          {anyUncertainty
+            ? ` Statistical support: square = AUPRC ratio, whiskers = 95% bootstrap interval (${firstUncertainty?.bootstrapReps ?? 0} resamples of the candidate gene pairs), filled = interval entirely above random (dashed line); p = one-sided permutation test against ${firstUncertainty?.permutationReps ?? 0} random rankings (* p < 0.05, ** p < 0.01). Overlapping intervals mean the data cannot separate those methods.`
+            : ""}
+        </p>
       </Panel>
       {isBenchmarkHelpOpen && typeof document !== "undefined" ? (
         <BenchmarkSummaryHelpModal
@@ -2760,256 +1612,127 @@ export default function BenchmarkInsights({
           activationReferenceCount={activationReferenceCount}
           inhibitionReferenceCount={inhibitionReferenceCount}
           signedMetricsAvailable={signedMetricsAvailable}
-          exampleRow={sortedRows[0]}
+          exampleRow={topRow}
           onClose={() => setIsBenchmarkHelpOpen(false)}
         />
       ) : null}
 
-      <StabilityAccuracyPanel rows={rows} stability={stability} />
 
-      {/* Curve charts are square, so pairing them uses the width the square gives up. */}
       <Panel
         title="Curve performance"
-        titleAction={
-          <button
-            type="button"
-            onClick={() => setIsCurveHelpOpen(true)}
-            aria-label="How to read curve performance"
-            aria-haspopup="dialog"
-            aria-controls="curve-performance-help-title"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-          >
-            ?
-          </button>
-        }
+        titleAction={helpButton(() => setIsCurveHelpOpen(true), "How to read curve performance", "curve-performance-help-title")}
+        description="One panel per method, in black; the other methods in grey for context; dashed = random."
         aside={
-          <DownloadMenu
-            ariaLabel="Download curve performance"
-            items={[
-              {
-                label: "Precision–recall",
-                format: "PNG",
-                onSelect: () =>
-                  downloadChart(
-                    prChartRef.current,
-                    "precision-recall-performance",
-                    "png",
-                  ),
-              },
-              {
-                label: "Precision–recall",
-                format: "SVG",
-                onSelect: () =>
-                  downloadChart(
-                    prChartRef.current,
-                    "precision-recall-performance",
-                    "svg",
-                  ),
-              },
-              {
-                label: "ROC",
-                format: "PNG",
-                onSelect: () =>
-                  downloadChart(rocChartRef.current, "roc-curves", "png"),
-              },
-              {
-                label: "ROC",
-                format: "SVG",
-                onSelect: () =>
-                  downloadChart(rocChartRef.current, "roc-curves", "svg"),
-              },
-              {
-                label: "Curve values",
-                format: "CSV",
-                description: "Both curves for every method.",
-                onSelect: () =>
-                  downloadCsv("curve-performance.csv", [
-                    ["curve", "algorithm", "x", "y"],
-                    ...rows.flatMap((row) => [
-                      ...row.pr.map((point) => [
-                        "precision-recall",
-                        row.algorithmId,
-                        point.x,
-                        point.y,
-                      ]),
-                      ...row.roc.map((point) => [
-                        "roc",
-                        row.algorithmId,
-                        point.x,
-                        point.y,
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold" role="group" aria-label="Curve type">
+              {(["pr", "roc"] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  aria-pressed={curveKind === kind}
+                  onClick={() => setCurveKind(kind)}
+                  className={`rounded-md px-3 py-1.5 transition ${curveKind === kind ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                  {kind === "pr" ? "Precision–recall" : "ROC"}
+                </button>
+              ))}
+            </div>
+            <DownloadMenu
+              ariaLabel="Download curve performance"
+              items={[
+                ...figureItems("curve", curveKind === "pr" ? "precision-recall-curves" : "roc-curves"),
+                {
+                  label: "Curve values",
+                  format: "CSV",
+                  description: "Both curves for every method.",
+                  onSelect: () =>
+                    downloadCsv("curve-performance.csv", [
+                      ["curve", "algorithm", "x", "y"],
+                      ...allRows.flatMap((row) => [
+                        ...row.pr.map((point) => ["precision-recall", row.algorithmId, point.x, point.y]),
+                        ...row.roc.map((point) => ["roc", row.algorithmId, point.x, point.y]),
                       ]),
                     ]),
-                  ]),
-              },
-            ]}
-          />
+                },
+              ]}
+            />
+          </div>
         }
       >
-        <div className="grid gap-6 xl:grid-cols-2">
-          <div ref={prChartRef}>
-            <LineChart
-              series={rows.map((row) => ({
-                name: row.algorithmId,
-                points: row.pr,
-                summary: `AUPRC ${row.auprc.toFixed(3)}`,
-              }))}
-              xLabel="Recall"
-              yLabel="Precision"
-              randomBaseline={benchmark.randomBaseline}
-              earlyRegionMax={0.25}
-              caption="Precision–recall"
-              showLegend={false}
-              focusedSeries={curveFocus}
-              onFocusedSeriesChange={setCurveFocus}
-            />
-          </div>
-          <div ref={rocChartRef}>
-            <LineChart
-              series={rows.map((row) => ({
-                name: row.algorithmId,
-                points: row.roc,
-                summary: `AUROC ${row.auroc.toFixed(3)}`,
-              }))}
-              xLabel="False-positive rate"
-              yLabel="True-positive rate"
-              diagonalBaseline
-              caption="ROC"
-              showLegend={false}
-              focusedSeries={curveFocus}
-              onFocusedSeriesChange={setCurveFocus}
-            />
-          </div>
-        </div>
-        {/*
-          One legend for both charts. Laid out as a table rather than chips so
-          "AUPRC"/"AUROC" are paid for once in the header instead of repeated on
-          every entry, and the values align into scannable columns.
-        */}
-        <div className="mt-5 border-t border-slate-100 pt-4">
-          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
-            {curveLegendColumns.map((column, columnIndex) => (
-              <div key={columnIndex}>
-                <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                  <span className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-                  <span className="flex-1">Method</span>
-                  <button
-                    type="button"
-                    onClick={() => setCurveLegendSort("auprc")}
-                    className={`w-12 text-right tabular-nums transition ${
-                      curveLegendSort === "auprc"
-                        ? "text-[#087ead]"
-                        : "hover:text-slate-600"
-                    }`}
-                  >
-                    AUPRC
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCurveLegendSort("auroc")}
-                    className={`w-12 text-right tabular-nums transition ${
-                      curveLegendSort === "auroc"
-                        ? "text-[#087ead]"
-                        : "hover:text-slate-600"
-                    }`}
-                  >
-                    AUROC
-                  </button>
-                </div>
-                {column.map((entry) => {
-                  const isFocused = curveFocus === entry.algorithmId;
-                  return (
-                    <button
-                      key={entry.algorithmId}
-                      type="button"
-                      aria-pressed={isFocused}
-                      onClick={() =>
-                        setCurveFocus(isFocused ? null : entry.algorithmId)
-                      }
-                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                        isFocused
-                          ? "bg-[#f2f9fc] text-[#087ead]"
-                          : curveFocus
-                            ? "text-slate-400 hover:bg-slate-50"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: entry.color }}
-                      />
-                      <span className="flex-1 truncate text-left">
-                        {entry.algorithmId}
-                      </span>
-                      <span className="w-12 text-right tabular-nums">
-                        {entry.auprc.toFixed(3)}
-                      </span>
-                      <span className="w-12 text-right tabular-nums">
-                        {entry.auroc.toFixed(3)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
+        <CurveSmallMultiples rows={figureRows} kind={curveKind} randomBaseline={benchmark.randomBaseline} svgRef={curveSvgRef} />
       </Panel>
       {isCurveHelpOpen && typeof document !== "undefined" ? (
-        <CurvePerformanceHelpModal
-          randomBaseline={benchmark.randomBaseline}
-          onClose={() => setIsCurveHelpOpen(false)}
-        />
+        <CurvePerformanceHelpModal randomBaseline={benchmark.randomBaseline} onClose={() => setIsCurveHelpOpen(false)} />
       ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-stretch">
+      <StabilityAccuracyPanel rows={rows} stability={stability} />
+
+      {methodRows.some((row) => row.runtimeSeconds > 0) ? (
+        <Panel
+          title="Accuracy vs runtime"
+          description="Is the slower method worth the wait? Runtime on a log scale; the blue line joins methods that no faster method beats."
+          aside={<DownloadMenu ariaLabel="Download accuracy vs runtime" items={figureItems("runtime", "accuracy-vs-runtime")} />}
+        >
+          <div className="flex flex-col gap-4">
+            <RuntimeScatter rows={figureRows} svgRef={runtimeSvgRef} />
+            {(() => {
+              const timed = methodRows.filter((row) => row.runtimeSeconds > 0);
+              const best = timed.reduce((top, row) => (row.auprcRatio > top.auprcRatio ? row : top), timed[0]);
+              const quick = timed
+                .filter((row) => row.auprcRatio >= best.auprcRatio * 0.9)
+                .reduce((fast, row) => (row.runtimeSeconds < fast.runtimeSeconds ? row : fast), best);
+              const format = (seconds: number) =>
+                seconds < 60 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
+              return (
+                <div className="space-y-2 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">
+                  <p>
+                    <span className="font-semibold text-slate-800">Top left</span>: fast and accurate. <span className="font-semibold text-slate-800">Bottom right</span>: slow and no better than the rest.
+                  </p>
+                  <p>
+                    Most accurate here: <span className="font-semibold text-slate-800">{best.algorithmId}</span> ({best.auprcRatio.toFixed(2)}× in {format(best.runtimeSeconds)}).
+                    {quick.algorithmId !== best.algorithmId ? (
+                      <>
+                        {" "}Fastest within 10% of it: <span className="font-semibold text-slate-800">{quick.algorithmId}</span> ({quick.auprcRatio.toFixed(2)}× in {format(quick.runtimeSeconds)}).
+                      </>
+                    ) : null}
+                  </p>
+                  <p className="text-xs text-slate-500">Runtimes are wall-clock times of this project&apos;s runs and depend on the machine and data size.</p>
+                </div>
+              );
+            })()}
+          </div>
+        </Panel>
+      ) : null}
+      </div>
 
       <details className="group rounded-[1.25rem] border border-slate-200 bg-white">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 sm:px-6">
           <div>
-            <h3 className="text-base font-extrabold text-slate-950">
-              Additional benchmark diagnostics
-            </h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Motif counts and top-prediction errors.
-            </p>
+            <h3 className="text-base font-extrabold text-slate-950">Additional benchmark diagnostics</h3>
+            <p className="mt-1 text-sm text-slate-600">Network motifs, where wrong predictions sit, and edge direction and sign.</p>
           </div>
-          <span className="text-xl font-light text-slate-400 transition group-open:rotate-45">
-            +
-          </span>
+          <span className="text-xl font-light text-slate-400 transition group-open:rotate-45">+</span>
         </summary>
         <div className="space-y-7 border-t border-slate-100 px-5 py-5 sm:px-6">
-          <section>
+          <div className="grid gap-7 xl:grid-cols-2">
+          <section className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-extrabold text-slate-900">
-                    Motif count ratios
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={() => setAdditionalBenchmarkHelp("motif")}
-                    aria-label="How to read motif count ratios"
-                    aria-haspopup="dialog"
-                    aria-controls="additional-benchmark-help-title"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-                  >
-                    ?
-                  </button>
-                </div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-extrabold text-slate-900">Motif counts relative to the reference</h4>
+                {helpButton(() => setAdditionalBenchmarkHelp("motif"), "How to read motif counts", "additional-benchmark-help-title")}
               </div>
               <DownloadMenu
-                ariaLabel="Download motif count ratios"
+                ariaLabel="Download motif counts"
                 items={[
+                  ...figureItems("motif", "motif-counts"),
                   {
                     label: "Motif count table",
                     format: "CSV",
                     onSelect: () =>
                       downloadCsv("motif-count-ratios.csv", [
-                        [
-                          "algorithm",
-                          "feedback_loops",
-                          "feed_forward_loops",
-                          "mutual_interactions",
-                        ],
-                        ...rows.map((row) => [
+                        ["algorithm", "feedback_loops", "feed_forward_loops", "mutual_interactions"],
+                        ...allRows.map((row) => [
                           row.algorithmId,
                           row.motifs?.feedbackLoops ?? "",
                           row.motifs?.feedForwardLoops ?? "",
@@ -3020,64 +1743,83 @@ export default function BenchmarkInsights({
                 ]}
               />
             </div>
-            <div className="mt-4">
-              <MotifRecovery
-                rows={rows}
-                reference={benchmark.referenceMotifs}
+            <p className="mt-1 text-xs text-slate-500">Blue = fewer motifs than the reference, red = more (log scale, 1× = same as the reference).</p>
+            <div className="mt-3 overflow-x-auto">
+              <MotifHeatmap
+                svgRef={motifSvgRef}
+                rows={byAuprc.map((row) => ({
+                  id: row.algorithmId,
+                  ratios: (["feedbackLoops", "feedForwardLoops", "mutualInteractions"] as const).map((key) => {
+                    const reference = benchmark.referenceMotifs[key];
+                    return row.motifs && reference > 0 ? row.motifs[key] / reference : null;
+                  }) as [number | null, number | null, number | null],
+                }))}
               />
             </div>
           </section>
+          <section className="min-w-0 xl:border-l xl:border-slate-100 xl:pl-8">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h4 className="text-sm font-extrabold text-slate-900">Direction and sign of recovered edges</h4>
+              <DownloadMenu
+                ariaLabel="Download direction and sign"
+                items={[
+                  ...figureItems("direction", "direction-and-sign"),
+                  {
+                    label: "Direction and sign table",
+                    format: "CSV",
+                    onSelect: () =>
+                      downloadCsv("direction-and-sign.csv", [
+                        ["algorithm", "predictions_on_reference_pairs", "right_direction", "sign_compared", "right_sign"],
+                        ...allRows.map((row) => [
+                          row.algorithmId,
+                          row.directionSign.pairs,
+                          row.directionSign.rightDirection,
+                          row.directionSign.signCompared,
+                          row.directionSign.rightSign,
+                        ]),
+                      ]),
+                  },
+                ]}
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Of each method&apos;s {`top ${benchmark.eligibleReferenceEdges} predictions`}, those linking a reference gene pair: drawn the right way
+              round, and with the reference&apos;s sign (activation or repression).
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <StackedBars
+                svgRef={directionSvgRef}
+                ariaLabel="Direction and sign of predicted edges on reference gene pairs"
+                categories={["Right direction, right sign", "Right direction, wrong sign", "Right direction, no sign", "Wrong direction"]}
+                colors={DIRECTION_COLORS}
+                rows={byAuprc.map((row) => {
+                  const d = row.directionSign;
+                  return {
+                    id: row.algorithmId,
+                    parts: [d.rightSign, d.signCompared - d.rightSign, d.rightDirection - d.signCompared, d.pairs - d.rightDirection],
+                    note: d.pairs ? `${d.pairs} edges · ${Math.round((d.rightDirection / d.pairs) * 100)}% right way` : "none",
+                  };
+                })}
+              />
+            </div>
+          </section>
+          </div>
           <section className="border-t border-slate-100 pt-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-extrabold text-slate-900">
-                    How the top predictions compare with the reference
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={() => setAdditionalBenchmarkHelp("path")}
-                    aria-label="How to read top-prediction paths"
-                    aria-haspopup="dialog"
-                    aria-controls="additional-benchmark-help-title"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-                  >
-                    ?
-                  </button>
-                </div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-extrabold text-slate-900">How the top predictions compare with the reference</h4>
+                {helpButton(() => setAdditionalBenchmarkHelp("path"), "How to read top-prediction paths", "additional-benchmark-help-title")}
               </div>
               <DownloadMenu
                 ariaLabel="Download top-prediction path context"
                 items={[
-                  {
-                    label: "Top-prediction path chart",
-                    format: "PNG",
-                    description: "Stacked bars with counts and path-category guide.",
-                    onSelect: async () => {
-                      if (!pathBreakdownExportRef.current) {
-                        throw new Error("The path chart is not available to download.");
-                      }
-                      await downloadSvgPng(
-                        pathBreakdownExportRef.current,
-                        "top-prediction-path-context.png",
-                      );
-                    },
-                  },
+                  ...figureItems("path", "top-prediction-path-context"),
                   {
                     label: "Path context table",
                     format: "CSV",
                     onSelect: () =>
                       downloadCsv("top-prediction-path-context.csv", [
-                        [
-                          "algorithm",
-                          "exact_reference_edge",
-                          "incorrect_2_steps",
-                          "incorrect_3_steps",
-                          "incorrect_4_steps",
-                          "incorrect_5_steps",
-                          "incorrect_more_than_5_steps",
-                          "incorrect_no_path",
-                        ],
+                        ["algorithm", "exact_reference_edge", "incorrect_2_steps", "incorrect_3_steps", "incorrect_4_steps", "incorrect_5_steps", "incorrect_more_than_5_steps", "incorrect_no_path"],
                         ...rows.map((row) => [
                           row.algorithmId,
                           row.pathCounts?.truePositive ?? "",
@@ -3093,11 +1835,24 @@ export default function BenchmarkInsights({
                 ]}
               />
             </div>
-            <div className="mt-4">
-              <PathBreakdown
-                rows={rows}
-                referenceEdgeCount={benchmark.eligibleReferenceEdges}
-                exportSvgRef={pathBreakdownExportRef}
+            <p className="mt-1 text-xs text-slate-500">
+              Each method&apos;s {`top ${benchmark.eligibleReferenceEdges} predictions`}: exact reference edges, and for wrong ones the length of the
+              shortest reference path between the two genes (short paths are near misses).
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <StackedBars
+                svgRef={pathSvgRef}
+                ariaLabel="Top predictions by distance in the reference network"
+                categories={["Exact reference edge", "Wrong · 2 steps", "Wrong · 3 steps", "Wrong · 4+ steps", "Wrong · no path"]}
+                colors={PATH_COLORS}
+                rows={byAuprc.map((row) => {
+                  const c = row.pathCounts;
+                  return {
+                    id: row.algorithmId,
+                    parts: c ? [c.truePositive, c.path2, c.path3, c.path4 + c.path5 + c.pathMoreThan5, c.noPath] : [],
+                    note: c ? `${c.truePositive} exact` : "not available",
+                  };
+                })}
               />
             </div>
           </section>
@@ -3106,11 +1861,7 @@ export default function BenchmarkInsights({
       {additionalBenchmarkHelp && typeof document !== "undefined" ? (
         <AdditionalBenchmarkHelpModal
           kind={additionalBenchmarkHelp}
-          referenceEdgeCount={
-            additionalBenchmarkHelp === "motif"
-              ? benchmark.motifReferenceEdgeCount
-              : benchmark.eligibleReferenceEdges
-          }
+          referenceEdgeCount={additionalBenchmarkHelp === "motif" ? benchmark.motifReferenceEdgeCount : benchmark.eligibleReferenceEdges}
           referenceMotifs={benchmark.referenceMotifs}
           onClose={() => setAdditionalBenchmarkHelp(null)}
         />
