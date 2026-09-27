@@ -163,6 +163,16 @@ class VisualizationContextTests(unittest.TestCase):
             set(trajectory["lineages"][0]["trends"]),
             {"G1", "G2"},
         )
+        cascade = trajectory["lineages"][0]["cascade"]
+        # Requested genes lead the cascade, followed by the remaining genes.
+        self.assertEqual(list(cascade["expression"])[:2], ["G2", "G1"])
+        self.assertEqual(set(cascade["expression"]), {"G1", "G2", "G3"})
+        self.assertTrue(
+            all(
+                len(values) == len(cascade["pseudotime"])
+                for values in cascade["expression"].values()
+            )
+        )
         self.assertEqual(
             trajectory["trend_method"],
             "restricted_cubic_regression_spline",

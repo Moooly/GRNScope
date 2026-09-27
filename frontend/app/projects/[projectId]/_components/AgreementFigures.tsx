@@ -189,7 +189,18 @@ export function AgreementHeatmap({
           const x = left + c * cell;
           const y = top + r * cell;
           if (rowId === columnId) {
-            return <rect key={`${r}-${c}`} x={x} y={y} width={cell} height={cell} fill="#eceff2" stroke="#ffffff" strokeWidth="1" />;
+            // A method compared with itself: similarity 1, drawn like any other cell.
+            return (
+              <g key={`${r}-${c}`}>
+                <title>{`${rowId} vs itself: ${metricLabel} 1`}</title>
+                <rect x={x} y={y} width={cell} height={cell} fill={blues(scale(1))} stroke="#ffffff" strokeWidth="1" />
+                {showValues && (
+                  <text x={x + cell / 2} y={y + cell / 2 + 3.5} fontSize={cell >= 48 ? 11.5 : cell >= 40 ? 10.5 : 9} textAnchor="middle" fill="#ffffff" pointerEvents="none">
+                    1
+                  </text>
+                )}
+              </g>
+            );
           }
           const v = similarity(rowId, columnId);
           const selected =

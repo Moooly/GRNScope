@@ -20,6 +20,10 @@ from .matrix_transformation_service import (
 
 
 MAX_TRAJECTORY_GENES = 8
+# Genes drawn in the expression-cascade heatmap (requested genes first, then
+# the most variable ones), each sampled at a coarser grid to keep it small.
+MAX_CASCADE_GENES = 40
+CASCADE_POINT_COUNT = 40
 TRAJECTORY_SPLINE_POINT_COUNT = 100
 TRAJECTORY_SPLINE_INTERNAL_KNOTS = 2
 MAX_TRAJECTORY_EMBEDDING_CELLS = 700
@@ -137,6 +141,7 @@ def _ground_truth_path(project_dir: Path, manifest: dict) -> Path | None:
 def _fit_expression_spline(
     pseudotime: np.ndarray,
     expression: np.ndarray,
+    point_count: int = TRAJECTORY_SPLINE_POINT_COUNT,
 ) -> list[dict]:
     """Fit a low-complexity cubic spline to cell-level expression."""
     finite = np.isfinite(pseudotime) & np.isfinite(expression)
@@ -167,7 +172,7 @@ def _fit_expression_spline(
     grid = np.linspace(
         float(unique_x[0]),
         float(unique_x[-1]),
-        TRAJECTORY_SPLINE_POINT_COUNT,
+        point_count,
     )
     if (
         len(unique_x) >= 8
@@ -666,6 +671,23 @@ def build_trajectory_context(
     if not genes:
         variances = expression.var(axis=1).sort_values(ascending=False)
         genes = [str(value) for value in variances.head(6).index]
+    cascade_genes = list(
+        dict.fromkeys(
+            [
+                *[
+                    gene
+                    for gene in dict.fromkeys(str(value).strip() for value in requested_genes)
+                    if gene in expression.index
+                ],
+                *(
+                    str(value)
+                    for value in expression.var(axis=1)
+                    .sort_values(ascending=False)
+                    .index
+                ),
+            ]
+        )
+    )[:MAX_CASCADE_GENES]
     lineages: list[dict] = []
     for lineage_name in pseudotime.columns:
         lineage_values = pseudotime[lineage_name].to_numpy(dtype=float)
@@ -683,11 +705,31 @@ def build_trajectory_context(
             for gene in genes
         }
 
+        cascade_grid: list[float] = []
+        cascade_expression: dict[str, list[float]] = {}
+        for gene in cascade_genes:
+            fitted = _fit_expression_spline(
+                lineage_values[valid_indices],
+                expression.loc[gene].to_numpy(dtype=float)[valid_indices],
+                point_count=CASCADE_POINT_COUNT,
+            )
+            if not fitted:
+                continue
+            if not cascade_grid:
+                cascade_grid = [round(point["pseudotime"], 4) for point in fitted]
+            cascade_expression[gene] = [round(point["expression"], 4) for point in fitted]
+
         lineages.append(
             {
                 "name": str(lineage_name),
                 "cell_count": valid_count,
                 "trends": trends,
+                # Compact trends for the cascade heatmap: one shared grid per
+                # lineage and one value per grid point for each gene.
+                "cascade": {
+                    "pseudotime": cascade_grid,
+                    "expression": cascade_expression,
+                },
             }
         )
 

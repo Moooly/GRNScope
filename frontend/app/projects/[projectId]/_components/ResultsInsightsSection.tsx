@@ -20,6 +20,7 @@ import type {
 } from "../_lib/types";
 import type { ResultsHubView } from "./ResultsHubViewSelector";
 import BenchmarkInsights from "./BenchmarkInsights";
+import type { TimingEdge } from "./TrajectoryFigures";
 import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
@@ -2329,6 +2330,40 @@ export default function ResultsInsightsSection({
   isContextLoading,
   onTrajectoryGenesChange,
 }: ResultsInsightsSectionProps) {
+  // Candidate regulator → target edges for the Trajectory tab: directed edges
+  // in the top 100 of each directed method, ranked by how many methods agree.
+  const timingEdges = useMemo<TimingEdge[]>(() => {
+    const directed = activeAlgorithmIds.filter((id) => algorithmMetaMap.get(id)?.directed ?? true);
+    const tally = new Map<string, { source: string; target: string; support: number; rankSum: number; signSum: number }>();
+    directed.forEach((id) => {
+      const seen = new Set<string>();
+      [...(algorithmEdgeRows[id] ?? [])]
+        .sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)
+        .some((edge) => {
+          if (edge.source === edge.target) return false;
+          const key = `${edge.source}\u0000${edge.target}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          const entry = tally.get(key) ?? { source: edge.source, target: edge.target, support: 0, rankSum: 0, signSum: 0 };
+          entry.support += 1;
+          entry.rankSum += seen.size;
+          entry.signSum += edge.sign;
+          tally.set(key, entry);
+          return seen.size >= 100;
+        });
+    });
+    return [...tally.values()]
+      .sort((a, b) => b.support - a.support || a.rankSum / a.support - b.rankSum / b.support)
+      .slice(0, 60)
+      .map((entry) => ({
+        source: entry.source,
+        target: entry.target,
+        support: entry.support,
+        methods: directed.length,
+        sign: entry.signSum > 0 ? 1 : entry.signSum < 0 ? -1 : 0,
+      }));
+  }, [activeAlgorithmIds, algorithmEdgeRows, algorithmMetaMap]);
+
   if (view === "agreement") {
     return (
       <AgreementView
@@ -2346,6 +2381,7 @@ export default function ResultsInsightsSection({
         trajectory={visualizationContext?.trajectory}
         loading={isContextLoading}
         onGenesChange={onTrajectoryGenesChange}
+        edges={timingEdges}
       />
     );
   }

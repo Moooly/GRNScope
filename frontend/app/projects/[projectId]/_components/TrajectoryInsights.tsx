@@ -9,6 +9,16 @@ import {
   downloadSvgPng,
 } from "../_lib/downloads";
 import DownloadMenu from "./DownloadMenu";
+import {
+  CascadeHeatmap,
+  GeneTrendPlot,
+  LINEAGE_COLORS,
+  RegulatorTimingPlot,
+  buildCascadeRows,
+  onsetTime,
+  type CascadeLineage,
+  type TimingEdge,
+} from "./TrajectoryFigures";
 
 export type TrajectoryData = {
   available: boolean;
@@ -29,6 +39,11 @@ export type TrajectoryData = {
         expression: number;
       }>
     >;
+    /** Compact trends for the cascade heatmap (one grid, one value per point). */
+    cascade?: {
+      pseudotime: number[];
+      expression: Record<string, number[]>;
+    };
   }>;
   embedding?: {
     method: string;
@@ -57,31 +72,6 @@ type ChartPoint = {
   x: number;
   y: number;
 };
-
-type ExpressionSeries = {
-  name: string;
-  color: string;
-  trend: ChartPoint[];
-};
-
-// Okabe-Ito, extended to eight. Chosen so adjacent series stay separable under
-// the common colour-vision deficiencies and none of them collide with the
-// slate used for axes and UI text.
-const GENE_COLORS = [
-  "#0072b2",
-  "#d55e00",
-  "#009e73",
-  "#cc79a7",
-  "#e69f00",
-  "#56b4e9",
-  "#5d3a9b",
-  "#7a4900",
-];
-
-// Light early -> deep late, so "faded" reads as the start of the trajectory
-// rather than as unimportant.
-const PSEUDOTIME_EARLY_RGB: [number, number, number] = [56, 170, 220];
-const PSEUDOTIME_LATE_RGB: [number, number, number] = [12, 74, 110];
 
 function formatAxisValue(value: number) {
   const absolute = Math.abs(value);
@@ -134,65 +124,24 @@ function formatTick(value: number, step: number) {
   return value.toFixed(stepDecimals(step));
 }
 
-function srgbToLinear(channel: number) {
-  return channel <= 0.04045
-    ? channel / 12.92
-    : ((channel + 0.055) / 1.055) ** 2.4;
-}
+// Viridis: the default pseudotime scale in scanpy, Slingshot and CellRank
+// figures; perceptually uniform and readable in greyscale.
+const VIRIDIS: [number, number, number][] = [
+  [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142], [38, 130, 142],
+  [31, 158, 137], [53, 183, 121], [109, 205, 89], [180, 222, 44], [253, 231, 37],
+];
+const FIG_INK = "#1a1a1a";
+const FIG_MUTED = "#6b7580";
 
-function linearToSrgb(channel: number) {
-  return channel <= 0.0031308
-    ? channel * 12.92
-    : 1.055 * channel ** (1 / 2.4) - 0.055;
-}
-
-function rgbToOklab([red, green, blue]: [number, number, number]) {
-  const r = srgbToLinear(red / 255);
-  const g = srgbToLinear(green / 255);
-  const b = srgbToLinear(blue / 255);
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [
-    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ] as [number, number, number];
-}
-
-function oklabToRgb([lightness, greenRed, blueYellow]: [number, number, number]) {
-  const l = (lightness + 0.3963377774 * greenRed + 0.2158037573 * blueYellow) ** 3;
-  const m = (lightness - 0.1055613458 * greenRed - 0.0638541728 * blueYellow) ** 3;
-  const s = (lightness - 0.0894841775 * greenRed - 1.291485548 * blueYellow) ** 3;
-  const channel = (value: number) =>
-    Math.round(Math.max(0, Math.min(1, linearToSrgb(value))) * 255);
-  return [
-    channel(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-    channel(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-    channel(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
-  ];
-}
-
-const PSEUDOTIME_EARLY_LAB = rgbToOklab(PSEUDOTIME_EARLY_RGB);
-const PSEUDOTIME_LATE_LAB = rgbToOklab(PSEUDOTIME_LATE_RGB);
-
-/** Interpolated in Oklab so equal pseudotime steps look like equal colour steps. */
 function interpolateColor(progress: number) {
-  const ratio = Math.max(0, Math.min(1, progress));
-  const lab = PSEUDOTIME_EARLY_LAB.map(
-    (value, index) => value + (PSEUDOTIME_LATE_LAB[index] - value) * ratio,
-  ) as [number, number, number];
-  return `rgb(${oklabToRgb(lab).join(",")})`;
+  const ratio = Math.max(0, Math.min(1, progress)) * (VIRIDIS.length - 1);
+  const index = Math.min(VIRIDIS.length - 2, Math.floor(ratio));
+  const fraction = ratio - index;
+  const color = VIRIDIS[index].map((value, channel) =>
+    Math.round(value + (VIRIDIS[index + 1][channel] - value) * fraction),
+  );
+  return `rgb(${color.join(",")})`;
 }
-
-const PSEUDOTIME_STOPS = Array.from({ length: 7 }, (_, index) => ({
-  offset: index / 6,
-  color: interpolateColor(index / 6),
-}));
-
-const PSEUDOTIME_CSS_GRADIENT = `linear-gradient(90deg, ${PSEUDOTIME_STOPS.map(
-  (stop) => `${stop.color} ${Math.round(stop.offset * 100)}%`,
-).join(", ")})`;
 
 function linearSvgPath(points: ChartPoint[]) {
   if (!points.length) return "";
@@ -222,12 +171,6 @@ function smoothSvgPath(points: ChartPoint[]) {
   return path;
 }
 
-/**
- * SVG text shrinks with the viewBox, so on a phone a 12-unit label renders at
- * ~5px. Holding the chart to a minimum width and letting its own container
- * scroll keeps every label legible without measuring the viewport.
- */
-const CHART_MIN_WIDTH = 640;
 
 /**
  * The embedding canvas spans the full column at a fixed aspect. An equal-aspect
@@ -238,7 +181,7 @@ const CHART_MIN_WIDTH = 640;
 // follows from this aspect, so it never needs a height cap (which would
 // letterbox the plot and pull the axes in from the edges).
 const CELL_CANVAS_WIDTH = 1200;
-const CELL_CANVAS_HEIGHT = 700;
+const CELL_CANVAS_HEIGHT = 500;
 
 function EmptyTrajectory({
   title,
@@ -272,7 +215,7 @@ function TrajectoryHelpModal({
   expressionLabel,
   onClose,
 }: {
-  mode: "cells" | "genes";
+  mode: "cells" | "genes" | "timing";
   trajectory: TrajectoryData;
   lineage: NonNullable<TrajectoryData["lineages"]>[number];
   expressionLabel: string;
@@ -326,12 +269,16 @@ function TrajectoryHelpModal({
             >
               {isCells
                 ? "Understanding the cell trajectory"
-                : "Understanding gene trends"}
+                : mode === "timing"
+                  ? "Understanding regulator and target plots"
+                  : "Understanding the expression cascade"}
             </h3>
             <p id={summaryId} className="mt-1 text-sm leading-5 text-slate-500">
               {isCells
                 ? "How cells, pseudotime, lineages, and the trajectory path are displayed."
-                : "How expression curves are fitted, scaled, compared, and downloaded."}
+                : mode === "timing"
+                  ? "How network edges are placed on the trajectory and how the lag is measured."
+                  : "How gene trends are fitted, scaled, ordered, and downloaded."}
             </p>
           </div>
           <button
@@ -339,7 +286,7 @@ function TrajectoryHelpModal({
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-            aria-label={`Close ${isCells ? "cell trajectory" : "gene trends"} help`}
+            aria-label={`Close ${isCells ? "cell trajectory" : mode === "timing" ? "regulator and target" : "expression cascade"} help`}
           >
             ×
           </button>
@@ -353,9 +300,10 @@ function TrajectoryHelpModal({
                 <ul className="mt-2 space-y-2">
                   <li>
                     <strong className="text-slate-800">Each dot is one displayed cell.</strong>{" "}
-                    Colored cells belong to <strong>{lineage.name}</strong>; light blue is
-                    early and deep blue is late. Pale gray cells belong to other lineages
-                    and provide spatial context.
+                    Colored cells belong to <strong>{lineage.name}</strong>, on the viridis
+                    scale from dark purple (early) to yellow (late). Gray cells belong only to
+                    other lineages and provide spatial context. The bars under the map count
+                    displayed cells along pseudotime, so sparse stretches are visible.
                   </li>
                   <li>
                     <strong className="text-slate-800">Pseudotime is an ordering, not elapsed time.</strong>{" "}
@@ -437,26 +385,59 @@ function TrajectoryHelpModal({
               <section className="mt-5 border-t border-slate-100 pt-5">
                 <h4 className="font-extrabold text-slate-900">Downloads</h4>
                 <p className="mt-2">
-                  PNG and SVG export the chart with its legend. CSV exports the displayed
+                  PNG and SVG export the map with its density strip and colour scale. CSV exports the displayed
                   cell IDs, embedding coordinates, selected lineage, and each cell&apos;s
                   pseudotime; blank pseudotime means the cell belongs only to another lineage.
+                </p>
+              </section>
+            </>
+          ) : mode === "timing" ? (
+            <>
+              <section>
+                <h4 className="font-extrabold text-slate-900">What the plot shows</h4>
+                <p className="mt-2">
+                  For one network edge, the regulator (black) and its target (blue) are drawn along{" "}
+                  <strong>{lineage.name}</strong>, each scaled 0–1, as in the two-gene panels of lag-based GRN
+                  papers. If the regulator drives the target, its expression should usually change first; methods
+                  such as SCODE, SINCERITIES and SINGE use this pseudotime lag to infer direction. Tick
+                  &quot;Show onsets&quot; to mark each gene&apos;s onset and the lag on the figure.
+                </p>
+              </section>
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">Onset and lag</h4>
+                <p className="mt-2">
+                  A gene&apos;s onset is the first pseudotime, up to its peak, at which its fitted trend
+                  reaches half of its range. The lag is the target&apos;s onset minus the regulator&apos;s:
+                  positive means the regulator switches on first. Timing agrees with direction but does not
+                  prove regulation, and repressors or genes that fall rather than rise can show other patterns.
+                </p>
+              </section>
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="font-extrabold text-slate-900">Which edges are listed</h4>
+                <p className="mt-2">
+                  Directed edges from each directed method&apos;s top 100, ranked by how many methods include
+                  them and then by average rank. Edges whose regulator or target barely changes along this
+                  lineage are left out, because an onset cannot be measured. CSV exports every listed edge with
+                  its support, sign, onsets and lag.
                 </p>
               </section>
             </>
           ) : (
             <>
               <section>
-                <h4 className="font-extrabold text-slate-900">What the curves show</h4>
+                <h4 className="font-extrabold text-slate-900">What the heatmap shows</h4>
                 <p className="mt-2">
-                  Each colored curve summarizes <strong>{expressionLabel.toLowerCase()}</strong>{" "}
-                  across cells ordered along <strong>{lineage.name}</strong>. Pseudotime is a
-                  relative progression, not elapsed time. The colored gene chips are the
-                  legend; add or remove genes there, with 1–8 genes shown at once.
+                  Each row is one gene&apos;s fitted trend of <strong>{expressionLabel.toLowerCase()}</strong>{" "}
+                  along pseudotime, with one panel per lineage. Rows are sorted by the pseudotime at
+                  which each gene peaks in <strong>{lineage.name}</strong>, so genes that switch on in
+                  sequence form a diagonal from top-left to bottom-right (an expression cascade, as in
+                  CellRank and Monocle). Pseudotime is a relative progression, not elapsed time.
                 </p>
                 <p className="mt-2">
-                  Hover near a curve to see its original fitted value and fitted range at the
-                  nearest pseudotime point. Click to pin that gene and dim the others; click
-                  the curve or pinned label again to clear it.
+                  Up to 40 genes are shown: any gene you look up first, then the most variable ones.
+                  A gene whose trend changes by less than 10% of the most dynamic gene&apos;s range is
+                  drawn in hatched grey for that lineage (&quot;not expressed&quot;) rather than stretched to
+                  full colour. Click a row to see the gene in real expression units in every lineage.
                 </p>
               </section>
 
@@ -493,9 +474,9 @@ function TrajectoryHelpModal({
               </section>
 
               <section className="mt-5 border-t border-slate-100 pt-5">
-                <h4 className="font-extrabold text-slate-900">Why every curve spans 0–1</h4>
+                <h4 className="font-extrabold text-slate-900">Why every row spans 0–1</h4>
                 <p className="mt-2">
-                  The chart independently rescales each gene&apos;s fitted values. This makes
+                  The heatmap independently rescales each gene&apos;s fitted values within each lineage. This makes
                   activation timing and curve shape comparable, but deliberately removes
                   between-gene magnitude differences.
                 </p>
@@ -528,9 +509,9 @@ function TrajectoryHelpModal({
               <section className="mt-5 border-t border-slate-100 pt-5">
                 <h4 className="font-extrabold text-slate-900">Downloads</h4>
                 <p className="mt-2">
-                  PNG and SVG export the relative 0–1 chart. CSV keeps the original fitted
-                  expression values for every selected gene and pseudotime point, before
-                  display scaling, so quantitative values are not lost.
+                  PNG and SVG export the heatmap. CSV keeps the original fitted expression
+                  values and the scaled 0–1 values for every gene, lineage and pseudotime
+                  point, so quantitative values are not lost.
                 </p>
               </section>
             </>
@@ -610,10 +591,7 @@ function CellTrajectoryChart({
   const pseudotimeMin = Math.min(...activeValues);
   const pseudotimeMax = Math.max(...activeValues);
   const activePath = embedding.paths.find((path) => path.name === lineageName);
-  const displayedCount = activeValues.length;
-  const otherLineageCount = Math.max(0, embedding.points.length - displayedCount);
   const isFittedSlingshotCurve = embedding.path_source === "slingshot_curve";
-  const exportLegendExtraHeight = 56;
   const activeChartPoints = (activePath?.points ?? []).map((point) => ({
     x: xPosition(point.x),
     y: yPosition(point.y),
@@ -713,668 +691,333 @@ function CellTrajectoryChart({
     applyZoom(factor, left + plotWidth / 2, top + plotHeight / 2);
 
   const controlClass =
-    "grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-[#1b75a6]/40 hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-40";
+    "grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40";
+
+  // Cell density along pseudotime, drawn under the embedding (displayed cells).
+  const DENSITY_BINS = 40;
+  const densityCounts = new Array<number>(DENSITY_BINS).fill(0);
+  activeValues.forEach((value) => {
+    const bin = Math.min(
+      DENSITY_BINS - 1,
+      Math.floor(((value - pseudotimeMin) / Math.max(1e-9, pseudotimeMax - pseudotimeMin)) * DENSITY_BINS),
+    );
+    densityCounts[bin] += 1;
+  });
+  const densityMax = Math.max(1, ...densityCounts);
+  const stripLeft = left + 40;
+  const stripWidth = plotWidth - 80;
+  const stripTop = height + 26;
+  const stripHeight = 46;
+  const barTop = stripTop + stripHeight + 4;
+  const { ticks: pseudotimeTicks, step: pseudotimeStep } = niceTicks(pseudotimeMin, pseudotimeMax, 6);
+  const stripX = (value: number) =>
+    stripLeft + ((value - pseudotimeMin) / Math.max(1e-9, pseudotimeMax - pseudotimeMin)) * stripWidth;
+  const totalHeight = height + 150;
+
+  const tipLabel = (points: ChartPoint[], name: string, active: boolean) => {
+    const tip = points.at(-1);
+    const from = points.at(-2) ?? tip;
+    if (!tip || !from) return null;
+    const rightward = tip.x >= from.x;
+    return (
+      <text
+        x={tip.x + (rightward ? -4 : 4) * strokeScale}
+        y={tip.y + 22 * strokeScale}
+        textAnchor={rightward ? "end" : "start"}
+        fontSize={15 * strokeScale}
+        fontWeight={active ? 700 : 400}
+        fill={active ? FIG_INK : FIG_MUTED}
+        stroke="#ffffff"
+        strokeWidth={4 * strokeScale}
+        paintOrder="stroke"
+      >
+        {name}
+      </text>
+    );
+  };
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_13rem] lg:items-start">
-      {/*
-        No height cap: one would letterbox the viewBox inside a wider box and
-        float the axes away from the edges. The canvas aspect is wide enough
-        that a full-width frame stays a sensible height on its own.
-      */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc]">
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
-          className={`block w-full ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
-          role="img"
-          aria-label={`${embedding.method} cell embedding colored by ${lineageName} pseudotime, light early to deep late. Drag to pan; pinch or use the zoom controls to magnify.`}
-          onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            const point = toViewBox(event.clientX, event.clientY);
-            if (!point) return;
-            panRef.current = {
-              pointerId: event.pointerId,
-              startX: point.x,
-              startY: point.y,
-              originX: transform.x,
-              originY: transform.y,
-            };
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setIsPanning(true);
-          }}
-          onPointerMove={(event) => {
-            const pan = panRef.current;
-            if (!pan || pan.pointerId !== event.pointerId) return;
-            const point = toViewBox(event.clientX, event.clientY);
-            if (!point) return;
-            const rawX = pan.originX + (point.x - pan.startX);
-            const rawY = pan.originY + (point.y - pan.startY);
-            setTransform((current) => ({
-              ...current,
-              ...clampPan(current.k, rawX, rawY),
-            }));
-          }}
-          onPointerUp={(event) => {
-            if (panRef.current?.pointerId === event.pointerId) {
-              panRef.current = null;
-              setIsPanning(false);
-            }
-          }}
-          onPointerCancel={() => {
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${width} ${totalHeight}`}
+        // Whole figure (map and cell-count strip) stays within one screen: the
+        // height is capped to the viewport and the viewBox letterboxes inside.
+        style={{ maxHeight: "max(460px, calc(100vh - 260px))" }}
+        className={`block h-auto w-full ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        fontFamily="Arial, Helvetica, sans-serif"
+        role="img"
+        aria-label={`${embedding.method} cell embedding colored by ${lineageName} pseudotime (viridis, dark early to yellow late), with cell density along pseudotime below. Drag to pan; pinch or use the zoom controls to magnify.`}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          const point = toViewBox(event.clientX, event.clientY);
+          if (!point || point.y > height) return;
+          panRef.current = {
+            pointerId: event.pointerId,
+            startX: point.x,
+            startY: point.y,
+            originX: transform.x,
+            originY: transform.y,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setIsPanning(true);
+        }}
+        onPointerMove={(event) => {
+          const pan = panRef.current;
+          if (!pan || pan.pointerId !== event.pointerId) return;
+          const point = toViewBox(event.clientX, event.clientY);
+          if (!point) return;
+          const rawX = pan.originX + (point.x - pan.startX);
+          const rawY = pan.originY + (point.y - pan.startY);
+          setTransform((current) => ({
+            ...current,
+            ...clampPan(current.k, rawX, rawY),
+          }));
+        }}
+        onPointerUp={(event) => {
+          if (panRef.current?.pointerId === event.pointerId) {
             panRef.current = null;
             setIsPanning(false);
-          }}
-        >
-          <defs>
-            <linearGradient id="trajectory-pseudotime-export-scale" x1="0" x2="1">
-              {PSEUDOTIME_STOPS.map((stop) => (
-                <stop
-                  key={stop.offset}
-                  offset={stop.offset}
-                  stopColor={stop.color}
-                />
-              ))}
-            </linearGradient>
-            <clipPath id="trajectory-plot-clip">
-              <rect x={left} y={top} width={plotWidth} height={plotHeight} />
-            </clipPath>
-          </defs>
-          <rect width={width} height={height} fill="#f8fafc" />
-          <g clipPath="url(#trajectory-plot-clip)">
-            <g transform={`translate(${tx} ${ty}) scale(${k})`}>
-              {embedding.points.map((point) => {
-                const pseudotime = point.pseudotime[lineageName];
-                const isActive = typeof pseudotime === "number";
-                const progress = isActive
-                  ? (pseudotime - pseudotimeMin) /
-                    Math.max(1e-9, pseudotimeMax - pseudotimeMin)
-                  : 0;
+          }
+        }}
+        onPointerCancel={() => {
+          panRef.current = null;
+          setIsPanning(false);
+        }}
+      >
+        <defs>
+          <clipPath id="trajectory-plot-clip">
+            <rect x={left} y={top} width={plotWidth} height={plotHeight} />
+          </clipPath>
+        </defs>
+        <rect width={width} height={totalHeight} fill="#ffffff" />
+        <g clipPath="url(#trajectory-plot-clip)">
+          <g transform={`translate(${tx} ${ty}) scale(${k})`}>
+            {embedding.points.map((point) => {
+              if (typeof point.pseudotime[lineageName] === "number") return null;
+              return (
+                <circle
+                  key={point.cell}
+                  cx={xPosition(point.x)}
+                  cy={yPosition(point.y)}
+                  r={3.2 * strokeScale}
+                  fill="#d6dbe0"
+                >
+                  <title>{`${point.cell} · not in ${lineageName}`}</title>
+                </circle>
+              );
+            })}
+            {[...embedding.points]
+              .filter((point) => typeof point.pseudotime[lineageName] === "number")
+              .sort((a, b) => (a.pseudotime[lineageName] as number) - (b.pseudotime[lineageName] as number))
+              .map((point) => {
+                const pseudotime = point.pseudotime[lineageName] as number;
+                const progress =
+                  (pseudotime - pseudotimeMin) / Math.max(1e-9, pseudotimeMax - pseudotimeMin);
                 return (
                   <circle
                     key={point.cell}
                     cx={xPosition(point.x)}
                     cy={yPosition(point.y)}
-                    r={(isActive ? 4 : 2.1) * strokeScale}
-                    fill={isActive ? interpolateColor(progress) : "#cbd5e1"}
-                    fillOpacity={isActive ? 1 : 0.11}
-                    stroke={isActive ? "#ffffff" : "none"}
-                    strokeWidth={isActive ? 0.6 * strokeScale : 0}
+                    r={4.2 * strokeScale}
+                    fill={interpolateColor(progress)}
+                    stroke="#ffffff"
+                    strokeWidth={0.6 * strokeScale}
                   >
-                    <title>
-                      {point.cell}
-                      {isActive
-                        ? ` · pseudotime ${formatAxisValue(pseudotime)}`
-                        : ""}
-                    </title>
+                    <title>{`${point.cell} · pseudotime ${formatAxisValue(pseudotime)}`}</title>
                   </circle>
                 );
               })}
-              {embedding.paths.map((path) => {
-                if (path.name === lineageName) return null;
-                const chartPoints = path.points.map((point) => ({
-                  x: xPosition(point.x),
-                  y: yPosition(point.y),
-                }));
-                return (
+            {embedding.paths.map((path) => {
+              if (path.name === lineageName) return null;
+              const chartPoints = path.points.map((point) => ({
+                x: xPosition(point.x),
+                y: yPosition(point.y),
+              }));
+              const tip = chartPoints.at(-1);
+              const from = chartPoints.at(-2) ?? tip;
+              const angle = tip && from ? (Math.atan2(tip.y - from.y, tip.x - from.x) * 180) / Math.PI : 0;
+              return (
+                <g key={path.name}>
                   <path
-                    key={path.name}
                     d={smoothSvgPath(chartPoints)}
                     fill="none"
-                    stroke="#cbd5e1"
-                    strokeWidth={2 * strokeScale}
+                    stroke="#9aa3ab"
+                    strokeWidth={1.6 * strokeScale}
                     strokeDasharray={contextStrokeDasharray}
                     strokeLinecap="round"
-                    opacity="0.35"
                   />
-                );
-              })}
-              {activePath && activeChartPoints.length ? (
-                <>
-                  <path
-                    d={activePathData}
-                    fill="none"
-                    stroke="white"
-                    strokeWidth={(isFittedSlingshotCurve ? 7 : 6) * strokeScale}
-                    strokeDasharray={activeStrokeDasharray}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity="0.9"
-                  />
-                  <path
-                    d={activePathData}
-                    fill="none"
-                    stroke="#0f789f"
-                    strokeWidth={(isFittedSlingshotCurve ? 3.5 : 3) * strokeScale}
-                    strokeDasharray={activeStrokeDasharray}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle
-                    cx={activeChartPoints[0].x}
-                    cy={activeChartPoints[0].y}
-                    r={5 * strokeScale}
-                    fill="white"
-                    stroke="#0f789f"
-                    strokeWidth={2.5 * strokeScale}
-                  />
-                  {arrowTip ? (
+                  {tip ? (
                     <polygon
-                      points={`${-11},${-7} ${3},${0} ${-11},${7}`}
-                      transform={`translate(${arrowTip.x} ${arrowTip.y}) rotate(${arrowAngle}) scale(${strokeScale})`}
-                      fill="#0f789f"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      strokeLinejoin="round"
+                      points="-10,-6 2,0 -10,6"
+                      transform={`translate(${tip.x} ${tip.y}) rotate(${angle}) scale(${strokeScale})`}
+                      fill="#9aa3ab"
                     />
                   ) : null}
-                </>
-              ) : null}
-            </g>
-          </g>
-          <text
-            x={left + plotWidth / 2}
-            y={height - 6}
-            textAnchor="middle"
-            fill="#64748b"
-            fontSize="12"
-            fontWeight="600"
-          >
-            {embedding.method} 1
-          </text>
-          <text
-            x="12"
-            y={top + plotHeight / 2}
-            textAnchor="middle"
-            fill="#64748b"
-            fontSize="12"
-            fontWeight="600"
-            transform={`rotate(-90 12 ${top + plotHeight / 2})`}
-          >
-            {embedding.method} 2
-          </text>
-          <g
-            data-export-only
-            data-export-extra-height={exportLegendExtraHeight}
-            style={{ display: "none" }}
-            aria-label="Cell trajectory legend"
-          >
-            <line
-              x1={left}
-              x2={width - right}
-              y1={height + 8}
-              y2={height + 8}
-              stroke="#e2e8f0"
-            />
-            <text x={left} y={height + 39} fill="#64748b" fontSize="10.5" fontWeight="600">
-              {formatAxisValue(pseudotimeMin)}
-            </text>
-            <rect
-              x={left + 24}
-              y={height + 30}
-              width="108"
-              height="9"
-              rx="4.5"
-              fill="url(#trajectory-pseudotime-export-scale)"
-            />
-            <text x={left + 140} y={height + 39} fill="#64748b" fontSize="10.5" fontWeight="600">
-              {formatAxisValue(pseudotimeMax)} pseudotime
-            </text>
-            <line
-              x1={left + 282}
-              x2={left + 316}
-              y1={height + 35}
-              y2={height + 35}
-              stroke="#0f789f"
-              strokeWidth="3"
-              strokeDasharray={isFittedSlingshotCurve ? undefined : "8 6"}
-              strokeLinecap="round"
-            />
-            <text x={left + 326} y={height + 39} fill="#334155" fontSize="10.5" fontWeight="600">
-              {isFittedSlingshotCurve
-                ? "Fitted Slingshot curve → late"
-                : "Pseudotime guide → late"}
-            </text>
-            {otherLineageCount > 0 ? (
+                  {tipLabel(chartPoints, path.name, false)}
+                </g>
+              );
+            })}
+            {activePath && activeChartPoints.length ? (
               <>
-                <circle cx={width - right - 142} cy={height + 35} r="3" fill="#cbd5e1" />
-                <text x={width - right - 132} y={height + 39} fill="#334155" fontSize="10.5" fontWeight="600">
-                  Other-lineage cells
+                <path
+                  d={activePathData}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={6 * strokeScale}
+                  strokeDasharray={activeStrokeDasharray}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.9"
+                />
+                <path
+                  d={activePathData}
+                  fill="none"
+                  stroke={FIG_INK}
+                  strokeWidth={2.6 * strokeScale}
+                  strokeDasharray={activeStrokeDasharray}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle
+                  cx={activeChartPoints[0].x}
+                  cy={activeChartPoints[0].y}
+                  r={6 * strokeScale}
+                  fill="#ffffff"
+                  stroke={FIG_INK}
+                  strokeWidth={2 * strokeScale}
+                />
+                <text
+                  x={activeChartPoints[0].x - 11 * strokeScale}
+                  y={activeChartPoints[0].y + 5 * strokeScale}
+                  textAnchor="end"
+                  fontSize={15 * strokeScale}
+                  fill={FIG_INK}
+                  stroke="#ffffff"
+                  strokeWidth={4 * strokeScale}
+                  paintOrder="stroke"
+                >
+                  Start
                 </text>
+                {arrowTip ? (
+                  <polygon
+                    points="-13,-8 3,0 -13,8"
+                    transform={`translate(${arrowTip.x} ${arrowTip.y}) rotate(${arrowAngle}) scale(${strokeScale})`}
+                    fill={FIG_INK}
+                    stroke="#ffffff"
+                    strokeWidth="1.2"
+                    strokeLinejoin="round"
+                  />
+                ) : null}
+                {tipLabel(activeChartPoints, lineageName, true)}
               </>
             ) : null}
           </g>
-        </svg>
-      </div>
+        </g>
 
-      <aside className="flex flex-col gap-5 text-xs lg:pt-1">
-        <div>
-          <p className="font-semibold text-slate-400">Pseudotime</p>
-          <div
-            className="mt-2 h-2 w-full rounded-full"
-            style={{ background: PSEUDOTIME_CSS_GRADIENT }}
-            aria-hidden="true"
+        {/* Axis arrows in the corner: embedding coordinates carry no units. */}
+        <g aria-hidden="true">
+          <path
+            d={`M${left + 4} ${top + plotHeight - 4}h52M${left + 4} ${top + plotHeight - 4}v-52`}
+            stroke={FIG_INK}
+            strokeWidth="1.4"
+            fill="none"
           />
-          <div className="mt-1.5 flex items-baseline justify-between text-[11px] tabular-nums text-slate-400">
-            <span>{formatAxisValue(pseudotimeMin)}</span>
-            <span>{formatAxisValue(pseudotimeMax)}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={() => zoomAboutCentre(1 / 1.4)}
-            disabled={k <= 1}
-            className={controlClass}
-            aria-label="Zoom out"
-          >
-            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
-              <path d="M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
-          <span className="w-10 text-center font-semibold tabular-nums text-slate-600">
-            {k.toFixed(1)}×
-          </span>
-          <button
-            type="button"
-            onClick={() => zoomAboutCentre(1.4)}
-            disabled={k >= 12}
-            className={controlClass}
-            aria-label="Zoom in"
-          >
-            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
-              <path
-                d="M8 3.5v9M3.5 8h9"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTransform({ k: 1, x: 0, y: 0 })}
-            disabled={!isZoomed}
-            className="ml-auto rounded-lg px-2 py-1.5 font-semibold text-slate-500 transition hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Fit
-          </button>
-        </div>
-
-      </aside>
-    </div>
-  );
-}
-
-function GeneTrendComparisonChart({
-  series,
-  pinnedGene,
-  onPinnedGeneChange,
-}: {
-  series: ExpressionSeries[];
-  pinnedGene: string | null;
-  onPinnedGeneChange: (gene: string | null) => void;
-}) {
-  const [hoveredTrend, setHoveredTrend] = useState<{
-    name: string;
-    color: string;
-    pseudotime: number;
-    relative: number;
-    expression: number;
-    minimum: number;
-    maximum: number;
-    x: number;
-    y: number;
-    /** Anchor in container pixels, so the tooltip tracks horizontal scrolling. */
-    anchorX: number;
-    anchorY: number;
-    flip: boolean;
-  } | null>(null);
-  const width = 820;
-  const height = 380;
-  const left = 58;
-  const right = 20;
-  const top = 14;
-  const bottom = 40;
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const allPoints = series.flatMap((item) => item.trend);
-  const xValues = allPoints.map((point) => point.x);
-  const xMin = Math.min(...xValues);
-  const xMax = Math.max(...xValues);
-  const xPosition = (value: number) =>
-    left + ((value - xMin) / Math.max(1e-9, xMax - xMin)) * (width - left - right);
-  const yPosition = (value: number) =>
-    top + (1 - value) * (height - top - bottom);
-  const yTicks = [0, 0.25, 0.5, 0.75, 1];
-  const { ticks: xTicks, step: xTickStep } = niceTicks(xMin, xMax, 6);
-  const normalizedSeries = series.map((item) => {
-    const expressionValues = item.trend.map((point) => point.y);
-    const minimum = Math.min(...expressionValues);
-    const maximum = Math.max(...expressionValues);
-    const normalizedPoints = item.trend.map((point) => ({
-      pseudotime: point.x,
-      expression: point.y,
-      relative:
-        maximum > minimum ? (point.y - minimum) / (maximum - minimum) : 0,
-    }));
-    return {
-      ...item,
-      minimum,
-      maximum,
-      normalizedPoints,
-      chartPoints: normalizedPoints.map((point) => ({
-        x: xPosition(point.pseudotime),
-        y: yPosition(point.relative),
-      })),
-    };
-  });
-  const exportLegendColumns = Math.min(4, Math.max(1, normalizedSeries.length));
-  const exportLegendRows = Math.ceil(normalizedSeries.length / exportLegendColumns);
-  const exportLegendColumnWidth = (width - left - right) / exportLegendColumns;
-  const exportLegendNoteY = height + 35 + exportLegendRows * 23;
-  const exportLegendExtraHeight = 58 + exportLegendRows * 23;
-  const focusedName = pinnedGene ?? hoveredTrend?.name ?? null;
-
-  const resolveNearest = (clientX: number, clientY: number, svg: SVGSVGElement) => {
-    const bounds = svg.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return null;
-    const chartX = ((clientX - bounds.left) / bounds.width) * width;
-    const chartY = ((clientY - bounds.top) / bounds.height) * height;
-    const pseudotime =
-      xMin +
-      ((Math.max(left, Math.min(width - right, chartX)) - left) /
-        Math.max(1e-9, width - left - right)) *
-        (xMax - xMin);
-    let best: (typeof hoveredTrend) | null = null;
-    let bestDistance = Infinity;
-    for (const item of normalizedSeries) {
-      if (!item.normalizedPoints.length) continue;
-      const nearest = item.normalizedPoints.reduce((closest, point) =>
-        Math.abs(point.pseudotime - pseudotime) <
-        Math.abs(closest.pseudotime - pseudotime)
-          ? point
-          : closest,
-      );
-      const pointY = yPosition(nearest.relative);
-      const distance = Math.abs(pointY - chartY);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        const pointX = xPosition(nearest.pseudotime);
-        const container = containerRef.current?.getBoundingClientRect();
-        const offsetLeft = container ? bounds.left - container.left : 0;
-        const offsetTop = container ? bounds.top - container.top : 0;
-        best = {
-          name: item.name,
-          color: item.color,
-          pseudotime: nearest.pseudotime,
-          relative: nearest.relative,
-          expression: nearest.expression,
-          minimum: item.minimum,
-          maximum: item.maximum,
-          x: pointX,
-          y: pointY,
-          anchorX: offsetLeft + (pointX / width) * bounds.width,
-          anchorY:
-            offsetTop +
-            Math.max(
-              70,
-              Math.min(bounds.height - 70, (pointY / height) * bounds.height),
-            ),
-          flip: pointX > width * 0.58,
-        };
-      }
-    }
-    return best;
-  };
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative overflow-x-auto rounded-2xl border border-slate-200 bg-white"
-    >
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="block w-full"
-        style={{ minWidth: CHART_MIN_WIDTH }}
-        role="img"
-        aria-label="Independently scaled gene-expression trend shapes over pseudotime"
-        onPointerLeave={() => setHoveredTrend(null)}
-      >
-        {yTicks.map((tick) => (
-          <g key={tick}>
-            <line
-              x1={left}
-              x2={width - right}
-              y1={yPosition(tick)}
-              y2={yPosition(tick)}
-              stroke={tick === 0 ? "#e2e8f0" : "#f1f5f9"}
-            />
-            <text
-              x={left - 10}
-              y={yPosition(tick) + 4}
-              textAnchor="end"
-              fill="#64748b"
-              fontSize="12"
-              fontWeight="600"
-            >
-              {formatAxisValue(tick)}
-            </text>
-          </g>
-        ))}
-        {xTicks.map((tick) => (
-          <text
-            key={tick}
-            x={xPosition(tick)}
-            y={height - bottom + 16}
-            textAnchor="middle"
-            fill="#64748b"
-            fontSize="12"
-            fontWeight="600"
-          >
-            {formatTick(tick, xTickStep)}
+          <path
+            d={`M${left + 58} ${top + plotHeight - 4}l-8 -4.5v9z M${left + 4} ${top + plotHeight - 58}l-4.5 8h9z`}
+            fill={FIG_INK}
+          />
+          <text x={left + 6} y={top + plotHeight + 14} fontSize="14" fill={FIG_MUTED}>
+            {embedding.method} 1
           </text>
-        ))}
-        {hoveredTrend ? (
-          <line
-            x1={hoveredTrend.x}
-            x2={hoveredTrend.x}
-            y1={top}
-            y2={height - bottom}
-            stroke="#cbd5e1"
-            strokeWidth="1"
-          />
-        ) : null}
-        {normalizedSeries.map((item) => {
-          const isFocused = !focusedName || focusedName === item.name;
-          return (
-            <path
-              key={item.name}
-              d={linearSvgPath(item.chartPoints)}
-              fill="none"
-              stroke={item.color}
-              strokeWidth={focusedName === item.name ? "4" : "3"}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              opacity={isFocused ? 1 : 0.22}
-              className="transition-opacity duration-150"
-            />
-          );
-        })}
-        {hoveredTrend ? (
-          <circle
-            cx={hoveredTrend.x}
-            cy={hoveredTrend.y}
-            r="4.5"
-            fill={hoveredTrend.color}
-            stroke="white"
-            strokeWidth="2"
-          />
-        ) : null}
-        <rect
-          x={left}
-          y={top}
-          width={Math.max(0, width - left - right)}
-          height={Math.max(0, height - top - bottom)}
-          fill="transparent"
-          className="cursor-pointer"
-          onPointerMove={(event) => {
-            const svg = event.currentTarget.ownerSVGElement;
-            if (!svg) return;
-            setHoveredTrend(resolveNearest(event.clientX, event.clientY, svg));
-          }}
-          onClick={(event) => {
-            const svg = event.currentTarget.ownerSVGElement;
-            if (!svg) return;
-            const nearest = resolveNearest(event.clientX, event.clientY, svg);
-            if (!nearest) return;
-            onPinnedGeneChange(pinnedGene === nearest.name ? null : nearest.name);
-          }}
-        >
-          <title>Hover to inspect a trend, click to keep it highlighted</title>
-        </rect>
-        <text
-          x={(left + width - right) / 2}
-          y={height - 8}
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="13"
-          fontWeight="600"
-        >
-          Pseudotime
-        </text>
-        <text
-          x="16"
-          y={(top + height - bottom) / 2}
-          textAnchor="middle"
-          fill="#64748b"
-          fontSize="13"
-          fontWeight="600"
-          transform={`rotate(-90 16 ${(top + height - bottom) / 2})`}
-        >
-          Relative trend
-        </text>
-        <g
-          data-export-only
-          data-export-extra-height={exportLegendExtraHeight}
-          style={{ display: "none" }}
-          aria-label="Gene trend legend"
-        >
-          <line
-            x1={left}
-            x2={width - right}
-            y1={height + 8}
-            y2={height + 8}
-            stroke="#e2e8f0"
-          />
-          {normalizedSeries.map((item, index) => {
-            const column = index % exportLegendColumns;
-            const row = Math.floor(index / exportLegendColumns);
-            const x = left + column * exportLegendColumnWidth;
-            const y = height + 31 + row * 23;
+          <text
+            transform={`translate(${left - 6} ${top + plotHeight - 6}) rotate(-90)`}
+            fontSize="14"
+            fill={FIG_MUTED}
+          >
+            {embedding.method} 2
+          </text>
+        </g>
+
+        {/* Cell density along pseudotime, with the colour key as its axis. */}
+        <g>
+          <text x={stripLeft - 10} y={stripTop + 14} textAnchor="end" fontSize="13" fill={FIG_MUTED}>
+            Cells
+          </text>
+          {densityCounts.map((count, index) => {
+            const barWidth = stripWidth / DENSITY_BINS;
+            const barHeight = (count / densityMax) * stripHeight;
             return (
-              <g key={`export-legend-${item.name}`}>
-                <line
-                  x1={x}
-                  x2={x + 22}
-                  y1={y}
-                  y2={y}
-                  stroke={item.color}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                />
-                <text
-                  x={x + 31}
-                  y={y + 4}
-                  fill="#334155"
-                  fontSize="10.5"
-                  fontWeight="700"
-                >
-                  {item.name}
-                </text>
-              </g>
+              <rect
+                key={index}
+                x={stripLeft + index * barWidth + 0.75}
+                y={stripTop + stripHeight - barHeight}
+                width={Math.max(0.5, barWidth - 1.5)}
+                height={barHeight}
+                fill="#8e979f"
+              >
+                <title>{`${count} displayed cells`}</title>
+              </rect>
             );
           })}
-          <line
-            x1={left}
-            x2={width - right}
-            y1={exportLegendNoteY - 11}
-            y2={exportLegendNoteY - 11}
-            stroke="#f1f5f9"
-          />
-          <text
-            x={left}
-            y={exportLegendNoteY + 7}
-            fill="#64748b"
-            fontSize="10"
-            fontWeight="600"
-          >
-            Relative trend · each gene independently scaled 0–1
-          </text>
-          <text
-            x={width - right}
-            y={exportLegendNoteY + 7}
-            textAnchor="end"
-            fill="#64748b"
-            fontSize="10"
-            fontWeight="600"
-          >
-            Pseudotime · relative order, not elapsed time
+          {Array.from({ length: 80 }, (_, index) => (
+            <rect
+              key={index}
+              x={stripLeft + (index * stripWidth) / 80}
+              y={barTop}
+              width={stripWidth / 80 + 0.6}
+              height="11"
+              fill={interpolateColor(index / 79)}
+            />
+          ))}
+          <line x1={stripLeft} x2={stripLeft + stripWidth} y1={barTop + 11} y2={barTop + 11} stroke={FIG_INK} strokeWidth="1" />
+          {pseudotimeTicks.map((tick) => (
+            <g key={tick}>
+              <line x1={stripX(tick)} x2={stripX(tick)} y1={barTop + 11} y2={barTop + 16} stroke={FIG_INK} strokeWidth="1" />
+              <text x={stripX(tick)} y={barTop + 31} textAnchor="middle" fontSize="13" fill={FIG_INK}>
+                {formatTick(tick, pseudotimeStep)}
+              </text>
+            </g>
+          ))}
+          <text x={stripLeft + stripWidth / 2} y={barTop + 50} textAnchor="middle" fontSize="14" fill={FIG_INK}>
+            {`${lineageName} pseudotime`}
           </text>
         </g>
       </svg>
-      {hoveredTrend ? (
-        <div
-          className="pointer-events-none absolute z-10 min-w-48 rounded-xl border border-slate-200 bg-white/95 px-3.5 py-3 text-xs shadow-lg backdrop-blur-sm"
-          style={{
-            top: hoveredTrend.anchorY,
-            left: hoveredTrend.anchorX + (hoveredTrend.flip ? -14 : 14),
-            transform: hoveredTrend.flip
-              ? "translate(-100%, -50%)"
-              : "translateY(-50%)",
-          }}
-        >
-          <div className="flex items-center gap-2 font-extrabold text-slate-900">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: hoveredTrend.color }}
-              aria-hidden="true"
-            />
-            {hoveredTrend.name}
-          </div>
-          {/*
-            Two rows only. The normalised height is already readable off the
-            y-axis, and pairing the fitted value with its range on one line is
-            what shows how small a gene's actual span is.
-          */}
-          <dl className="mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-slate-600">
-            <dt>Pseudotime</dt>
-            <dd className="text-right font-bold tabular-nums text-slate-800">
-              {formatAxisValue(hoveredTrend.pseudotime)}
-            </dd>
-            <dt>Expression</dt>
-            <dd className="text-right tabular-nums">
-              <span className="font-bold text-slate-800">
-                {formatAxisValue(hoveredTrend.expression)}
-              </span>{" "}
-              <span className="text-slate-400">
-                of {formatAxisValue(hoveredTrend.minimum)}–
-                {formatAxisValue(hoveredTrend.maximum)}
-              </span>
-            </dd>
-          </dl>
-        </div>
-      ) : null}
-      {pinnedGene ? (
+
+      <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-xl bg-white/90 p-1 text-xs shadow-sm ring-1 ring-slate-200">
         <button
           type="button"
-          onClick={() => onPinnedGeneChange(null)}
-          style={{ left: `${((left + 8) / width) * 100}%` }}
-          className="absolute top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-sm transition hover:text-slate-900"
+          onClick={() => zoomAboutCentre(1 / 1.4)}
+          disabled={k <= 1}
+          className={controlClass}
+          aria-label="Zoom out"
         >
-          {pinnedGene} pinned
-          <span aria-hidden="true">×</span>
+          <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+            <path d="M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
         </button>
-      ) : null}
+        <span className="w-9 text-center font-semibold tabular-nums text-slate-600">{k.toFixed(1)}×</span>
+        <button
+          type="button"
+          onClick={() => zoomAboutCentre(1.4)}
+          disabled={k >= 12}
+          className={controlClass}
+          aria-label="Zoom in"
+        >
+          <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+            <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTransform({ k: 1, x: 0, y: 0 })}
+          disabled={!isZoomed}
+          className="rounded-lg px-2 py-1.5 font-semibold text-slate-500 transition hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Fit
+        </button>
+      </div>
     </div>
   );
 }
@@ -1511,17 +1154,23 @@ export default function TrajectoryInsights({
   trajectory,
   loading,
   onGenesChange,
+  edges = [],
 }: {
   trajectory?: TrajectoryData;
   loading: boolean;
   onGenesChange: (genes: string[]) => void;
+  /** Directed network edges, best-supported first, for regulator timing. */
+  edges?: TimingEdge[];
 }) {
-  const [mode, setMode] = useState<"cells" | "genes">("cells");
+  const [requestedEdge, setRequestedEdge] = useState<string | null>(null);
+  const [showOnsets, setShowOnsets] = useState(false);
+  const [edgeQuery, setEdgeQuery] = useState("");
+  const timingChartRef = useRef<HTMLDivElement | null>(null);
   const [requestedLineageName, setRequestedLineageName] = useState("");
   const [geneQuery, setGeneQuery] = useState("");
   const [isGeneSearchOpen, setIsGeneSearchOpen] = useState(false);
-  const [pinnedGene, setPinnedGene] = useState<string | null>(null);
-  const [helpMode, setHelpMode] = useState<"cells" | "genes" | null>(null);
+  const [requestedGene, setRequestedGene] = useState<string | null>(null);
+  const [helpMode, setHelpMode] = useState<"cells" | "genes" | "timing" | null>(null);
   const cellChartRef = useRef<HTMLDivElement | null>(null);
   const geneChartRef = useRef<HTMLDivElement | null>(null);
   const lineages = useMemo(
@@ -1537,9 +1186,7 @@ export default function TrajectoryInsights({
     if (!normalizedQuery) return [];
     return availableGenes
       .filter(
-        (gene) =>
-          !genes.includes(gene) &&
-          gene.toLocaleLowerCase().includes(normalizedQuery),
+        (gene) => gene.toLocaleLowerCase().includes(normalizedQuery),
       )
       .sort((left, right) => {
         const leftStarts = left.toLocaleLowerCase().startsWith(normalizedQuery);
@@ -1548,7 +1195,62 @@ export default function TrajectoryInsights({
         return left.localeCompare(right);
       })
       .slice(0, 8);
-  }, [availableGenes, geneQuery, genes]);
+  }, [availableGenes, geneQuery]);
+  const lineageIndex = Math.max(0, lineages.findIndex((item) => item.name === (requestedLineageName || lineages[0]?.name)));
+  const cascadeLineages = useMemo<CascadeLineage[]>(
+    () =>
+      lineages.map((item) =>
+        item.cascade?.pseudotime.length
+          ? { name: item.name, pseudotime: item.cascade.pseudotime, expression: item.cascade.expression }
+          : {
+              name: item.name,
+              pseudotime: (Object.values(item.trends)[0] ?? []).map((point) => point.pseudotime),
+              expression: Object.fromEntries(
+                Object.entries(item.trends).map(([gene, points]) => [gene, points.map((point) => point.expression)]),
+              ),
+            },
+      ),
+    [lineages],
+  );
+  const cascade = useMemo(() => buildCascadeRows(cascadeLineages, lineageIndex), [cascadeLineages, lineageIndex]);
+  const selectedGene =
+    cascade.rows.find((row) => row.gene === requestedGene)?.gene ?? cascade.rows[0]?.gene ?? null;
+  const isDefaultGene = !cascade.rows.some((row) => row.gene === requestedGene);
+  const timingKey = (edge: { source: string; target: string }) => `${edge.source}→${edge.target}`;
+  const { timingRows, timingSkipped } = useMemo(() => {
+    const current = cascadeLineages[lineageIndex];
+    if (!current) return { timingRows: [], timingSkipped: 0 };
+    let skipped = 0;
+    const rows = edges.flatMap((edge) => {
+      const regulator = current.expression[edge.source];
+      const target = current.expression[edge.target];
+      if (!regulator || !target) return [];
+      if (cascade.isFlat(lineageIndex, edge.source) || cascade.isFlat(lineageIndex, edge.target)) {
+        skipped += 1;
+        return [];
+      }
+      const regulatorOnset = onsetTime(current.pseudotime, regulator);
+      const targetOnset = onsetTime(current.pseudotime, target);
+      if (regulatorOnset === null || targetOnset === null) return [];
+      return [{ ...edge, regulatorOnset, targetOnset, lag: targetOnset - regulatorOnset }];
+    });
+    return { timingRows: rows, timingSkipped: skipped };
+  }, [cascade, cascadeLineages, edges, lineageIndex]);
+  const selectedTiming =
+    timingRows.find((row) => timingKey(row) === requestedEdge) ??
+    [...timingRows].sort((a, b) => b.support - a.support || b.lag - a.lag)[0] ??
+    null;
+  const isDefaultTiming = !timingRows.some((row) => timingKey(row) === requestedEdge);
+  const regulatorFirstCount = timingRows.filter((row) => row.lag > 0).length;
+  const maxAbsLag = Math.max(1, ...timingRows.map((row) => Math.abs(row.lag)));
+  const visibleTimingRows = (() => {
+    const query = edgeQuery.trim().toLocaleLowerCase();
+    const filtered = query
+      ? timingRows.filter((row) => `${row.source} ${row.target}`.toLocaleLowerCase().includes(query))
+      : timingRows;
+    // Ordered by lag: regulator-first edges at the top, target-first at the bottom.
+    return [...filtered].sort((a, b) => b.lag - a.lag);
+  })();
 
   if (loading) {
     return (
@@ -1569,17 +1271,6 @@ export default function TrajectoryInsights({
     );
   }
 
-  const series = genes.map((gene) => {
-    const colorIndex = Math.max(0, genes.indexOf(gene));
-    return {
-      name: gene,
-      color: GENE_COLORS[colorIndex % GENE_COLORS.length],
-      trend: (lineage.trends[gene] ?? []).map((point) => ({
-        x: point.pseudotime,
-        y: point.expression,
-      })),
-    };
-  });
   const expressionLabel = trajectory.expression_label ?? "Expression";
   const hasEmbedding = Boolean(
     trajectory.embedding?.points.length && trajectory.embedding.paths.length,
@@ -1588,20 +1279,44 @@ export default function TrajectoryInsights({
     trajectory.pseudotime_source === "estimated"
       ? "Estimated pseudotime"
       : "Uploaded pseudotime";
-  const activeChartRef = mode === "cells" ? cellChartRef : geneChartRef;
-  const activeFilename =
-    mode === "cells" ? "cell-trajectory" : "gene-trends-over-pseudotime";
-  const downloadActiveChart = async (format: "svg" | "png") => {
-    const svg = activeChartRef.current?.querySelector("svg");
+  type PanelKey = "cells" | "genes" | "timing";
+  const chartRefOf = (panel: PanelKey) =>
+    panel === "cells" ? cellChartRef : panel === "timing" ? timingChartRef : geneChartRef;
+  const filenameOf = (panel: PanelKey) =>
+    panel === "cells"
+      ? `cell-trajectory-${lineage.name}`
+      : panel === "timing"
+        ? `regulator-timing-${selectedTiming ? `${selectedTiming.source}-${selectedTiming.target}` : "edge"}-${lineage.name}`
+        : `gene-expression-cascade-by-${lineage.name}`;
+  const downloadTimingCsv = () =>
+    downloadCsv(`regulator-timing-${lineage.name}.csv`, [
+      ["regulator", "target", "methods_supporting", "directed_methods", "sign", "regulator_onset", "target_onset", "onset_lag"],
+      ...timingRows.map((row) => [
+        row.source,
+        row.target,
+        row.support,
+        row.methods,
+        row.sign,
+        row.regulatorOnset.toFixed(2),
+        row.targetOnset.toFixed(2),
+        row.lag.toFixed(2),
+      ]),
+    ]);
+  const downloadChart = async (panel: PanelKey, format: "svg" | "png") => {
+    const svg = chartRefOf(panel).current?.querySelector("svg");
     if (!svg) throw new Error("The current chart is not available to download.");
     if (format === "svg") {
-      downloadSvg(svg, `${activeFilename}.svg`);
+      downloadSvg(svg, `${filenameOf(panel)}.svg`);
     } else {
-      await downloadSvgPng(svg, `${activeFilename}.png`);
+      await downloadSvgPng(svg, `${filenameOf(panel)}.png`);
     }
   };
-  const downloadActiveData = () => {
-    if (mode === "cells" && trajectory.embedding) {
+  const downloadData = (panel: PanelKey) => {
+    if (panel === "timing") {
+      downloadTimingCsv();
+      return;
+    }
+    if (panel === "cells" && trajectory.embedding) {
       downloadCsv("cell-trajectory.csv", [
         ["cell", "embedding_x", "embedding_y", "lineage", "pseudotime"],
         ...trajectory.embedding.points.map((point) => [
@@ -1614,109 +1329,43 @@ export default function TrajectoryInsights({
       ]);
       return;
     }
-    downloadCsv("gene-trends-over-pseudotime.csv", [
-      ["gene", "pseudotime", "fitted_expression"],
-      ...series.flatMap((item) =>
-        item.trend.map((point) => [item.name, point.x, point.y]),
+    downloadCsv("gene-expression-cascade.csv", [
+      ["gene", "lineage", "pseudotime", "fitted_expression", "scaled_0_1"],
+      ...cascade.rows.flatMap((row) =>
+        cascadeLineages.flatMap((item) => {
+          const values = item.expression[row.gene] ?? [];
+          const lo = Math.min(...values);
+          const hi = Math.max(...values);
+          return values.map((value, index) => [
+            row.gene,
+            item.name,
+            item.pseudotime[index],
+            value,
+            hi > lo ? ((value - lo) / (hi - lo)).toFixed(4) : "",
+          ]);
+        }),
       ),
     ]);
   };
 
-  return (
-    <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-extrabold text-slate-950">
-              {mode === "cells"
-                ? "Cell trajectory"
-                : "Gene trends over pseudotime"}
-            </h3>
-            <button
-              type="button"
-              onClick={() => setHelpMode(mode)}
-              aria-label={`How to read ${mode === "cells" ? "the cell trajectory" : "gene trends"}`}
-              aria-haspopup="dialog"
-              aria-controls={`${mode}-trajectory-help-title`}
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-            >
-              ?
-            </button>
-          </div>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            {mode === "cells"
-              ? `${trajectory.embedding?.method ?? "2D"} view of cells colored from early to late pseudotime.`
-              : "Compare relative gene-expression shapes across pseudotime."}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <LineageMenu
-            lineages={lineages}
-            value={lineage.name}
-            onChange={setRequestedLineageName}
-          />
-          <DownloadMenu
-            ariaLabel={`Download ${mode === "cells" ? "cell trajectory" : "gene trends"}`}
-            items={[
-              {
-                label: "Chart image",
-                format: "PNG",
-                onSelect: () => downloadActiveChart("png"),
-              },
-              {
-                label: "Vector chart",
-                format: "SVG",
-                onSelect: () => downloadActiveChart("svg"),
-              },
-              {
-                label: "Chart values",
-                format: "CSV",
-                onSelect: downloadActiveData,
-              },
-            ]}
-          />
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200">
-        <div className="flex items-center gap-6" role="tablist" aria-label="Trajectory visualization">
-          {[
-            { value: "cells" as const, label: "Cell trajectory" },
-            { value: "genes" as const, label: "Gene trends" },
-          ].map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="tab"
-              aria-selected={mode === option.value}
-              onClick={() => setMode(option.value)}
-              className={`relative pb-3 text-sm font-bold transition ${
-                mode === option.value
-                  ? "text-[#087ead] after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:rounded-full after:bg-[#087ead]"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 pb-2">
-          <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-bold text-[#087ead]">
-            {pseudotimeSourceLabel}
-          </span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-            {lineage.cell_count.toLocaleString()} lineage cells
-          </span>
-          {mode === "cells" && trajectory.embedding ? (
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-              {trajectory.embedding.sampled_cell_count.toLocaleString()} displayed
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="mt-5">
-        {mode === "cells" ? (
+  const panels: Array<{
+    key: "cells" | "genes" | "timing";
+    title: string;
+    description: string;
+    chips: string[];
+    actions?: ReactNode;
+    body: ReactNode;
+  }> = [
+    {
+      key: "cells",
+      title: "Cell trajectory",
+      description: `${trajectory.embedding?.method ?? "2D"} view of cells coloured by pseudotime, with the lineage path and cell density along pseudotime.`,
+      chips: [
+        pseudotimeSourceLabel,
+        `${lineage.cell_count.toLocaleString()} lineage cells`,
+        ...(trajectory.embedding ? [`${trajectory.embedding.sampled_cell_count.toLocaleString()} displayed`] : []),
+      ],
+      body: (
           hasEmbedding && trajectory.embedding ? (
             <div ref={cellChartRef}>
               <CellTrajectoryChart
@@ -1730,106 +1379,382 @@ export default function TrajectoryInsights({
               detail="The pseudotime trends are available, but there are not enough usable cells to build the two-dimensional cell view. Expression over pseudotime can still be explored."
             />
           )
-        ) : (
-          <>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-xs font-bold text-slate-500">Genes</span>
-                {genes.map((gene, index) => {
-                  const color = GENE_COLORS[index % GENE_COLORS.length];
-                  return (
-                    <span
-                      key={gene}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm"
-                    >
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: color }}
-                      />
-                      {gene}
-                      <button
-                        type="button"
-                        disabled={genes.length === 1}
-                        onClick={() =>
-                          onGenesChange(genes.filter((value) => value !== gene))
-                        }
-                        className="-mr-1 grid h-4 w-4 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
-                        aria-label={`Remove ${gene}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-              <div className="relative">
-                <div className="flex h-9 w-52 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-slate-500 shadow-sm transition focus-within:border-[#087ead]/50 focus-within:ring-2 focus-within:ring-[#087ead]/10">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="h-4 w-4 shrink-0"
-                    aria-hidden="true"
-                  >
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="m20 20-3.5-3.5" />
-                  </svg>
-                  <input
-                    value={geneQuery}
-                    disabled={genes.length >= 8}
-                    onFocus={() => setIsGeneSearchOpen(true)}
-                    onBlur={() =>
-                      window.setTimeout(() => setIsGeneSearchOpen(false), 120)
-                    }
-                    onChange={(event) => {
-                      setGeneQuery(event.target.value);
-                      setIsGeneSearchOpen(true);
-                    }}
-                    placeholder={genes.length >= 8 ? "8 genes selected" : "Add a gene"}
-                    className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
-                    aria-label="Search genes to add"
-                  />
-                </div>
-                {isGeneSearchOpen && geneQuery.trim() ? (
-                  <div className="absolute right-0 z-20 mt-2 max-h-60 w-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                    {matchingGenes.length ? (
-                      matchingGenes.map((gene) => (
-                        <button
-                          key={gene}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            onGenesChange([...genes, gene]);
-                            setGeneQuery("");
-                            setIsGeneSearchOpen(false);
-                          }}
-                          className="block w-full rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 transition hover:bg-sky-50 hover:text-[#087ead]"
-                        >
-                          {gene}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-3 py-3 text-xs font-semibold text-slate-500">
-                        No matching genes
-                      </p>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <div ref={geneChartRef}>
-              <GeneTrendComparisonChart
-                series={series}
-                pinnedGene={
-                  pinnedGene && genes.includes(pinnedGene) ? pinnedGene : null
-                }
-                onPinnedGeneChange={setPinnedGene}
+      ),
+    },
+    {
+      key: "genes",
+      title: "Gene expression cascade",
+      description: "Smoothed gene trends along pseudotime, sorted by when each gene peaks.",
+      chips: [],
+      actions: (
+          <div className="relative">
+            <div className="flex h-9 w-56 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-slate-500 shadow-sm transition focus-within:border-[#087ead]/50 focus-within:ring-2 focus-within:ring-[#087ead]/10">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                id="trajectory-gene-search"
+                value={geneQuery}
+                onFocus={() => setIsGeneSearchOpen(true)}
+                onBlur={() => window.setTimeout(() => setIsGeneSearchOpen(false), 120)}
+                onChange={(event) => {
+                  setGeneQuery(event.target.value);
+                  setIsGeneSearchOpen(true);
+                }}
+                placeholder="Find a gene"
+                className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                aria-label="Find a gene"
               />
             </div>
+            {isGeneSearchOpen && geneQuery.trim() ? (
+              <div className="absolute right-0 z-20 mt-2 max-h-60 w-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                {matchingGenes.length ? (
+                  matchingGenes.map((gene) => (
+                    <button
+                      key={gene}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        if (!cascade.rows.some((row) => row.gene === gene)) {
+                          onGenesChange([...genes.filter((value) => value !== gene), gene].slice(-8));
+                        }
+                        setRequestedGene(gene);
+                        setGeneQuery("");
+                        setIsGeneSearchOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 transition hover:bg-sky-50 hover:text-[#087ead]"
+                    >
+                      <span className="italic">{gene}</span>
+                      {cascade.hidden.includes(gene) ? <span className="font-semibold text-slate-400">not expressed</span> : null}
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-3 py-3 text-xs font-semibold text-slate-500">No matching genes</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+      ),
+      body: (
+          <>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+              <div className="min-w-0">
+                <div ref={geneChartRef}>
+                  <CascadeHeatmap
+                    lineages={cascadeLineages}
+                    rows={cascade.rows}
+                    isFlat={cascade.isFlat}
+                    selectedGene={selectedGene}
+                    onSelect={setRequestedGene}
+                  />
+                </div>
+                <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+                  Each row is a gene&apos;s smoothed trend, scaled 0–1 within each lineage; a diagonal from top-left to
+                  bottom-right is a cascade of sequential activation. Darker blue = higher expression; hatched grey = the gene barely changes along that lineage. The strip above each panel is pseudotime.
+                  {cascade.hidden.length
+                    ? ` Not expressed along any lineage (not shown): ${cascade.hidden.join(", ")}.`
+                    : ""}
+                </p>
+              </div>
+              {selectedGene ? (
+                <aside
+                  key={selectedGene}
+                  className="agreement-detail flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white"
+                  aria-label={`${selectedGene} details`}
+                  aria-live="polite"
+                >
+                  <div className="border-b border-slate-100 px-5 pb-4 pt-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#087ead]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#087ead]" aria-hidden="true" />
+                        {isDefaultGene ? "Selected · earliest peak" : "Selected gene"}
+                      </p>
+                      {isDefaultGene ? null : (
+                        <button type="button" onClick={() => setRequestedGene(null)} className="text-[11px] font-semibold text-slate-400 transition hover:text-[#087ead]">
+                          Back to first
+                        </button>
+                      )}
+                    </div>
+                    <h4 className="mt-1.5 text-[17px] font-extrabold italic leading-snug text-slate-950">{selectedGene}</h4>
+                    <p className="mt-1 text-xs text-slate-500">Smoothed trend along each lineage</p>
+                    <table className="mt-4 w-full border-collapse text-[12.5px]">
+                      <thead>
+                        <tr className="text-[10.5px] uppercase tracking-[0.08em] text-slate-400">
+                          <th className="py-1 pr-2 text-left font-semibold">Lineage</th>
+                          <th className="py-1 pl-2 text-right font-semibold">Peak at</th>
+                          <th className="py-1 pl-2 text-right font-semibold">Max</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cascadeLineages.map((item, index) => {
+                          const values = item.expression[selectedGene] ?? [];
+                          const flat = cascade.isFlat(index, selectedGene);
+                          const peak = cascade.rows.find((row) => row.gene === selectedGene)?.peaks[index] ?? null;
+                          return (
+                            <tr key={item.name} className="border-t border-slate-100">
+                              <td className="py-1.5 pr-2 font-semibold text-slate-700">
+                                <span className="mr-2 inline-block h-0.5 w-4 align-middle" style={{ backgroundColor: LINEAGE_COLORS[index % LINEAGE_COLORS.length] }} />
+                                {item.name}
+                              </td>
+                              <td className="py-1.5 pl-2 text-right tabular-nums text-slate-900">{flat || peak === null ? "not expressed" : Math.round(peak)}</td>
+                              <td className="py-1.5 pl-2 text-right tabular-nums text-slate-500">{values.length ? Math.max(...values).toFixed(2) : "–"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="px-4 py-4">
+                    <GeneTrendPlot gene={selectedGene} lineages={cascadeLineages} expressionLabel={expressionLabel} />
+                  </div>
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500">
+                    <span>{expressionLabel}, fitted spline</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadCsv(`gene-trend-${selectedGene}.csv`, [
+                          ["gene", "lineage", "pseudotime", "fitted_expression"],
+                          ...cascadeLineages.flatMap((item) =>
+                            (item.expression[selectedGene] ?? []).map((value, index) => [selectedGene, item.name, item.pseudotime[index], value]),
+                          ),
+                        ])
+                      }
+                      className="shrink-0 font-bold text-[#087ead] transition hover:text-[#06688f]"
+                    >
+                      CSV
+                    </button>
+                  </div>
+                </aside>
+              ) : null}
+            </div>
           </>
-        )}
-      </div>
+      ),
+    },
+    {
+      key: "timing",
+      title: "Regulator and target along pseudotime",
+      description: "Network edges placed on the trajectory: does each regulator change before its target?",
+      chips: timingRows.length ? [`${timingRows.length} edges`] : [],
+      body: (
+          timingRows.length && selectedTiming ? (
+            <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)] xl:items-stretch">
+              {/* Step 1: choose an edge. The list doubles as an overview of every edge's lag. */}
+              <div className="relative min-w-0 xl:min-h-[380px]">
+              <div className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white xl:absolute xl:inset-0">
+                <div className="border-b border-slate-100 px-4 pb-3 pt-4">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-400">Choose an edge</p>
+                  <p className="mt-1.5 text-xs text-slate-600">
+                    Regulator changes first in{" "}
+                    <span className="font-bold tabular-nums text-slate-900">
+                      {regulatorFirstCount} of {timingRows.length}
+                    </span>{" "}
+                    edges along {lineage.name}.
+                  </p>
+                  <div className="mt-2 flex h-1.5 overflow-hidden rounded-sm bg-slate-100" aria-hidden="true">
+                    <span className="bg-slate-800" style={{ width: `${(regulatorFirstCount / timingRows.length) * 100}%` }} />
+                    <span className="bg-amber-400" style={{ width: `${((timingRows.length - regulatorFirstCount) / timingRows.length) * 100}%` }} />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 px-2.5 text-slate-400 focus-within:border-[#087ead]/50">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
+                      <input
+                        id="trajectory-edge-search"
+                        value={edgeQuery}
+                        onChange={(event) => setEdgeQuery(event.target.value)}
+                        placeholder="Filter by gene"
+                        className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                        aria-label="Filter edges by gene"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_3rem_7rem] gap-2 px-4 pb-1 pt-2 text-[10px] font-semibold text-slate-400">
+                  <span className="uppercase tracking-[0.08em]">Regulator → target</span>
+                  <span className="text-right uppercase tracking-[0.08em]" title="Directed methods with this edge in their top 100">Support</span>
+                  <span className="flex justify-between">
+                    <span>← target</span>
+                    <span>regulator →</span>
+                  </span>
+                </div>
+                <ul
+                  className="max-h-[360px] min-h-[120px] flex-1 overflow-y-auto px-2 pb-2 xl:max-h-none xl:min-h-0"
+                  role="listbox"
+                  aria-label="Network edges"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                    event.preventDefault();
+                    const index = visibleTimingRows.findIndex((row) => timingKey(row) === timingKey(selectedTiming));
+                    const next = visibleTimingRows[Math.max(0, Math.min(visibleTimingRows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))];
+                    if (next) setRequestedEdge(timingKey(next));
+                  }}
+                >
+                  {visibleTimingRows.map((row) => {
+                    const on = timingKey(row) === timingKey(selectedTiming);
+                    const share = Math.min(1, Math.abs(row.lag) / maxAbsLag);
+                    return (
+                      <li
+                        key={timingKey(row)}
+                        role="option"
+                        aria-selected={on}
+                        onClick={() => setRequestedEdge(timingKey(row))}
+                        className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_3rem_7rem] items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] transition ${on ? "bg-slate-50 ring-2 ring-inset ring-slate-900" : "hover:bg-slate-50"}`}
+                      >
+                        <span className={`truncate font-mono text-[12px] ${on ? "font-bold text-slate-950" : "text-slate-700"}`} title={`${row.source} → ${row.target}`}>
+                          {row.source} → {row.target}
+                        </span>
+                        <span className="text-right tabular-nums text-slate-500">{row.support}/{row.methods}</span>
+                        <span className="relative flex h-4 items-center" title={`Onset lag ${row.lag >= 0 ? "+" : "−"}${Math.abs(row.lag).toFixed(0)}`}>
+                          <span className="absolute left-1/2 top-0 h-4 w-px bg-slate-300" />
+                          <span
+                            className={`absolute top-1 h-2 rounded-[1px] ${row.lag >= 0 ? "bg-slate-700" : "bg-amber-400"}`}
+                            style={
+                              row.lag >= 0
+                                ? { left: "50%", width: `${share * 50}%` }
+                                : { right: "50%", width: `${share * 50}%` }
+                            }
+                          />
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {!visibleTimingRows.length ? <li className="px-2 py-6 text-center text-xs text-slate-400">No edge matches this gene.</li> : null}
+                </ul>
+                <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-500">
+                  <span>Bars: onset lag, amber = target first</span>
+                  <button type="button" onClick={downloadTimingCsv} className="shrink-0 font-bold text-[#087ead] transition hover:text-[#06688f]">
+                    CSV
+                  </button>
+                </div>
+              </div>
+              </div>
+
+              {/* Step 2: the selected edge along pseudotime. */}
+              <div key={timingKey(selectedTiming)} className="agreement-detail min-w-0">
+                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+                  <div className="min-w-0">
+                    <p className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#087ead]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#087ead]" aria-hidden="true" />
+                      {isDefaultTiming ? "Selected · best-supported edge" : "Selected edge"}
+                    </p>
+                    <h4 className="mt-1 text-[19px] font-extrabold leading-snug text-slate-950">
+                      <span className="italic">{selectedTiming.source}</span>
+                      <span className="px-2 font-normal text-slate-400">→</span>
+                      <span className="italic">{selectedTiming.target}</span>
+                    </h4>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      In the top 100 of {selectedTiming.support} of {selectedTiming.methods} directed methods
+                      {selectedTiming.sign > 0 ? " · activation" : selectedTiming.sign < 0 ? " · repression" : ""}
+                    </p>
+                  </div>
+                  <dl className="grid grid-cols-3 divide-x divide-slate-100 text-left">
+                    {[
+                      {
+                        label: "Onset lag",
+                        value: `${selectedTiming.lag >= 0 ? "+" : "−"}${Math.abs(selectedTiming.lag).toFixed(0)}`,
+                        tone: selectedTiming.lag >= 0 ? "text-slate-900" : "text-amber-700",
+                      },
+                      { label: `${selectedTiming.source} on`, value: selectedTiming.regulatorOnset.toFixed(0), tone: "text-slate-900" },
+                      { label: `${selectedTiming.target} on`, value: selectedTiming.targetOnset.toFixed(0), tone: "text-slate-900" },
+                    ].map((stat, index) => (
+                      <div key={stat.label} className={index === 0 ? "pr-4" : "px-4"}>
+                        <dt className="max-w-[7rem] truncate text-[10.5px] font-semibold uppercase tracking-[0.08em] text-slate-400" title={stat.label}>{stat.label}</dt>
+                        <dd className={`mt-0.5 text-lg font-bold tabular-nums ${stat.tone}`}>{stat.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+                <div ref={timingChartRef} className="mt-4">
+                  <RegulatorTimingPlot
+                    showOnsets={showOnsets}
+                    lineage={cascadeLineages[lineageIndex]}
+                    regulator={selectedTiming.source}
+                    target={selectedTiming.target}
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+                  <p className="max-w-3xl">
+                    Regulator (black) and target (blue) along {lineage.name}, each scaled 0–1. Onset = first point a gene reaches
+                    half of its range; a positive lag means the regulator changes first. Edges are the directed network edges most
+                    often found in the methods&apos; top 100
+                    {timingSkipped ? `; ${timingSkipped} with a gene that does not change along ${lineage.name} are left out` : ""}.
+                  </p>
+                  <label className="inline-flex shrink-0 items-center gap-2 font-semibold text-slate-600">
+                    <input
+                      id="trajectory-show-onsets"
+                      type="checkbox"
+                      checked={showOnsets}
+                      onChange={(event) => setShowOnsets(event.target.checked)}
+                      className="accent-[#087ead]"
+                    />
+                    Show onsets
+                  </label>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <EmptyTrajectory
+              title="No regulator timing to show"
+              detail="Timing needs directed network edges whose regulator and target both change along this lineage. Try another lineage or include directed methods."
+            />
+          )
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {panels.map((panel) => (
+        <section key={panel.key} className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-extrabold text-slate-950">{panel.title}</h3>
+                <button
+                  type="button"
+                  onClick={() => setHelpMode(panel.key)}
+                  aria-label={`How to read ${panel.title.toLowerCase()}`}
+                  aria-haspopup="dialog"
+                  aria-controls={`${panel.key}-trajectory-help-title`}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-extrabold leading-none text-slate-500 transition hover:border-[#087ead]/40 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
+                >
+                  ?
+                </button>
+              </div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{panel.description}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              {panel.actions}
+              <LineageMenu lineages={lineages} value={lineage.name} onChange={setRequestedLineageName} />
+              <DownloadMenu
+                ariaLabel={`Download ${panel.title.toLowerCase()}`}
+                items={[
+                  { label: "Chart image", format: "PNG", onSelect: () => downloadChart(panel.key, "png") },
+                  { label: "Vector chart", format: "SVG", onSelect: () => downloadChart(panel.key, "svg") },
+                  { label: "Chart values", format: "CSV", onSelect: () => downloadData(panel.key) },
+                ]}
+              />
+            </div>
+          </div>
+          {panel.chips.length ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {panel.chips.map((chip, index) => (
+                <span
+                  key={chip}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${index === 0 && panel.key === "cells" ? "bg-sky-50 text-[#087ead]" : "bg-slate-100 text-slate-600"}`}
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="mt-5">{panel.body}</div>
+        </section>
+      ))}
       {helpMode && typeof document !== "undefined" ? (
         <TrajectoryHelpModal
           mode={helpMode}
@@ -1839,6 +1764,6 @@ export default function TrajectoryInsights({
           onClose={() => setHelpMode(null)}
         />
       ) : null}
-    </section>
+    </div>
   );
 }
