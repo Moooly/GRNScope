@@ -119,8 +119,15 @@ export function AgreementHeatmap({
   const top = heatmapPlotTop(order);
   const left = treeW + nameW + strip + 8;
   const legendX = left + n * cell + 24;
-  const W = legendX;
-  const H = top + n * cell + (showTree ? 50 : 20);
+  // Methods with fewer edges than the top-K limit get an asterisk and a footnote
+  // inside the figure, so downloads carry the caveat too.
+  const short = order.filter((id) => sizeOf(id) < topK);
+  const footH = short.length ? 22 : 0;
+  const footnote = short.length
+    ? `* Fewer than ${topK} edges available: ${short.map((id) => `${id} (n = ${sizeOf(id)})`).join(", ")}.`
+    : "";
+  const W = Math.max(legendX, treeW + 16 + footnote.length * 5.8);
+  const H = top + n * cell + (showTree ? 50 : 20) + footH;
 
   let minValue = 1;
   for (let i = 0; i < n; i += 1) for (let j = i + 1; j < n; j += 1) minValue = Math.min(minValue, similarity(order[i], order[j]));
@@ -178,9 +185,12 @@ export function AgreementHeatmap({
           <g key={id}>
             <text x={treeW + nameW - 4} y={y + cell / 2 + 4} fontSize="12.5" textAnchor="end" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">
               {id}
-              {size < topK && <tspan fill={MUTED} fontSize="9.5" dx="4">{`n = ${size}`}</tspan>}
+              {size < topK && <tspan fill={MUTED}>*</tspan>}
             </text>
-            <text transform={`translate(${left + index * cell + cell / 2 + 4} ${top - 10}) rotate(-50)`} fontSize="12" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">{id}</text>
+            <text transform={`translate(${left + index * cell + cell / 2 + 4} ${top - 10}) rotate(-50)`} fontSize="12" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">
+              {id}
+              {size < topK && <tspan fill={MUTED}>*</tspan>}
+            </text>
           </g>
         );
       })}
@@ -233,6 +243,11 @@ export function AgreementHeatmap({
           );
         }),
       )}
+      {short.length ? (
+        <text x={treeW + 8} y={H - 8} fontSize="10.5" fill={MUTED}>
+          {footnote}
+        </text>
+      ) : null}
     </svg>
   );
 }
