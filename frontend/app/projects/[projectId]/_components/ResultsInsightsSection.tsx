@@ -808,6 +808,35 @@ function SettingsSegmentGroup({
   );
 }
 
+/**
+ * Beeswarm layout (as in ggbeeswarm): points stay on the centre line and only
+ * step sideways, alternating right and left, when they would overlap a point
+ * already placed. Deterministic, so points never move between renders.
+ */
+function beeswarmOffsets(ys: number[], radius: number, maxOffset: number) {
+  const gap = radius * 2 + 0.4;
+  const order = ys.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value);
+  const placed: Array<{ x: number; y: number }> = [];
+  const offsets = new Array<number>(ys.length).fill(0);
+  order.forEach(({ value, index }) => {
+    const free = (x: number) => placed.every((p) => (p.x - x) ** 2 + (p.y - value) ** 2 >= gap * gap);
+    let chosen = 0;
+    for (let step = 0; step * gap <= maxOffset; step += 1) {
+      const candidates = step === 0 ? [0] : [step * gap, -step * gap];
+      const hit = candidates.find(free);
+      if (hit !== undefined) {
+        chosen = hit;
+        break;
+      }
+      chosen = step % 2 ? step * gap : -step * gap;
+    }
+    chosen = Math.max(-maxOffset, Math.min(maxOffset, chosen));
+    placed.push({ x: chosen, y: value });
+    offsets[index] = chosen;
+  });
+  return offsets;
+}
+
 function comparisonKey(edge: AggregatedEdge, mode: ComparisonMode) {
   if (mode === "topology") {
     return [edge.source, edge.target].sort().join(" — ");
@@ -1103,12 +1132,12 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
     // fall back to rotated labels in tighter columns.
     const slot = Math.max(56, Math.min(96, ((boxWidth || 900) - left - right) / plotted.length));
     const horizontal = slot >= 92;
-    const labelH = horizontal ? 58 : 96;
+    const labelH = horizontal ? 46 : 96;
     const width = left + plotted.length * slot + right;
     // b: top-edge recovery strip, aligned under the boxes.
     const hasStrip = plotted.some((row) => row.topRecovery.some((cell) => cell.value !== null));
-    const rowH = 24;
-    const stripTop = top + plotH + 4 + 46;
+    const rowH = 19;
+    const stripTop = top + plotH + 4 + 44;
     const labelBase = hasStrip ? stripTop + TOP_EDGE_CUTOFFS.length * rowH + 2 : top + plotH + 4;
     const height = labelBase + labelH;
     const summaries = plotted.map((row) => {
@@ -1146,17 +1175,20 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
             fontFamily={font}
           >
             <rect x="0" y="0" width={width} height={height} fill="#ffffff" />
-            <text x="4" y="16" fontSize="15" fontWeight="700" fill={INK}>a</text>
-            <text x="22" y="16" fontSize="10.5" fill="#6b7580">Whole-ranking agreement between runs</text>
+            <text x="4" y="16" fontSize="16" fontWeight="700" fill={INK}>a</text>
+            <text x="22" y="16" fontSize="11.5" fill="#4b5560">Whole-ranking agreement between runs</text>
             {hasStrip && (
               <>
-                <text x="4" y={stripTop - 14} fontSize="15" fontWeight="700" fill={INK}>b</text>
-                <text x="22" y={stripTop - 14} fontSize="10.5" fill="#6b7580">Top-edge recovery across runs</text>
+                <text x="4" y={stripTop - 12} fontSize="16" fontWeight="700" fill={INK}>b</text>
+                <text x="22" y={stripTop - 12} fontSize="11.5" fill="#4b5560">Top-edge recovery across runs (%)</text>
                 {TOP_EDGE_CUTOFFS.map((k, i) => (
-                  <text key={k} x={left - 8} y={stripTop + i * rowH + rowH / 2} fontSize="10.5" textAnchor="end" dominantBaseline="middle" fill={INK}>top {k}</text>
+                  <text key={k} x={left - 8} y={stripTop + i * rowH + rowH / 2} fontSize="10" textAnchor="end" dominantBaseline="middle" fill={INK}>top {k}</text>
                 ))}
               </>
             )}
+            {ticks.map((t) => (
+              <line key={`grid-${t}`} x1={left} x2={width - right} y1={y(t)} y2={y(t)} stroke="#e9edf0" strokeWidth="0.8" />
+            ))}
             <line x1={left} x2={left} y1={top} y2={axisY} stroke={INK} strokeWidth="0.8" />
             {ticks.map((t) => (
               <g key={t}>
@@ -1164,7 +1196,7 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
                 <text x={left - 7} y={y(t)} fontSize="11" textAnchor="end" dominantBaseline="middle" fill={INK}>{t.toFixed(step < 0.1 ? 2 : 1)}</text>
               </g>
             ))}
-            <text transform={`translate(16 ${top + plotH / 2}) rotate(-90)`} fontSize="11.5" textAnchor="middle" fill={INK}>Pairwise Spearman ρ</text>
+            <text transform={`translate(16 ${top + plotH / 2}) rotate(-90)`} fontSize="12.5" textAnchor="middle" fill={INK}>Pairwise Spearman ρ between runs</text>
             <line x1={left} x2={width - right} y1={axisY} y2={axisY} stroke={INK} strokeWidth="0.8" />
             {summaries.map(({ row, values, stats, min, max, outcome }, index) => {
               const cx = left + slot * (index + 0.5);
@@ -1177,17 +1209,21 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
                 <g key={row.algorithmId} onMouseEnter={() => setHovered(row.algorithmId)} data-hl={on ? "" : undefined}>
                   <title>{`${row.algorithmId}\nmedian ρ ${stats.med.toFixed(3)} · IQR ${stats.q1.toFixed(3)}–${stats.q3.toFixed(3)}\nrange ${min.toFixed(3)}–${max.toFixed(3)}\n${row.runCount} runs · ${values.length} run pairs · ${outcome}`}</title>
                   <rect x={cx - slot / 2} y={top} width={slot} height={plotH} fill={on ? HIGHLIGHT : "transparent"} fillOpacity={on ? 0.05 : 0} data-hl-bg="" />
-                  {values.map((value, i) => {
-                    // Deterministic jitter so points don't move between renders.
-                    const jitter = ((((i + 1) * 0.618034) % 1) - 0.5) * half * 1.1;
-                    return <circle key={i} cx={cx + jitter} cy={y(value)} r={dense ? 1.4 : 2.1} fill={GREY} fillOpacity={dense ? 0.55 : 1} />;
-                  })}
+                  <rect x={cx - half} y={y(stats.q3)} width={half * 2} height={Math.max(0.5, y(stats.q1) - y(stats.q3))} fill="#eef1f4" />
+                  {(() => {
+                    const radius = dense ? 1.4 : 2.1;
+                    const ys = values.map((value) => y(value));
+                    const offsets = beeswarmOffsets(ys, radius, half * 1.15);
+                    return ys.map((cy, i) => (
+                      <circle key={i} cx={cx + offsets[i]} cy={cy} r={radius} fill={GREY} fillOpacity={dense ? 0.55 : 1} />
+                    ));
+                  })()}
                   <line x1={cx} x2={cx} y1={y(stats.hi)} y2={y(stats.q3)} stroke={ink} strokeWidth="0.8" />
                   <line x1={cx} x2={cx} y1={y(stats.q1)} y2={y(stats.lo)} stroke={ink} strokeWidth="0.8" />
                   <line x1={cx - half * 0.45} x2={cx + half * 0.45} y1={y(stats.hi)} y2={y(stats.hi)} stroke={ink} strokeWidth="0.8" />
                   <line x1={cx - half * 0.45} x2={cx + half * 0.45} y1={y(stats.lo)} y2={y(stats.lo)} stroke={ink} strokeWidth="0.8" />
-                  <rect x={cx - half} y={y(stats.q3)} width={half * 2} height={Math.max(0.5, y(stats.q1) - y(stats.q3))} fill="none" stroke={ink} strokeWidth={on ? 1.4 : 0.8} />
-                  <line x1={cx - half} x2={cx + half} y1={y(stats.med)} y2={y(stats.med)} stroke={ink} strokeWidth="1.8" />
+                  <rect x={cx - half} y={y(stats.q3)} width={half * 2} height={Math.max(0.5, y(stats.q1) - y(stats.q3))} fill="none" stroke={ink} strokeWidth={on ? 1.4 : 0.9} />
+                  <line x1={cx - half} x2={cx + half} y1={y(stats.med)} y2={y(stats.med)} stroke={ink} strokeWidth="2.4" />
                   <line x1={cx} x2={cx} y1={axisY} y2={axisY + 4} stroke={INK} strokeWidth="0.8" />
                   {hasStrip && row.topRecovery.map((cell, i) => {
                     const cellW = Math.min(slot - 4, 120);
@@ -1195,22 +1231,25 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
                     return (
                       <g key={cell.k}>
                         <title>{cell.value === null ? `${row.algorithmId}: fewer than ${cell.k} ranked edges` : `${row.algorithmId}: top ${cell.k} edges recovered in ${Math.round(cell.value * 100)}% of runs on average`}</title>
-                        <rect data-cell="" x={cx - cellW / 2} y={yTop + 1} width={cellW} height={rowH - 2} fill={cell.value === null ? "#f8fafc" : rhoColor(cell.value)} />
-                        <text x={cx} y={yTop + rowH / 2} fontSize="10.5" textAnchor="middle" dominantBaseline="middle"
-                          fill={cell.value !== null && cell.value > 0.6 ? "#ffffff" : "#1f2a33"}>{cell.value === null ? "—" : `${Math.round(cell.value * 100)}%`}</text>
+                        <rect data-cell="" x={cx - cellW / 2} y={yTop + 1} width={cellW} height={rowH - 2} fill={cell.value === null ? "#f8fafc" : recoveryColor(cell.value)} stroke="#e3e8ec" strokeWidth="0.6" />
+                        <text x={cx} y={yTop + rowH / 2} fontSize="10" textAnchor="middle" dominantBaseline="middle"
+                          fill={cell.value === null ? "#8a949c" : "#1f2a33"}>{cell.value === null ? "—" : Math.round(cell.value * 100)}</text>
                       </g>
                     );
                   })}
                   {horizontal ? (
                     <>
                       <text x={cx} y={labelBase + 16} fontSize="11.5" textAnchor="middle" fill={ink} data-name="">{row.algorithmId}</text>
-                      <text x={cx} y={labelBase + 31} fontSize="10" textAnchor="middle" fill="#6b7580">{row.runCount ? `${row.runCount} runs` : ""}</text>
-                      <text x={cx} y={labelBase + 44} fontSize="10" textAnchor="middle" fill={outcome === "ran to cap" ? "#b45309" : "#8a949c"}>{outcome}</text>
+                      <text x={cx} y={labelBase + 31} fontSize="10" textAnchor="middle" fill="#6b7580">
+                        {row.runCount ? `${row.runCount} runs` : ""}
+                        {outcome === "ran to cap" && <tspan fill="#b45309">{" · ran to cap"}</tspan>}
+                      </text>
                     </>
                   ) : (
                     <text transform={`translate(${cx + 4} ${labelBase + 10}) rotate(-45)`} fontSize="11.5" textAnchor="end" fill={ink} data-name="">
                       {row.algorithmId}
                       <tspan fill="#8a949c" fontSize="10">{row.runCount ? ` · ${row.runCount} runs` : ""}</tspan>
+                      {outcome === "ran to cap" && <tspan fill="#b45309" fontSize="10">{" · ran to cap"}</tspan>}
                     </text>
                   )}
                 </g>
@@ -1222,16 +1261,15 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
   },
 );
 
-/** Five-stop sequential blue, light (low) to dark (high), for 0–1 values. */
-function rhoColor(t: number) {
-  const stops = [[239, 245, 250], [198, 219, 239], [107, 174, 214], [33, 113, 181], [8, 48, 107]];
-  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
-  const i = Math.min(stops.length - 2, Math.floor(x));
-  const f = x - i;
-  const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
+/** Recovery shading: white at 100%, light blue only as recovery falls, so
+ * the eye goes to the cells that lose edges between runs. */
+function recoveryColor(t: number) {
+  const f = 1 - Math.max(0, Math.min(1, t));
+  const s = Math.min(1, f / 0.6);
+  const lo = [255, 255, 255], hi = [107, 174, 214];
+  const c = lo.map((v, k) => Math.round(v + (hi[k] - v) * s));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
-
 
 /** Per-algorithm repeat-run stability for the selected result scope, sorted
  * by median ρ (highest first). Shared by the Comparison stability panel and
@@ -1365,7 +1403,10 @@ function RepeatRunStabilityPanel({
       ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
       : null;
   const stabilityDescription =
-    "(a) Each point is the rank correlation between two bootstrap runs over the whole edge ranking. (b) How often the top-ranked edges are recovered across runs — the edges you would actually read.";
+    "(a) Each point is the rank correlation between two bootstrap runs over the whole edge ranking. (b) How often the top-ranked edges are recovered across runs — the edges you would actually read." +
+    (rows.some((row) => row.earlyStoppingEnabled)
+      ? " Runs stopped once the ranking met the stability rule, except where marked “ran to cap”."
+      : "");
   const handleDownloadCsv = () => {
     const maximumRunCount = Math.max(
       0,
