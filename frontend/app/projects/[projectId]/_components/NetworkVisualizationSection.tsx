@@ -230,6 +230,7 @@ export default function NetworkVisualizationSection(props: Props) {
   const [tableOpen, setTableOpen] = useState(true);
   const [tableWidth, setTableWidth] = useState(420);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
+  const [highlightedEdgeKeys, setHighlightedEdgeKeys] = useState<string[] | null>(null);
   const splitRef = useRef<HTMLDivElement | null>(null);
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
     const box = splitRef.current?.getBoundingClientRect();
@@ -286,7 +287,7 @@ export default function NetworkVisualizationSection(props: Props) {
   const hasUnsignedLinks = edges.some((e) => e.sign === 0);
   const effectiveEffect: EffectFilter = effect === "unknown" && !hasUnsignedLinks ? "all" : effect;
   const visibleEdges = useMemo(() => edges.filter((e) => passesEffect(e.sign, effectiveEffect)), [edges, effectiveEffect]);
-  const linkFilter = (variant: "line" | "chips") => (
+  const linkFilter = (variant: "line" | "chips" | "inline") => (
     <NetworkLinkFilter
       relationships={edges.length}
       signCounts={{
@@ -359,7 +360,7 @@ export default function NetworkVisualizationSection(props: Props) {
       else if (what === "svg") data.saveBlob(figures.paperFigureSvg(graph), `${base}-figure.svg`);
       else if (what === "png") data.saveBlob(await figures.paperFigurePng(graph), `${base}-figure.png`);
       else if (what === "xlsx") data.saveBlob(await data.supplementaryWorkbook(nodes, visibleEdges, ctx), `${base}-table.xlsx`);
-      else if (what === "csv") data.saveBlob(new Blob([data.linksCsv(visibleEdges)], { type: "text/csv;charset=utf-8" }), `${base}-links.csv`);
+      else if (what === "csv") data.saveBlob(new Blob([data.linksCsv(visibleEdges)], { type: "text/csv;charset=utf-8" }), `${base}-edges.csv`);
       else {
         const { default: JSZip } = await import("jszip");
         const zip = new JSZip();
@@ -367,7 +368,7 @@ export default function NetworkVisualizationSection(props: Props) {
         zip.file(`${base}-figure.svg`, figures.paperFigureSvg(graph));
         zip.file(`${base}-figure.png`, await figures.paperFigurePng(graph));
         zip.file(`${base}-table.xlsx`, await data.supplementaryWorkbook(nodes, visibleEdges, ctx));
-        zip.file(`${base}-links.csv`, data.linksCsv(visibleEdges));
+        zip.file(`${base}-edges.csv`, data.linksCsv(visibleEdges));
         zip.file(`${base}-figure-legend.txt`, `${data.figureLegend(nodes, visibleEdges, ctx)}\n`);
         data.saveBlob(await zip.generateAsync({ type: "blob", compression: "DEFLATE" }), `${base}.zip`);
       }
@@ -520,18 +521,6 @@ export default function NetworkVisualizationSection(props: Props) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {tableMode && (
-                <button
-                  type="button"
-                  onClick={() => { setTableOpen((open) => !open); setHoveredEdgeKey(null); }}
-                  aria-pressed={tableOpen}
-                  title={tableOpen ? "Hide the table" : "Show the exact numbers beside the network"}
-                  className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-4 text-xs font-bold transition ${tableOpen ? "border-[#b9cfe0] bg-[#eef4f8] text-[#1b75a6]" : "border-slate-200 bg-white text-slate-600 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"}`}
-                >
-                  <svg width="13" height="12" viewBox="0 0 13 12" aria-hidden="true"><rect x=".75" y=".75" width="11.5" height="10.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M.75 4.2h11.5M5 4.2v7" stroke="currentColor" strokeWidth="1.3"/></svg>
-                  Table
-                </button>
-              )}
               {networkLayout !== "circos" && (
                 <div
                   className="inline-flex h-10 overflow-hidden rounded-full border border-slate-200 bg-white"
@@ -602,27 +591,22 @@ export default function NetworkVisualizationSection(props: Props) {
                   </span>
                 </button>
                 {isExportConfirmOpen && useNewCanvas && networkLayout !== "circos" ? (
-                  <div className="dl-menu" role="dialog" aria-modal="false" aria-label="Download for a paper">
-                    <div className="dl-sec">
-                      <div className="dl-row"><div><div className="dl-t">Figure</div><div className="dl-d">The network as shown, 183 mm wide (two columns)</div></div></div>
-                      <div className="dl-fmts">
-                        <button type="button" className="dl-fmt is-rec" disabled={exporting} onClick={() => void downloadPaper("pdf")}><b>PDF</b><i>vector · recommended</i></button>
-                        <button type="button" className="dl-fmt" disabled={exporting} onClick={() => void downloadPaper("svg")}><b>SVG</b><i>editable text</i></button>
-                        <button type="button" className="dl-fmt" disabled={exporting} onClick={() => void downloadPaper("png")}><b>PNG</b><i>600 dpi</i></button>
-                      </div>
-                    </div>
-                    <div className="dl-sec">
-                      <div className="dl-row"><div><div className="dl-t">Supplementary table</div><div className="dl-d">Links, genes and how they were made</div></div>
-                        <div className="dl-pills"><button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("xlsx")}>XLSX</button><button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("csv")}>CSV</button></div></div>
-                    </div>
-                    <div className="dl-sec">
-                      <div className="dl-row"><div><div className="dl-t">Figure legend</div><div className="dl-d">{legendCopied ? "Copied — paste it under the figure" : "Ready-to-paste caption text"}</div></div>
-                        <button type="button" className={`dl-pill${legendCopied ? " is-done" : ""}`} onClick={() => void copyLegend()}>{legendCopied ? "✓ Copied" : "Copy"}</button></div>
-                    </div>
-                    <div className="dl-sec">
-                      <div className="dl-row"><div><div className="dl-t">Everything</div><div className="dl-d">Figure (PDF, SVG, PNG) + table + legend</div></div>
-                        <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("zip")}>ZIP</button></div>
-                    </div>
+                  <div className="dl-menu" role="dialog" aria-modal="false" aria-label="Download">
+                    <div className="dl-line"><span className="dl-t">Network</span><div className="dl-pills">
+                      <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("png")}>PNG</button>
+                      <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("svg")}>SVG</button>
+                      <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("pdf")}>PDF</button>
+                    </div></div>
+                    <div className="dl-line"><span className="dl-t">Data table</span><div className="dl-pills">
+                      <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("xlsx")}>Excel</button>
+                      <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("csv")}>CSV</button>
+                    </div></div>
+                    <div className="dl-line"><span className="dl-t">Caption</span><div className="dl-pills">
+                      <button type="button" className={`dl-pill${legendCopied ? " is-done" : ""}`} onClick={() => void copyLegend()}>{legendCopied ? "✓ Copied" : "Copy"}</button>
+                    </div></div>
+                    <div className="dl-line"><span className="dl-t">Everything</span><div className="dl-pills">
+                      <button type="button" className="dl-pill" disabled={exporting} onClick={() => void downloadPaper("zip")}>ZIP</button>
+                    </div></div>
                     {exporting && <div className="dl-busy">Preparing…</div>}
                   </div>
                 ) : isExportConfirmOpen ? (
@@ -700,9 +684,8 @@ export default function NetworkVisualizationSection(props: Props) {
         )}
         {useNewCanvas && networkLayout !== "circos" ? (
           <>
-            {/* Key on top. With the side panel open the filter lives in the
-                panel, so the key names the link tips itself; with the panel
-                hidden the filter line below it shows the tips with counts. */}
+            {/* Key on top. The edge filter sits with the controls at its right
+                and names the tips itself, with or without the side panel. */}
             {nodes.length > 0 && (
               <NetworkKey
                 directionSplit={edges.some((e) => hasDirection(e))}
@@ -715,14 +698,9 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSizeByChange={setSizeBy}
                 sizeChoice={edges.some((e) => hasDirection(e))}
                 onWidthByChange={setWidthBy}
-                signs={tableOpen ? {
-                  activation: visibleEdges.some((e) => e.sign === 1),
-                  repression: visibleEdges.some((e) => e.sign === -1),
-                  unknown: visibleEdges.some((e) => e.sign === 0),
-                } : undefined}
+                filter={linkFilter("inline")}
               />
             )}
-            {tableOpen ? null : linkFilter("line")}
           </>
         ) : (
         <NetworkLegend
@@ -789,6 +767,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 layoutNonce={layoutNonce}
                 palette={figurePalette}
                 hoveredEdgeKey={hoveredEdgeKey}
+                highlightedEdgeKeys={highlightedEdgeKeys}
               />
             ) : (
               <NetworkGraph
@@ -824,13 +803,15 @@ export default function NetworkVisualizationSection(props: Props) {
                 onSelectGene={(id) => { if (id) selectGene(id); else clearSelection(); }}
                 onSelectEdge={(key) => { if (key) selectEdge(key); else clearSelection(); }}
                 onHoverEdge={setHoveredEdgeKey}
-                onHide={() => { setTableOpen(false); setHoveredEdgeKey(null); }}
+                onHighlightEdges={setHighlightedEdgeKeys}
+                onHide={() => { setTableOpen(false); setHoveredEdgeKey(null); setHighlightedEdgeKeys(null); }}
                 onFocus={(id) => { focus(id); clearSelection(); }}
-                filter={linkFilter("chips")}
                 palette={figurePalette}
               />
             </>
-          ) : null) : useNewCanvas ? (
+          ) : (
+            <button type="button" className="tp-hide tp-show" onClick={() => setTableOpen(true)} aria-label="Show panel" title="Show panel">⟨</button>
+          )) : useNewCanvas ? (
             <NetworkInspectorPanel
               node={selectedVisibleNode}
               edge={selectedEdge}

@@ -4,9 +4,9 @@ export type NodeSizeBy = "out" | "all" | "in";
 export type EdgeWidthBy = "evidence" | "support";
 
 export const NODE_SIZE_OPTIONS: Record<NodeSizeBy, { label: string; scale: string; legend: string; help: string }> = {
-  out: { label: "Targets", scale: "Targets", legend: "Size: genes it regulates", help: "Node size: number of displayed genes this gene regulates (directed out-links)." },
+  out: { label: "Targets", scale: "Targets", legend: "Size: genes it regulates", help: "Node size: number of displayed genes this gene regulates (outgoing edges)." },
   all: { label: "All connections", scale: "Connections", legend: "Size: all connections", help: "Node size: number of displayed relationships touching this gene, directed or not." },
-  in: { label: "Regulators", scale: "Regulators", legend: "Size: its regulators", help: "Node size: number of displayed genes that regulate this gene (directed in-links)." },
+  in: { label: "Regulators", scale: "Regulators", legend: "Size: its regulators", help: "Node size: number of displayed genes that regulate this gene (incoming edges)." },
 };
 
 /** End labels for the compact width scale. */
@@ -85,3 +85,21 @@ export const PIE_SHADES = {
   tf: ["#b8732a", "#e8b779", "#f5e1c6"],
   gene: ["#9a9a9a", "#d1d1d1", "#ececec"],
 } as const;
+
+/** Evidence and bootstrap confidence as two distributions on one 0–1 axis:
+ * the links in each 0.05-wide bin, once by evidence and once by confidence.
+ * A link with no verified confidence is left out of the confidence side
+ * rather than counted as low. */
+export const SCORE_BIN_STEP = 0.05, SCORE_BIN_COUNT = 20;
+export const scoreBin = (value: number) => Math.min(SCORE_BIN_COUNT - 1, Math.max(0, Math.floor(value / SCORE_BIN_STEP + 1e-9)));
+export type ScoreBins<E> = { evidence: E[][]; confidence: E[][]; verified: number };
+export function scoreDistributions<E extends { score: number; confidence: number; bootstrapVerified?: boolean }>(edges: E[]): ScoreBins<E> {
+  const evidence: E[][] = Array.from({ length: SCORE_BIN_COUNT }, () => []);
+  const confidence: E[][] = Array.from({ length: SCORE_BIN_COUNT }, () => []);
+  let verified = 0;
+  for (const e of edges) {
+    if (Number.isFinite(e.score)) evidence[scoreBin(e.score)].push(e);
+    if (e.bootstrapVerified === true && Number.isFinite(e.confidence)) { confidence[scoreBin(e.confidence)].push(e); verified++; }
+  }
+  return { evidence, confidence, verified };
+}

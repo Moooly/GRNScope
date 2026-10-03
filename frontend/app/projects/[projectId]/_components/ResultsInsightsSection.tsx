@@ -2266,7 +2266,7 @@ function AgreementView({
       {activeAlgorithmIds.length >= 2 && orderedAlgorithmIds.length >= 2 && regulatorRows.length ? (
         <Panel
           title="Key regulators across methods"
-          description={`Each cell is a gene's rank as a regulator in one method's top ${topK.toLocaleString()} edges (1 = most links). Methods often agree more on which regulators matter than on single edges.`}
+          description={`Each cell is a gene's rank as a regulator in one method's top ${topK.toLocaleString()} edges (1 = most edges). Methods often agree more on which regulators matter than on single edges.`}
           aside={
             <DownloadMenu
               ariaLabel="Download key regulators"
@@ -2276,7 +2276,7 @@ function AgreementView({
                 {
                   label: "Regulator ranks",
                   format: "CSV",
-                  description: "Rank and link count per method for the genes shown.",
+                  description: "Rank and edge count per method for the genes shown.",
                   onSelect: () => downloadCsv(`key-regulators-top-${topK}.csv`, regulatorCsvRows()),
                 },
               ]}
@@ -2330,13 +2330,13 @@ function AgreementView({
                 onGroupChange={() => undefined}
                 firstHeader="Method"
                 monoFirst={false}
-                rankHeaders={["Rank", "Links"]}
-                footnote="Links = targets (directed) or connections (undirected)"
+                rankHeaders={["Rank", "Edges"]}
+                footnote="Edges = targets (directed) or connections (undirected)"
                 onReset={isDefaultRegulator ? undefined : () => setRequestedGene(null)}
                 resetLabel="Back to top"
                 onDownload={() =>
                   downloadCsv(`regulator-${selectedRegulator.gene}-top-${topK}.csv`, [
-                    ["method", "directed", "rank", "links"],
+                    ["method", "directed", "rank", "edges"],
                     ...orderedAlgorithmIds.map((id, index) => [
                       id,
                       regulatorDirected[index] ? "yes" : "no",

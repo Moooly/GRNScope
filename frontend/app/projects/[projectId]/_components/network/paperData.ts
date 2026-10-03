@@ -72,15 +72,15 @@ export function figureLegend(nodes: NetworkNode[], edges: NetworkEdge[], ctx: Pa
   const faded = edges.some(e => e.bootstrapVerified && e.confidence < 0.8);
   const filters = activeFilters(ctx.filters);
   const sentences = [
-    `Network of ${genes.length} genes and ${edges.length} regulatory ${edges.length === 1 ? "link" : "links"}`
+    `Network of ${genes.length} genes and ${edges.length} regulatory ${edges.length === 1 ? "edge" : "edges"}`
       + `${filters.length ? ` (${filters.join("; ").replace(/^Evidence/, "evidence")})` : ""}`
       + `${ctx.methods.length ? `, inferred ${ctx.methods.length > 1 ? `by consensus of ${ctx.methods.length} methods (${list(ctx.methods)})` : `with ${ctx.methods[0]}`}` : ""}`
       + `${ctx.focus ? `, showing the direct neighbourhood of ${ctx.focus}` : ""}`
-      + `${ctx.effect !== "all" ? `; ${ctx.effect === "unknown" ? "links of unknown sign" : `${ctx.effect} links`} only` : ""}.`,
-    `${soft ? "Blue" : "Orange"} circles, transcription factors; ${soft ? "yellow" : "grey"} circles, other genes; circle size, ${ctx.sizeBy === "out" ? "number of target genes" : ctx.sizeBy === "in" ? "number of regulators" : "number of links"}.`,
-    ...(directed ? [`Each circle is split by link direction (dark, regulates; light, regulated by${undirected ? "; pale, direction unknown" : ""}).`] : []),
+      + `${ctx.effect !== "all" ? `; ${ctx.effect === "unknown" ? "edges of unknown sign" : `${ctx.effect} edges`} only` : ""}.`,
+    `${soft ? "Blue" : "Orange"} circles, transcription factors; ${soft ? "yellow" : "grey"} circles, other genes; circle size, ${ctx.sizeBy === "out" ? "number of target genes" : ctx.sizeBy === "in" ? "number of regulators" : "number of edges"}.`,
+    ...(directed ? [`Each circle is split by edge direction (dark, regulates; light, regulated by${undirected ? "; pale, direction unknown" : ""}).`] : []),
     [signs.has(1) ? "Arrowheads, activation" : "", signs.has(-1) ? "bars, repression" : "", signs.has(0) ? "no tip, sign unknown" : "", undirected ? "dashed lines, direction not resolved" : ""].filter(Boolean).join("; ").replace(/^./, c => c.toUpperCase()) + ".",
-    `Line width, ${ctx.widthBy === "support" ? "number of methods reporting the link" : "evidence (per-target rank, 0–1)"}${faded ? "; faded lines, bootstrap confidence below 0.8" : ""}.`,
+    `Line width, ${ctx.widthBy === "support" ? "number of methods reporting the edge" : "evidence (per-target rank, 0–1)"}${faded ? "; faded lines, bootstrap confidence below 0.8" : ""}.`,
   ].filter(s => s !== ".");
   return `Gene regulatory network inferred with GRNScope. ${sentences.join(" ")}`;
 }
@@ -125,7 +125,7 @@ export async function supplementaryWorkbook(nodes: NetworkNode[], edges: Network
     const c = linkCells(r);
     return [gene(r.regulator), gene(r.target), c[2], c[3], num(r.evidence), r.confidence === null ? "" : num(r.confidence), r.methods, c[7]] as Cell[];
   })];
-  const geneSheet: Cell[][] = [head(["gene", "transcription_factor", "targets", "regulators", "direction_unknown", "links"]),
+  const geneSheet: Cell[][] = [head(["gene", "transcription_factor", "targets", "regulators", "direction_unknown", "edges"]),
     ...genes.map(g => [gene(g.gene), g.tf ? "yes" : "no", g.targets, g.regulators, g.unknown, g.links] as Cell[])];
   const when = ctx.exportedAt ?? new Date();
   const about: [string, string][] = [
@@ -136,17 +136,17 @@ export async function supplementaryWorkbook(nodes: NetworkNode[], edges: Network
     ["Scope", ctx.scope],
     ["Filters", ctx.filters || "None"],
     ...(ctx.focus ? [["Neighbourhood", ctx.focus] as [string, string]] : []),
-    ...(ctx.effect !== "all" ? [["Links shown", `${ctx.effect} only`] as [string, string]] : []),
+    ...(ctx.effect !== "all" ? [["Edges shown", `${ctx.effect} only`] as [string, string]] : []),
     ["evidence", "Per-target rank of the regulator (0–1; 1 = strongest regulator of that target), averaged across methods."],
-    ["bootstrap_confidence", "Share of bootstrap runs that recover the link; empty when not verified."],
+    ["bootstrap_confidence", "Share of bootstrap runs that recover the edge; empty when not verified."],
     ["direction_resolved", "yes when the methods agree on which gene regulates which; otherwise the regulator column is the listed source."],
-    ["methods_agreeing", `Number of the ${ctx.methods.length} selected methods that report the link.`],
-    ["Contents", `Links: ${links.length} rows · Genes: ${genes.length} rows — the same links and genes as the exported figure.`],
+    ["methods_agreeing", `Number of the ${ctx.methods.length} selected methods that report the edge.`],
+    ["Contents", `Edges: ${links.length} rows · Genes: ${genes.length} rows — the same edges and genes as the exported figure.`],
     ["Figure legend", figureLegend(nodes, edges, ctx)],
   ];
   const aboutSheet: Cell[][] = about.map(([k, v]) => [{ v: k, s: 5 }, { v, s: 4 }]);
   const sheets = [
-    { name: "Links", xml: sheetXml(linkSheet, [14, 14, 12, 18, 10, 20, 17, 44], true) },
+    { name: "Edges", xml: sheetXml(linkSheet, [14, 14, 12, 18, 10, 20, 17, 44], true) },
     { name: "Genes", xml: sheetXml(geneSheet, [14, 20, 10, 12, 18, 8], true) },
     { name: "About", xml: sheetXml(aboutSheet, [22, 100], false) },
   ];

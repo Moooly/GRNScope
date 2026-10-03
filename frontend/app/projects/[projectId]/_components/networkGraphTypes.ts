@@ -89,6 +89,8 @@ export type NetworkGraphProps = {
   layoutNonce?: number;
   /** A table row under the pointer: its link is emphasised and labelled. */
   hoveredEdgeKey?: string | null;
+  /** A group of links emphasised together (a histogram segment); the rest fade. */
+  highlightedEdgeKeys?: string[] | null;
   /** Colour palette (temporary switch while the boss chooses). */
   palette?: import("./network/theme").PaletteName;
 

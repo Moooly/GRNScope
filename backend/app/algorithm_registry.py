@@ -222,7 +222,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "description": "Gradient-boosted tree method for fast regulator ranking.",
         "long_description": (
             "GRNBoost2 uses gradient-boosted tree models through Arboreto to infer "
-            "regulatory links efficiently from expression data."
+            "regulatory edges efficiently from expression data."
         ),
         "category": "Gradient boosting",
         "year": "2018",
@@ -305,7 +305,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "description": "Prior-informed Bayesian ridge regression using promoter or atlas base-GRN candidates.",
         "long_description": (
             "CellOracle combines a TF-target base GRN with single-cell expression "
-            "data to estimate directed, signed regulatory links. GRNScope runs it "
+            "data to estimate directed, signed regulatory edges. GRNScope runs it "
             "globally, and also per cluster when cluster labels are uploaded."
         ),
         "category": "Bayesian ridge regression",
@@ -363,7 +363,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
             {
                 "name": "pValueCutoff",
                 "label": "P-value cutoff",
-                "description": "CellOracle links above this p-value are removed when p-values are available.",
+                "description": "CellOracle edges above this p-value are removed when p-values are available.",
                 "default": 0.05,
                 "required": False,
                 "value_type": "float",
@@ -620,7 +620,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
     {
         "id": "SCRIBE",
         "name": "SCRIBE",
-        "description": "Restricted-directed-information method for causal regulatory links.",
+        "description": "Restricted-directed-information method for causal regulatory edges.",
         "long_description": (
             "SCRIBE uses restricted directed information to estimate causal regulatory "
             "interactions between genes from coupled single-cell expression dynamics."
@@ -1080,7 +1080,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "long_description": (
             "Jump3 combines a formal dynamical model of gene expression with "
             "non-parametric decision-tree reconstruction. It uses time-series expression "
-            "data to rank directed regulatory links."
+            "data to rank directed regulatory edges."
         ),
         "category": "Dynamical model + trees",
         "year": "2015",
@@ -1100,7 +1100,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
         "strengths": [
             "Combines a biologically motivated dynamical model with flexible tree-based reconstruction.",
             "Produces directed regulator-target predictions.",
-            "Can rank candidate regulatory links from time-series expression data.",
+            "Can rank candidate regulatory edges from time-series expression data.",
         ],
         "limitations": [
             "Requires time-series or ordered data.",

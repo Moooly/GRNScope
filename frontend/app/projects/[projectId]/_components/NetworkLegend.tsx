@@ -80,7 +80,7 @@ export default function NetworkLegend({
         className="grn-legend grn-legend-compact"
         aria-label="Network legend"
       >
-        <span style={GROUP_LABEL}>Link</span>
+        <span style={GROUP_LABEL}>Edge</span>
         <span
           className="grn-legend-key"
           title="The regulator increases its target's expression"
@@ -189,7 +189,7 @@ export default function NetworkLegend({
         </span>
         <span
           className="grn-legend-key"
-          title="Node size — number of regulatory links the gene takes part in"
+          title="Node size — number of regulatory edges the gene takes part in"
         >
           <svg width="34" height="18" aria-hidden="true">
             <circle cx="6" cy="9" r="3.5" fill={palette.node} stroke="#a8c3d5" strokeWidth="1.3" />
@@ -255,7 +255,7 @@ export default function NetworkLegend({
         </span>
         <span
           className="grn-legend-key"
-          title="Node size — number of regulatory links the gene takes part in"
+          title="Node size — number of regulatory edges the gene takes part in"
         >
           <svg width="30" height="16" aria-hidden="true">
             <circle cx="5" cy="8" r="2.6" fill={palette.node} />

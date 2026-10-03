@@ -78,7 +78,7 @@ export const NETWORK_APPEARANCES = {
   },
   atlas: {
     label: "Regulatory atlas",
-    description: "Light canvas · sized hubs · flowing links",
+    description: "Light canvas · sized hubs · flowing edges",
     background: "#edf3f8",
     node: "#3e6d88",
     tf: "#3e6d88",

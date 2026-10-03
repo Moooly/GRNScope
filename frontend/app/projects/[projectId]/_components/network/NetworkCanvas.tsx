@@ -110,7 +110,7 @@ function focusEdge(cy: Core, edge: cytoscape.EdgeSingular | null): HoverTip | nu
   if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; }
   const reversed = Number(edge.data("direction")) === -1;
   const sign = Number(edge.data("sign"));
-  return { kind: "link", x: mid.x, y: mid.y, nx, ny, halfWidth: Math.max(3.2, Number(edge.data("width")) * 2.2) * cy.zoom() / 2,
+  return { kind: "link", x: mid.x, y: mid.y, nx, ny, halfWidth: (Number(edge.data("focusEdgeWidth")) || Number(edge.data("width")) * 2.2) * cy.zoom() / 2,
     ends: [{ ...a, r: edge.source().renderedOuterWidth() / 2 }, { ...b, r: edge.target().renderedOuterWidth() / 2 }],
     from: reversed ? edge.target().id() : edge.source().id(), to: reversed ? edge.source().id() : edge.target().id(),
     mark: Number(edge.data("direction")) === 0 ? "—" : sign === -1 ? "⊣" : "→", evidence: Number(edge.data("evidence")).toFixed(2) };
@@ -382,6 +382,17 @@ export default function NetworkCanvas(props: NetworkGraphProps) {
     const tip = focusEdge(cy, edge.nonempty() && edge.isEdge() ? edge : null);
     queueMicrotask(() => setHoverTip(tip));
   }, [props.hoveredEdgeKey]);
+
+  // A histogram segment keeps its links at full ink and fades the others.
+  useEffect(() => {
+    const cy = coreRef.current;
+    if (!cy || cy.destroyed()) return;
+    const keys = props.highlightedEdgeKeys?.length ? new Set(props.highlightedEdgeKeys) : null;
+    cy.batch(() => {
+      cy.edges().removeClass("group-on group-dim");
+      if (keys) cy.edges().forEach(e => { e.addClass(keys.has(e.id()) ? "group-on" : "group-dim"); });
+    });
+  }, [props.highlightedEdgeKeys, props.edges]);
 
   // Spacing and Reset layout are driven from the Display menu.
   useEffect(() => {

@@ -5,6 +5,14 @@ import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { hasDirection } from "../networkVisualEncoding";
 import { PALETTES, DEFAULT_PALETTE, type Palette, type PaletteName } from "./theme";
 import { nodeDegrees } from "./model";
+import { downloadSvg, downloadSvgPng } from "../../_lib/downloads";
+import { SCORE_BIN_COUNT, SCORE_BIN_STEP, scoreDistributions } from "./encoding";
+
+/** Ink, grid and hues of the Comparison and Benchmark figures: evidence in
+ * their blue, confidence in their orange. */
+const SERIES = { e: { name: "Evidence", fill: "rgb(33,113,181)" }, c: { name: "Confidence", fill: "rgb(253,141,60)" } } as const;
+type SeriesKey = keyof typeof SERIES;
+const FIG_FONT = "Arial, Helvetica, sans-serif", FIG_INK = "#1a1a1a", FIG_SUB = "#4b5560", FIG_GRID = "#e9edf0", FIG_SELECT = "#087ead";
 
 /**
  * The side panel of the network: a soft sheet in the same card as the figure
@@ -22,6 +30,8 @@ type Props = {
   onSelectGene: (id: string | null) => void;
   onSelectEdge: (key: string | null) => void;
   onHoverEdge: (key: string | null) => void;
+  /** A group of links to emphasise together on the canvas (a histogram segment). */
+  onHighlightEdges?: (keys: string[] | null) => void;
   onHide: () => void;
   onFocus?: (id: string) => void;
   /** The figure's link filter, shown at the top of the sheet. */
@@ -64,13 +74,18 @@ export function PieGlyph({ tf, out, inn, unknown, size = 14, T }: { tf: boolean;
   })}</svg>;
 }
 
-export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHide, onFocus, filter, palette = DEFAULT_PALETTE }: Props) {
+export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE }: Props) {
   const T = PALETTES[palette];
   const [view, setView] = useState<View>("overview");
   const [linkSort, setLinkSort] = useState<{ key: LinkKey; desc: boolean }>({ key: "evidence", desc: true });
   const [geneSort, setGeneSort] = useState<{ key: GeneKey; desc: boolean }>({ key: "total", desc: true });
   const [showAll, setShowAll] = useState(false);
+  // Histogram bar under the pointer, and the one pinned by a click: "e:bin" or "c:bin".
+  const [segHover, setSegHover] = useState<string | null>(null);
+  const [segPinned, setSegPinned] = useState<string | null>(null);
+  const [figureMenu, setFigureMenu] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const figureRef = useRef<SVGSVGElement | null>(null);
 
   const tfOf = useMemo(() => new Map(nodes.map(n => [n.id, n.isTF])), [nodes]);
   const degrees = useMemo(() => nodeDegrees(edges), [edges]);
@@ -106,6 +121,21 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
   // A new card starts at its top, and a row that vanished with the old view
   // must not keep its link focused on the canvas.
   useEffect(() => { bodyRef.current?.scrollTo?.({ top: 0 }); onHoverEdge(null); }, [selectedGene, selectedEdgeKey, view, onHoverEdge]);
+
+  const histogram = useMemo(() => scoreDistributions(edges), [edges]);
+  const segKey = segHover ?? segPinned;
+  const segEdges = useMemo(() => {
+    if (!segKey) return null;
+    const [series, i] = segKey.split(":");
+    const group = (series === "e" ? histogram.evidence : histogram.confidence)[Number(i)];
+    return group?.length ? group : null;
+  }, [segKey, histogram]);
+  const overviewShown = view === "overview" && !selectedGene && !selectedEdgeKey;
+  // The segment's links stand out on the canvas while it is hovered or pinned.
+  useEffect(() => {
+    onHighlightEdges?.(overviewShown && segEdges ? segEdges.map(e => e.key) : null);
+  }, [overviewShown, segEdges, onHighlightEdges]);
+  useEffect(() => () => onHighlightEdges?.(null), [onHighlightEdges]);
 
   const sortLink = (key: LinkKey) => setLinkSort(s => ({ key, desc: s.key === key ? !s.desc : key !== "regulator" && key !== "target" }));
   const sortGene = (key: GeneKey) => setGeneSort(s => ({ key, desc: s.key === key ? !s.desc : key !== "gene" }));
@@ -147,7 +177,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     const data = what === "links"
       ? [["regulator", "target", "effect", "direction_resolved", "evidence", "bootstrap_confidence", "methods", "method_names"],
          ...(subset ?? rows).map(r => [r.regulator, r.target, r.edge.sign === 1 ? "activation" : r.edge.sign === -1 ? "repression" : "unknown", r.directed ? "yes" : "no", r.edge.score.toFixed(3), r.edge.bootstrapVerified ? r.edge.confidence.toFixed(3) : "", String(r.edge.count), r.edge.supportingAlgorithms.join(";")])]
-      : [["gene", "transcription_factor", "targets", "regulators", "direction_unknown", "total_links"], ...genes.map(g => [g.id, g.tf ? "yes" : "no", String(g.targets), String(g.regulators), String(g.unknown), String(g.total)])];
+      : [["gene", "transcription_factor", "targets", "regulators", "direction_unknown", "total_edges"], ...genes.map(g => [g.id, g.tf ? "yes" : "no", String(g.targets), String(g.regulators), String(g.unknown), String(g.total)])];
     const url = URL.createObjectURL(new Blob([csv(data)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = `network-${name ?? what}.csv`;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -155,7 +185,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
 
   const stat = (value: ReactNode, label: ReactNode) => <div className="tp-stat"><b>{value}</b><span>{label}</span></div>;
   const crumb = (label: string, onClose: () => void) => <div className="tp-crumb">
-    <button type="button" className="tp-back" onClick={onClose}>{view === "overview" ? "Overview" : view === "links" ? "Links" : "Genes"}</button>
+    <button type="button" className="tp-back" onClick={onClose}>{view === "overview" ? "Overview" : view === "links" ? "Edges" : "Genes"}</button>
     <span aria-hidden="true">›</span><b><i>{label}</i></b>
     <button type="button" className="tp-x" aria-label="Close" onClick={onClose}>✕</button>
   </div>;
@@ -202,7 +232,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
       {crumb(id, () => onSelectGene(null))}
       <div className="tp-gene-head">{pie(id, 56)}<div><h3><i>{id}</i></h3><span className={`tp-tag${tf ? " is-tf" : ""}`}>{tf ? "Transcription factor" : "Other gene"}</span></div></div>
       <div className="tp-stats">
-        {anyDirected ? <>{stat(regulates.length, "regulates")}{stat(regulatedBy.length, "regulated by")}</> : stat(mine.length, plural(mine.length, "link").replace(/^\d+ /, ""))}
+        {anyDirected ? <>{stat(regulates.length, "regulates")}{stat(regulatedBy.length, "regulated by")}</> : stat(mine.length, plural(mine.length, "edge").replace(/^\d+ /, ""))}
         {stat(mine.length ? mine[0].edge.score.toFixed(2) : "—", "strongest evidence")}
       </div>
       {(act > 0 || rep > 0) && <div className="tp-split">
@@ -210,8 +240,8 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         <div className="tp-splitbar"><i style={{ flex: act }} /><i style={{ flex: rep }} /></div>
       </div>}
       {anyDirected && list("Regulates", regulates, r => r.target, `${id} regulates no displayed gene.`)}
-      {anyDirected && list("Regulated by", regulatedBy, r => r.regulator, "No regulator among the displayed links.")}
-      {unknown.length > 0 && list(anyDirected ? "Direction unknown" : "Links", unknown, r => r.regulator === id ? r.target : r.regulator, "")}
+      {anyDirected && list("Regulated by", regulatedBy, r => r.regulator, "No regulator among the displayed edges.")}
+      {unknown.length > 0 && list(anyDirected ? "Direction unknown" : "Edges", unknown, r => r.regulator === id ? r.target : r.regulator, "")}
       <div className="tp-card-actions">
         {onFocus && <button type="button" className="tp-link" onClick={() => onFocus(id)}>◎ Show only this neighbourhood</button>}
         <button type="button" className="tp-link" onClick={() => download("links", mine, id)}>⤓ CSV</button>
@@ -221,28 +251,76 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
 
   // ---- Overview --------------------------------------------------------
   const overview = () => {
-    const tfCount = nodes.filter(n => n.isTF).length;
-    const lo = edges.length ? Math.min(0.9, Math.floor(Math.min(...edges.map(e => e.score)) * 10) / 10) : 0;
-    const steps = Math.max(1, Math.round((1 - lo) * 10));
-    const bins = Array.from({ length: steps }, () => 0);
-    edges.forEach(e => { bins[Math.min(steps - 1, Math.max(0, Math.floor((e.score - lo) * 10)))] += 1; });
-    const peak = Math.max(1, ...bins);
+    // Evidence (up) and bootstrap confidence (down) on one 0–1 axis, one count scale.
+    const N = SCORE_BIN_COUNT, W = 340, X0 = 44, X1 = 326, TOP = 36, MID = 136, BOT = 236, AXIS = BOT + 4, H = 282;
+    const peak = Math.max(1, ...histogram.evidence.map(g => g.length), ...histogram.confidence.map(g => g.length));
+    const yTick = Math.max(1, Math.ceil(peak / 4)), yMax = Math.ceil(peak / yTick) * yTick;
+    const slot = (X1 - X0) / N, half = MID - TOP;
+    const range = (i: number) => `${(i * SCORE_BIN_STEP).toFixed(2)}–${((i + 1) * SCORE_BIN_STEP).toFixed(2)}`;
+    const [segSeries, segBin] = segKey ? [segKey.split(":")[0] as SeriesKey, Number(segKey.split(":")[1])] : [null, -1];
+    const segRows = segPinned && segEdges ? segEdges.map(orient).sort((a, b) => b.edge.score - a.edge.score) : [];
+    const counts: Record<SeriesKey, number> = { e: edges.length, c: histogram.verified };
+    const bars = (series: SeriesKey, groups: NetworkEdge[][]) => groups.map((group, i) => {
+      const n = group.length;
+      if (!n) return null;
+      const h = (n / yMax) * half, key = `${series}:${i}`, on = segKey === key;
+      return <rect key={key} className="tp-seg" x={X0 + i * slot + 1} y={series === "e" ? MID - h : MID} width={slot - 2} height={h}
+        fill={on ? FIG_SELECT : SERIES[series].fill} data-export-fill={SERIES[series].fill}
+        onMouseEnter={() => setSegHover(key)} onClick={() => setSegPinned(p => p === key ? null : key)}>
+        <title data-ui="">{`${SERIES[series].name} ${range(i)}: ${plural(n, "edge")}\nClick to ${segPinned === key ? "release" : "keep and list these edges"}`}</title>
+      </rect>;
+    });
     const top = [...genes].sort((a, b) => (anyDirected ? b.targets - a.targets : b.total - a.total) || a.id.localeCompare(b.id)).slice(0, 6).filter(g => (anyDirected ? g.targets : g.total) > 0);
     const topMax = Math.max(1, ...top.map(g => anyDirected ? g.targets : g.total));
     // No headline numbers here: the tabs already count links and genes, and
     // the filter chips count links by sign.
     return <div className="tp-card">
       {edges.length > 0 && <section className="tp-section">
-        <h4>Evidence of displayed links</h4>
-        <div className="tp-hist" role="img" aria-label="Number of links by evidence">
-          {bins.map((n, i) => <div key={i} title={`${(lo + i / 10).toFixed(1)}–${(lo + (i + 1) / 10).toFixed(1)}: ${plural(n, "link")}`}>
-            <span>{n}</span><i style={{ height: `${Math.round((n / peak) * 64)}px`, opacity: 0.45 + 0.55 * (i + 1) / steps }} />
-          </div>)}
+        <div className="tp-figure" onMouseLeave={() => { setSegHover(null); setFigureMenu(false); }}>
+          <button type="button" className="tp-figure-dl" aria-label="Download chart" title="Download chart" aria-haspopup="menu" aria-expanded={figureMenu} onClick={() => setFigureMenu(open => !open)}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.5 1.5v7M3.5 6l3 3 3-3M2 11.5h9" /></svg>
+          </button>
+          {figureMenu && <div className="tp-figure-pop" role="menu">
+            <button type="button" role="menuitem" onClick={() => { setFigureMenu(false); if (figureRef.current) void downloadSvgPng(figureRef.current, "evidence-confidence.png"); }}>PNG</button>
+            <button type="button" role="menuitem" onClick={() => { setFigureMenu(false); if (figureRef.current) downloadSvg(figureRef.current, "evidence-confidence.svg"); }}>SVG</button>
+          </div>}
+          <svg ref={figureRef} viewBox={`0 0 ${W} ${H}`} width="100%" role="img" fontFamily={FIG_FONT}
+            aria-label="Number of displayed edges by evidence score (bars up) and by bootstrap confidence (bars down), on one axis from 0 to 1">
+            {(["e", "c"] as SeriesKey[]).map((k, n) => <g key={k}>
+              <rect x={4 + n * 118} y="6" width="10" height="10" fill={SERIES[k].fill} />
+              <text x={18 + n * 118} y="15" fontSize="10" fill={FIG_INK}>{SERIES[k].name} (n = {counts[k].toLocaleString()})</text>
+            </g>)}
+            {Array.from({ length: yMax / yTick + 1 }, (_, k) => k * yTick).flatMap(v => (v === 0 ? [0] : [-1, 1]).map(side => {
+              const y = MID - side * (v / yMax) * half;
+              return <g key={`${v}:${side}`}>
+                <line x1={X0} x2={X1} y1={y} y2={y} stroke={FIG_GRID} strokeWidth="0.8" />
+                <line x1={X0 - 4} x2={X0} y1={y} y2={y} stroke={FIG_INK} strokeWidth="0.8" />
+                <text x={X0 - 7} y={y + 3.8} fontSize="11" textAnchor="end" fill={FIG_INK}>{v}</text>
+              </g>;
+            }))}
+            {bars("e", histogram.evidence)}
+            {bars("c", histogram.confidence)}
+            {histogram.verified === 0 && <text x={(X0 + X1) / 2} y={MID + half / 2} fontSize="11" textAnchor="middle" fill={FIG_SUB}>No verified bootstrap confidence for these edges</text>}
+            <line x1={X0} x2={X0} y1={TOP} y2={AXIS} stroke={FIG_INK} strokeWidth="0.8" />
+            <line x1={X0} x2={X1} y1={MID} y2={MID} stroke={FIG_INK} strokeWidth="0.8" />
+            <line x1={X0} x2={X1} y1={AXIS} y2={AXIS} stroke={FIG_INK} strokeWidth="0.8" />
+            {Array.from({ length: 11 }, (_, t) => { const x = X0 + (t / 10) * (X1 - X0); return <g key={t}>
+              <line x1={x} x2={x} y1={AXIS} y2={AXIS + 4} stroke={FIG_INK} strokeWidth="0.8" />
+              {t % 2 === 0 && <text x={x} y={AXIS + 16} fontSize="11" textAnchor="middle" fill={FIG_INK}>{(t / 10).toFixed(1)}</text>}
+            </g>; })}
+            <text x={(X0 + X1) / 2} y={AXIS + 36} fontSize="12" textAnchor="middle" fill={FIG_INK}>Score (0–1)</text>
+            <text transform={`translate(13 ${MID}) rotate(-90)`} fontSize="12" textAnchor="middle" fill={FIG_INK}>Number of edges</text>
+          </svg>
+          <p className="tp-figure-note">{segEdges
+            ? <>{plural(segEdges.length, "edge")} · {segSeries ? SERIES[segSeries].name.toLowerCase() : ""} {range(segBin)}</>
+            : "Hover a bar to see its edges in the network; click to list them."}</p>
+          {segRows.length > 0 && <table><tbody>{segRows.map(r => <tr key={r.edge.key} {...rowEvents(r)}>
+            <td>{gene(r.regulator)}</td><td className="tp-gl">{glyph(r)}</td><td>{gene(r.target)}</td><td className="n">{evidence(r.edge.score, 44)}</td>
+          </tr>)}</tbody></table>}
         </div>
-        <div className="tp-hist-axis">{Array.from({ length: steps + 1 }, (_, i) => <span key={i}>{(lo + i / 10).toFixed(1)}</span>)}</div>
       </section>}
       {top.length > 0 && <section className="tp-section">
-        <h4>Top {anyDirected ? "regulators by targets" : "hubs by links"}{tfCount > 0 ? ` · ${plural(tfCount, "TF")} in view` : ""}</h4>
+        <div className="tp-section-head"><h4>Top {top.length} {anyDirected ? "regulators" : "hubs"}</h4><button type="button" className="tp-more-link" onClick={() => setView("genes")}>All genes →</button></div>
         <table><tbody>{top.map(g => {
           const v = anyDirected ? g.targets : g.total;
           return <tr key={g.id} onClick={() => onSelectGene(g.id)} title={`Open ${g.id}`}>
@@ -252,11 +330,10 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         })}</tbody></table>
       </section>}
       {byEvidence.length > 0 && <section className="tp-section">
-        <h4>Strongest links</h4>
+        <div className="tp-section-head"><h4>Top {Math.min(5, byEvidence.length)} edges</h4><button type="button" className="tp-more-link" onClick={() => setView("links")}>All edges →</button></div>
         <table><tbody>{byEvidence.slice(0, 5).map(r => <tr key={r.edge.key} {...rowEvents(r)}>
           <td>{gene(r.regulator)}</td><td className="tp-gl">{glyph(r)}</td><td>{gene(r.target)}</td><td className="n">{evidence(r.edge.score, 44)}</td>
         </tr>)}</tbody></table>
-        <button type="button" className="tp-more-link" onClick={() => setView("links")}>All {plural(edges.length, "link")} →</button>
       </section>}
     </div>;
   };
@@ -278,15 +355,15 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         <td className="n">{evidence(r.edge.score)}</td><td className="n">{confidence(r.edge)}</td><td className="n">{pips(r.edge.count)}</td>
       </tr>)}</tbody>
     </table>
-    {rows.length > LIMIT && !showAll && <button type="button" className="tp-more" onClick={() => setShowAll(true)}>Show all {rows.length.toLocaleString()} links</button>}
+    {rows.length > LIMIT && !showAll && <button type="button" className="tp-more" onClick={() => setShowAll(true)}>Show all {rows.length.toLocaleString()} edges</button>}
   </>;
   const genesTable = <table className="tp-table">
     <thead><tr>
       <th onClick={() => sortGene("gene")}>Gene{arrow(geneSort.key === "gene", geneSort.desc)}</th>
       {anyDirected && <th className="n" onClick={() => sortGene("targets")} title="Genes it regulates">Targets{arrow(geneSort.key === "targets", geneSort.desc)}</th>}
       {anyDirected && <th className="n" onClick={() => sortGene("regulators")} title="Genes that regulate it">Regulators{arrow(geneSort.key === "regulators", geneSort.desc)}</th>}
-      {anyDirected && anyUnknown && <th className="n" onClick={() => sortGene("unknown")} title="Links with no resolved direction">Unknown{arrow(geneSort.key === "unknown", geneSort.desc)}</th>}
-      <th className="n" onClick={() => sortGene("total")}>Links{arrow(geneSort.key === "total", geneSort.desc)}</th>
+      {anyDirected && anyUnknown && <th className="n" onClick={() => sortGene("unknown")} title="Edges with no resolved direction">Unknown{arrow(geneSort.key === "unknown", geneSort.desc)}</th>}
+      <th className="n" onClick={() => sortGene("total")}>Edges{arrow(geneSort.key === "total", geneSort.desc)}</th>
     </tr></thead>
     <tbody>{genes.map(g => <tr key={g.id} className={g.id === selectedGene ? "is-sel" : undefined} onClick={() => onSelectGene(g.id === selectedGene ? null : g.id)}>
       <td><span className="tp-gene">{pie(g.id, 12)}<em>{g.id}</em></span></td>
@@ -307,7 +384,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     <div className="tp-head">
       <div className="tp-tabs" role="tablist">
         {tab("overview", "Overview")}
-        {tab("links", "Links", edges.length)}
+        {tab("links", "Edges", edges.length)}
         {tab("genes", "Genes", nodes.length)}
       </div>
       <button type="button" className="tp-hide" onClick={onHide} aria-label="Hide panel" title="Hide panel">⟩</button>
@@ -317,7 +394,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
       {card ?? (view === "overview" ? overview() : view === "links" ? linksTable : genesTable)}
     </div>
     {!card && view !== "overview" && <div className="tp-foot">
-      <span>{view === "links" ? `${plural(rows.length, "link")} · hover a row to see it on the network` : plural(genes.length, "gene")}</span>
+      <span>{view === "links" ? `${plural(rows.length, "edge")} · hover a row to see it on the network` : plural(genes.length, "gene")}</span>
       <button type="button" className="tp-link" onClick={() => download(view)}>⤓ CSV</button>
     </div>}
   </aside>;

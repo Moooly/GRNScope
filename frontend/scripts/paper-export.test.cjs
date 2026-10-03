@@ -43,25 +43,25 @@ test("the paper figure is 183 mm wide, in print units, with only the figure and 
 test("the legend describes what is shown and only the filters that cut", () => {
   assert.deepEqual(activeFilters(ctx.filters), ["Evidence ≥ 0.80"]);
   const text = figureLegend(nodes, edges, ctx);
-  assert.match(text, /Network of 4 genes and 3 regulatory links \(evidence ≥ 0\.80\), inferred by consensus of 2 methods \(GENIE3 and PIDC\)\./);
+  assert.match(text, /Network of 4 genes and 3 regulatory edges \(evidence ≥ 0\.80\), inferred by consensus of 2 methods \(GENIE3 and PIDC\)\./);
   assert.match(text, /Blue circles, transcription factors; yellow circles, other genes/);
   assert.match(text, /Arrowheads, activation; bars, repression\./);
-  assert.ok(!/faded lines/.test(text), "no confidence sentence when every link is confident");
+  assert.ok(!/faded lines/.test(text), "no confidence sentence when every edge is confident");
 });
 
-test("tables list the figure's links strongest first, oriented regulator → target", () => {
+test("tables list the figure's edges strongest first, oriented regulator → target", () => {
   const rows = linkRows(edges);
   assert.deepEqual(rows.map(r => [r.regulator, r.target]), [["SOX9", "DKK1"], ["SRY", "SOX9"], ["SOX9", "FGF9"]]);
   assert.equal(geneRows(nodes, edges)[0].gene, "SOX9");
   assert.equal(linksCsv(edges).split("\n")[0], "regulator,target,effect,direction_resolved,evidence,bootstrap_confidence,methods_agreeing,methods");
 });
 
-test("the workbook has Links, Genes and About sheets", async () => {
+test("the workbook has Edges, Genes and About sheets", async () => {
   const blob = await supplementaryWorkbook(nodes, edges, ctx);
   const JSZip = require("jszip");
   const zip = await JSZip.loadAsync(Buffer.from(await blob.arrayBuffer()));
   const book = await zip.file("xl/workbook.xml").async("string");
-  assert.match(book, /name="Links".*name="Genes".*name="About"/);
+  assert.match(book, /name="Edges".*name="Genes".*name="About"/);
   const links = await zip.file("xl/worksheets/sheet1.xml").async("string");
   assert.match(links, /state="frozen"/);
   assert.match(links, /<t xml:space="preserve">SOX9<\/t>/);

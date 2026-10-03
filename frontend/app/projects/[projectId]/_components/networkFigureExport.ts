@@ -70,7 +70,7 @@ export async function exportNetworkFigure(
     appearance === "braid"
       ? "Arrowhead size counts the methods that agree; a solid head marks stronger evidence; line darkness is bootstrap confidence."
       : appearance === "atlas"
-        ? "Colour groups genes by the regulatory hub that reaches them first. Neutral links bridge two modules."
+        ? "Colour groups genes by the regulatory hub that reaches them first. Neutral edges bridge two modules."
         : METRICS[context.metric].description,
     `Style: ${palette.label} · Shape: gene type${appearance === "teal" || appearance === "pastel" ? " · Node size: displayed connections" : ""}`,
   ].flatMap((line) => {
@@ -192,7 +192,7 @@ export async function exportNetworkFigure(
       fill: "none",
     });
     label(379, top + 28, "Repression", palette.negative);
-    label(470, top + 28, "Node size = regulatory links");
+    label(470, top + 28, "Node size = regulatory edges");
     label(665, top + 28, "Tip points to affected gene");
 
     // Row 2: the three edge metrics, each on its own channel.
@@ -283,7 +283,7 @@ export async function exportNetworkFigure(
         context.metric === "evidence" ? value.toFixed(1) : `${value * 100}%`,
       );
     });
-    label(560, top + 53, "Node size = regulatory links");
+    label(560, top + 53, "Node size = regulatory edges");
   } else {
     add("path", { d: `M30 ${top + 18}l6 6-6 6-6-6Z`, fill: palette.node });
     label(43, top + 28, "TF");
