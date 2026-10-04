@@ -1527,42 +1527,21 @@ export default function TrajectoryInsights({
                       )}
                     </div>
                     <h4 className="mt-1.5 text-[17px] font-extrabold italic leading-snug text-slate-950">{selectedGene}</h4>
-                    <p className="mt-1 text-xs text-slate-500">Smoothed trend along each lineage</p>
                     <table className="mt-4 w-full border-collapse text-[12.5px]">
                       <thead>
                         <tr className="text-[10.5px] uppercase tracking-[0.08em] text-slate-400">
                           <th className="py-1 pr-2 text-left font-semibold">Lineage</th>
-                          <th className="py-1 pl-2 text-right font-semibold" title="The cell closest in pseudotime to where the smoothed trend is highest">Peak at</th>
                           <th className="py-1 pl-2 text-right font-semibold" title="Highest value of the smoothed trend along this lineage, in expression units">Max</th>
                         </tr>
                       </thead>
                       <tbody>
                         {cascadeLineages.map((item, index) => {
                           const values = item.expression[selectedGene] ?? [];
-                          const flat = cascade.isFlat(index, selectedGene);
-                          const peak = cascade.rows.find((row) => row.gene === selectedGene)?.peaks[index] ?? null;
-                          // The curve peaks at a pseudotime; name the cell that sits closest to it on this lineage.
-                          let peakCell: string | null = null;
-                          if (peak !== null) {
-                            let nearest = Infinity;
-                            for (const point of trajectory.embedding?.points ?? []) {
-                              const time = point.pseudotime[item.name];
-                              if (typeof time !== "number") continue;
-                              const gap = Math.abs(time - peak);
-                              if (gap < nearest) { nearest = gap; peakCell = point.cell; }
-                            }
-                          }
                           return (
                             <tr key={item.name} className="border-t border-slate-100">
                               <td className="py-1.5 pr-2 font-semibold text-slate-700">
                                 <span className="mr-2 inline-block h-0.5 w-4 align-middle" style={{ backgroundColor: LINEAGE_COLORS[index % LINEAGE_COLORS.length] }} />
                                 {item.name}
-                              </td>
-                              <td
-                                className="py-1.5 pl-2 text-right tabular-nums text-slate-900"
-                                title={flat || peak === null ? undefined : `The trend peaks at pseudotime ${Math.round(peak)}${peakCell ? `; ${peakCell} is the cell closest to that point on ${item.name}` : ""}`}
-                              >
-                                {flat || peak === null ? "no peak" : peakCell ?? Math.round(peak)}
                               </td>
                               <td className="py-1.5 pl-2 text-right tabular-nums text-slate-500">{values.length ? Math.max(...values).toFixed(2) : "–"}</td>
                             </tr>
