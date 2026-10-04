@@ -13,7 +13,7 @@ import {
   CascadeHeatmap,
   GeneTrendPlot,
   LINEAGE_COLORS,
-  RegulatorTimingPlot,
+  RegulatorPathFigure,
   buildCascadeRows,
   onsetTime,
   type CascadeLineage,
@@ -394,20 +394,22 @@ function TrajectoryHelpModal({
           ) : mode === "timing" ? (
             <>
               <section>
-                <h4 className="font-extrabold text-slate-900">What the plot shows</h4>
+                <h4 className="font-extrabold text-slate-900">What the figure shows</h4>
                 <p className="mt-2">
-                  For one network edge, the regulator (black) and its target (blue) are drawn along{" "}
-                  <strong>{lineage.name}</strong>, each scaled 0–1, as in the two-gene panels of lag-based GRN
-                  papers. If the regulator drives the target, its expression should usually change first; methods
-                  such as SCODE, SINCERITIES and SINGE use this pseudotime lag to infer direction. Tick
-                  &quot;Show onsets&quot; to mark each gene&apos;s onset and the lag on the figure.
+                  Choose a target gene. The diagram on the left lists the genes with a network edge into it
+                  (direct regulators). Click one to draw its curve next to the target&apos;s along{" "}
+                  <strong>{lineage.name}</strong>, each scaled 0–1; this also lists the genes that regulate that
+                  regulator, so a chain A → B → target can be built one step at a time. If a regulator drives its
+                  target, its expression should usually change first; methods such as SCODE, SINCERITIES and SINGE
+                  use this pseudotime lag to infer direction. A solid arrow means the regulator switches on first,
+                  a dashed arrow that it switches on later.
                 </p>
               </section>
               <section className="mt-5 border-t border-slate-100 pt-5">
                 <h4 className="font-extrabold text-slate-900">Onset and lag</h4>
                 <p className="mt-2">
-                  A gene&apos;s onset is the first pseudotime, up to its peak, at which its fitted trend
-                  reaches half of its range. The lag is the target&apos;s onset minus the regulator&apos;s:
+                  A gene&apos;s onset (the open circle on its curve) is the first pseudotime, up to its peak, at
+                  which its fitted trend reaches half of its range. The lag is the target&apos;s onset minus the regulator&apos;s:
                   positive means the regulator switches on first. Timing agrees with direction but does not
                   prove regulation, and repressors or genes that fall rather than rise can show other patterns.
                 </p>
@@ -435,9 +437,10 @@ function TrajectoryHelpModal({
                 </p>
                 <p className="mt-2">
                   Up to 40 genes are shown: any gene you look up first, then the most variable ones.
-                  A gene whose trend changes by less than 10% of the most dynamic gene&apos;s range is
-                  drawn in hatched grey for that lineage (&quot;not expressed&quot;) rather than stretched to
-                  full colour. Click a row to see the gene in real expression units in every lineage.
+                  Each gene has one colour scale across all lineages, so a gene that stays off along
+                  a lineage is simply pale there. A gene whose trend changes by less than 10% of the
+                  most dynamic gene&apos;s range along a lineage has no peak in it and is not ordered
+                  by that lineage. Click a row to see the gene in real expression units in every lineage.
                 </p>
               </section>
 
@@ -476,9 +479,10 @@ function TrajectoryHelpModal({
               <section className="mt-5 border-t border-slate-100 pt-5">
                 <h4 className="font-extrabold text-slate-900">Why every row spans 0–1</h4>
                 <p className="mt-2">
-                  The heatmap independently rescales each gene&apos;s fitted values within each lineage. This makes
-                  activation timing and curve shape comparable, but deliberately removes
-                  between-gene magnitude differences.
+                  The heatmap rescales each gene&apos;s fitted values across all lineages together: 0 is the
+                  gene&apos;s lowest value in any lineage and 1 its highest. This makes activation timing
+                  comparable between genes and shows in which lineage a gene is on, but deliberately
+                  removes between-gene magnitude differences.
                 </p>
                 <TrajectoryFormula>
                   <math display="block" aria-label="Relative trend for gene g at pseudotime t equals fitted expression minus its minimum, divided by its maximum minus its minimum">
@@ -1162,11 +1166,12 @@ export default function TrajectoryInsights({
   /** Directed network edges, best-supported first, for regulator timing. */
   edges?: TimingEdge[];
 }) {
-  const [requestedEdge, setRequestedEdge] = useState<string | null>(null);
-  const [showOnsets, setShowOnsets] = useState(false);
-  const [edgeQuery, setEdgeQuery] = useState("");
+  const [requestedTarget, setRequestedTarget] = useState<string | null>(null);
+  const [pathPicks, setPathPicks] = useState<{ key: string; direct: string[]; upstream: string[]; focus: string | null } | null>(null);
   const timingChartRef = useRef<HTMLDivElement | null>(null);
   const [requestedLineageName, setRequestedLineageName] = useState("");
+  // The cascade shows every lineage; this is only which one orders its rows.
+  const [cascadeSortName, setCascadeSortName] = useState("");
   const [geneQuery, setGeneQuery] = useState("");
   const [isGeneSearchOpen, setIsGeneSearchOpen] = useState(false);
   const [requestedGene, setRequestedGene] = useState<string | null>(null);
@@ -1212,45 +1217,87 @@ export default function TrajectoryInsights({
       ),
     [lineages],
   );
-  const cascade = useMemo(() => buildCascadeRows(cascadeLineages, lineageIndex), [cascadeLineages, lineageIndex]);
+  const cascadeSortIndex = Math.max(0, cascadeLineages.findIndex((item) => item.name === cascadeSortName));
+  const cascade = useMemo(() => buildCascadeRows(cascadeLineages, cascadeSortIndex), [cascadeLineages, cascadeSortIndex]);
   const selectedGene =
     cascade.rows.find((row) => row.gene === requestedGene)?.gene ?? cascade.rows[0]?.gene ?? null;
   const isDefaultGene = !cascade.rows.some((row) => row.gene === requestedGene);
-  const timingKey = (edge: { source: string; target: string }) => `${edge.source}→${edge.target}`;
-  const { timingRows, timingSkipped } = useMemo(() => {
+  const timingRows = useMemo(() => {
     const current = cascadeLineages[lineageIndex];
-    if (!current) return { timingRows: [], timingSkipped: 0 };
-    let skipped = 0;
+    if (!current) return [];
     const rows = edges.flatMap((edge) => {
       const regulator = current.expression[edge.source];
       const target = current.expression[edge.target];
       if (!regulator || !target) return [];
-      if (cascade.isFlat(lineageIndex, edge.source) || cascade.isFlat(lineageIndex, edge.target)) {
-        skipped += 1;
-        return [];
-      }
+      if (cascade.isFlat(lineageIndex, edge.source) || cascade.isFlat(lineageIndex, edge.target)) return [];
       const regulatorOnset = onsetTime(current.pseudotime, regulator);
       const targetOnset = onsetTime(current.pseudotime, target);
       if (regulatorOnset === null || targetOnset === null) return [];
       return [{ ...edge, regulatorOnset, targetOnset, lag: targetOnset - regulatorOnset }];
     });
-    return { timingRows: rows, timingSkipped: skipped };
+    return rows;
   }, [cascade, cascadeLineages, edges, lineageIndex]);
-  const selectedTiming =
-    timingRows.find((row) => timingKey(row) === requestedEdge) ??
-    [...timingRows].sort((a, b) => b.support - a.support || b.lag - a.lag)[0] ??
-    null;
-  const isDefaultTiming = !timingRows.some((row) => timingKey(row) === requestedEdge);
-  const regulatorFirstCount = timingRows.filter((row) => row.lag > 0).length;
-  const maxAbsLag = Math.max(1, ...timingRows.map((row) => Math.abs(row.lag)));
-  const visibleTimingRows = (() => {
-    const query = edgeQuery.trim().toLocaleLowerCase();
-    const filtered = query
-      ? timingRows.filter((row) => `${row.source} ${row.target}`.toLocaleLowerCase().includes(query))
-      : timingRows;
-    // Ordered by lag: regulator-first edges at the top, target-first at the bottom.
-    return [...filtered].sort((a, b) => b.lag - a.lag);
+  // Regulators of one target: which target, and which genes are picked for the plot.
+  const onsetOf: Record<string, number> = {};
+  timingRows.forEach((row) => {
+    onsetOf[row.source] = row.regulatorOnset;
+    onsetOf[row.target] = row.targetOnset;
+  });
+  const byOnset = (a: string, b: string) => onsetOf[a] - onsetOf[b] || a.localeCompare(b);
+  const regulatorsOf = (gene: string) =>
+    timingRows.filter((row) => row.target === gene && row.source !== gene).map((row) => row.source).sort(byOnset);
+  const timingTargets = [...new Set(timingRows.map((row) => row.target))]
+    .map((gene) => ({ gene, count: regulatorsOf(gene).length }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.gene.localeCompare(b.gene));
+  const timingTarget = timingTargets.find((item) => item.gene === requestedTarget)?.gene ?? timingTargets[0]?.gene ?? null;
+  const directRegulators = timingTarget ? regulatorsOf(timingTarget) : [];
+  const upstreamOf = (gene: string) => regulatorsOf(gene).filter((source) => source !== timingTarget);
+  const supportOf = (source: string, target: string) =>
+    timingRows.find((row) => row.source === source && row.target === target)?.support ?? 0;
+  const picksKey = `${cascadeLineages[lineageIndex]?.name ?? ""}|${timingTarget ?? ""}`;
+  // Opens on the best-supported two-step path whose genes switch on in order.
+  const defaultPicks = (() => {
+    let best: { a: string; b: string; score: number } | null = null;
+    if (timingTarget) {
+      for (const b of directRegulators) {
+        for (const a of upstreamOf(b)) {
+          const ordered = onsetOf[a] < onsetOf[b] && onsetOf[b] < onsetOf[timingTarget];
+          const score = (ordered ? 1000 : 0) + supportOf(a, b) + supportOf(b, timingTarget);
+          if (!best || score > best.score) best = { a, b, score };
+        }
+      }
+    }
+    const first = best?.b ?? directRegulators[0] ?? null;
+    return { direct: first ? [first] : [], upstream: best ? [`${best.a}|${best.b}`] : [], focus: first };
   })();
+  const picks = pathPicks?.key === picksKey ? pathPicks : defaultPicks;
+  const savePicks = (next: { direct: string[]; upstream: string[]; focus: string | null }) =>
+    setPathPicks({ key: picksKey, ...next });
+  const toggleDirect = (gene: string) => {
+    if (!picks.direct.includes(gene)) savePicks({ ...picks, direct: [...picks.direct, gene], focus: gene });
+    else if (picks.focus !== gene) savePicks({ ...picks, focus: gene });
+    else {
+      const direct = picks.direct.filter((item) => item !== gene);
+      savePicks({ ...picks, direct, focus: direct.at(-1) ?? null });
+    }
+  };
+  const toggleUpstream = (gene: string) => {
+    const key = `${gene}|${picks.focus}`;
+    savePicks({
+      ...picks,
+      upstream: picks.upstream.includes(key) ? picks.upstream.filter((item) => item !== key) : [...picks.upstream, key],
+    });
+  };
+  const plottedGenes = [
+    ...new Set([
+      ...picks.direct,
+      ...picks.upstream.map((key) => key.split("|")).filter(([, via]) => picks.direct.includes(via)).map(([gene]) => gene),
+    ]),
+  ]
+    .filter((gene) => gene !== timingTarget)
+    .sort(byOnset);
+  const timingColorOrder = [...new Set([...directRegulators, ...directRegulators.flatMap(upstreamOf)])].sort(byOnset);
 
   if (loading) {
     return (
@@ -1286,7 +1333,7 @@ export default function TrajectoryInsights({
     panel === "cells"
       ? `cell-trajectory-${lineage.name}`
       : panel === "timing"
-        ? `regulator-timing-${selectedTiming ? `${selectedTiming.source}-${selectedTiming.target}` : "edge"}-${lineage.name}`
+        ? `regulators-of-${timingTarget ?? "target"}-${lineage.name}`
         : `gene-expression-cascade-by-${lineage.name}`;
   const downloadTimingCsv = () =>
     downloadCsv(`regulator-timing-${lineage.name}.csv`, [
@@ -1384,7 +1431,9 @@ export default function TrajectoryInsights({
     {
       key: "genes",
       title: "Gene expression cascade",
-      description: "Smoothed gene trends along pseudotime, sorted by when each gene peaks.",
+      description: lineages.length > 1
+        ? "Smoothed gene trends along pseudotime, sorted by when each gene peaks. Click a lineage name to sort by that lineage."
+        : "Smoothed gene trends along pseudotime, sorted by when each gene peaks.",
       chips: [],
       actions: (
           <div className="relative">
@@ -1426,7 +1475,7 @@ export default function TrajectoryInsights({
                       className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 transition hover:bg-sky-50 hover:text-[#087ead]"
                     >
                       <span className="italic">{gene}</span>
-                      {cascade.hidden.includes(gene) ? <span className="font-semibold text-slate-400">not expressed</span> : null}
+                      {cascade.hidden.includes(gene) ? <span className="font-semibold text-slate-400">no clear trend</span> : null}
                     </button>
                   ))
                 ) : (
@@ -1444,16 +1493,17 @@ export default function TrajectoryInsights({
                   <CascadeHeatmap
                     lineages={cascadeLineages}
                     rows={cascade.rows}
-                    isFlat={cascade.isFlat}
                     selectedGene={selectedGene}
                     onSelect={setRequestedGene}
+                    sortIndex={cascadeSortIndex}
+                    onSortChange={(index) => setCascadeSortName(cascadeLineages[index]?.name ?? "")}
                   />
                 </div>
                 <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-                  Each row is a gene&apos;s smoothed trend, scaled 0–1 within each lineage; a diagonal from top-left to
-                  bottom-right is a cascade of sequential activation. Darker blue = higher expression; hatched grey = the gene barely changes along that lineage. The strip above each panel is pseudotime.
+                  Each row is a gene&apos;s smoothed trend, scaled 0–1 across all lineages together; a diagonal from top-left to
+                  bottom-right is a cascade of sequential activation. Darker blue = higher expression; a row that stays pale in one lineage means the gene is off there. The colour bar under each panel is pseudotime.
                   {cascade.hidden.length
-                    ? ` Not expressed along any lineage (not shown): ${cascade.hidden.join(", ")}.`
+                    ? ` No clear trend along any lineage (not shown): ${cascade.hidden.join(", ")}.`
                     : ""}
                 </p>
               </div>
@@ -1482,8 +1532,8 @@ export default function TrajectoryInsights({
                       <thead>
                         <tr className="text-[10.5px] uppercase tracking-[0.08em] text-slate-400">
                           <th className="py-1 pr-2 text-left font-semibold">Lineage</th>
-                          <th className="py-1 pl-2 text-right font-semibold">Peak at</th>
-                          <th className="py-1 pl-2 text-right font-semibold">Max</th>
+                          <th className="py-1 pl-2 text-right font-semibold" title="The cell closest in pseudotime to where the smoothed trend is highest">Peak at</th>
+                          <th className="py-1 pl-2 text-right font-semibold" title="Highest value of the smoothed trend along this lineage, in expression units">Max</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1491,13 +1541,29 @@ export default function TrajectoryInsights({
                           const values = item.expression[selectedGene] ?? [];
                           const flat = cascade.isFlat(index, selectedGene);
                           const peak = cascade.rows.find((row) => row.gene === selectedGene)?.peaks[index] ?? null;
+                          // The curve peaks at a pseudotime; name the cell that sits closest to it on this lineage.
+                          let peakCell: string | null = null;
+                          if (peak !== null) {
+                            let nearest = Infinity;
+                            for (const point of trajectory.embedding?.points ?? []) {
+                              const time = point.pseudotime[item.name];
+                              if (typeof time !== "number") continue;
+                              const gap = Math.abs(time - peak);
+                              if (gap < nearest) { nearest = gap; peakCell = point.cell; }
+                            }
+                          }
                           return (
                             <tr key={item.name} className="border-t border-slate-100">
                               <td className="py-1.5 pr-2 font-semibold text-slate-700">
                                 <span className="mr-2 inline-block h-0.5 w-4 align-middle" style={{ backgroundColor: LINEAGE_COLORS[index % LINEAGE_COLORS.length] }} />
                                 {item.name}
                               </td>
-                              <td className="py-1.5 pl-2 text-right tabular-nums text-slate-900">{flat || peak === null ? "not expressed" : Math.round(peak)}</td>
+                              <td
+                                className="py-1.5 pl-2 text-right tabular-nums text-slate-900"
+                                title={flat || peak === null ? undefined : `The trend peaks at pseudotime ${Math.round(peak)}${peakCell ? `; ${peakCell} is the cell closest to that point on ${item.name}` : ""}`}
+                              >
+                                {flat || peak === null ? "no peak" : peakCell ?? Math.round(peak)}
+                              </td>
                               <td className="py-1.5 pl-2 text-right tabular-nums text-slate-500">{values.length ? Math.max(...values).toFixed(2) : "–"}</td>
                             </tr>
                           );
@@ -1534,166 +1600,29 @@ export default function TrajectoryInsights({
     {
       key: "timing",
       title: "Regulator and target along pseudotime",
-      description: "Network edges placed on the trajectory: does each regulator change before its target?",
-      chips: timingRows.length ? [`${timingRows.length} edges`] : [],
+      description: "Click the target box to choose a target, pick its regulators on the left, and compare their expression on one axis.",
+      chips: [],
       body: (
-          timingRows.length && selectedTiming ? (
-            <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)] xl:items-stretch">
-              {/* Step 1: choose an edge. The list doubles as an overview of every edge's lag. */}
-              <div className="relative min-w-0 xl:min-h-[380px]">
-              <div className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white xl:absolute xl:inset-0">
-                <div className="border-b border-slate-100 px-4 pb-3 pt-4">
-                  <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-400">Choose an edge</p>
-                  <p className="mt-1.5 text-xs text-slate-600">
-                    Regulator changes first in{" "}
-                    <span className="font-bold tabular-nums text-slate-900">
-                      {regulatorFirstCount} of {timingRows.length}
-                    </span>{" "}
-                    edges along {lineage.name}.
-                  </p>
-                  <div className="mt-2 flex h-1.5 overflow-hidden rounded-sm bg-slate-100" aria-hidden="true">
-                    <span className="bg-slate-800" style={{ width: `${(regulatorFirstCount / timingRows.length) * 100}%` }} />
-                    <span className="bg-amber-400" style={{ width: `${((timingRows.length - regulatorFirstCount) / timingRows.length) * 100}%` }} />
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 px-2.5 text-slate-400 focus-within:border-[#087ead]/50">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="m20 20-3.5-3.5" />
-                      </svg>
-                      <input
-                        id="trajectory-edge-search"
-                        value={edgeQuery}
-                        onChange={(event) => setEdgeQuery(event.target.value)}
-                        placeholder="Filter by gene"
-                        className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
-                        aria-label="Filter edges by gene"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-[minmax(0,1fr)_3rem_7rem] gap-2 px-4 pb-1 pt-2 text-[10px] font-semibold text-slate-400">
-                  <span className="uppercase tracking-[0.08em]">Regulator → target</span>
-                  <span className="text-right uppercase tracking-[0.08em]" title="Directed methods with this edge in their top 100">Support</span>
-                  <span className="flex justify-between">
-                    <span>← target</span>
-                    <span>regulator →</span>
-                  </span>
-                </div>
-                <ul
-                  className="max-h-[360px] min-h-[120px] flex-1 overflow-y-auto px-2 pb-2 xl:max-h-none xl:min-h-0"
-                  role="listbox"
-                  aria-label="Network edges"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-                    event.preventDefault();
-                    const index = visibleTimingRows.findIndex((row) => timingKey(row) === timingKey(selectedTiming));
-                    const next = visibleTimingRows[Math.max(0, Math.min(visibleTimingRows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))];
-                    if (next) setRequestedEdge(timingKey(next));
-                  }}
-                >
-                  {visibleTimingRows.map((row) => {
-                    const on = timingKey(row) === timingKey(selectedTiming);
-                    const share = Math.min(1, Math.abs(row.lag) / maxAbsLag);
-                    return (
-                      <li
-                        key={timingKey(row)}
-                        role="option"
-                        aria-selected={on}
-                        onClick={() => setRequestedEdge(timingKey(row))}
-                        className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_3rem_7rem] items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] transition ${on ? "bg-slate-50 ring-2 ring-inset ring-slate-900" : "hover:bg-slate-50"}`}
-                      >
-                        <span className={`truncate font-mono text-[12px] ${on ? "font-bold text-slate-950" : "text-slate-700"}`} title={`${row.source} → ${row.target}`}>
-                          {row.source} → {row.target}
-                        </span>
-                        <span className="text-right tabular-nums text-slate-500">{row.support}/{row.methods}</span>
-                        <span className="relative flex h-4 items-center" title={`Onset lag ${row.lag >= 0 ? "+" : "−"}${Math.abs(row.lag).toFixed(0)}`}>
-                          <span className="absolute left-1/2 top-0 h-4 w-px bg-slate-300" />
-                          <span
-                            className={`absolute top-1 h-2 rounded-[1px] ${row.lag >= 0 ? "bg-slate-700" : "bg-amber-400"}`}
-                            style={
-                              row.lag >= 0
-                                ? { left: "50%", width: `${share * 50}%` }
-                                : { right: "50%", width: `${share * 50}%` }
-                            }
-                          />
-                        </span>
-                      </li>
-                    );
-                  })}
-                  {!visibleTimingRows.length ? <li className="px-2 py-6 text-center text-xs text-slate-400">No edge matches this gene.</li> : null}
-                </ul>
-                <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-500">
-                  <span>Bars: onset lag, amber = target first</span>
-                  <button type="button" onClick={downloadTimingCsv} className="shrink-0 font-bold text-[#087ead] transition hover:text-[#06688f]">
-                    CSV
-                  </button>
-                </div>
-              </div>
-              </div>
-
-              {/* Step 2: the selected edge along pseudotime. */}
-              <div key={timingKey(selectedTiming)} className="agreement-detail min-w-0">
-                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-                  <div className="min-w-0">
-                    <p className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#087ead]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#087ead]" aria-hidden="true" />
-                      {isDefaultTiming ? "Selected · best-supported edge" : "Selected edge"}
-                    </p>
-                    <h4 className="mt-1 text-[19px] font-extrabold leading-snug text-slate-950">
-                      <span className="italic">{selectedTiming.source}</span>
-                      <span className="px-2 font-normal text-slate-400">→</span>
-                      <span className="italic">{selectedTiming.target}</span>
-                    </h4>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      In the top 100 of {selectedTiming.support} of {selectedTiming.methods} directed methods
-                      {selectedTiming.sign > 0 ? " · activation" : selectedTiming.sign < 0 ? " · repression" : ""}
-                    </p>
-                  </div>
-                  <dl className="grid grid-cols-3 divide-x divide-slate-100 text-left">
-                    {[
-                      {
-                        label: "Onset lag",
-                        value: `${selectedTiming.lag >= 0 ? "+" : "−"}${Math.abs(selectedTiming.lag).toFixed(0)}`,
-                        tone: selectedTiming.lag >= 0 ? "text-slate-900" : "text-amber-700",
-                      },
-                      { label: `${selectedTiming.source} on`, value: selectedTiming.regulatorOnset.toFixed(0), tone: "text-slate-900" },
-                      { label: `${selectedTiming.target} on`, value: selectedTiming.targetOnset.toFixed(0), tone: "text-slate-900" },
-                    ].map((stat, index) => (
-                      <div key={stat.label} className={index === 0 ? "pr-4" : "px-4"}>
-                        <dt className="max-w-[7rem] truncate text-[10.5px] font-semibold uppercase tracking-[0.08em] text-slate-400" title={stat.label}>{stat.label}</dt>
-                        <dd className={`mt-0.5 text-lg font-bold tabular-nums ${stat.tone}`}>{stat.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-                <div ref={timingChartRef} className="mt-4">
-                  <RegulatorTimingPlot
-                    showOnsets={showOnsets}
-                    lineage={cascadeLineages[lineageIndex]}
-                    regulator={selectedTiming.source}
-                    target={selectedTiming.target}
-                  />
-                </div>
-                <div className="mt-3 flex flex-wrap items-start justify-between gap-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-                  <p className="max-w-3xl">
-                    Regulator (black) and target (blue) along {lineage.name}, each scaled 0–1. Onset = first point a gene reaches
-                    half of its range; a positive lag means the regulator changes first. Edges are the directed network edges most
-                    often found in the methods&apos; top 100
-                    {timingSkipped ? `; ${timingSkipped} with a gene that does not change along ${lineage.name} are left out` : ""}.
-                  </p>
-                  <label className="inline-flex shrink-0 items-center gap-2 font-semibold text-slate-600">
-                    <input
-                      id="trajectory-show-onsets"
-                      type="checkbox"
-                      checked={showOnsets}
-                      onChange={(event) => setShowOnsets(event.target.checked)}
-                      className="accent-[#087ead]"
-                    />
-                    Show onsets
-                  </label>
-                </div>
+          timingRows.length && timingTarget ? (
+            <div className="min-w-0">
+              {/* Choose on the left of the figure, read the curves on the right. */}
+              <div ref={timingChartRef}>
+                <RegulatorPathFigure
+                  lineage={cascadeLineages[lineageIndex]}
+                  target={timingTarget}
+                  targets={timingTargets}
+                  onTarget={setRequestedTarget}
+                  direct={directRegulators}
+                  upstream={picks.focus ? upstreamOf(picks.focus) : []}
+                  focus={picks.focus}
+                  pickedDirect={picks.direct}
+                  pickedUpstream={picks.focus ? picks.upstream.filter((key) => key.endsWith(`|${picks.focus}`)).map((key) => key.split("|")[0]) : []}
+                  plotted={plottedGenes}
+                  colorOrder={timingColorOrder}
+                  onsets={onsetOf}
+                  onDirect={toggleDirect}
+                  onUpstream={toggleUpstream}
+                />
               </div>
             </div>
           ) : (
@@ -1729,7 +1658,9 @@ export default function TrajectoryInsights({
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               {panel.actions}
-              <LineageMenu lineages={lineages} value={lineage.name} onChange={setRequestedLineageName} />
+              {panel.key === "genes" ? null : (
+                <LineageMenu lineages={lineages} value={lineage.name} onChange={setRequestedLineageName} />
+              )}
               <DownloadMenu
                 ariaLabel={`Download ${panel.title.toLowerCase()}`}
                 items={[

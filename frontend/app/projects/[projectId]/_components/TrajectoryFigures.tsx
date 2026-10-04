@@ -3,19 +3,19 @@
 /**
  * Journal-style gene-trend figures for the Trajectory tab:
  *  - CascadeHeatmap: smoothed trends as rows, pseudotime as columns, each row
- *    scaled 0–1 within a lineage and sorted by peak time (CellRank 2 Fig. 3e,
+ *    scaled 0–1 across all lineages together (as tradeSeq recommends for
+ *    comparing lineages) and sorted by peak time (CellRank 2 Fig. 3e,
  *    Monocle plot_pseudotime_heatmap), lineages side by side.
  *  - GeneTrendPanel: the inspection panel for one gene, its trend in real
  *    expression units in every lineage (tradeSeq plotSmoothers).
  * Plain SVG, one unit per pixel, so downloads match the screen.
  */
 
-import { useCallback, useRef, useState, type Ref } from "react";
+import { useCallback, useId, useRef, useState, type Ref } from "react";
 
 const FONT = "Arial, Helvetica, sans-serif";
 const INK = "#1a1a1a";
 const MUTED = "#6b7580";
-const FLAT = "#eef1f3";
 const SELECT = "#087ead";
 /** Okabe-Ito blue and vermilion, then the rest of the set for more lineages. */
 export const LINEAGE_COLORS = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
@@ -46,7 +46,6 @@ export function blues(progress: number) {
   const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
-const FLAT_FILL = "url(#cascade-not-expressed)";
 
 export type CascadeLineage = {
   name: string;
@@ -61,9 +60,10 @@ export type CascadeRow = {
 };
 
 /**
- * A gene is "not expressed" in a lineage when its fitted trend barely moves
- * compared with the most dynamic gene in the dataset; stretching such a trend
- * to 0–1 would paint noise as a full-contrast pattern.
+ * A gene has no peak in a lineage when its fitted trend barely moves compared
+ * with the most dynamic gene in the dataset. Such a lineage does not order the
+ * gene; the heatmap itself simply draws it pale, because rows are scaled across
+ * lineages.
  */
 export function buildCascadeRows(lineages: CascadeLineage[], orderBy: number) {
   const genes = [...new Set(lineages.flatMap((lineage) => Object.keys(lineage.expression)))];
@@ -124,16 +124,19 @@ function niceMax(value: number) {
 export function CascadeHeatmap({
   lineages,
   rows,
-  isFlat,
   selectedGene,
   onSelect,
+  sortIndex = 0,
+  onSortChange,
   svgRef,
 }: {
   lineages: CascadeLineage[];
   rows: CascadeRow[];
-  isFlat: (lineageIndex: number, gene: string) => boolean;
   selectedGene: string | null;
   onSelect: (gene: string | null) => void;
+  /** Which lineage orders the rows, and what clicking a lineage name does. */
+  sortIndex?: number;
+  onSortChange?: (lineageIndex: number) => void;
   svgRef?: Ref<SVGSVGElement>;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -146,11 +149,19 @@ export function CascadeHeatmap({
   const available = Math.max(360, (boxWidth || 900) - nameW - keyW - 8);
   const panelW = Math.max(160, Math.min(560, (available - gap * (L - 1)) / L));
   const rowH = rows.length > 30 ? 16 : rows.length > 20 ? 18 : 21;
-  const top = 46;
+  // No strip above the rows: the pseudotime colour key is the axis under them,
+  // the same place and form as in the cell-trajectory figure.
+  const top = 28;
   const plotH = rows.length * rowH;
   const W = nameW + L * panelW + (L - 1) * gap + keyW;
-  const H = top + plotH + 52;
+  const H = top + plotH + 60;
   const panelX = (index: number) => nameW + index * (panelW + gap);
+  const rowScale: Record<string, [number, number]> = Object.fromEntries(
+    rows.map((row) => {
+      const all = lineages.flatMap((lineage) => lineage.expression[row.gene] ?? []);
+      return [row.gene, all.length ? [Math.min(...all), Math.max(...all)] : [0, 1]];
+    }),
+  );
 
   return (
     <div ref={measure} className="min-w-0 overflow-x-auto">
@@ -165,12 +176,6 @@ export function CascadeHeatmap({
         aria-label="Expression cascade: smoothed gene trends along pseudotime, each scaled 0 to 1 and sorted by peak time"
         onMouseLeave={() => setHovered(null)}
       >
-        <defs>
-          <pattern id="cascade-not-expressed" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="6" height="6" fill={FLAT} />
-            <line x1="0" y1="0" x2="0" y2="6" stroke="#cfd5db" strokeWidth="1.4" />
-          </pattern>
-        </defs>
         <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
         {lineages.map((lineage, li) => {
           const x0 = panelX(li);
@@ -180,59 +185,63 @@ export function CascadeHeatmap({
           const tMax = lineage.pseudotime[n - 1] ?? 1;
           return (
             <g key={lineage.name}>
-              <text x={x0 + panelW / 2} y={14} fontSize="13" fontWeight="700" textAnchor="middle" fill={INK}>
+              {/* With several lineages one of them orders the rows: its name says
+                * so, and clicking another name sorts by that one instead. */}
+              <text
+                x={x0 + panelW / 2}
+                y={14}
+                fontSize="13"
+                fontWeight="700"
+                textAnchor="middle"
+                fill={INK}
+                style={L > 1 && onSortChange && li !== sortIndex ? { cursor: "pointer" } : undefined}
+                onClick={L > 1 && onSortChange && li !== sortIndex ? () => onSortChange(li) : undefined}
+              >
+                {L > 1 && onSortChange ? (
+                  <title>{li === sortIndex ? `Genes are sorted by when they peak along ${lineage.name}` : `Sort genes by when they peak along ${lineage.name}`}</title>
+                ) : null}
                 {lineage.name}
               </text>
-              {li === 0 ? (
-                <text x={x0 - 8} y={32} fontSize="10.5" textAnchor="end" fill={MUTED}>
-                  Pseudotime
-                </text>
-              ) : null}
-              {Array.from({ length: n }, (_, i) => (
-                <rect key={i} x={x0 + i * colW} y={24} width={colW + 0.4} height={9} fill={viridis(i / Math.max(1, n - 1))} />
-              ))}
               {rows.map((row, r) => {
                 const values = lineage.expression[row.gene] ?? [];
-                const flat = isFlat(li, row.gene);
-                const lo = Math.min(...values);
-                const hi = Math.max(...values);
+                // One scale per gene across every lineage: a gene that is off
+                // in this lineage stays pale here instead of being stretched.
+                const [lo, hi] = rowScale[row.gene] ?? [0, 1];
                 const y = top + r * rowH;
                 return (
                   <g key={row.gene}>
-                    {flat ? (
-                      <rect x={x0} y={y} width={panelW} height={rowH - 1} fill={FLAT_FILL}>
-                        <title>{`${row.gene} is not expressed along ${lineage.name}`}</title>
-                      </rect>
-                    ) : (
-                      values.map((value, i) => (
-                        <rect
-                          key={i}
-                          x={x0 + i * colW}
-                          y={y}
-                          width={colW + 0.4}
-                          height={rowH - 1}
-                          fill={blues((value - lo) / Math.max(1e-9, hi - lo))}
-                        />
-                      ))
-                    )}
+                    {values.map((value, i) => (
+                      <rect
+                        key={i}
+                        x={x0 + i * colW}
+                        y={y}
+                        width={colW + 0.4}
+                        height={rowH - 1}
+                        fill={blues((value - lo) / Math.max(1e-9, hi - lo))}
+                      />
+                    ))}
                   </g>
                 );
               })}
-              <line x1={x0} x2={x0 + panelW} y1={top + plotH + 3} y2={top + plotH + 3} stroke={INK} strokeWidth="0.9" />
-              {[0, 0.5, 1].map((f) => {
+              {/* Pseudotime axis: the colour key with ticks. */}
+              {Array.from({ length: n }, (_, i) => (
+                <rect key={i} x={x0 + i * colW} y={top + plotH + 3} width={colW + 0.4} height={9} fill={viridis(i / Math.max(1, n - 1))} />
+              ))}
+              <line x1={x0} x2={x0 + panelW} y1={top + plotH + 12} y2={top + plotH + 12} stroke={INK} strokeWidth="0.9" />
+              {[0, 0.25, 0.5, 0.75, 1].map((f) => {
                 const x = x0 + f * panelW;
                 const value = tMin + f * (tMax - tMin);
                 return (
                   <g key={f}>
-                    <line x1={x} x2={x} y1={top + plotH + 3} y2={top + plotH + 7} stroke={INK} strokeWidth="0.9" />
-                    <text x={x} y={top + plotH + 20} fontSize="11" textAnchor="middle" fill={INK}>
+                    <line x1={x} x2={x} y1={top + plotH + 12} y2={top + plotH + 16} stroke={INK} strokeWidth="0.9" />
+                    <text x={x} y={top + plotH + 29} fontSize="11" textAnchor="middle" fill={INK}>
                       {Math.round(value)}
                     </text>
                   </g>
                 );
               })}
-              <text x={x0 + panelW / 2} y={top + plotH + 38} fontSize="12" textAnchor="middle" fill={INK}>
-                Pseudotime
+              <text x={x0 + panelW / 2} y={top + plotH + 48} fontSize="12" textAnchor="middle" fill={INK}>
+                {`${lineage.name} pseudotime`}
               </text>
             </g>
           );
@@ -243,7 +252,7 @@ export function CascadeHeatmap({
           const on = row.gene === selectedGene;
           const x2 = panelX(L - 1) + panelW;
           const peakText = row.peaks
-            .map((peak, i) => `${lineages[i].name}: ${peak === null ? "not expressed" : `peak at ${Math.round(peak)}`}`)
+            .map((peak, i) => `${lineages[i].name}: ${peak === null ? "no peak" : `peak at ${Math.round(peak)}`}`)
             .join(" · ");
           return (
             <g
@@ -296,8 +305,6 @@ export function CascadeHeatmap({
               <text transform={`translate(${kx + 34} ${ky + kh / 2}) rotate(90)`} fontSize="11" textAnchor="middle" fill={INK}>
                 Scaled expression
               </text>
-              <rect x={kx} y={ky + kh + 20} width="10" height="10" fill={FLAT_FILL} stroke="#cfd5db" strokeWidth="0.8" />
-              <text x={kx + 15} y={ky + kh + 29} fontSize="11" fill={INK}>Not expressed</text>
             </g>
           );
         })()}
@@ -409,122 +416,280 @@ export function onsetTime(pseudotime: number[], values: number[]): number | null
   return pseudotime[peak];
 }
 
-export function RegulatorTimingPlot({
+/* ------------------------------------------------------------------ */
+/* Regulators of one target: chooser diagram + curves on one axis      */
+/* ------------------------------------------------------------------ */
+
+const PATH_COLORS = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9", "#7a5195", "#8c6d31"];
+const FAINT = "#b4bcc4";
+
+export function RegulatorPathFigure({
   lineage,
-  regulator,
   target,
-  showOnsets = false,
-  svgRef,
+  direct,
+  upstream,
+  focus,
+  pickedDirect,
+  pickedUpstream,
+  plotted,
+  colorOrder,
+  onsets,
+  onDirect,
+  onUpstream,
+  targets,
+  onTarget,
 }: {
   lineage: CascadeLineage;
-  regulator: string;
   target: string;
-  /** Adds the half-maximum onset marks and the lag bracket (off by default). */
-  showOnsets?: boolean;
-  svgRef?: Ref<SVGSVGElement>;
+  /** Genes that can be chosen as the target, from the menu on the target box. */
+  targets: Array<{ gene: string; count: number }>;
+  onTarget: (gene: string) => void;
+  /** Genes with an edge into the target, earliest onset first. */
+  direct: string[];
+  /** Genes with an edge into the focused direct regulator. */
+  upstream: string[];
+  /** The direct regulator whose own regulators are listed on the left. */
+  focus: string | null;
+  pickedDirect: string[];
+  /** Upstream genes picked for the focused direct regulator. */
+  pickedUpstream: string[];
+  /** Every gene drawn in the plot besides the target. */
+  plotted: string[];
+  /** Fixes each gene's colour while the selection changes. */
+  colorOrder: string[];
+  onsets: Record<string, number>;
+  onDirect: (gene: string) => void;
+  onUpstream: (gene: string) => void;
 }) {
   const [boxWidth, measure] = useWidth();
-  const W = Math.max(520, Math.min(980, boxWidth || 760));
-  const H = 360;
-  const left = 58;
-  const right = 150;
-  const top = showOnsets ? 58 : 24;
-  const bottom = 52;
-  const pw = W - left - right;
-  const ph = H - top - bottom;
+  const [hover, setHover] = useState<string | null>(null);
+  const uid = useId().replace(/:/g, "");
+  const W = Math.max(840, Math.min(1100, boxWidth || 900));
+  const longest = Math.max(...[target, ...direct, ...upstream].map((gene) => gene.length));
+  const cw = Math.max(84, Math.min(128, longest * 7.4 + 38));
+  const gap = 44;
+  const rowH = 34;
+  const X = [12, 12 + cw + gap, 12 + 2 * (cw + gap)];
+  const left = X[2] + cw + 76;
+  const pw = W - left - 18;
+  const top = 50;
+  const ph = 260;
+  const ty = top + 44;
+  const rowsN = Math.max(direct.length, upstream.length, 1);
+  // One key row along the bottom of the whole figure.
+  const H = Math.max(top + ph + 72, ty + rowsN * rowH + 36);
+  const keyY = H - 14;
   const t = lineage.pseudotime;
   const tMin = t[0] ?? 0;
   const tMax = t.at(-1) ?? 1;
   const sx = (value: number) => left + ((value - tMin) / Math.max(1e-9, tMax - tMin)) * pw;
   const sy = (value: number) => top + ph - value * ph;
-  const genes = [
-    { gene: regulator, role: "regulator", color: INK, dash: "" },
-    { gene: target, role: "target", color: LINEAGE_COLORS[0], dash: "" },
-  ].map((item) => {
-    const values = lineage.expression[item.gene] ?? [];
-    const lo = Math.min(...values);
-    const hi = Math.max(...values);
-    const scaled = values.map((value) => (hi > lo ? (value - lo) / (hi - lo) : 0));
-    return { ...item, scaled, onset: onsetTime(t, values) };
-  });
-  const [reg, tar] = genes;
-  const lag = reg.onset !== null && tar.onset !== null ? tar.onset - reg.onset : null;
   const step = niceMax((tMax - tMin) / 5);
   const xTicks: number[] = [];
   for (let value = Math.ceil(tMin / step) * step; value <= tMax + 1e-9; value += step) xTicks.push(value);
-  // Curve-end labels, nudged apart when the curves finish close together.
-  const ends = genes.map((item) => ({ item, y: sy(item.scaled.at(-1) ?? 0) }));
-  if (Math.abs(ends[0].y - ends[1].y) < 30) {
-    const mid = (ends[0].y + ends[1].y) / 2;
-    const upper = ends[0].y <= ends[1].y ? 0 : 1;
-    ends[upper].y = mid - 15;
-    ends[1 - upper].y = mid + 15;
-  }
+  const scaledOf = (gene: string) => {
+    const values = lineage.expression[gene] ?? [];
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    return values.map((value) => (hi > lo ? (value - lo) / (hi - lo) : 0));
+  };
+  const pathOf = (gene: string) =>
+    scaledOf(gene).map((value, i) => `${i ? "L" : "M"}${sx(t[i]).toFixed(1)} ${sy(value).toFixed(1)}`).join("");
+  const colorOf = (gene: string) =>
+    gene === target ? INK : PATH_COLORS[Math.max(0, colorOrder.indexOf(gene)) % PATH_COLORS.length];
+  const hoverGene = hover ? hover.slice(2) : null;
+  const ghost = hoverGene && hoverGene !== target && !plotted.includes(hoverGene) ? hoverGene : null;
+  const curves = [...plotted, target];
+  // Gene names sit above each curve's peak, on up to three levels so neighbours do not collide.
+  const lastX: number[] = [];
+  const labels = [...curves, ...(ghost ? [ghost] : [])]
+    .map((gene) => {
+      const scaled = scaledOf(gene);
+      return { gene, x: sx(t[scaled.indexOf(Math.max(...scaled))] ?? tMin) };
+    })
+    .sort((a, b) => a.x - b.x)
+    .map((label) => {
+      let level = 0;
+      while (level < 2 && lastX[level] !== undefined && label.x - lastX[level] < label.gene.length * 7.2 + 14) level += 1;
+      lastX[level] = label.x;
+      const half = label.gene.length * 3.6;
+      return { ...label, y: top - 8 - level * 14, tx: Math.max(left + half, Math.min(left + pw - half, label.x)) };
+    });
+  const yOf = (index: number, count: number) => ty + ((rowsN - count) * rowH) / 2 + index * rowH;
+  const upstreamY = (gene: string) => yOf(upstream.indexOf(gene), upstream.length);
+  const directY = (gene: string) => yOf(direct.indexOf(gene), direct.length);
+  const targetY = yOf(0, 1);
+  const arrows = [
+    ...(focus
+      ? upstream.map((gene) => ({
+          key: `u-${gene}`,
+          x1: X[0] + cw,
+          y1: upstreamY(gene),
+          x2: X[1] - 3,
+          y2: directY(focus),
+          ordered: onsets[gene] < onsets[focus],
+          on: pickedUpstream.includes(gene) || hover === `u:${gene}`,
+        }))
+      : []),
+    ...direct.map((gene) => ({
+      key: `d-${gene}`,
+      x1: X[1] + cw,
+      y1: directY(gene),
+      x2: X[2] - 3,
+      y2: targetY,
+      ordered: onsets[gene] < onsets[target],
+      on: pickedDirect.includes(gene) || hover === `d:${gene}`,
+    })),
+  ].sort((a, b) => Number(a.on) - Number(b.on));
+  const box = (kind: "u" | "d" | "t", gene: string, x: number, y: number) => {
+    const on = kind === "t" || (kind === "u" ? pickedUpstream.includes(gene) : pickedDirect.includes(gene));
+    const hot = hover === `${kind}:${gene}`;
+    const color = colorOf(gene);
+    return (
+      <g
+        key={`${kind}-${gene}`}
+        onClick={kind === "t" ? undefined : () => (kind === "u" ? onUpstream(gene) : onDirect(gene))}
+        onMouseEnter={() => setHover(`${kind}:${gene}`)}
+        onMouseLeave={() => setHover(null)}
+        style={{ cursor: kind === "t" ? "default" : "pointer" }}
+      >
+        <title>{`${gene}: switches on at ${onsets[gene]?.toFixed(0) ?? "?"}`}</title>
+        <rect
+          x={x}
+          y={y - 12}
+          width={cw}
+          height={24}
+          rx={4}
+          fill={on || hot ? "#ffffff" : "#f7f9fa"}
+          stroke={on || hot ? color : "#c3cbd2"}
+          strokeWidth={on ? 2 : 1}
+        />
+        <text x={x + 10} y={y + 4} fontSize="12" fontStyle="italic" fontWeight={on ? 700 : 400} fill={on || hot ? color : MUTED}>
+          {gene}
+        </text>
+        {kind === "t" ? (
+          <path d={`M${x + cw - 17} ${y - 2.5}l4 4l4 -4`} fill="none" stroke={INK} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" data-ui="true" />
+        ) : null}
+      </g>
+    );
+  };
   return (
     <div ref={measure} className="min-w-0 overflow-x-auto">
+      <div style={{ position: "relative", width: W }}>
+      {/* The target box is the target menu: an invisible native select sits on top of it. */}
+      <select
+        id="trajectory-timing-target"
+        aria-label="Target gene"
+        title="Choose the target gene"
+        value={target}
+        onChange={(event) => onTarget(event.target.value)}
+        style={{ position: "absolute", left: X[2], top: targetY - 12, width: cw, height: 24, opacity: 0, cursor: "pointer" }}
+      >
+        {targets.map((item) => (
+          <option key={item.gene} value={item.gene}>
+            {item.gene} · {item.count} regulator{item.count === 1 ? "" : "s"}
+          </option>
+        ))}
+      </select>
       <svg
-        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         width={W}
         height={H}
         style={{ display: "block" }}
         fontFamily={FONT}
         role="img"
-        aria-label={`${regulator} and ${target} trends along ${lineage.name}, with the onset of each`}
+        aria-label={`Regulators of ${target} and their expression along ${lineage.name}`}
       >
+        <defs>
+          {([["d", INK], ["f", FAINT]] as const).map(([kind, color]) => (
+            <marker key={kind} id={`${uid}-${kind}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+              <path d="M0 0L10 5L0 10z" fill={color} />
+            </marker>
+          ))}
+        </defs>
         <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
-        <path d={`M${left} ${top}V${top + ph}H${left + pw}`} fill="none" stroke={INK} strokeWidth="1" />
+
+        {/* Left: who regulates whom. */}
+        {focus ? (
+          <text x={X[0] + cw / 2} y={ty - 22} fontSize="11" textAnchor="middle" fill={MUTED}>
+            Regulators of <tspan fontStyle="italic">{focus}</tspan>
+          </text>
+        ) : (
+          <text fontSize="10.5" textAnchor="middle" fill={MUTED}>
+            <tspan x={X[0] + cw / 2} y={targetY - 3}>Pick a direct regulator</tspan>
+            <tspan x={X[0] + cw / 2} y={targetY + 11}>to see what regulates it</tspan>
+          </text>
+        )}
+        {focus && !upstream.length ? (
+          <text x={X[0] + cw / 2} y={directY(focus) + 4} fontSize="10.5" textAnchor="middle" fill={MUTED}>none found</text>
+        ) : null}
+        <text x={X[1] + cw / 2} y={ty - 22} fontSize="11" textAnchor="middle" fill={MUTED}>Direct regulators</text>
+        <text x={X[2] + cw / 2} y={ty - 22} fontSize="11" textAnchor="middle" fill={MUTED}>Target</text>
+        <text x={X[2] + cw / 2} y={targetY + 26} fontSize="10" textAnchor="middle" fill={MUTED} data-ui="true">click to change</text>
+        {arrows.map((arrow) => {
+          const mx = (arrow.x1 + arrow.x2) / 2;
+          return (
+            <path
+              key={arrow.key}
+              d={`M${arrow.x1} ${arrow.y1}C${mx} ${arrow.y1} ${mx} ${arrow.y2} ${arrow.x2} ${arrow.y2}`}
+              fill="none"
+              stroke={arrow.on ? INK : FAINT}
+              strokeWidth={arrow.on ? 1.6 : 0.9}
+              strokeDasharray={arrow.ordered ? undefined : "3 2.5"}
+              markerEnd={`url(#${uid}-${arrow.on ? "d" : "f"})`}
+            />
+          );
+        })}
+        {upstream.map((gene) => box("u", gene, X[0], upstreamY(gene)))}
+        {direct.map((gene) => box("d", gene, X[1], directY(gene)))}
+        {box("t", target, X[2], targetY)}
+        <g fontSize="10.5" fill={INK}>
+          <line x1={X[0]} x2={X[0] + 22} y1={keyY} y2={keyY} stroke={INK} strokeWidth="0.9" markerEnd={`url(#${uid}-d)`} />
+          <text x={X[0] + 29} y={keyY + 3.5}>regulator on first</text>
+          <line x1={X[0] + 150} x2={X[0] + 172} y1={keyY} y2={keyY} stroke={INK} strokeWidth="0.9" strokeDasharray="3 2.5" markerEnd={`url(#${uid}-d)`} />
+          <text x={X[0] + 179} y={keyY + 3.5}>regulator on later</text>
+          <line x1={X[0] + 300} x2={X[0] + 322} y1={keyY} y2={keyY} stroke={INK} strokeWidth="1.8" />
+          <text x={X[0] + 329} y={keyY + 3.5}>between plotted genes</text>
+          <circle cx={X[0] + 471} cy={keyY} r="3" fill="#ffffff" stroke={INK} strokeWidth="1.4" />
+          <text x={X[0] + 480} y={keyY + 3.5}>switch-on: first point at half of the gene&apos;s range</text>
+        </g>
+
+        {/* Right: the picked genes on one axis. */}
         {[0, 0.5, 1].map((value) => (
           <g key={value}>
+            <line x1={left} x2={left + pw} y1={sy(value)} y2={sy(value)} stroke="#e9edf0" strokeWidth="0.8" />
             <line x1={left - 4} x2={left} y1={sy(value)} y2={sy(value)} stroke={INK} strokeWidth="1" />
             <text x={left - 8} y={sy(value) + 4} fontSize="12" textAnchor="end" fill={INK}>{value}</text>
           </g>
         ))}
+        <path d={`M${left} ${top}V${top + ph}H${left + pw}`} fill="none" stroke={INK} strokeWidth="1" />
         {xTicks.map((value) => (
           <g key={value}>
             <line x1={sx(value)} x2={sx(value)} y1={top + ph} y2={top + ph + 4} stroke={INK} strokeWidth="1" />
             <text x={sx(value)} y={top + ph + 18} fontSize="12" textAnchor="middle" fill={INK}>{Number(value.toFixed(1))}</text>
           </g>
         ))}
-        <text x={left + pw / 2} y={H - 10} fontSize="13" textAnchor="middle" fill={INK}>{`${lineage.name} pseudotime`}</text>
-        <text transform={`translate(16 ${top + ph / 2}) rotate(-90)`} fontSize="13" textAnchor="middle" fill={INK}>Scaled expression</text>
-        {showOnsets ? <line x1={left} x2={left + pw} y1={sy(0.5)} y2={sy(0.5)} stroke="#c3c9ce" strokeDasharray="3 3" /> : null}
-        {genes.map((item) => (
-          <g key={item.role}>
-            <path
-              d={item.scaled.map((value, i) => `${i ? "L" : "M"}${sx(t[i]).toFixed(1)} ${sy(value).toFixed(1)}`).join("")}
-              fill="none"
-              stroke={item.color}
-              strokeWidth="2.2"
-            />
-            {showOnsets && item.onset !== null ? (
-              <g>
-                <line x1={sx(item.onset)} x2={sx(item.onset)} y1={sy(0.5)} y2={top + ph} stroke={item.color} strokeWidth="1" />
-                <circle cx={sx(item.onset)} cy={sy(0.5)} r="3.5" fill="#ffffff" stroke={item.color} strokeWidth="1.6" />
-              </g>
+        <text x={left + pw / 2} y={top + ph + 38} fontSize="13" textAnchor="middle" fill={INK}>{`${lineage.name} pseudotime`}</text>
+        <text transform={`translate(${left - 42} ${top + ph / 2}) rotate(-90)`} fontSize="13" textAnchor="middle" fill={INK}>Scaled expression</text>
+        {ghost ? <path d={pathOf(ghost)} fill="none" stroke={colorOf(ghost)} strokeWidth="1.6" strokeDasharray="5 3" opacity="0.8" /> : null}
+        {curves.map((gene) => (
+          <g key={gene} opacity={hoverGene && hoverGene !== gene && gene !== target && plotted.includes(hoverGene) ? 0.35 : 1}>
+            <path d={pathOf(gene)} fill="none" stroke={colorOf(gene)} strokeWidth={gene === target ? 2.6 : 2} />
+            {onsets[gene] !== undefined ? (
+              <circle cx={sx(onsets[gene])} cy={sy(0.5)} r="3.4" fill="#ffffff" stroke={colorOf(gene)} strokeWidth="1.5" />
             ) : null}
           </g>
         ))}
-        {ends.map(({ item, y }) => (
-          <text key={item.role} x={left + pw + 10} y={y + 4} fontSize="13" fill={item.color}>
-            <tspan fontStyle="italic" fontWeight="700">{item.gene}</tspan>
-            <tspan fill={MUTED} fontSize="11.5">{` ${item.role}`}</tspan>
-          </text>
-        ))}
-        {showOnsets && lag !== null && reg.onset !== null && tar.onset !== null ? (
-          <g>
-            <path
-              d={`M${sx(reg.onset)} ${top - 18}v6M${sx(reg.onset)} ${top - 15}H${sx(tar.onset)}M${sx(tar.onset)} ${top - 18}v6`}
-              fill="none"
-              stroke={INK}
-              strokeWidth="1"
-            />
-            <text x={(sx(reg.onset) + sx(tar.onset)) / 2} y={top - 24} fontSize="12.5" textAnchor="middle" fill={INK}>
-              {`Onset lag ${lag >= 0 ? "+" : "−"}${Math.abs(lag).toFixed(0)}`}
+        {labels.map((label) => (
+          <g key={label.gene}>
+            <line x1={label.x} x2={label.x} y1={top - 1} y2={label.y + 3} stroke={colorOf(label.gene)} strokeWidth="0.8" />
+            <text x={label.tx} y={label.y} fontSize="12" fontStyle="italic" fontWeight="700" textAnchor="middle" fill={colorOf(label.gene)}>
+              {label.gene}
             </text>
           </g>
-        ) : null}
+        ))}
       </svg>
+      </div>
     </div>
   );
 }
