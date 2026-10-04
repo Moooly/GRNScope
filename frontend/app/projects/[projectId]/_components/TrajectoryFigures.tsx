@@ -173,7 +173,7 @@ export function CascadeHeatmap({
         style={{ display: "block" }}
         fontFamily={FONT}
         role="img"
-        aria-label="Expression cascade: smoothed gene trends along pseudotime, each scaled 0 to 1 and sorted by peak time"
+        aria-label="Gene expression timeline: smoothed gene trends along pseudotime, each scaled 0 to 1 and sorted by peak time"
         onMouseLeave={() => setHovered(null)}
       >
         <rect x="0" y="0" width={W} height={H} fill="#ffffff" />

@@ -271,7 +271,7 @@ function TrajectoryHelpModal({
                 ? "Understanding the cell trajectory"
                 : mode === "timing"
                   ? "Understanding regulator and target plots"
-                  : "Understanding the expression cascade"}
+                  : "Understanding the expression timeline"}
             </h3>
             <p id={summaryId} className="mt-1 text-sm leading-5 text-slate-500">
               {isCells
@@ -286,7 +286,7 @@ function TrajectoryHelpModal({
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-            aria-label={`Close ${isCells ? "cell trajectory" : mode === "timing" ? "regulator and target" : "expression cascade"} help`}
+            aria-label={`Close ${isCells ? "cell trajectory" : mode === "timing" ? "regulator and target" : "expression timeline"} help`}
           >
             ×
           </button>
@@ -1334,7 +1334,7 @@ export default function TrajectoryInsights({
       ? `cell-trajectory-${lineage.name}`
       : panel === "timing"
         ? `regulators-of-${timingTarget ?? "target"}-${lineage.name}`
-        : `gene-expression-cascade-by-${lineage.name}`;
+        : `gene-expression-timeline-by-${lineage.name}`;
   const downloadTimingCsv = () =>
     downloadCsv(`regulator-timing-${lineage.name}.csv`, [
       ["regulator", "target", "methods_supporting", "directed_methods", "sign", "regulator_onset", "target_onset", "onset_lag"],
@@ -1376,7 +1376,7 @@ export default function TrajectoryInsights({
       ]);
       return;
     }
-    downloadCsv("gene-expression-cascade.csv", [
+    downloadCsv("gene-expression-timeline.csv", [
       ["gene", "lineage", "pseudotime", "fitted_expression", "scaled_0_1"],
       ...cascade.rows.flatMap((row) =>
         cascadeLineages.flatMap((item) => {
@@ -1430,7 +1430,7 @@ export default function TrajectoryInsights({
     },
     {
       key: "genes",
-      title: "Gene expression cascade",
+      title: "Gene expression timeline",
       description: lineages.length > 1
         ? "Smoothed gene trends along pseudotime, sorted by when each gene peaks. Click a lineage name to sort by that lineage."
         : "Smoothed gene trends along pseudotime, sorted by when each gene peaks.",
