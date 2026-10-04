@@ -1374,7 +1374,7 @@
 .figure-key .key-part { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; margin: -2px 0; border: 0; border-radius: 5px; background: transparent; font: inherit; color: #5f6b72; cursor: pointer; transition: background 120ms, opacity 120ms; }
 .figure-key .key-part:hover:not(:disabled) { background: #f1f4f7; }
 .figure-key .key-part.is-on { background: #e8eef5; color: #1f2a30; }
-.figure-key .key-part.is-dim { opacity: 0.55; }
+.figure-key .key-part.is-dim { opacity: 1; }
 .figure-key .key-part:disabled { cursor: default; opacity: 0.45; }
 .figure-key .key-part:focus-visible { outline: 2px solid #1b75a6; outline-offset: 1px; }
 /* Keep the key on one line at common widths. */
@@ -1388,7 +1388,8 @@
 .figure-filter .key-part b { font-weight: 600; color: #1f2a30; font-variant-numeric: tabular-nums; }
 .figure-filter .key-part:hover:not(:disabled) { background: #f1f4f7; }
 .figure-filter .key-part.is-on { background: #e8eef5; color: #1f2a30; }
-.figure-filter .key-part.is-dim { opacity: 0.55; }
+/* Unselected filters stay at full strength: faded, they looked disabled. */
+.figure-filter .key-part.is-dim { opacity: 1; }
 .figure-filter .key-part:disabled { cursor: default; opacity: 0.45; }
 .figure-filter .key-part:focus-visible { outline: 2px solid #1b75a6; outline-offset: 1px; }
 .figure-filter svg, .figure-key-line svg { display: block; flex: none; }
