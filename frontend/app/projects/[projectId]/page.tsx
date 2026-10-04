@@ -1,6 +1,5 @@
 "use client";
 
-import { chooseOpeningEvidenceCut } from "./_lib/openingCut";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +45,9 @@ import {
   type ProjectManifest,
 } from "./_lib/types";
 import { clamp } from "./_lib/utils";
+
+/** Evidence threshold a project opens with, until the reader changes it. */
+const DEFAULT_EVIDENCE_THRESHOLD = 0.55;
 
 const CONFIDENCE_STABILITY_TOP_K = 10;
 const MODAL_ANIMATION_MS = 480;
@@ -564,7 +566,7 @@ export default function ProjectDetailPage() {
   } = useProjectDetailData({ projectId, isDemoRoute });
   const [selectedAlgorithmIds, setSelectedAlgorithmIds] = useState<string[]>([]);
   const [selectedResultScopeId, setSelectedResultScopeId] = useState("global");
-  const [evidenceThreshold, setEvidenceThreshold] = useState(0.8);
+  const [evidenceThreshold, setEvidenceThreshold] = useState(DEFAULT_EVIDENCE_THRESHOLD);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [directionConfidenceThreshold, setDirectionConfidenceThreshold] = useState(0);
   const [signConfidenceThreshold, setSignConfidenceThreshold] = useState(0);
@@ -1935,15 +1937,12 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    // Otherwise open at an evidence cut chosen from this project's own scores:
-    // the strongest links up to a readable size (see _lib/openingCut.ts).
-    const geneCount = new Set(candidatePool.flatMap((edge) => [edge.source, edge.target])).size;
-    const cut = chooseOpeningEvidenceCut(candidatePool.map((edge) => edge.score), geneCount);
-    if (!cut) return;
+    // Otherwise open at a fixed evidence default. The data-driven cut in
+    // _lib/openingCut.ts (chooseOpeningEvidenceCut) is kept but not used for now.
 
     // Evidence alone drives the initial count; relax the other axes so they
     // don't undercut it. The panel then honestly reflects what is shown.
-    setEvidenceThreshold(cut.threshold);
+    setEvidenceThreshold(DEFAULT_EVIDENCE_THRESHOLD);
     setConfidenceThreshold(0);
     setDirectionConfidenceThreshold(0);
     setSignConfidenceThreshold(0);

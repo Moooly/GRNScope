@@ -1134,11 +1134,7 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
     const horizontal = slot >= 92;
     const labelH = horizontal ? 46 : 96;
     const width = left + plotted.length * slot + right;
-    // b: top-edge recovery strip, aligned under the boxes.
-    const hasStrip = plotted.some((row) => row.topRecovery.some((cell) => cell.value !== null));
-    const rowH = 19;
-    const stripTop = top + plotH + 4 + 44;
-    const labelBase = hasStrip ? stripTop + TOP_EDGE_CUTOFFS.length * rowH + 2 : top + plotH + 4;
+    const labelBase = top + plotH + 4;
     const height = labelBase + labelH;
     const summaries = plotted.map((row) => {
       const values = row.pairRhos.length ? row.pairRhos : [row.medianRho as number];
@@ -1168,24 +1164,14 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
             ref={ref}
             viewBox={`0 0 ${width} ${height}`}
             role="img"
-            aria-label="(a) Box plot of pairwise Spearman correlation between repeat runs per algorithm; (b) mean bootstrap recovery of each algorithm's top 10, 25 and 50 edges"
+            aria-label="Box plot of pairwise Spearman correlation between repeat runs per algorithm"
             width={width}
             height={height}
             style={{ display: "block", margin: "0 auto" }}
             fontFamily={font}
           >
             <rect x="0" y="0" width={width} height={height} fill="#ffffff" />
-            <text x="4" y="16" fontSize="16" fontWeight="700" fill={INK}>a</text>
-            <text x="22" y="16" fontSize="11.5" fill="#4b5560">Whole-ranking agreement between runs</text>
-            {hasStrip && (
-              <>
-                <text x="4" y={stripTop - 12} fontSize="16" fontWeight="700" fill={INK}>b</text>
-                <text x="22" y={stripTop - 12} fontSize="11.5" fill="#4b5560">Top-edge recovery across runs (%)</text>
-                {TOP_EDGE_CUTOFFS.map((k, i) => (
-                  <text key={k} x={left - 8} y={stripTop + i * rowH + rowH / 2} fontSize="10" textAnchor="end" dominantBaseline="middle" fill={INK}>top {k}</text>
-                ))}
-              </>
-            )}
+            <text x="4" y="16" fontSize="11.5" fill="#4b5560">Whole-ranking agreement between runs</text>
             {ticks.map((t) => (
               <line key={`grid-${t}`} x1={left} x2={width - right} y1={y(t)} y2={y(t)} stroke="#e9edf0" strokeWidth="0.8" />
             ))}
@@ -1225,18 +1211,6 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
                   <rect x={cx - half} y={y(stats.q3)} width={half * 2} height={Math.max(0.5, y(stats.q1) - y(stats.q3))} fill="none" stroke={ink} strokeWidth={on ? 1.4 : 0.9} />
                   <line x1={cx - half} x2={cx + half} y1={y(stats.med)} y2={y(stats.med)} stroke={ink} strokeWidth="2.4" />
                   <line x1={cx} x2={cx} y1={axisY} y2={axisY + 4} stroke={INK} strokeWidth="0.8" />
-                  {hasStrip && row.topRecovery.map((cell, i) => {
-                    const cellW = Math.min(slot - 4, 120);
-                    const yTop = stripTop + i * rowH;
-                    return (
-                      <g key={cell.k}>
-                        <title>{cell.value === null ? `${row.algorithmId}: fewer than ${cell.k} ranked edges` : `${row.algorithmId}: top ${cell.k} edges recovered in ${Math.round(cell.value * 100)}% of runs on average`}</title>
-                        <rect data-cell="" x={cx - cellW / 2} y={yTop + 1} width={cellW} height={rowH - 2} fill={cell.value === null ? "#f8fafc" : recoveryColor(cell.value)} stroke="#e3e8ec" strokeWidth="0.6" />
-                        <text x={cx} y={yTop + rowH / 2} fontSize="10" textAnchor="middle" dominantBaseline="middle"
-                          fill={cell.value === null ? "#8a949c" : "#1f2a33"}>{cell.value === null ? "—" : Math.round(cell.value * 100)}</text>
-                      </g>
-                    );
-                  })}
                   {horizontal ? (
                     <>
                       <text x={cx} y={labelBase + 16} fontSize="11.5" textAnchor="middle" fill={ink} data-name="">{row.algorithmId}</text>
@@ -1260,16 +1234,6 @@ const StabilityBoxPlot = forwardRef<SVGSVGElement, { rows: StabilityPlotRow[] }>
     );
   },
 );
-
-/** Recovery shading: white at 100%, light blue only as recovery falls, so
- * the eye goes to the cells that lose edges between runs. */
-function recoveryColor(t: number) {
-  const f = 1 - Math.max(0, Math.min(1, t));
-  const s = Math.min(1, f / 0.6);
-  const lo = [255, 255, 255], hi = [107, 174, 214];
-  const c = lo.map((v, k) => Math.round(v + (hi[k] - v) * s));
-  return `rgb(${c[0]},${c[1]},${c[2]})`;
-}
 
 /** Per-algorithm repeat-run stability for the selected result scope, sorted
  * by median ρ (highest first). Shared by the Comparison stability panel and
@@ -1630,7 +1594,7 @@ function RepeatRunStabilityPanel({
       ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
       : null;
   const stabilityDescription =
-    "(a) Each point is the rank correlation between two bootstrap runs over the whole edge ranking. (b) How often the top-ranked edges are recovered across runs — the edges you would actually read." +
+    "Each point is the rank correlation between two bootstrap runs over the whole edge ranking." +
     (rows.some((row) => row.earlyStoppingEnabled)
       ? " Runs stopped once the ranking met the stability rule, except where marked “ran to cap”."
       : "");
@@ -2526,7 +2490,7 @@ function AgreementView({
       {activeAlgorithmIds.length >= 2 && orderedAlgorithmIds.length >= 2 && regulatorRows.length ? (
         <Panel
           title="Key regulators across methods"
-          description={`Each cell is a gene's rank as a regulator in one method's top ${topK.toLocaleString()} edges (1 = most edges). Methods often agree more on which regulators matter than on single edges.`}
+          description={`Each cell is a gene's rank as a regulator in one method's top ${topK.toLocaleString()} edges (1 = most targets). Methods often agree more on which regulators matter than on single edges.`}
           aside={
             <DownloadMenu
               ariaLabel="Download key regulators"
@@ -2590,13 +2554,13 @@ function AgreementView({
                 onGroupChange={() => undefined}
                 firstHeader="Method"
                 monoFirst={false}
-                rankHeaders={["Rank", "Edges"]}
-                footnote="Edges = targets (directed) or connections (undirected)"
+                rankHeaders={["Rank", "Targets"]}
+                footnote="For methods without direction, targets = connected genes"
                 onReset={isDefaultRegulator ? undefined : () => setRequestedGene(null)}
                 resetLabel="Back to top"
                 onDownload={() =>
                   downloadCsv(`regulator-${selectedRegulator.gene}-top-${topK}.csv`, [
-                    ["method", "directed", "rank", "edges"],
+                    ["method", "directed", "rank", "targets"],
                     ...orderedAlgorithmIds.map((id, index) => [
                       id,
                       regulatorDirected[index] ? "yes" : "no",

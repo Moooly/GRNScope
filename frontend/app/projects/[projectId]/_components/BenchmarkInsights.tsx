@@ -33,7 +33,6 @@ import {
   DIRECTION_COLORS,
   MotifHeatmap,
   PATH_COLORS,
-  RuntimeScatter,
   StackedBars,
   SummaryHeatmap,
   overallRanks,
@@ -98,7 +97,7 @@ type BenchmarkRow = {
   pathCounts: PathCounts | null;
   rankedEdges: BeelineRankedEdge[];
   /** Top-K predictions (K = reference size) that link a reference gene pair. */
-  directionSign: { pairs: number; rightDirection: number; signCompared: number; rightSign: number };
+  directionSign: { examined: number; pairs: number; rightDirection: number; signCompared: number; rightSign: number };
 };
 
 function edgeKey(source: string, target: string) {
@@ -468,7 +467,7 @@ function CurvePerformanceHelpModal({
               id="curve-performance-help-title"
               className="text-lg font-extrabold tracking-tight text-slate-950"
             >
-              Understanding curve performance
+              Understanding the precision-recall and ROC curves
             </h3>
             <p
               id="curve-performance-help-summary"
@@ -482,7 +481,7 @@ function CurvePerformanceHelpModal({
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 transition hover:border-[#087ead]/30 hover:bg-[#f2f9fc] hover:text-[#087ead] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087ead]/30"
-            aria-label="Close curve performance help"
+            aria-label="Close precision-recall and ROC curves help"
           >
             ×
           </button>
@@ -1001,7 +1000,7 @@ function directionSignCounts(
     const predicted = Number(edge.positive_selected_runs ?? 0) >= Number(edge.negative_selected_runs ?? 0) ? 1 : -1;
     if (predicted === referenceSign) rightSign += 1;
   });
-  return { pairs, rightDirection, signCompared, rightSign };
+  return { examined: top.length, pairs, rightDirection, signCompared, rightSign };
 }
 
 
@@ -1009,188 +1008,6 @@ function directionSignCounts(
 
 
 export type StabilityPoint = { algorithmId: string; medianRho: number | null; runCount: number };
-
-/** Average ranks (ties share the mean rank), for Spearman's r. */
-function averageRanks(values: number[]) {
-  const order = values.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value);
-  const ranks = new Array<number>(values.length);
-  for (let i = 0; i < order.length; ) {
-    let j = i;
-    while (j + 1 < order.length && order[j + 1].value === order[i].value) j += 1;
-    for (let k = i; k <= j; k += 1) ranks[order[k].index] = (i + j) / 2 + 1;
-    i = j + 1;
-  }
-  return ranks;
-}
-
-function spearman(first: number[], second: number[]) {
-  if (first.length < 3) return null;
-  const a = averageRanks(first), b = averageRanks(second);
-  const mean = (a.length + 1) / 2;
-  let num = 0, da = 0, db = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    num += (a[i] - mean) * (b[i] - mean);
-    da += (a[i] - mean) ** 2;
-    db += (b[i] - mean) ** 2;
-  }
-  return da && db ? num / Math.sqrt(da * db) : null;
-}
-
-/** Stability (median pairwise ρ between bootstrap runs) against accuracy
- * (AUPRC ratio on the reference network): one dot per algorithm. Top-right
- * is both repeatable and accurate. The pairing follows BEELINE, which reports
- * stability next to accuracy. */
-function StabilityAccuracyPanel({ rows, stability }: { rows: BenchmarkRow[]; stability: StabilityPoint[] }) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
-  const byId = new Map(stability.map((item) => [item.algorithmId, item]));
-  const points = rows
-    .map((row) => ({ id: row.algorithmId, x: byId.get(row.algorithmId)?.medianRho ?? null, y: row.auprcRatio, runs: byId.get(row.algorithmId)?.runCount ?? 0 }))
-    .filter((point): point is { id: string; x: number; y: number; runs: number } => point.x !== null && Number.isFinite(point.y));
-  if (points.length < 2) return null;
-
-  const W = 560, H = 380, L = 58, R = 110, T = 14, B = 46;
-  const pw = W - L - R, ph = H - T - B;
-  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
-  const xMin = Math.max(-1, Math.min(0.9, Math.floor((Math.min(...xs) - 0.03) * 10) / 10));
-  const xMax = 1;
-  const yMin = Math.min(0.9, Math.floor((Math.min(...ys) - 0.03) * 10) / 10);
-  const yMax = Math.max(1.1, Math.ceil((Math.max(...ys) + 0.03) * 10) / 10);
-  const sx = (v: number) => L + ((v - xMin) / (xMax - xMin)) * pw;
-  const sy = (v: number) => T + ((yMax - v) / (yMax - yMin)) * ph;
-  const tickStep = (span: number) => (span > 1 ? 0.2 : 0.1);
-  const ticks = (lo: number, hi: number) => {
-    const step = tickStep(hi - lo), out: number[] = [];
-    for (let t = Math.ceil(lo / step - 1e-9) * step; t <= hi + 1e-9; t += step) out.push(Number(t.toFixed(2)) || 0);
-    return out;
-  };
-  const r = spearman(xs, ys);
-
-  // Greedy label placement: right, left, above, below — first spot that
-  // overlaps neither another label nor a dot.
-  type Box = { x: number; y: number; w: number; h: number };
-  const hit = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-  const dots: Box[] = points.map((p) => ({ x: sx(p.x) - 4, y: sy(p.y) - 4, w: 8, h: 8 }));
-  const placed: Box[] = [];
-  const labels = [...points].sort((a, b) => b.y - a.y).map((p) => {
-    const cx = sx(p.x), cy = sy(p.y), w = p.id.length * 6.1, h = 11;
-    const options = [
-      { x: cx + 7, y: cy - h / 2, anchor: "start" as const },
-      { x: cx - 7 - w, y: cy - h / 2, anchor: "end" as const },
-      { x: cx - w / 2, y: cy - h - 6, anchor: "middle" as const },
-      { x: cx - w / 2, y: cy + 6, anchor: "middle" as const },
-      { x: cx + 7, y: cy - h - 3, anchor: "start" as const },
-      { x: cx + 7, y: cy + 3, anchor: "start" as const },
-    ];
-    const choice = options.find((o) => {
-      const box = { x: o.x, y: o.y, w, h };
-      return box.x >= L - 40 && box.x + w <= W - 4 && !placed.some((b) => hit(b, box)) && !dots.some((d) => hit(d, box));
-    }) ?? options[0];
-    placed.push({ x: choice.x, y: choice.y, w, h });
-    const tx = choice.anchor === "start" ? choice.x : choice.anchor === "end" ? choice.x + w : choice.x + w / 2;
-    return { id: p.id, tx, ty: choice.y + h / 2, anchor: choice.anchor };
-  });
-
-  const download = async (format: "png" | "svg") => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.querySelectorAll("title").forEach((node) => node.remove());
-    clone.querySelectorAll("[data-hl]").forEach((node) => {
-      if (node.tagName === "circle") node.setAttribute("fill", "#000");
-      else node.setAttribute("fill", "#333");
-    });
-    if (format === "svg") downloadSvg(clone, "stability-vs-accuracy.svg");
-    else await downloadSvgPng(clone, "stability-vs-accuracy.png", 4);
-  };
-
-  return (
-    <Panel
-      title="Stability vs accuracy"
-      description="Each dot is one method: how consistent it is across repeat runs against how well it recovers the reference."
-      aside={
-        <DownloadMenu
-          ariaLabel="Download stability vs accuracy"
-          items={[
-            { label: "Figure", format: "PNG", description: "Scatter plot at print resolution.", onSelect: () => void download("png") },
-            { label: "Figure", format: "SVG", description: "Editable vector version.", onSelect: () => void download("svg") },
-          ]}
-        />
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${W} ${H}`}
-          className="block w-full"
-          fontFamily="Arial, Helvetica, sans-serif"
-          role="img"
-          aria-label="Scatter of repeat-run stability against AUPRC ratio, one dot per algorithm"
-          onMouseLeave={() => setHovered(null)}
-        >
-          <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
-          {/* random predictor */}
-          {yMin < 1 && yMax > 1 && (
-            <>
-              <line x1={L} x2={L + pw} y1={sy(1)} y2={sy(1)} stroke="#8a949c" strokeWidth="0.8" strokeDasharray="4 3" />
-              <text x={L + pw} y={sy(1) - 4} fontSize="10" textAnchor="end" fill="#8a949c">random predictor</text>
-            </>
-          )}
-          <line x1={L} x2={L} y1={T} y2={T + ph} stroke="#000" strokeWidth="0.8" />
-          <line x1={L} x2={L + pw} y1={T + ph} y2={T + ph} stroke="#000" strokeWidth="0.8" />
-          {ticks(yMin, yMax).map((t) => (
-            <g key={`y${t}`}>
-              <line x1={L - 4} x2={L} y1={sy(t)} y2={sy(t)} stroke="#000" strokeWidth="0.8" />
-              <text x={L - 7} y={sy(t)} fontSize="11" textAnchor="end" dominantBaseline="middle">{t.toFixed(1)}</text>
-            </g>
-          ))}
-          {ticks(xMin, xMax).map((t) => (
-            <g key={`x${t}`}>
-              <line x1={sx(t)} x2={sx(t)} y1={T + ph} y2={T + ph + 4} stroke="#000" strokeWidth="0.8" />
-              <text x={sx(t)} y={T + ph + 16} fontSize="11" textAnchor="middle">{t.toFixed(1)}</text>
-            </g>
-          ))}
-          <text x={L + pw / 2} y={H - 8} fontSize="11.5" textAnchor="middle">Stability · median pairwise Spearman ρ</text>
-          <text transform={`translate(16 ${T + ph / 2}) rotate(-90)`} fontSize="11.5" textAnchor="middle">Accuracy · AUPRC ratio</text>
-          {points.map((p) => {
-            const on = hovered === p.id;
-            return (
-              <g key={p.id} onMouseEnter={() => setHovered(p.id)}>
-                <title>{`${p.id}\nstability ρ ${p.x.toFixed(3)} (${p.runs} runs)\nAUPRC ratio ${p.y.toFixed(3)}×`}</title>
-                <circle cx={sx(p.x)} cy={sy(p.y)} r="10" fill="transparent" />
-                <circle cx={sx(p.x)} cy={sy(p.y)} r={on ? 5 : 4} fill={on ? "#087ead" : "#000"} data-hl={on ? "" : undefined} />
-              </g>
-            );
-          })}
-          {labels.map((label) => {
-            const on = hovered === label.id;
-            return (
-              <text key={label.id} x={label.tx} y={label.ty} fontSize="10" textAnchor={label.anchor} dominantBaseline="middle"
-                fill={on ? "#087ead" : "#333"} fontWeight={on ? 700 : 400} data-hl={on ? "" : undefined}
-                onMouseEnter={() => setHovered(label.id)}>{label.id}</text>
-            );
-          })}
-          {r !== null && (
-            <text x={L + pw} y={T + ph - 8} fontSize="10.5" textAnchor="end" fill="#333">Spearman r = {r.toFixed(2)}</text>
-          )}
-        </svg>
-        <div className="space-y-2 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">
-          <p>
-            <span className="font-semibold text-slate-800">Top right</span>: repeatable and accurate.{" "}
-            <span className="font-semibold text-slate-800">Bottom right</span>: consistent but not matching the reference.{" "}
-            <span className="font-semibold text-slate-800">Top left</span>: accurate on average, but runs vary.{" "}
-            <span className="font-semibold text-slate-800">Below the dashed line</span>: no better than random.
-          </p>
-          {r !== null && (
-            <p className="text-xs text-slate-500">
-              Spearman r = {r.toFixed(2)} across {points.length} algorithms: {r >= 0.3 ? "more stable algorithms tend to be more accurate here" : r <= -0.3 ? "more stable algorithms tend to be less accurate here" : "stability and accuracy are largely unrelated here"}.
-            </p>
-          )}
-        </div>
-      </div>
-    </Panel>
-  );
-}
 
 export default function BenchmarkInsights({
   groundTruth,
@@ -1366,7 +1183,6 @@ export default function BenchmarkInsights({
   }, [benchmark]);
   const summarySvgRef = useRef<SVGSVGElement | null>(null);
   const curveSvgRef = useRef<SVGSVGElement | null>(null);
-  const runtimeSvgRef = useRef<SVGSVGElement | null>(null);
   const motifSvgRef = useRef<SVGSVGElement | null>(null);
   const pathSvgRef = useRef<SVGSVGElement | null>(null);
   const directionSvgRef = useRef<SVGSVGElement | null>(null);
@@ -1447,15 +1263,12 @@ export default function BenchmarkInsights({
   const topRow =
     [...methodRows].sort((a, b) => (ranks.get(a.algorithmId) ?? 0) - (ranks.get(b.algorithmId) ?? 0))[0] ?? methodRows[0];
   const showStability = figureRows.some((row) => row.stability !== null);
-  const anyUncertainty = uncertainty.size > 0;
-  const firstUncertainty = [...uncertainty.values()][0];
   const byAuprc = [...methodRows].sort((a, b) => b.auprcRatio - a.auprcRatio);
-  type FigureKey = "summary" | "curve" | "runtime" | "motif" | "path" | "direction";
+  type FigureKey = "summary" | "curve" | "motif" | "path" | "direction";
   const downloadFigure = async (key: FigureKey, filename: string, format: "svg" | "png") => {
     const refs = {
       summary: summarySvgRef,
       curve: curveSvgRef,
-      runtime: runtimeSvgRef,
       motif: motifSvgRef,
       path: pathSvgRef,
       direction: directionSvgRef,
@@ -1592,15 +1405,6 @@ export default function BenchmarkInsights({
         <div className="mt-4">
           <SummaryHeatmap rows={figureRows} showSigned={signedMetricsAvailable} showStability={showStability} svgRef={summarySvgRef} />
         </div>
-        <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-          Rank = mean rank over AUPRC ratio, early precision ratio and AUROC. Ratios are relative to a random predictor (1 = random).
-          Circle size and shade compare methods within each column; grey = no better than random; n/a = the method reports no such edges.
-          {consensusRow ? " Consensus = rank average of all selected methods (DREAM5 “wisdom of crowds”)." : ""}
-          {showStability ? " Stability = median Spearman ρ between repeat runs." : ""}
-          {anyUncertainty
-            ? ` Statistical support: square = AUPRC ratio, whiskers = 95% bootstrap interval (${firstUncertainty?.bootstrapReps ?? 0} resamples of the candidate gene pairs), filled = interval entirely above random (dashed line); p = one-sided permutation test against ${firstUncertainty?.permutationReps ?? 0} random rankings (* p < 0.05, ** p < 0.01). Overlapping intervals mean the data cannot separate those methods.`
-            : ""}
-        </p>
       </Panel>
       {isBenchmarkHelpOpen && typeof document !== "undefined" ? (
         <BenchmarkSummaryHelpModal
@@ -1619,8 +1423,8 @@ export default function BenchmarkInsights({
 
 
       <Panel
-        title="Curve performance"
-        titleAction={helpButton(() => setIsCurveHelpOpen(true), "How to read curve performance", "curve-performance-help-title")}
+        title="Precision-recall and ROC curves"
+        titleAction={helpButton(() => setIsCurveHelpOpen(true), "How to read the precision-recall and ROC curves", "curve-performance-help-title")}
         description="One panel per method, in black; the other methods in grey for context; dashed = random."
         aside={
           <div className="flex flex-wrap items-center gap-2">
@@ -1638,7 +1442,7 @@ export default function BenchmarkInsights({
               ))}
             </div>
             <DownloadMenu
-              ariaLabel="Download curve performance"
+              ariaLabel="Download precision-recall and ROC curves"
               items={[
                 ...figureItems("curve", curveKind === "pr" ? "precision-recall-curves" : "roc-curves"),
                 {
@@ -1646,7 +1450,7 @@ export default function BenchmarkInsights({
                   format: "CSV",
                   description: "Both curves for every method.",
                   onSelect: () =>
-                    downloadCsv("curve-performance.csv", [
+                    downloadCsv("precision-recall-roc-curves.csv", [
                       ["curve", "algorithm", "x", "y"],
                       ...allRows.flatMap((row) => [
                         ...row.pr.map((point) => ["precision-recall", row.algorithmId, point.x, point.y]),
@@ -1666,60 +1470,10 @@ export default function BenchmarkInsights({
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-2 xl:items-stretch">
-      <StabilityAccuracyPanel rows={rows} stability={stability} />
-
-      {methodRows.some((row) => row.runtimeSeconds > 0) ? (
-        <Panel
-          title="Accuracy vs runtime"
-          description="Is the slower method worth the wait? Runtime on a log scale; the blue line joins methods that no faster method beats."
-          aside={<DownloadMenu ariaLabel="Download accuracy vs runtime" items={figureItems("runtime", "accuracy-vs-runtime")} />}
-        >
-          <div className="flex flex-col gap-4">
-            <RuntimeScatter rows={figureRows} svgRef={runtimeSvgRef} />
-            {(() => {
-              const timed = methodRows.filter((row) => row.runtimeSeconds > 0);
-              const best = timed.reduce((top, row) => (row.auprcRatio > top.auprcRatio ? row : top), timed[0]);
-              const quick = timed
-                .filter((row) => row.auprcRatio >= best.auprcRatio * 0.9)
-                .reduce((fast, row) => (row.runtimeSeconds < fast.runtimeSeconds ? row : fast), best);
-              const format = (seconds: number) =>
-                seconds < 60 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
-              return (
-                <div className="space-y-2 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">
-                  <p>
-                    <span className="font-semibold text-slate-800">Top left</span>: fast and accurate. <span className="font-semibold text-slate-800">Bottom right</span>: slow and no better than the rest.
-                  </p>
-                  <p>
-                    Most accurate here: <span className="font-semibold text-slate-800">{best.algorithmId}</span> ({best.auprcRatio.toFixed(2)}× in {format(best.runtimeSeconds)}).
-                    {quick.algorithmId !== best.algorithmId ? (
-                      <>
-                        {" "}Fastest within 10% of it: <span className="font-semibold text-slate-800">{quick.algorithmId}</span> ({quick.auprcRatio.toFixed(2)}× in {format(quick.runtimeSeconds)}).
-                      </>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-slate-500">Runtimes are wall-clock times of this project&apos;s runs and depend on the machine and data size.</p>
-                </div>
-              );
-            })()}
-          </div>
-        </Panel>
-      ) : null}
-      </div>
-
-      <details className="group rounded-[1.25rem] border border-slate-200 bg-white">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 sm:px-6">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-950">Additional benchmark diagnostics</h3>
-            <p className="mt-1 text-sm text-slate-600">Network motifs, where wrong predictions sit, and edge direction and sign.</p>
-          </div>
-          <span className="text-xl font-light text-slate-400 transition group-open:rotate-45">+</span>
-        </summary>
-        <div className="space-y-7 border-t border-slate-100 px-5 py-5 sm:px-6">
-          <div className="grid gap-7 xl:grid-cols-2">
-          <section className="min-w-0">
+          <section className="min-w-0 rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-2">
-                <h4 className="text-sm font-extrabold text-slate-900">Motif counts relative to the reference</h4>
+                <h3 className="text-lg font-extrabold text-slate-950">Motif counts relative to the reference</h3>
                 {helpButton(() => setAdditionalBenchmarkHelp("motif"), "How to read motif counts", "additional-benchmark-help-title")}
               </div>
               <DownloadMenu
@@ -1743,7 +1497,6 @@ export default function BenchmarkInsights({
                 ]}
               />
             </div>
-            <p className="mt-1 text-xs text-slate-500">Blue = fewer motifs than the reference, red = more (log scale, 1× = same as the reference).</p>
             <div className="mt-3 overflow-x-auto">
               <MotifHeatmap
                 svgRef={motifSvgRef}
@@ -1757,9 +1510,9 @@ export default function BenchmarkInsights({
               />
             </div>
           </section>
-          <section className="min-w-0 xl:border-l xl:border-slate-100 xl:pl-8">
+          <section className="min-w-0 rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <h4 className="text-sm font-extrabold text-slate-900">Direction and sign of recovered edges</h4>
+              <h3 className="text-lg font-extrabold text-slate-950">Direction and sign of recovered edges</h3>
               <DownloadMenu
                 ariaLabel="Download direction and sign"
                 items={[
@@ -1769,9 +1522,10 @@ export default function BenchmarkInsights({
                     format: "CSV",
                     onSelect: () =>
                       downloadCsv("direction-and-sign.csv", [
-                        ["algorithm", "predictions_on_reference_pairs", "right_direction", "sign_compared", "right_sign"],
+                        ["algorithm", "top_predictions_examined", "predictions_on_reference_pairs", "right_direction", "sign_compared", "right_sign"],
                         ...allRows.map((row) => [
                           row.algorithmId,
+                          row.directionSign.examined,
                           row.directionSign.pairs,
                           row.directionSign.rightDirection,
                           row.directionSign.signCompared,
@@ -1782,32 +1536,30 @@ export default function BenchmarkInsights({
                 ]}
               />
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              Of each method&apos;s {`top ${benchmark.eligibleReferenceEdges} predictions`}, those linking a reference gene pair: drawn the right way
-              round, and with the reference&apos;s sign (activation or repression).
-            </p>
             <div className="mt-3 overflow-x-auto">
               <StackedBars
                 svgRef={directionSvgRef}
                 ariaLabel="Direction and sign of predicted edges on reference gene pairs"
-                categories={["Right direction, right sign", "Right direction, wrong sign", "Right direction, no sign", "Wrong direction"]}
+                categories={["Direction ✓ · Sign ✓", "Direction ✓ · Sign ✗", "Direction ✓ · No sign", "Direction ✗", "Not a reference pair"]}
+                minTop={68}
+                axis={{ max: benchmark.eligibleReferenceEdges, label: `Number of top-ranked predictions (${benchmark.eligibleReferenceEdges} = edges in the reference)` }}
                 colors={DIRECTION_COLORS}
                 rows={byAuprc.map((row) => {
                   const d = row.directionSign;
                   return {
                     id: row.algorithmId,
-                    parts: [d.rightSign, d.signCompared - d.rightSign, d.rightDirection - d.signCompared, d.pairs - d.rightDirection],
-                    note: d.pairs ? `${d.pairs} edges · ${Math.round((d.rightDirection / d.pairs) * 100)}% right way` : "none",
+                    parts: [d.rightSign, d.signCompared - d.rightSign, d.rightDirection - d.signCompared, d.pairs - d.rightDirection, d.examined - d.pairs],
+                    note: `${d.pairs}`,
                   };
                 })}
               />
             </div>
           </section>
           </div>
-          <section className="border-t border-slate-100 pt-6">
+          <section className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-2">
-                <h4 className="text-sm font-extrabold text-slate-900">How the top predictions compare with the reference</h4>
+                <h3 className="text-lg font-extrabold text-slate-950">How the top predictions compare with the reference</h3>
                 {helpButton(() => setAdditionalBenchmarkHelp("path"), "How to read top-prediction paths", "additional-benchmark-help-title")}
               </div>
               <DownloadMenu
@@ -1835,7 +1587,7 @@ export default function BenchmarkInsights({
                 ]}
               />
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-sm leading-6 text-slate-600">
               Each method&apos;s {`top ${benchmark.eligibleReferenceEdges} predictions`}: exact reference edges, and for wrong ones the length of the
               shortest reference path between the two genes (short paths are near misses).
             </p>
@@ -1843,7 +1595,7 @@ export default function BenchmarkInsights({
               <StackedBars
                 svgRef={pathSvgRef}
                 ariaLabel="Top predictions by distance in the reference network"
-                categories={["Exact reference edge", "Wrong · 2 steps", "Wrong · 3 steps", "Wrong · 4+ steps", "Wrong · no path"]}
+                categories={["Reference edge", "2 steps apart", "3 steps apart", "4+ steps apart", "No path"]}
                 colors={PATH_COLORS}
                 rows={byAuprc.map((row) => {
                   const c = row.pathCounts;
@@ -1856,8 +1608,6 @@ export default function BenchmarkInsights({
               />
             </div>
           </section>
-        </div>
-      </details>
       {additionalBenchmarkHelp && typeof document !== "undefined" ? (
         <AdditionalBenchmarkHelpModal
           kind={additionalBenchmarkHelp}

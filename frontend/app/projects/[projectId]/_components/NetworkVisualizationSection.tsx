@@ -225,7 +225,8 @@ export default function NetworkVisualizationSection(props: Props) {
   const [effect, setEffect] = useState<EffectFilter>("all");
   // Palette and spacing are fixed; node size and line width are chosen in the key.
   const figurePalette: PaletteName = DEFAULT_PALETTE;
-  const [layoutNonce, setLayoutNonce] = useState(0);
+  // No control changes this any more (the reset-layout button was removed); kept so the canvas prop stays wired.
+  const [layoutNonce] = useState(0);
   // Side-by-side table: open by default, resizable, can be hidden.
   const [tableOpen, setTableOpen] = useState(true);
   const [tableWidth, setTableWidth] = useState(420);
@@ -555,17 +556,6 @@ export default function NetworkVisualizationSection(props: Props) {
                       title="Fit view"
                     >
                       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
-                    </button>
-                  )}
-                  {useNewCanvas && (
-                    <button
-                      type="button"
-                      onClick={() => setLayoutNonce((n) => n + 1)}
-                      className="inline-flex h-full w-10 items-center justify-center border-l border-slate-200 text-slate-600 transition hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                      aria-label="Reset layout"
-                      title="Reset layout: recompute the arrangement, e.g. after dragging genes"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M11.6 4.2A5.2 5.2 0 1 0 12.2 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12.4 1.2v3.4H9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                   )}
                 </div>

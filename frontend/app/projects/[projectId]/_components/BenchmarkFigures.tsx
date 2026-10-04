@@ -20,6 +20,7 @@ type Rgb = [number, number, number];
 const BLUES: Rgb[] = [[198, 219, 239], [107, 174, 214], [33, 113, 181], [8, 48, 107]];
 const ORANGES: Rgb[] = [[253, 208, 162], [253, 141, 60], [217, 72, 1], [127, 39, 4]];
 const GREENS: Rgb[] = [[199, 233, 192], [116, 196, 118], [35, 139, 69], [0, 68, 27]];
+const PURPLES: Rgb[] = [[218, 218, 235], [158, 154, 200], [106, 81, 163], [63, 0, 125]];
 const DIVERGING: Rgb[] = [[33, 102, 172], [103, 169, 207], [209, 229, 240], [247, 247, 247], [253, 219, 199], [239, 138, 98], [178, 24, 43]];
 
 function ramp(stops: Rgb[], value: number) {
@@ -79,7 +80,7 @@ export function overallRanks(rows: FigureRow[]) {
 
 type SummaryColumn = {
   group: string;
-  key: "auprcRatio" | "eprRatio" | "auroc" | "activation" | "inhibition" | "stability";
+  key: "auprcRatio" | "eprRatio" | "auroc" | "activation" | "inhibition" | "stability" | "runtime";
   title: string[];
   random: number;
   palette: Rgb[];
@@ -109,6 +110,8 @@ export function SummaryHeatmap({
         ] as SummaryColumn[])
       : []),
     ...(showStability ? ([{ group: "Stability", key: "stability", title: ["Median ρ", "across runs"], random: -Infinity, palette: GREENS }] as SummaryColumn[]) : []),
+    // Wall-clock time of this project's run: lower is better, so the fastest method gets the largest, darkest circle.
+    ...(rows.some((row) => (row.runtime ?? 0) > 0) ? ([{ group: "Runtime", key: "runtime", title: ["Runtime"], random: -Infinity, palette: PURPLES }] as SummaryColumn[]) : []),
   ];
   const methods = rows.filter((row) => !row.consensus);
   const consensus = rows.find((row) => row.consensus) ?? null;
@@ -127,7 +130,7 @@ export function SummaryHeatmap({
   const forestExtra = Math.min(160, spare - (colW - 84) * columns.length);
   const groupGap = 18;
   const rowH = 32;
-  const top = 76;
+  const top = 54;
   const consensusGap = consensus ? 10 : 0;
   const colX: number[] = [];
   let x = nameW + rankW + 18;
@@ -151,7 +154,6 @@ export function SummaryHeatmap({
   const W = showStats ? pX + 70 : x + 8;
   const axisH = showStats ? 34 : 0;
   const H = top + display.length * rowH + consensusGap + 12 + axisH;
-  const groups = [...new Set(columns.map((column) => column.group))];
   const rowY = (index: number) => top + index * rowH + (consensus && index === display.length - 1 ? consensusGap : 0);
 
   return (
@@ -170,17 +172,15 @@ export function SummaryHeatmap({
       <text x={nameW + 8} y={top - 10} fontSize="11" fill={MUTED}>Overall rank</text>
       {showStats ? (
         <g>
-          <text x={(forestX + pX + 62) / 2} y={16} fontSize="12.5" fontWeight="700" textAnchor="middle" fill={INK}>Statistical support</text>
-          <line x1={forestX + 4} x2={pX + 62} y1={23} y2={23} stroke={INK} strokeWidth="1" />
-          <text x={ciTextX + 50} y={42} fontSize="11" textAnchor="middle" fill={INK}>
+          <text x={ciTextX + 50} y={20} fontSize="11" textAnchor="middle" fill={INK}>
             <tspan x={ciTextX + 50}>Ratio</tspan>
             <tspan x={ciTextX + 50} dy={13}>[95% CI]</tspan>
           </text>
-          <text x={forestX + forestW / 2} y={42} fontSize="11" textAnchor="middle" fill={INK}>
+          <text x={forestX + forestW / 2} y={20} fontSize="11" textAnchor="middle" fill={INK}>
             <tspan x={forestX + forestW / 2}>AUPRC ratio</tspan>
             <tspan x={forestX + forestW / 2} dy={13}>with 95% CI</tspan>
           </text>
-          <text x={pX + 30} y={42} fontSize="11" textAnchor="middle" fill={INK}>
+          <text x={pX + 30} y={20} fontSize="11" textAnchor="middle" fill={INK}>
             <tspan x={pX + 30}>p vs</tspan>
             <tspan x={pX + 30} dy={13}>random</tspan>
           </text>
@@ -203,19 +203,8 @@ export function SummaryHeatmap({
           })()}
         </g>
       ) : null}
-      {groups.map((group) => {
-        const indexes = columns.map((column, index) => (column.group === group ? index : -1)).filter((index) => index >= 0);
-        const x0 = colX[indexes[0]];
-        const x1 = colX[indexes[indexes.length - 1]] + colW;
-        return (
-          <g key={group}>
-            <text x={(x0 + x1) / 2} y={16} fontSize="12.5" fontWeight="700" textAnchor="middle" fill={INK}>{group}</text>
-            <line x1={x0 + 4} x2={x1 - 4} y1={23} y2={23} stroke={INK} strokeWidth="1" />
-          </g>
-        );
-      })}
       {columns.map((column, index) => (
-        <text key={column.key} x={colX[index] + colW / 2} y={42} fontSize="11" textAnchor="middle" fill={INK}>
+        <text key={column.key} x={colX[index] + colW / 2} y={20} fontSize="11" textAnchor="middle" fill={INK}>
           {column.title.map((line, lineIndex) => (
             <tspan key={line} x={colX[index] + colW / 2} dy={lineIndex ? 13 : 0}>{line}</tspan>
           ))}
@@ -235,8 +224,21 @@ export function SummaryHeatmap({
             {columns.map((column, columnIndex) => {
               const value = row[column.key];
               const cx = colX[columnIndex] + colW / 2;
-              if (value === null || value === undefined) {
+              if (value === null || value === undefined || (column.key === "runtime" && value <= 0)) {
                 return <text key={column.key} x={cx} y={y + 4} fontSize="11" textAnchor="middle" fill={FAINT}>n/a</text>;
+              }
+              if (column.key === "runtime") {
+                const times = rows.map((other) => other.runtime).filter((v): v is number => v !== null && v > 0).map(Math.log10);
+                const fast = Math.min(...times);
+                const slow = Math.max(...times);
+                const t = slow > fast ? 1 - (Math.log10(value) - fast) / (slow - fast) : 1;
+                return (
+                  <g key={column.key}>
+                    <title>{`${label(row)} · Runtime: ${formatSeconds(value)} (${value.toFixed(1)} s)`}</title>
+                    <circle cx={cx - 20} cy={y} r={6 + t * 8} fill={ramp(PURPLES, t)} />
+                    <text x={cx - 2} y={y + 4} fontSize="11" fill={INK}>{formatSeconds(value)}</text>
+                  </g>
+                );
               }
               const all = rows.map((other) => other[column.key]).filter((v): v is number => v !== null && v !== undefined);
               const hi = Math.max(...all);
@@ -323,7 +325,7 @@ export function CurveSmallMultiples({
           const sx = (v: number) => ox + v * pw;
           const sy = (v: number) => oy + ph - (Math.min(yMax, v) / yMax) * ph;
           const path = (points: CurvePoint[]) => points.map((p, i) => `${i ? "L" : "M"}${sx(p.x).toFixed(1)} ${sy(p.y).toFixed(1)}`).join("");
-          const metric = kind === "pr" ? `AUPRC ${row.auprcRatio.toFixed(2)}×` : `AUROC ${row.auroc.toFixed(3)}`;
+          const metric = kind === "pr" ? `AUPRC ratio ${row.auprcRatio.toFixed(2)}` : `AUROC ${row.auroc.toFixed(3)}`;
           return (
             <g key={row.id}>
               <text x={ox} y={oy - 9} fontSize="12.5" fontWeight="700" fill={row.consensus ? CONSENSUS : INK}>{label(row)}</text>
@@ -363,87 +365,13 @@ export function CurveSmallMultiples({
 }
 
 /* ------------------------------------------------------------------ */
-/* Accuracy vs runtime                                                 */
+/* Runtime formatting                                                  */
 /* ------------------------------------------------------------------ */
 
 function formatSeconds(seconds: number) {
   if (seconds < 60) return `${Math.round(seconds)} s`;
   if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
   return `${(seconds / 3600).toFixed(seconds < 36000 ? 1 : 0)} h`;
-}
-
-export function RuntimeScatter({ rows, svgRef }: { rows: FigureRow[]; svgRef?: Ref<SVGSVGElement> }) {
-  const points = rows.filter((row) => !row.consensus && row.runtime && row.runtime > 0) as Array<FigureRow & { runtime: number }>;
-  const W = 720;
-  const H = 480;
-  const left = 70;
-  const right = 150;
-  const top = 20;
-  const bottom = 56;
-  const pw = W - left - right;
-  const ph = H - top - bottom;
-  const logMin = Math.floor(Math.log10(Math.max(1, Math.min(...points.map((p) => p.runtime)))) * 2) / 2;
-  const logMax = Math.log10(Math.max(...points.map((p) => p.runtime), 10)) + 0.25;
-  const yMax = Math.max(1.5, Math.ceil(Math.max(...points.map((p) => p.auprcRatio)) * 5) / 5 + 0.1);
-  const yMin = Math.max(0, Math.min(0.5, Math.floor((Math.min(...points.map((p) => p.auprcRatio)) - 0.15) * 2) / 2));
-  const sx = (seconds: number) => left + ((Math.log10(seconds) - logMin) / (logMax - logMin)) * pw;
-  const sy = (value: number) => top + ph - ((value - yMin) / (yMax - yMin)) * ph;
-  const tickCandidates = [1, 5, 10, 30, 60, 300, 600, 1800, 3600, 7200, 18000, 36000, 86400];
-  const xTicks = tickCandidates.filter((t) => Math.log10(t) >= logMin - 1e-9 && Math.log10(t) <= logMax);
-  const yTicks: number[] = [];
-  for (let v = yMin; v <= yMax + 1e-9; v += 0.25) yTicks.push(Number(v.toFixed(2)));
-  // Pareto front: no faster method is more accurate.
-  const front = [...points].sort((a, b) => a.runtime - b.runtime).reduce<typeof points>((acc, p) => {
-    if (!acc.length || p.auprcRatio > acc[acc.length - 1].auprcRatio) acc.push(p);
-    return acc;
-  }, []);
-  const frontIds = new Set(front.map((p) => p.id));
-  // Simple label placement: flip left when a neighbour sits just to the right.
-  const labels = points.map((p) => {
-    const px = sx(p.runtime);
-    const py = sy(p.auprcRatio);
-    const crowded = points.some((q) => q !== p && sx(q.runtime) > px - 4 && sx(q.runtime) - px < 8 + q.id.length * 6.5 && Math.abs(sy(q.auprcRatio) - py) < 13);
-    return { p, px, py, flip: crowded && px - left > 90 };
-  });
-  return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }} fontFamily={FONT} role="img" aria-label="AUPRC ratio against runtime">
-      <rect width={W} height={H} fill="#ffffff" />
-      <path d={`M${left} ${top}V${top + ph}H${left + pw}`} fill="none" stroke={INK} />
-      {yTicks.map((v) => (
-        <g key={v}>
-          <line x1={left - 4} x2={left} y1={sy(v)} y2={sy(v)} stroke={INK} />
-          <text x={left - 8} y={sy(v) + 4} fontSize="11" textAnchor="end" fill={INK}>{`${v}×`}</text>
-        </g>
-      ))}
-      {xTicks.map((t) => (
-        <g key={t}>
-          <line x1={sx(t)} x2={sx(t)} y1={top + ph} y2={top + ph + 4} stroke={INK} />
-          <text x={sx(t)} y={top + ph + 17} fontSize="11" textAnchor="middle" fill={INK}>{formatSeconds(t)}</text>
-        </g>
-      ))}
-      <text x={left + pw / 2} y={H - 10} fontSize="12" textAnchor="middle" fill={INK}>Runtime (log scale)</text>
-      <text transform={`translate(22 ${top + ph / 2}) rotate(-90)`} fontSize="12" textAnchor="middle" fill={INK}>AUPRC ratio</text>
-      <line x1={left} x2={left + pw} y1={sy(1)} y2={sy(1)} stroke={FAINT} strokeDasharray="4 3" />
-      <text x={left + 6} y={sy(1) - 5} fontSize="10.5" fill={MUTED}>random</text>
-      {front.length > 1 ? (
-        <path d={front.map((p, i) => `${i ? "L" : "M"}${sx(p.runtime)} ${sy(p.auprcRatio)}`).join("")} fill="none" stroke={CONSENSUS} strokeWidth="1.4" strokeDasharray="2 3" />
-      ) : null}
-      {labels.map(({ p, px, py, flip }) => {
-        const onFront = frontIds.has(p.id);
-        return (
-          <g key={p.id}>
-            <title>{`${p.id}: ${p.auprcRatio.toFixed(2)}× in ${formatSeconds(p.runtime)}`}</title>
-            <circle cx={px} cy={py} r="5" fill={onFront ? CONSENSUS : INK} />
-            <text x={flip ? px - 8 : px + 8} y={py + 4} fontSize="11" textAnchor={flip ? "end" : "start"} fill={onFront ? CONSENSUS : INK} fontWeight={onFront ? 700 : 400}>{p.id}</text>
-          </g>
-        );
-      })}
-      <line x1={left + pw + 14} x2={left + pw + 34} y1={top + 10} y2={top + 10} stroke={CONSENSUS} strokeWidth="1.4" strokeDasharray="2 3" />
-      <text x={left + pw + 40} y={top + 14} fontSize="11" fill={CONSENSUS}>best trade-off</text>
-      <text x={left + pw + 14} y={top + 30} fontSize="10.5" fill={MUTED}>no faster method</text>
-      <text x={left + pw + 14} y={top + 44} fontSize="10.5" fill={MUTED}>is more accurate</text>
-    </svg>
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -461,7 +389,8 @@ export function MotifHeatmap({ rows, svgRef }: { rows: MotifRow[]; svgRef?: Ref<
   const nameW = Math.min(170, 24 + Math.max(...rows.map((row) => row.id.length)) * 7.4);
   const cw = 124;
   const rh = 28;
-  const top = 50;
+  // 68 leaves room for a two-row legend in the stacked bars beside it, so the rows line up.
+  const top = 68;
   const keyX = nameW + 8 + cols.length * cw + 26;
   const W = keyX + 80;
   const H = Math.max(top + rows.length * rh + 12, top + 190);
@@ -471,8 +400,8 @@ export function MotifHeatmap({ rows, svgRef }: { rows: MotifRow[]; svgRef?: Ref<
       <rect width={W} height={H} fill="#ffffff" />
       {cols.map(([title, sub], i) => (
         <g key={title}>
-          <text x={nameW + 8 + i * cw + cw / 2} y={18} fontSize="12" fontWeight="700" textAnchor="middle" fill={INK}>{title}</text>
-          <text x={nameW + 8 + i * cw + cw / 2} y={34} fontSize="10.5" textAnchor="middle" fill={MUTED}>{sub}</text>
+          <text x={nameW + 8 + i * cw + cw / 2} y={36} fontSize="12" fontWeight="700" textAnchor="middle" fill={INK}>{title}</text>
+          <text x={nameW + 8 + i * cw + cw / 2} y={52} fontSize="10.5" textAnchor="middle" fill={MUTED}>{sub}</text>
         </g>
       ))}
       {rows.map((row, r) => {
@@ -527,61 +456,93 @@ export function StackedBars({
   colors,
   svgRef,
   ariaLabel,
+  axis,
+  minTop = 50,
 }: {
   rows: StackRow[];
   categories: string[];
   colors: string[];
   svgRef?: Ref<SVGSVGElement>;
   ariaLabel: string;
+  /**
+   * Draw bars as counts on a shared axis instead of stretching each to full width. The last
+   * category is the remainder (drawn pale), and each row's note is printed where the
+   * other categories end.
+   */
+  axis?: { max: number; label: string };
+  /** Lowest y of the first row; set to line the rows up with a neighbouring figure. */
+  minTop?: number;
 }) {
   const [boxWidth, measure] = useWidth();
+  // The segment under the pointer: it is outlined, its category stays solid in every row, and
+  // its value is shown at once in a label above it.
+  const [hover, setHover] = useState<{ row: number; part: number } | null>(null);
   const nameW = Math.min(170, 24 + Math.max(...rows.map((row) => row.id.length)) * 7.4);
-  const barW = Math.max(300, Math.min(900, (boxWidth || 640) - nameW - 10 - 170));
-  const rh = 26;
-  // Legend items flow left to right and wrap at the bar width.
-  const legend: Array<{ x: number; y: number }> = [];
-  let lx = 0;
-  let ly = 0;
-  categories.forEach((name) => {
-    const w = 16 + name.length * 5.9 + 18;
-    if (lx > 0 && lx + w > barW + 160) {
-      lx = 0;
-      ly += 18;
-    }
-    legend.push({ x: lx, y: ly });
-    lx += w;
-  });
-  const top = 14 + ly + 18 + 8;
-  const W = nameW + 10 + barW + 170;
-  const H = top + rows.length * rh + 10;
+  // Counts on an axis are labelled inside the bar, so the bars can use the full width.
+  const right = axis ? 18 : 170;
+  const barW = Math.max(300, Math.min(1100, (boxWidth || 640) - nameW - 10 - right));
+  const W = nameW + 10 + barW + right;
+  // Row pitch and first-row offset match MotifHeatmap, so the two figures line up side by side.
+  const rh = 28;
+  const pale = (color: string) => color === "#ffffff" || color === "#f1f3f5" || color === "#eff3ff";
+  // Legend: one evenly spaced row when it fits; otherwise aligned columns, never a ragged wrap.
+  const itemW = categories.map((name) => 16 + name.length * 4.9);
+  const legendW = itemW.reduce((sum, w) => sum + w + 14, -14);
+  const oneRow = legendW <= W - 4;
+  // Starts at the bars; slides left only when one row would not fit otherwise.
+  const legendX = oneRow ? Math.max(2, Math.min(nameW + 10, W - 2 - legendW)) : nameW + 10;
+  const colW = Math.max(...itemW) + 24;
+  const perRow = oneRow ? categories.length : Math.max(1, Math.min(categories.length, Math.floor((W - nameW - 10) / colW)));
+  const legend = categories.map((_, index) =>
+    oneRow
+      ? { x: itemW.slice(0, index).reduce((sum, w) => sum + w + 14, 0), y: 0 }
+      : { x: (index % perRow) * colW, y: Math.floor(index / perRow) * 18 },
+  );
+  const ly = oneRow ? 0 : Math.floor((categories.length - 1) / perRow) * 18;
+  const top = Math.max(minTop, 50 + ly);
+  const H = top + rows.length * rh + (axis ? 46 : 12);
+  const axisStep = axis ? ([1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((step) => axis.max / step <= 5) ?? Math.ceil(axis.max / 4)) : 0;
+  const axisTicks = axis ? [...Array.from({ length: Math.floor(axis.max / axisStep) + 1 }, (_, i) => i * axisStep).filter((v) => axis.max - v >= axisStep * 0.45), axis.max] : [];
   return (
     <div ref={measure} className="min-w-0 overflow-x-auto">
     <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width={W} height={H} style={{ display: "block" }} fontFamily={FONT} role="img" aria-label={ariaLabel}>
       <rect width={W} height={H} fill="#ffffff" />
       {categories.map((name, i) => {
-        const x = nameW + 10 + legend[i].x;
-        const y = 8 + legend[i].y;
+        const x = legendX + legend[i].x;
+        const y = top - 42 - ly + legend[i].y;
         return (
-          <g key={name}>
-            <rect x={x} y={y} width="11" height="11" fill={colors[i]} stroke={colors[i] === "#ffffff" ? "#c9ced3" : "none"} />
-            <text x={x + 16} y={y + 10} fontSize="11" fill={INK}>{name}</text>
+          <g key={name} opacity={hover && hover.part !== i ? 0.4 : 1}>
+            <rect x={x} y={y} width="11" height="11" fill={colors[i]} stroke={pale(colors[i]) ? "#c9ced3" : "none"} />
+            <text x={x + 16} y={y + 10} fontSize="11" fontWeight={hover?.part === i ? 700 : 400} fill={INK}>{name}</text>
           </g>
         );
       })}
       {rows.map((row, r) => {
         const y = top + r * rh;
         const total = row.parts.reduce((sum, v) => sum + v, 0);
+        const scale = axis ? axis.max : total;
+        const counted = axis ? total - (row.parts.at(-1) ?? 0) : total;
         let x = nameW + 10;
         return (
           <g key={row.id}>
             <text x={nameW} y={y + rh / 2 + 4} fontSize="12" textAnchor="end" fill={INK}>{row.id}</text>
             {total ? (
               row.parts.map((value, i) => {
-                const w = (value / total) * barW;
+                const w = (value / scale) * barW;
                 const rect = w > 0 ? (
-                  <rect key={i} x={x} y={y + 4} width={w} height={rh - 8} fill={colors[i]}>
-                    <title>{`${row.id} · ${categories[i]}: ${value} (${Math.round((value / total) * 100)}%)`}</title>
-                  </rect>
+                  <rect
+                    key={i}
+                    x={x}
+                    y={y + 5}
+                    width={w}
+                    height={rh - 10}
+                    fill={colors[i]}
+                    stroke={pale(colors[i]) ? "#d9dde1" : "none"}
+                    strokeWidth="0.6"
+                    opacity={hover && hover.part !== i ? 0.3 : 1}
+                    onMouseEnter={() => setHover({ row: r, part: i })}
+                    onMouseLeave={() => setHover(null)}
+                  />
                 ) : null;
                 x += w;
                 return rect;
@@ -589,14 +550,66 @@ export function StackedBars({
             ) : (
               <text x={nameW + 10} y={y + rh / 2 + 4} fontSize="11" fill={FAINT}>none</text>
             )}
-            {row.note ? <text x={nameW + 18 + barW} y={y + rh / 2 + 4} fontSize="11" fill={MUTED}>{row.note}</text> : null}
+            {row.note ? (
+              <text x={axis ? nameW + 10 + (counted / scale) * barW + 5 : nameW + 18 + barW} y={y + rh / 2 + 4} fontSize="11" fill={MUTED} pointerEvents="none">{row.note}</text>
+            ) : null}
           </g>
         );
       })}
+      {(() => {
+        if (!hover) return null;
+        const row = rows[hover.row];
+        const total = row.parts.reduce((sum, v) => sum + v, 0);
+        const scale = axis ? axis.max : total;
+        const value = row.parts[hover.part];
+        const x0 = nameW + 10 + (row.parts.slice(0, hover.part).reduce((sum, v) => sum + v, 0) / scale) * barW;
+        const w = (value / scale) * barW;
+        const y = top + hover.row * rh;
+        // A light card above the segment: method, then the category with its colour, then the number.
+        const name = categories[hover.part];
+        const share = `${value} of ${total} · ${Math.round((value / total) * 100)}%`;
+        const nameX = 12 + row.id.length * 6.6 + 12;
+        const shareX = nameX + 16 + name.length * 6.3 + 14;
+        const boxW = shareX + share.length * 6.5 + 12;
+        const boxH = 26;
+        const cx = x0 + w / 2;
+        const bx = Math.max(2, Math.min(W - boxW - 2, cx - boxW / 2));
+        const by = y - boxH - 1;
+        return (
+          <g data-ui="true" pointerEvents="none">
+            <rect x={x0} y={y + 5} width={w} height={rh - 10} fill="none" stroke={INK} strokeWidth="1.8" />
+            <g style={{ filter: "drop-shadow(0 2px 5px rgba(15, 23, 42, 0.18))" }}>
+              <rect x={bx} y={by} width={boxW} height={boxH} rx="6" fill="#ffffff" stroke="#cfd6dd" />
+              <path d={`M${cx - 5} ${by + boxH - 0.5}L${cx} ${by + boxH + 5}L${cx + 5} ${by + boxH - 0.5}Z`} fill="#ffffff" stroke="#cfd6dd" strokeLinejoin="round" />
+              <rect x={cx - 5.5} y={by + boxH - 2} width="11" height="2" fill="#ffffff" />
+            </g>
+            <text x={bx + 12} y={by + 17} fontSize="12" fill={MUTED}>{row.id}</text>
+            <rect x={bx + nameX} y={by + 7.5} width="11" height="11" fill={colors[hover.part]} stroke={pale(colors[hover.part]) ? "#c9ced3" : "none"} />
+            <text x={bx + nameX + 16} y={by + 17} fontSize="12" fill={INK}>{name}</text>
+            <text x={bx + shareX} y={by + 17} fontSize="12" fontWeight="700" fill={INK}>{share}</text>
+          </g>
+        );
+      })()}
+      {axis ? (
+        <g>
+          <line x1={nameW + 10} x2={nameW + 10 + barW} y1={top + rows.length * rh + 4} y2={top + rows.length * rh + 4} stroke={INK} strokeWidth="0.9" />
+          {axisTicks.map((tick) => {
+            const x = nameW + 10 + (tick / axis.max) * barW;
+            return (
+              <g key={tick}>
+                <line x1={x} x2={x} y1={top + rows.length * rh + 4} y2={top + rows.length * rh + 8} stroke={INK} strokeWidth="0.9" />
+                <text x={x} y={top + rows.length * rh + 20} fontSize="10.5" textAnchor="middle" fill={INK}>{tick}</text>
+              </g>
+            );
+          })}
+          <text x={nameW + 10 + barW / 2} y={top + rows.length * rh + 38} fontSize="11.5" textAnchor="middle" fill={INK}>{axis.label}</text>
+        </g>
+      ) : null}
     </svg>
     </div>
   );
 }
 
-export const PATH_COLORS = ["#1f2a33", "#5b6670", "#8e979f", "#bcc3c9", "#e3e6e9"];
-export const DIRECTION_COLORS = ["#1f2a33", WARN, "#9aa3ab", "#e6c9a8"];
+// ColorBrewer 5-class Blues, dark to light: exact edges darkest, then wrong edges by distance.
+export const PATH_COLORS = ["#08519c", "#3182bd", "#6baed6", "#bdd7e7", "#eff3ff"];
+export const DIRECTION_COLORS = ["#1f2a33", WARN, "#9aa3ab", "#e6c9a8", "#f1f3f5"];
