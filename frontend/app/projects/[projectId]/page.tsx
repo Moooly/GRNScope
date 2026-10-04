@@ -2890,12 +2890,12 @@ useEffect(() => {
                       projectId={projectId ?? ""}
                       selectedAlgorithmIds={activeAlgorithmIds}
                       scopeLabel={availableResultScopes.find(scope => scope.id === selectedResultScopeId)?.label ?? selectedResultScopeId}
-                      filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign stability ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}`}
+                      filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign confidence ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}`}
                       filterChips={<>
                         {evidenceThreshold > 0 && <button onClick={() => setEvidenceThreshold(0)}>Evidence ≥ {evidenceThreshold.toFixed(2)} ×</button>}
                         {confidenceThreshold > 0 && <button onClick={() => setConfidenceThreshold(0)}>Confidence ≥ {Math.round(confidenceThreshold * 100)}% ×</button>}
                         {directionConfidenceThreshold > 0 && <button onClick={() => setDirectionConfidenceThreshold(0)}>Direction ≥ {Math.round(directionConfidenceThreshold * 100)}% ×</button>}
-                        {signConfidenceThreshold > 0 && <button onClick={() => setSignConfidenceThreshold(0)}>Sign stability ≥ {Math.round(signConfidenceThreshold * 100)}% ×</button>}
+                        {signConfidenceThreshold > 0 && <button onClick={() => setSignConfidenceThreshold(0)}>Sign confidence ≥ {Math.round(signConfidenceThreshold * 100)}% ×</button>}
                         {activeAlgorithmIds.length > 1 && consensusThreshold > 1 && <button onClick={() => { setHasTouchedConsensusThreshold(true); setConsensusThreshold(1); }}>Support ≥ {consensusThreshold} ×</button>}
                       </>}
                       networkLayout={networkLayout}

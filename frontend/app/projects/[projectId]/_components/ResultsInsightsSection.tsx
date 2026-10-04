@@ -1378,6 +1378,233 @@ export function buildStabilityRows(
 
 export type StabilityRow = ReturnType<typeof buildStabilityRows>[number];
 
+type MethodOutputSortKey = "rank" | "source" | "target" | "score" | "confidence" | "direction" | "sign" | "signStability";
+const METHOD_OUTPUT_PAGE_SIZE = 20;
+const METHOD_OUTPUT_COLUMNS: Array<[MethodOutputSortKey, string]> = [
+  ["rank", "Rank"],
+  ["source", "Regulator"],
+  ["target", "Target"],
+  ["score", "Evidence"],
+  ["confidence", "Confidence"],
+  ["direction", "Direction confidence"],
+  ["sign", "Sign"],
+  ["signStability", "Sign confidence"],
+];
+
+/** One method's ranked edges with all of its confidence runs combined, in the
+ * format of the earlier Edge Analysis Table: header band, two-line cells,
+ * coloured sign and First / Previous / Next / Last paging. */
+function MethodOutputPanel({
+  algorithmResults,
+  algorithmMetaMap,
+  activeAlgorithmIds,
+  selectedResultScopeId,
+}: {
+  algorithmResults: Record<string, AlgorithmStoredResult>;
+  algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
+  activeAlgorithmIds: string[];
+  selectedResultScopeId: string;
+}) {
+  const [methodId, setMethodId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<MethodOutputSortKey>("rank");
+  const [ascending, setAscending] = useState(true);
+  const [page, setPage] = useState(1);
+
+  const edgesOf = (algorithmId: string) =>
+    selectedResultForScope(algorithmResults[algorithmId], selectedResultScopeId)?.edges ?? [];
+  const available = activeAlgorithmIds.filter((algorithmId) => edgesOf(algorithmId).length > 0);
+  if (!available.length) return null;
+  const current = methodId && available.includes(methodId) ? methodId : available[0];
+  const runsOf = (algorithmId: string) =>
+    edgesOf(algorithmId).reduce((most, edge) => Math.max(most, Number(edge.run_count) || 0), 0);
+
+  const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+  // Direction confidence for one method, as in the consensus: how much the
+  // evidence for regulator → target outweighs the reverse, |f − r| ÷ (f + r).
+  // A method that reports no direction has none. Sign confidence is the share
+  // of signed recovering runs that agree with the displayed sign.
+  const meta = algorithmMetaMap.get(current);
+  const directed = meta?.directed ?? true;
+  const signed = meta?.signed ?? true;
+  const evidenceByPair = new Map(edgesOf(current).map((edge) => [`${edge.source}|${edge.target}`, finite(edge.score) ?? 0]));
+  const rows = edgesOf(current).map((edge, index) => {
+    // A method that reports no sign has none, whatever its raw scores look like.
+    const positive = signed ? finite(edge.positive_selected_runs) ?? 0 : 0;
+    const negative = signed ? finite(edge.negative_selected_runs) ?? 0 : 0;
+    const forward = finite(edge.score) ?? 0;
+    const reverse = evidenceByPair.get(`${edge.target}|${edge.source}`) ?? 0;
+    return {
+      directionConfidence: directed && forward + reverse > 0 ? Math.abs(forward - reverse) / (forward + reverse) : null,
+      rank: finite(edge.rank) ?? index + 1,
+      source: edge.source,
+      target: edge.target,
+      score: finite(edge.score) ?? 0,
+      raw: finite(edge.mean_raw_score) ?? finite(edge.full_data_raw_score),
+      mean: finite(edge.bootstrap_mean_evidence),
+      low: finite(edge.evidence_ci_lower),
+      high: finite(edge.evidence_ci_upper),
+      confidence: finite(edge.confidence),
+      selected: finite(edge.selected_runs),
+      runs: finite(edge.run_count),
+      positive,
+      negative,
+      sign: positive > negative ? 1 : negative > positive ? -1 : 0,
+      signConfidence: signed ? finite(edge.bootstrap_sign_confidence) : null,
+      fullRank: finite(edge.full_data_rank),
+    };
+  });
+  type Row = (typeof rows)[number];
+  const sortValue = (row: Row): number | string =>
+    sortKey === "source" ? row.source
+      : sortKey === "target" ? row.target
+        : sortKey === "score" ? row.score
+            : sortKey === "confidence" ? row.confidence ?? -1
+              : sortKey === "direction" ? row.directionConfidence ?? -1
+                : sortKey === "signStability" ? row.signConfidence ?? -1
+              : sortKey === "sign" ? row.positive - row.negative
+                  : row.rank;
+  const needle = query.trim().toLowerCase();
+  const sorted = rows
+    .filter((row) => !needle || row.source.toLowerCase().includes(needle) || row.target.toLowerCase().includes(needle))
+    .sort((first, second) => {
+      const a = sortValue(first);
+      const b = sortValue(second);
+      const order = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
+      return (ascending ? order : -order) || first.rank - second.rank;
+    });
+  const totalPages = Math.max(1, Math.ceil(sorted.length / METHOD_OUTPUT_PAGE_SIZE));
+  const shownPage = Math.min(page, totalPages);
+  const displayed = sorted.slice((shownPage - 1) * METHOD_OUTPUT_PAGE_SIZE, shownPage * METHOD_OUTPUT_PAGE_SIZE);
+
+  const percent = (value: number | null) => (value === null ? "-" : `${Math.round(value * 100)}%`);
+  const blank = (value: number | null) => (value === null ? "" : value);
+  const handleDownload = () =>
+    downloadCsv(`method-output-${current}.csv`, [
+      ["rank", "regulator", "target", "evidence", "raw_score", "mean_evidence_across_runs", "ci95_low", "ci95_high", "confidence", "runs_recovered", "runs", "direction_confidence", "runs_positive", "runs_negative", "sign_confidence", "full_data_rank"],
+      ...sorted.map((row) => [
+        row.rank, row.source, row.target, row.score, blank(row.raw), blank(row.mean), blank(row.low), blank(row.high),
+        blank(row.confidence), blank(row.selected), blank(row.runs), blank(row.directionConfidence), row.positive, row.negative, blank(row.signConfidence), blank(row.fullRank),
+      ]),
+    ]);
+  const pageButton = "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:opacity-45";
+  const subLine = "mt-1 text-xs tabular-nums text-slate-400";
+
+  return (
+    <Panel
+      title="Method output"
+      description="One method's ranked edges, with all of its confidence runs combined. Evidence is the 0–1 score on all cells; confidence and sign confidence come from the runs; direction confidence compares an edge with its reverse."
+      aside={
+        <button
+          type="button"
+          onClick={handleDownload}
+          aria-label={`Download ${current} output as CSV`}
+          title={`Download ${current} output as CSV`}
+          className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+        >
+          Download
+        </button>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+          Method
+          <select
+            value={current}
+            onChange={(event) => { setMethodId(event.target.value); setPage(1); }}
+            className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"
+          >
+            {available.map((algorithmId) => {
+              const runs = runsOf(algorithmId);
+              return (
+                <option key={algorithmId} value={algorithmId}>
+                  {algorithmId}{runs > 0 ? ` · ${runs} ${runs === 1 ? "run" : "runs"}` : ""}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => { setQuery(event.target.value); setPage(1); }}
+          placeholder="Search genes"
+          aria-label="Search genes in the method output"
+          className="h-10 w-56 max-w-full rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 sm:ml-auto"
+        />
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-slate-600">
+              <tr>
+                {METHOD_OUTPUT_COLUMNS.map(([key, label]) => (
+                  <th key={key} className="whitespace-nowrap px-4 py-3 align-middle font-medium">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPage(1);
+                        if (sortKey === key) setAscending((value) => !value);
+                        else { setSortKey(key); setAscending(true); }
+                      }}
+                      className="group inline-flex items-center gap-2 text-left transition hover:text-[#1b75a6]"
+                    >
+                      <span className="block font-bold text-slate-800 group-hover:text-[#1b75a6]">{label}</span>
+                      {sortKey === key && <span className="text-[#1b75a6]">{ascending ? "↑" : "↓"}</span>}
+                    </button>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {displayed.length > 0 ? (
+                displayed.map((row) => (
+                  <tr key={`${row.source}|${row.target}`} className="align-top">
+                    <td className="px-4 py-3 font-medium tabular-nums text-slate-600">{row.rank}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-bold text-slate-950">{row.source}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-bold text-slate-950">{row.target}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-slate-700">{row.score.toFixed(3)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <div className="font-medium tabular-nums text-slate-700">{percent(row.confidence)}</div>
+                      <div className={subLine}>{row.selected === null || row.runs === null ? "-" : `${row.selected} of ${row.runs} runs`}</div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-slate-700">{percent(row.directionConfidence)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <div className={`font-medium ${row.sign === 1 ? "text-[#0072B2]" : row.sign === -1 ? "text-[#D55E00]" : "text-slate-700"}`}>
+                        {row.sign === 1 ? "positive" : row.sign === -1 ? "negative" : row.positive > 0 ? "mixed" : "unknown"}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-slate-700">{percent(row.signConfidence)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-4 py-8 text-center text-slate-500" colSpan={METHOD_OUTPUT_COLUMNS.length}>
+                    No edges match this search.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <p>
+          Page {shownPage.toLocaleString()} of {totalPages.toLocaleString()} · {sorted.length.toLocaleString()} matching rows
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setPage(1)} disabled={shownPage === 1} className={pageButton}>First</button>
+          <button type="button" onClick={() => setPage(Math.max(1, shownPage - 1))} disabled={shownPage === 1} className={pageButton}>Previous</button>
+          <button type="button" onClick={() => setPage(Math.min(totalPages, shownPage + 1))} disabled={shownPage === totalPages} className={pageButton}>Next</button>
+          <button type="button" onClick={() => setPage(totalPages)} disabled={shownPage === totalPages} className={pageButton}>Last</button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function RepeatRunStabilityPanel({
   algorithmResults,
   activeAlgorithmIds,
@@ -1645,6 +1872,26 @@ function AgreementView({
     () => clusterMethods(eligibleAlgorithmIds, pairSimilarity),
     [eligibleAlgorithmIds, pairSimilarity],
   );
+  // Methods that contribute fewer edges than the others: their agreement is
+  // low partly because of their size, so the figure says so in one sentence.
+  const shortMethodNote = useMemo(() => {
+    const counts = eligibleAlgorithmIds.map((id) => ({ id, n: rankedKeys.get(id)?.length ?? 0 }));
+    const most = Math.max(0, ...counts.map((item) => item.n));
+    const short = counts.filter((item) => item.n < most);
+    // Only worth a sentence when it is the exception, not the rule.
+    if (!short.length || short.length > counts.length / 2) return "";
+    const edges = (n: number) => `${n.toLocaleString()} edge${n === 1 ? "" : "s"}`;
+    const ceiling = (n: number) => (n / most).toFixed(2).replace(/^0\./, ".");
+    if (short.length === 1) {
+      const { id, n } = short[0];
+      return metric === "jaccard"
+        ? `${id} has only ${edges(n)}, so its agreement with other methods cannot exceed ${ceiling(n)}.`
+        : `${id} has only ${edges(n)}, so its low agreement with other methods partly reflects its size.`;
+    }
+    const list = short.map((item) => `${item.id} (${item.n.toLocaleString()})`).join(", ");
+    return `Some methods have fewer than ${edges(most)}, so their low agreement partly reflects their size: ${list}.`;
+  }, [eligibleAlgorithmIds, rankedKeys, metric]);
+
   const orderedAlgorithmIds = useMemo(
     () => agreementTree?.members ?? eligibleAlgorithmIds,
     [agreementTree, eligibleAlgorithmIds],
@@ -1667,6 +1914,60 @@ function AgreementView({
       ),
     [rankedKeys],
   );
+  // The edges of the selected group, beside the UpSet plot or the Venn diagram.
+  const intersectionPanel = (plotTop: number) =>
+    selectedIntersection ? (
+                          <AgreementDetailPanel
+                            eyebrow={selectedIntersectionKey ? "Selected group" : "Selected · largest group"}
+                            plotTop={plotTop}
+                            selectionKey={selectedIntersection.key}
+                            title={
+                              selectedIntersection.members.length === 1
+                                ? `${selectedIntersection.members[0]} only`
+                                : selectedIntersection.members.length === eligibleAlgorithmIds.length
+                                  ? `All ${eligibleAlgorithmIds.length} methods`
+                                  : selectedIntersection.members.length > eligibleAlgorithmIds.length / 2
+                                    ? `All except ${eligibleAlgorithmIds.filter((id) => !selectedIntersection.members.includes(id)).join(", ")}`
+                                    : selectedIntersection.members.join(" · ")
+                            }
+                            subtitle={`Edges picked by exactly ${selectedIntersection.members.length === 1 ? "this method" : `these ${selectedIntersection.members.length} methods`}, top ${topK.toLocaleString()}`}
+                            stats={[
+                              { label: "Edges", value: selectedIntersection.edges.length.toLocaleString() },
+                              { label: "Methods", value: `${selectedIntersection.members.length} of ${eligibleAlgorithmIds.length}` },
+                              {
+                                label: "Of all edges",
+                                value: `${Math.round((selectedIntersection.edges.length / Math.max(1, setIntersections.reduce((sum, item) => sum + item.edges.length, 0))) * 100)}%`,
+                              },
+                            ]}
+                            groups={[
+                              {
+                                key: "edges",
+                                label: "Edges",
+                                rows: selectedIntersection.edges
+                                  .map((edge) => {
+                                    const ranks = selectedIntersection.members.map((id) => rankLookup.get(id)?.get(edge) ?? null);
+                                    const known = ranks.filter((rank): rank is number => rank !== null);
+                                    return { edge, ranks: [known.length ? Math.round(median(known)) : null, known.length ? Math.min(...known) : null] };
+                                  })
+                                  .sort((first, second) => (first.ranks[0] ?? Infinity) - (second.ranks[0] ?? Infinity)),
+                              },
+                            ]}
+                            activeGroup="edges"
+                            onGroupChange={() => undefined}
+                            rankHeaders={["Median", "Best"]}
+                            onReset={selectedIntersectionKey ? () => setSelectedIntersectionKey(null) : undefined}
+                            resetLabel="Back to largest"
+                            onDownload={() =>
+                              downloadCsv(`intersection-${selectedIntersection.members.join("-")}-top-${topK}.csv`, [
+                                ["edge", ...selectedIntersection.members.map((id) => `rank_${id}`)],
+                                ...selectedIntersection.edges.map((edge) => [
+                                  edge,
+                                  ...selectedIntersection.members.map((id) => rankLookup.get(id)?.get(edge) ?? ""),
+                                ]),
+                              ])
+                            }
+                          />
+                        ) : null;
   const handleDownloadOverlap = (format: "svg" | "png") => {
     const svg = overlapSvgRef.current;
     if (!svg) return;
@@ -1978,6 +2279,11 @@ function AgreementView({
               <>
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
               <div className="min-w-0">
+            {shortMethodNote ? (
+              <p className="mb-3 inline-block border-l-[3px] border-[#fd8d3c] bg-[#fff7ef] px-3 py-1.5 text-[12.5px] text-slate-800">
+                {shortMethodNote}
+              </p>
+            ) : null}
             <div className="overflow-x-auto">
               {agreementTree ? (
                 <AgreementHeatmap
@@ -2120,15 +2426,20 @@ function AgreementView({
               >
                 {setIntersections.length ? (
                   eligibleAlgorithmIds.length <= 3 ? (
-                    <div>
-                      <EulerDiagram
-                        svgRef={overlapSvgRef}
-                        methods={eligibleAlgorithmIds}
-                        intersections={setIntersections}
-                      />
-                      <p className="mt-2 text-center text-xs text-slate-500">
-                        Circle and overlap areas are proportional to edge counts; each region shows its count and share of all edges in the diagram.
-                      </p>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+                      <div className="min-w-0">
+                        <EulerDiagram
+                          svgRef={overlapSvgRef}
+                          methods={eligibleAlgorithmIds}
+                          intersections={setIntersections}
+                          selectedKey={selectedIntersection?.key ?? null}
+                          onSelect={setSelectedIntersectionKey}
+                        />
+                        <p className="mt-2 text-center text-xs text-slate-500">
+                          Circle and overlap areas are proportional to edge counts; each region shows its count and share of all edges in the diagram. Selected region in blue. Click any region to see its edges.
+                        </p>
+                      </div>
+                      {intersectionPanel(0)}
                     </div>
                   ) : (
                     <div>
@@ -2182,58 +2493,7 @@ function AgreementView({
                         ) : null}
                       </div>
                         </div>
-                        {selectedIntersection ? (
-                          <AgreementDetailPanel
-                            eyebrow={selectedIntersectionKey ? "Selected group" : "Selected · largest group"}
-                            plotTop={upsetPlotTop(upsetByDegree)}
-                            selectionKey={selectedIntersection.key}
-                            title={
-                              selectedIntersection.members.length === 1
-                                ? `${selectedIntersection.members[0]} only`
-                                : selectedIntersection.members.length === eligibleAlgorithmIds.length
-                                  ? `All ${eligibleAlgorithmIds.length} methods`
-                                  : selectedIntersection.members.length > eligibleAlgorithmIds.length / 2
-                                    ? `All except ${eligibleAlgorithmIds.filter((id) => !selectedIntersection.members.includes(id)).join(", ")}`
-                                    : selectedIntersection.members.join(" · ")
-                            }
-                            subtitle={`Edges picked by exactly these ${selectedIntersection.members.length === 1 ? "method" : `${selectedIntersection.members.length} methods`}, top ${topK.toLocaleString()}`}
-                            stats={[
-                              { label: "Edges", value: selectedIntersection.edges.length.toLocaleString() },
-                              { label: "Methods", value: `${selectedIntersection.members.length} of ${eligibleAlgorithmIds.length}` },
-                              {
-                                label: "Of all edges",
-                                value: `${Math.round((selectedIntersection.edges.length / Math.max(1, setIntersections.reduce((sum, item) => sum + item.edges.length, 0))) * 100)}%`,
-                              },
-                            ]}
-                            groups={[
-                              {
-                                key: "edges",
-                                label: "Edges",
-                                rows: selectedIntersection.edges
-                                  .map((edge) => {
-                                    const ranks = selectedIntersection.members.map((id) => rankLookup.get(id)?.get(edge) ?? null);
-                                    const known = ranks.filter((rank): rank is number => rank !== null);
-                                    return { edge, ranks: [known.length ? Math.round(median(known)) : null, known.length ? Math.min(...known) : null] };
-                                  })
-                                  .sort((first, second) => (first.ranks[0] ?? Infinity) - (second.ranks[0] ?? Infinity)),
-                              },
-                            ]}
-                            activeGroup="edges"
-                            onGroupChange={() => undefined}
-                            rankHeaders={["Median", "Best"]}
-                            onReset={selectedIntersectionKey ? () => setSelectedIntersectionKey(null) : undefined}
-                            resetLabel="Back to largest"
-                            onDownload={() =>
-                              downloadCsv(`intersection-${selectedIntersection.members.join("-")}-top-${topK}.csv`, [
-                                ["edge", ...selectedIntersection.members.map((id) => `rank_${id}`)],
-                                ...selectedIntersection.edges.map((edge) => [
-                                  edge,
-                                  ...selectedIntersection.members.map((id) => rankLookup.get(id)?.get(edge) ?? ""),
-                                ]),
-                              ])
-                            }
-                          />
-                        ) : null}
+                        {intersectionPanel(upsetPlotTop(upsetByDegree))}
                       </div>
                     </div>
                   )
@@ -2355,6 +2615,12 @@ function AgreementView({
           onClose={() => setIsAgreementHelpOpen(false)}
         />
       ) : null}
+      <MethodOutputPanel
+        algorithmResults={algorithmResults}
+        algorithmMetaMap={algorithmMetaMap}
+        activeAlgorithmIds={activeAlgorithmIds}
+        selectedResultScopeId={selectedResultScopeId}
+      />
     </div>
   );
 }

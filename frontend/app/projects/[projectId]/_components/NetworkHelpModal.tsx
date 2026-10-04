@@ -69,7 +69,7 @@ export default function NetworkHelpModal({
           <p className="mt-2">
             Results Settings first selects the result scope and methods,
             then applies minimum evidence, bootstrap confidence,
-            direction confidence, sign stability, and—when comparing
+            direction confidence, sign confidence, and—when comparing
             methods—minimum support. Search genes filters the network to matching relationships.
             Focus explicitly narrows the graph to its direct neighborhood.
           </p>
@@ -298,7 +298,7 @@ export default function NetworkHelpModal({
 
             <details className="group rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <summary className="cursor-pointer list-none font-bold text-slate-800 marker:hidden">
-                Regulatory sign and sign stability
+                Regulatory sign and sign confidence
                 <span className="ml-2 text-xs font-normal text-slate-500">
                   activation or repression agreement
                 </span>
@@ -331,13 +331,13 @@ export default function NetworkHelpModal({
                   for repression, or 0 when the method is unsigned.
                 </p>
                 <p>
-                  Sign stability is calculated among recovered runs with
+                  Sign confidence is calculated among recovered runs with
                   a nonzero sign:
                 </p>
                 <div className="overflow-x-auto rounded-lg bg-white px-3 py-3 text-center text-slate-800">
                   <math
                     display="block"
-                    aria-label="Sign stability equals the number of signed runs agreeing with the displayed sign divided by the total number of positive and negative signed runs"
+                    aria-label="Sign confidence equals the number of signed runs agreeing with the displayed sign divided by the total number of positive and negative signed runs"
                   >
                     <mrow>
                       <msub><mi>S</mi><mtext>stab</mtext></msub>

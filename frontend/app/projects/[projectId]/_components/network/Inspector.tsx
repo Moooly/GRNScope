@@ -56,7 +56,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
  *   coverage 0   no method reported a sign at all. Absence of information.
  *   coverage > 0 methods reported one and did not agree. Conflicting
  *                information, which is a different thing to know, and the
- *                reason the Sign stability threshold exists.
+ *                reason the Sign confidence threshold exists.
  */
 function unresolved(coverage: number, methodCount: number, what: string) {
   if (coverage > 0)

@@ -67,7 +67,7 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
-            <h4 className="text-base font-bold text-slate-950">Sign stability</h4>
+            <h4 className="text-base font-bold text-slate-950">Sign confidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
               Keeps edges only when enough signed bootstrap recoveries agree
               with the activation or repression shown by the full-data result

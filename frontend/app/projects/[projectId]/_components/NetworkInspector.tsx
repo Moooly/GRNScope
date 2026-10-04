@@ -241,7 +241,7 @@ export default function NetworkInspector({
                 )}
                 {edge.bootstrapSignConfidence != null && (
                   <div>
-                    <dt>Sign stability / coverage</dt>
+                    <dt>Sign confidence / coverage</dt>
                     <dd>
                       {percent(edge.bootstrapSignConfidence)} /{" "}
                       {percent(edge.bootstrapSignCoverage)}

@@ -13,7 +13,7 @@ const { galaxyElements } = require(base + "model.ts");
 const nodes = [{ id: "SOX9", isTF: true }, { id: "SRY", isTF: true }, { id: "DKK1", isTF: false }, { id: "FGF9", isTF: false }];
 const edge = (key, source, target, sign, score, direction = 1) => ({ key, source, target, score, confidence: 1, bootstrapVerified: true, count: 5, rank: 1, supportingAlgorithms: ["GENIE3", "PIDC"], direction, directionConfidence: 1, directionCoverage: 1, sign, signConfidence: 1, signCoverage: 1 });
 const edges = [edge("1", "SOX9", "DKK1", 1, 0.93), edge("2", "SRY", "SOX9", 1, 0.85), edge("3", "SOX9", "FGF9", -1, 0.81)];
-const ctx = { projectName: "Demo", projectId: "p1", methods: ["GENIE3", "PIDC"], filters: "Evidence ≥ 0.80; confidence ≥ 0%; direction confidence ≥ 0%; sign stability ≥ 0%; support ≥ 1", scope: "Global", focus: null, effect: "all", palette: "soft", sizeBy: "all", widthBy: "evidence" };
+const ctx = { projectName: "Demo", projectId: "p1", methods: ["GENIE3", "PIDC"], filters: "Evidence ≥ 0.80; confidence ≥ 0%; direction confidence ≥ 0%; sign confidence ≥ 0%; support ≥ 1", scope: "Global", focus: null, effect: "all", palette: "soft", sizeBy: "all", widthBy: "evidence" };
 
 function graph() {
   const els = galaxyElements(nodes, edges, { methodCount: 2 });

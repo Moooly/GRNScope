@@ -12,7 +12,7 @@
  * All three are plain SVG so the PNG/SVG downloads are exactly what is shown.
  */
 
-import { useCallback, useMemo, useRef, useState, type Ref } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type Ref } from "react";
 
 export type AgreementIntersection = { key: string; members: string[]; edges: string[] };
 
@@ -118,16 +118,16 @@ export function AgreementHeatmap({
   const strip = 0;
   const top = heatmapPlotTop(order);
   const left = treeW + nameW + strip + 8;
-  const legendX = left + n * cell + 24;
-  // Methods with fewer edges than the top-K limit get an asterisk and a footnote
-  // inside the figure, so downloads carry the caveat too.
-  const short = order.filter((id) => sizeOf(id) < topK);
-  const footH = short.length ? 22 : 0;
-  const footnote = short.length
-    ? `* Fewer than ${topK} edges available: ${short.map((id) => `${id} (n = ${sizeOf(id)})`).join(", ")}.`
-    : "";
-  const W = Math.max(legendX, treeW + 16 + footnote.length * 5.8);
-  const H = top + n * cell + (showTree ? 50 : 20) + footH;
+  const W = left + n * cell + 24;
+  const H = top + n * cell + (showTree ? 50 : 20);
+  // What a short method does to a cell, for the hover text.
+  const sizeNote = (a: string, b: string) => {
+    const sa = sizeOf(a), sb = sizeOf(b);
+    if (sa === sb) return "";
+    const low = sa <= sb ? a : b, few = Math.min(sa, sb), many = Math.max(sa, sb);
+    const ceiling = metricLabel === "Jaccard" && many > 0 ? `, so this value cannot exceed ${(few / many).toFixed(2)}` : "";
+    return ` ${low} has only ${few} edge${few === 1 ? "" : "s"}${ceiling}.`;
+  };
 
   let minValue = 1;
   for (let i = 0; i < n; i += 1) for (let j = i + 1; j < n; j += 1) minValue = Math.min(minValue, similarity(order[i], order[j]));
@@ -179,17 +179,14 @@ export function AgreementHeatmap({
       )}
       {order.map((id, index) => {
         const y = top + index * cell;
-        const size = sizeOf(id);
         const on = !!selectedPair && selectedPair.includes(id);
         return (
           <g key={id}>
             <text x={treeW + nameW - 4} y={y + cell / 2 + 4} fontSize="12.5" textAnchor="end" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">
               {id}
-              {size < topK && <tspan fill={MUTED}>*</tspan>}
             </text>
             <text transform={`translate(${left + index * cell + cell / 2 + 4} ${top - 10}) rotate(-50)`} fontSize="12" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">
               {id}
-              {size < topK && <tspan fill={MUTED}>*</tspan>}
             </text>
           </g>
         );
@@ -224,7 +221,7 @@ export function AgreementHeatmap({
               onMouseEnter={() => setHovered(`${rowId}|${columnId}`)}
               onClick={() => onSelectPair(selected ? null : [columnId, rowId])}
             >
-              <title>{`${rowId} vs ${columnId}: ${metricLabel} ${v.toFixed(3)}. Click to inspect shared edges.`}</title>
+              <title>{`${rowId} vs ${columnId}: ${metricLabel} ${v.toFixed(3)}.${sizeNote(rowId, columnId)} Click to inspect shared edges.`}</title>
               <rect x={x} y={y} width={cell} height={cell} fill={blues(t)} stroke="#ffffff" strokeWidth="1" />
               {showValues && (
                 <text x={x + cell / 2} y={y + cell / 2 + 3.5} fontSize={cell >= 48 ? 11.5 : cell >= 40 ? 10.5 : 9} textAnchor="middle" fill={t > 0.55 ? "#ffffff" : "#1f2a33"} pointerEvents="none">
@@ -243,11 +240,6 @@ export function AgreementHeatmap({
           );
         }),
       )}
-      {short.length ? (
-        <text x={treeW + 8} y={H - 8} fontSize="10.5" fill={MUTED}>
-          {footnote}
-        </text>
-      ) : null}
     </svg>
   );
 }
@@ -440,18 +432,27 @@ function distanceForOverlap(r1: number, r2: number, target: number) {
 export function EulerDiagram({
   methods,
   intersections,
+  selectedKey,
+  onSelect,
   svgRef,
 }: {
   methods: string[];
   intersections: AgreementIntersection[];
+  /** The selected region (an intersection key) and what a click on a region does. */
+  selectedKey?: string | null;
+  onSelect?: (key: string) => void;
   svgRef?: Ref<SVGSVGElement>;
 }) {
+  const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const m = methods.length;
   const regionCount = new Map<string, number>();
+  const regionKey = new Map<string, string>();
   intersections.forEach((item) => {
     const code = methods.map((id) => (item.members.includes(id) ? "1" : "0")).join("");
     regionCount.set(code, (regionCount.get(code) ?? 0) + item.edges.length);
+    if (!regionKey.has(code)) regionKey.set(code, item.key);
   });
+  const selectedCode = [...regionKey].find(([, key]) => key === selectedKey)?.[0] ?? null;
   const union = [...regionCount.values()].reduce((a, b) => a + b, 0);
   const sizeOf = (i: number) => [...regionCount].filter(([code]) => code[i] === "1").reduce((s, [, v]) => s + v, 0);
   const pairOf = (i: number, j: number) => [...regionCount].filter(([code]) => code[i] === "1" && code[j] === "1").reduce((s, [, v]) => s + v, 0);
@@ -509,9 +510,34 @@ export function EulerDiagram({
       fontFamily={FONT}
       role="img"
       aria-label={`Area-proportional Euler diagram of ${methods.join(", ")}`}
+      onClick={onSelect ? (event) => {
+        // The region under the pointer is the set of circles that contain it.
+        const box = event.currentTarget.getBoundingClientRect();
+        const px = ((event.clientX - box.left) / Math.max(1, box.width)) * W;
+        const py = ((event.clientY - box.top) / Math.max(1, box.height)) * H;
+        const code = P.map(([cx, cy], i) => ((px - cx) ** 2 + (py - cy) ** 2 <= radius[i] ** 2 ? "1" : "0")).join("");
+        const key = regionKey.get(code);
+        if (key && regionCount.get(code)) onSelect(key);
+      } : undefined}
     >
       <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
-      {P.map(([x, y], i) => <circle key={methods[i]} cx={x} cy={y} r={radius[i]} fill="rgba(8,126,173,0.05)" stroke={INK} strokeWidth="1.2" />)}
+      {/* Selected region: inside its own circles, outside the others. Screen only. */}
+      {selectedCode && (
+        <g data-ui="" pointerEvents="none">
+          <defs>
+            {P.map(([x, y], i) => <clipPath key={i} id={`${clipId}-c${i}`}><circle cx={x} cy={y} r={radius[i]} /></clipPath>)}
+            <mask id={`${clipId}-out`}>
+              <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
+              {P.map(([x, y], i) => selectedCode[i] === "0" ? <circle key={i} cx={x} cy={y} r={radius[i]} fill="#000000" /> : null)}
+            </mask>
+          </defs>
+          {P.map((_, i) => i).filter((i) => selectedCode[i] === "1").reduce<React.ReactNode>(
+            (inner, i) => <g clipPath={`url(#${clipId}-c${i})`}>{inner}</g>,
+            <rect x="0" y="0" width={W} height={H} fill={SELECT} fillOpacity="0.22" mask={`url(#${clipId}-out)`} />,
+          )}
+        </g>
+      )}
+      {P.map(([x, y], i) => <circle key={methods[i]} cx={x} cy={y} r={radius[i]} fill="rgba(8,126,173,0.05)" stroke={INK} strokeWidth="1.2" style={onSelect ? { cursor: "pointer" } : undefined} />)}
       {[...regionCount].map(([code, count]) => {
         const c = centroids.get(code);
         if (!c || !count) return null;
@@ -521,8 +547,8 @@ export function EulerDiagram({
         const core = code === allCode && m > 1;
         return (
           <g key={code}>
-            <title>{`${count} edges in ${names.join(" ∩ ")}${names.length === 1 ? " only" : ""}`}</title>
-            <text x={x} y={y} fontSize={core ? 16 : 13.5} fontWeight={core ? 700 : 500} textAnchor="middle" fill={INK} stroke="#ffffff" strokeWidth="3" paintOrder="stroke">{count}</text>
+            <title>{`${count} edges in ${names.join(" ∩ ")}${names.length === 1 ? " only" : ""}${onSelect ? ". Click to see them." : ""}`}</title>
+            <text x={x} y={y} fontSize={core ? 16 : 13.5} fontWeight={core ? 700 : 500} textAnchor="middle" fill={code === selectedCode ? SELECT : INK} data-export-fill={INK} style={onSelect ? { cursor: "pointer" } : undefined} stroke="#ffffff" strokeWidth="3" paintOrder="stroke">{count}</text>
             <text x={x} y={y + 13} fontSize="9.5" textAnchor="middle" fill={MUTED} stroke="#ffffff" strokeWidth="3" paintOrder="stroke">{`${Math.round((count / Math.max(1, union)) * 100)}%`}</text>
           </g>
         );
@@ -794,7 +820,7 @@ export function AgreementDetailPanel({
     // plot's top edge to the bottom of the figure column, so both sides end
     // together; the edge list scrolls inside whatever height remains.
     <div
-      className="relative min-w-0 xl:self-stretch xl:min-h-[calc(var(--plot-top)+440px)]"
+      className="relative min-w-0 xl:self-stretch xl:min-h-[calc(var(--plot-top)+580px)]"
       style={{ ["--plot-top" as string]: `${plotTop}px` }}
     >
     <aside

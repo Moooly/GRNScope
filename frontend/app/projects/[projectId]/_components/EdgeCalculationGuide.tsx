@@ -327,7 +327,7 @@ export default function EdgeCalculationGuide() {
 
         <FormulaCard
           step={5}
-          title="Regulatory sign, sign stability, and sign coverage"
+          title="Regulatory sign, sign confidence, and sign coverage"
           formula={
             <div className="space-y-2">
               <math
@@ -443,7 +443,7 @@ export default function EdgeCalculationGuide() {
             Nₘ⁺ and Nₘ⁻ count positive and negative nonzero raw scores.
           </p>
           <p className="mt-2">
-            For one method, sign stability is the signed selected-run fraction
+            For one method, sign confidence is the signed selected-run fraction
             agreeing with the displayed full-data sign; if the edge was absent
             from the full-data fit, the bootstrap-mean sign is the reference.
             For consensus, positive probability is averaged using signed
