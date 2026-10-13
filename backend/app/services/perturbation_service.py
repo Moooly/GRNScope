@@ -20,11 +20,11 @@ from .beeline_service import (
     CELLORACLE_INPUT_CONTRACT_VERSION,
     ensure_celloracle_expression_source,
     ensure_project_preprocessed_expression,
-    parse_ranked_edges_csv,
     resolve_celloracle_expression_mode,
     resolve_algorithm_image,
     resolve_beeline_root,
 )
+from .ranked_edges import parse_ranked_edges_csv
 from .result_service import read_algorithm_result
 
 

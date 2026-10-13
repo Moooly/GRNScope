@@ -14,9 +14,9 @@ from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
 from ..services.beeline_service import (
     FULL_DATA_RUN_ID,
-    compute_beeline_path_stats,
     compute_repeat_run_spearman_from_paths,
 )
+from ..services.ranked_edges import compute_beeline_path_stats
 from ..services.gene_coordinate_service import get_gene_coordinate
 from ..services.demo_service import (
     get_demo_algorithm_ids,

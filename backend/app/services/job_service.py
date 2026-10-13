@@ -34,7 +34,6 @@ from ..services.beeline_service import (
     PreprocessingRuntimeError,
     collect_expression_matrix_issues,
     count_expression_gene_rows,
-    detect_csv_dialect_from_file,
     ensure_project_preprocessed_expression,
     find_algorithm_runtime_roots,
     parse_bool,
@@ -45,6 +44,7 @@ from ..services.beeline_service import (
     terminate_algorithm_docker_containers,
     write_expression_subset_by_cells,
 )
+from .ranked_edges import detect_csv_dialect_from_file
 from ..services.email_service import (
     normalize_notification_email,
     send_job_completion_email,
