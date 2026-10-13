@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import type { Core } from "cytoscape";
@@ -705,9 +706,9 @@ export default function NetworkVisualizationSection(props: Props) {
         <div
           ref={splitRef}
           className={tableMode
-            ? "grn-stage grn-split"
+            ? `grn-stage grn-split${tableOpen ? " grn-split-open" : ""}`
             : `grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
-          style={tableMode ? { gridTemplateColumns: tableOpen ? `minmax(0, 1fr) 7px min(${tableWidth}px, 40%)` : "minmax(0, 1fr)" } : undefined}
+          style={tableMode ? { "--grn-table-width": `${tableWidth}px` } as CSSProperties : undefined}
         >
           <div className="grn-graph-region">
             {!nodes.length ? (

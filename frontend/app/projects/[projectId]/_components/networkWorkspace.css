@@ -1178,7 +1178,7 @@
 
 @media (max-width: 720px) {
   .grn-project-context .group\/analysis-bar {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
   .grn-toolbar > div:has(> button) {
     flex-grow: 0;
@@ -1409,9 +1409,9 @@
 .figure-key-line .key-control:hover select { background-color: #e8eef5; border-color: #d5dde5; }
 .figure-key-line .key-control select:focus-visible { outline: 2px solid #1b75a6; outline-offset: 1px; }
 
-/* Side-by-side: network | resizable gap | panel. One surface: the panel is a
- * soft inset sheet in the same card, not a boxed spreadsheet beside it. */
-.grn-split { display: grid; background: #fff; }
+/* Keep the network and table in one surface; stack them on narrow screens. */
+.grn-split { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); background: #fff; }
+.grn-split.grn-split-open { grid-template-columns: minmax(0, 1fr) 7px min(var(--grn-table-width), 40%); }
 .grn-split > .grn-graph-region { min-width: 0; }
 .grn-split-handle { width: 7px; cursor: col-resize; background: transparent; position: relative; touch-action: none; }
 .grn-split-handle::after { content: ""; position: absolute; left: 2px; top: 50%; width: 3px; height: 36px; margin-top: -18px; border-radius: 3px; background: #dde2e8; opacity: 0; transition: opacity 150ms; }
@@ -1433,11 +1433,21 @@
 .tp-hide { margin-left: auto; width: 28px; height: 28px; border: 1px solid #e3e7ec; border-radius: 8px; background: #fff; color: #7a8591; font-size: 13px; cursor: pointer; }
 .tp-hide:hover { color: var(--tp-ink); }
 /* Panel hidden: the same button, mirrored, in the corner where the panel's own sat. */
-.grn-split { position: relative; }
 .tp-show { position: absolute; top: 10px; right: 10px; z-index: 6; margin: 0; }
 
 .tp-filter { padding: 0 14px 10px; }
 .figure-filter.is-inline { padding: 0; border: 0; gap: 2px; font-size: inherit; flex-wrap: nowrap; }
+@media (max-width: 720px) {
+  .grn-split.grn-split-open { grid-template-columns: minmax(0, 1fr); }
+  .grn-split-handle { display: none; }
+  .grn-split .tp { width: auto; height: min(560px, 70dvh); margin: 0 12px 12px; }
+  .tp-head { flex-wrap: wrap; }
+  .tp-tabs [role="tab"] { padding-inline: 7px; font-size: 11px; }
+  .figure-key-line { padding-inline: 12px; }
+  .figure-key-line .key-group,
+  .figure-key-line .key-control { padding-inline: 6px; }
+  .figure-filter.is-inline { flex-wrap: wrap; }
+}
 .figure-filter.is-inline .key-control-name { margin-right: 4px; }
 .figure-key-line .key-filter { cursor: default; }
 /* Size each picker to its current choice, not its longest option (where the browser supports it). */

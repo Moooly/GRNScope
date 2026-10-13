@@ -947,7 +947,7 @@ export default function CreateProjectModal({
                 hasExpressionFile ? "bg-slate-50/80" : "bg-slate-50/55"
               }`}
             >
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 w-full flex-auto sm:w-auto sm:flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
                   Advanced settings
                 </p>

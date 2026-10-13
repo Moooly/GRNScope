@@ -60,12 +60,12 @@ export default function AnalysisSetupSection({
         </div>
 
         {onDownloadRunManifests ? (
-          <div className="relative z-10 order-3 ml-auto flex min-w-0 flex-1 items-center justify-end self-stretch lg:order-none">
+          <div className="relative z-10 order-3 flex w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-nowrap sm:justify-end sm:gap-0 sm:border-t-0 sm:px-0 sm:py-0 lg:order-none">
             <div className="contents [&>*]:!order-none [&>*]:!ml-0 [&>*]:!px-0 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
               {status}
             </div>
 
-            <span className="mx-4 h-6 w-px shrink-0 bg-slate-200" aria-hidden="true" />
+            <span className="mx-4 hidden h-6 w-px shrink-0 bg-slate-200 sm:block" aria-hidden="true" />
 
             <button
               type="button"
@@ -80,7 +80,7 @@ export default function AnalysisSetupSection({
                   ? "The analysis package is available after an algorithm run finishes"
                   : "Download analysis package"
               }
-              className="relative z-20 mr-5 inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 sm:mr-6 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+              className="relative z-20 inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 sm:mr-6 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
             >
               <svg viewBox="0 0 18 18" className="h-4 w-4" fill="none" aria-hidden="true">
                 <path

@@ -292,7 +292,7 @@ export default function NetworkDemoPage() {
             marginBottom: 14,
           }}
         >
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {SIZES.map((value) => (
               <button
                 key={value}

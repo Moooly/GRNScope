@@ -165,7 +165,7 @@ export default function AlgorithmsPage() {
         {!loadError ? (
           <>
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <div className="relative min-w-0 flex-1 sm:max-w-sm">
+              <div className="relative min-w-0 w-full flex-1 sm:max-w-sm">
                 <svg
                   viewBox="0 0 20 20"
                   className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -197,17 +197,17 @@ export default function AlgorithmsPage() {
                 ) : null}
               </div>
 
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
                 <FilterMenu
-                pseudotime={pseudotimeFilter}
-                direction={directionFilter}
-                sign={signFilter}
-                onPseudotimeChange={setPseudotimeFilter}
-                onDirectionChange={setDirectionFilter}
-                onSignChange={setSignFilter}
-                activeCount={activeFilterCount}
-                onClearAll={clearFacets}
-              />
+                  pseudotime={pseudotimeFilter}
+                  direction={directionFilter}
+                  sign={signFilter}
+                  onPseudotimeChange={setPseudotimeFilter}
+                  onDirectionChange={setDirectionFilter}
+                  onSignChange={setSignFilter}
+                  activeCount={activeFilterCount}
+                  onClearAll={clearFacets}
+                />
                 <SortDropdown value={sortKey} onChange={setSortKey} />
               </div>
             </div>
@@ -281,7 +281,7 @@ function SortDropdown({
   }, [isOpen]);
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div ref={ref} className="relative ml-auto max-w-full shrink-0">
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
@@ -425,7 +425,7 @@ function FilterMenu({
       {isOpen ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-40 mt-1.5 w-[19rem] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/15"
+          className="absolute left-0 top-full z-40 mt-1.5 w-[19rem] max-w-[calc(100vw-2.5rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/15 sm:left-auto sm:right-0"
         >
           <div className="space-y-4">
             <FacetGroup
