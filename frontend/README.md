@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GRNScope frontend
 
-## Getting Started
+This Next.js 16 application provides the GRNScope project workspace, algorithm directory, and result visualizations. The FastAPI backend serves `/api/*` through the rewrite in `next.config.ts`.
 
-First, run the development server:
+## Run locally
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>. Start the backend on port 8000 as described in the [repository README](../README.md). The default API base is same-origin `/api`; see `app/_lib/apiConfig.ts` and `next.config.ts` for overrides.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run `npm run check` for ESLint, TypeScript, network tests, and a production build. Individual commands are `npm run lint`, `npm run typecheck`, `npm run test:network`, and `npm run build`.
 
-## Learn More
+## Code map
 
-To learn more about Next.js, take a look at the following resources:
+- `app/` contains routes and the current feature UI.
+- `app/_lib/` contains the API base and client identity helper.
+- `app/projects/[projectId]/` contains the results workspace and network views.
+- `scripts/` contains network layout and export checks.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the module and styling conventions used during the refactor. `AGENTS.md` requires reading the installed Next.js documentation before editing Next-specific code.
