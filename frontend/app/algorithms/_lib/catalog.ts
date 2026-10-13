@@ -1,63 +1,14 @@
 import { API_BASE } from "../../_lib/apiConfig";
-
-export type MethodologyCategory =
-  | "Partial information decomposition"
-  | "Random forest"
-  | "Gradient boosting"
-  | "Bayesian ridge regression"
-  | "Partial correlation"
-  | "Pearson correlation"
-  | "Linear ODE"
-  | "Ridge regression"
-  | "Directed information"
-  | "Kernel Granger causality"
-  | "Lagged correlation"
-  | "Linear ODE + velocity"
-  | "Bayesian ARMA"
-  | "Dynamical model + trees"
-  | "Signed graph learning";
-
-export type AlgorithmParameter = {
-  name: string;
-  label?: string;
-  description?: string;
-  default?: unknown;
-  required?: boolean;
-  value_type?: string;
-  options?: unknown[];
-  minimum?: number;
-  maximum?: number;
-  exclusive_minimum?: number;
-  exclusive_maximum?: number;
-  step?: number;
-  advanced?: boolean;
-};
-
-export type BackendAlgorithmEntry = {
-  id: string;
-  name: string;
-  description: string;
-  long_description: string;
-  category: MethodologyCategory;
-  year: string;
-  journal: string;
-  publication_title: string;
-  publication_url: string;
-  source_url: string | null;
-  docker_image: string;
-  runner: string;
-  directed: boolean;
-  signed: boolean;
-  requires_pseudotime: boolean;
-  supports_expression_matrix: boolean;
-  active: boolean;
-  recommended: boolean;
-  estimated_runtime: string;
-  strengths: string[];
-  limitations: string[];
-  recommended_use_cases: string[];
-  parameters: AlgorithmParameter[];
-};
+import type {
+  AlgorithmParameter,
+  BackendAlgorithmEntry,
+  MethodologyCategory,
+} from "../../_lib/apiContracts";
+export type {
+  AlgorithmParameter,
+  BackendAlgorithmEntry,
+  MethodologyCategory,
+} from "../../_lib/apiContracts";
 
 export type AlgorithmEntry = {
   id: string;

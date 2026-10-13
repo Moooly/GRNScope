@@ -1,0 +1,676 @@
+{
+  "algorithm": {
+    "active": true,
+    "category": "Partial information decomposition",
+    "description": "Partial-information-decomposition method for undirected GRN inference.",
+    "directed": false,
+    "docker_image": "grnbeeline/pidc:base",
+    "estimated_runtime": "Slow for large gene sets",
+    "id": "PIDC",
+    "journal": "Cell Systems",
+    "limitations": [
+      "Produces undirected and unsigned edges.",
+      "Can be computationally expensive on larger gene sets."
+    ],
+    "long_description": "PIDC uses multivariate information measures to infer statistical dependency relationships between genes from single-cell expression data.",
+    "name": "PIDC",
+    "parameters": [
+      {
+        "default": 500,
+        "description": "PIDC's own gene cap, applied after the project-wide gene filter. PIDC evaluates every gene triplet, so its runtime rises very quickly with gene count. When more genes remain than this cap, PIDC keeps only the highest-variance ones.",
+        "label": "Gene filter",
+        "maximum": 8000,
+        "minimum": 3,
+        "name": "maxGenes",
+        "required": false,
+        "step": 100,
+        "value_type": "integer"
+      }
+    ],
+    "publication_title": "Gene regulatory network inference from single-cell data using multivariate information measures",
+    "publication_url": "https://doi.org/10.1016/j.cels.2017.08.014",
+    "recommended": true,
+    "recommended_use_cases": [
+      "General-purpose GRN inference.",
+      "Datasets without pseudotime.",
+      "Recommended preset selection."
+    ],
+    "requires_pseudotime": false,
+    "runner": "BLRun/pidcRunner.py",
+    "signed": false,
+    "source_url": null,
+    "strengths": [
+      "Recommended by the BEELINE paper as one of the strongest methods.",
+      "Does not require pseudotime.",
+      "Showed strong accuracy on curated and experimental datasets."
+    ],
+    "supports_expression_matrix": true,
+    "year": "2017"
+  },
+  "project_detail": {
+    "latest_job": {
+      "ensemble_enabled": true,
+      "job_id": "demo",
+      "overall_status": "Completed",
+      "project_id": "demo",
+      "tasks": [
+        {
+          "algorithm_id": "GENIE3",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "GRISLI",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "GRNBOOST2",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "GRNVBEM",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "LEAP",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "PEARSON",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "PIDC",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "PPCOR",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "SCODE",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "SCRIBE",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "SINCERITIES",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        },
+        {
+          "algorithm_id": "SINGE",
+          "completed_at": "demo",
+          "completed_at_timestamp": null,
+          "elapsed_seconds": 0,
+          "error_message": null,
+          "error_type": null,
+          "progress_label": "Completed",
+          "progress_percent": 100,
+          "result_path": null,
+          "started_at": null,
+          "started_at_timestamp": null,
+          "status": "Completed"
+        }
+      ]
+    },
+    "ok": true,
+    "project": {
+      "created_at": "demo",
+      "created_at_display": "Demo",
+      "ensemble_enabled": true,
+      "is_demo": true,
+      "latest_job_id": "demo",
+      "project_description": "This demo uses selected GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary.",
+      "project_id": "demo",
+      "project_name": "Demo Project",
+      "read_only": true,
+      "selected_algorithms": [
+        "GENIE3",
+        "GRISLI",
+        "GRNBOOST2",
+        "GRNVBEM",
+        "LEAP",
+        "PEARSON",
+        "PIDC",
+        "PPCOR",
+        "SCODE",
+        "SCRIBE",
+        "SINCERITIES",
+        "SINGE"
+      ]
+    }
+  },
+  "project_list": {
+    "ok": true,
+    "projects": [
+      {
+        "createdAt": "Demo",
+        "datasetCount": 1,
+        "description": "This demo uses selected GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary.",
+        "id": "demo",
+        "isDemo": true,
+        "jobCount": 1,
+        "latestJob": {
+          "job_id": "demo",
+          "overall_status": "Completed",
+          "project_id": "demo",
+          "tasks": [
+            {
+              "algorithm_id": "GENIE3",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "GRISLI",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "GRNBOOST2",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "GRNVBEM",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "LEAP",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "PEARSON",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "PIDC",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "PPCOR",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "SCODE",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "SCRIBE",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "SINCERITIES",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            },
+            {
+              "algorithm_id": "SINGE",
+              "completed_at": "demo",
+              "completed_at_timestamp": null,
+              "elapsed_seconds": 0,
+              "error_message": null,
+              "error_type": null,
+              "progress_label": "Completed",
+              "progress_percent": 100,
+              "result_path": null,
+              "started_at": null,
+              "started_at_timestamp": null,
+              "status": "Completed"
+            }
+          ]
+        },
+        "name": "Demo Project",
+        "readOnly": true
+      }
+    ]
+  },
+  "project_metadata": {
+    "metadata": {
+      "cell_count": 2000,
+      "cell_names": [],
+      "ensemble_enabled": true,
+      "expression_filename": "ExpressionData.csv",
+      "gene_count": 19,
+      "gene_names": [],
+      "has_ground_truth": true,
+      "has_pseudotime": true,
+      "input_files": [
+        {
+          "description": "Demo expression matrix with genes as rows and cells as columns.",
+          "name": "ExpressionData.csv",
+          "path": "inputs/ExpressionData.csv"
+        },
+        {
+          "description": "Demo pseudotime file used by pseudotime-based algorithms.",
+          "name": "PseudoTime.csv",
+          "path": "inputs/PseudoTime.csv"
+        },
+        {
+          "description": "Illustrative GSD-style reference network used to demonstrate the benchmark views. Not a curated gold standard.",
+          "name": "refNetwork.csv",
+          "path": "inputs/refNetwork.csv"
+        }
+      ],
+      "is_demo": true,
+      "job": {
+        "job_id": "demo",
+        "overall_status": "Completed"
+      },
+      "known_tf_gene_count": 3272,
+      "preprocessing": {
+        "dataset_species": "human",
+        "detection": {
+          "enabled": false,
+          "minimum_cell_percent": 10
+        },
+        "enabled_stages": [],
+        "matrix_state": "log_normalized",
+        "schema_version": 1,
+        "trajectory": {
+          "bonferroni_correction": true,
+          "enabled": false,
+          "gene_ordering_filename": null,
+          "gene_ordering_source": "calculate",
+          "p_value_threshold": 0.01,
+          "retain_significant_tfs": true
+        },
+        "variance": {
+          "enabled": false,
+          "gene_count": 500,
+          "include_known_tfs": true
+        }
+      },
+      "project_description": "This demo uses selected GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary.",
+      "project_id": "demo",
+      "project_name": "Demo Project",
+      "pseudotime_filename": "PseudoTime.csv",
+      "read_only": true,
+      "selected_algorithms": [
+        "GENIE3",
+        "GRISLI",
+        "GRNBOOST2",
+        "GRNVBEM",
+        "LEAP",
+        "PEARSON",
+        "PIDC",
+        "PPCOR",
+        "SCODE",
+        "SCRIBE",
+        "SINCERITIES",
+        "SINGE"
+      ]
+    },
+    "ok": true,
+    "project_id": "demo"
+  },
+  "result_list": {
+    "is_demo": true,
+    "job_id": "demo",
+    "ok": true,
+    "project_id": "demo",
+    "read_only": true,
+    "results": [
+      {
+        "algorithm_id": "GENIE3",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "GENIE3.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "GRISLI",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "GRISLI.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "GRNBOOST2",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "GRNBOOST2.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "GRNVBEM",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "GRNVBEM.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "LEAP",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "LEAP.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "PEARSON",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "PEARSON.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "PIDC",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "PIDC.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "PPCOR",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "PPCOR.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "SCODE",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "SCODE.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "SCRIBE",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "SCRIBE.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "SINCERITIES",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "SINCERITIES.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      },
+      {
+        "algorithm_id": "SINGE",
+        "completed_at": "demo",
+        "completed_at_timestamp": null,
+        "elapsed_seconds": 0,
+        "progress_label": "Completed",
+        "progress_percent": 100,
+        "result_path": "SINGE.json",
+        "started_at": null,
+        "started_at_timestamp": null,
+        "status": "Completed"
+      }
+    ]
+  }
+}

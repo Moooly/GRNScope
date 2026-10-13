@@ -28,8 +28,13 @@ from ..algorithm_registry import (
     validate_selected_algorithm_parameters,
 )
 from ..atomic_io import atomic_write_json
+from ..api_contracts import (
+    ProjectDetailResponse,
+    ProjectListResponse,
+    ProjectMetadataResponse,
+)
 from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
-from ..preprocessing_contract import build_preprocessing_config
+from ..preprocessing_contract import PREPROCESSING_SCHEMA_VERSION, build_preprocessing_config
 from ..matrix_state_detection import detect_matrix_state
 from .client_identity import (
     get_or_create_client_id,
@@ -1141,7 +1146,11 @@ async def update_confidence_recovery_rank(
 
 # --- Job monitoring endpoints ---
 
-@router.get("/api/projects")
+@router.get(
+    "/api/projects",
+    response_model=ProjectListResponse,
+    response_model_exclude_unset=True,
+)
 async def list_projects(request: Request, response: Response):
     owner_id = get_or_create_client_id(request, response)
     try:
@@ -1250,7 +1259,11 @@ async def list_projects(request: Request, response: Response):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get("/api/projects/{project_id}")
+@router.get(
+    "/api/projects/{project_id}",
+    response_model=ProjectDetailResponse,
+    response_model_exclude_unset=True,
+)
 async def get_project(project_id: str, request: Request, response: Response):
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
@@ -1348,7 +1361,11 @@ async def download_project_validation_report(
     )
 
 
-@router.get("/api/projects/{project_id}/metadata")
+@router.get(
+    "/api/projects/{project_id}/metadata",
+    response_model=ProjectMetadataResponse,
+    response_model_exclude_unset=True,
+)
 async def get_project_metadata(project_id: str, request: Request, response: Response):
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):

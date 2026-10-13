@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from ..api_contracts import AlgorithmResultResponse, ProjectResultsResponse
 from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
@@ -618,7 +619,11 @@ def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
     )
 
 
-@router.get("/api/projects/{project_id}/results")
+@router.get(
+    "/api/projects/{project_id}/results",
+    response_model=ProjectResultsResponse,
+    response_model_exclude_unset=True,
+)
 async def get_project_results(project_id: str, request: Request, response: Response):
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
@@ -814,7 +819,11 @@ async def get_gene_selection_audit(
     }
 
 
-@router.get("/api/projects/{project_id}/results/{algorithm_id}")
+@router.get(
+    "/api/projects/{project_id}/results/{algorithm_id}",
+    response_model=AlgorithmResultResponse,
+    response_model_exclude_unset=True,
+)
 async def get_algorithm_result(
     project_id: str,
     algorithm_id: str,

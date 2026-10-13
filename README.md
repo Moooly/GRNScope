@@ -35,4 +35,4 @@ Open <http://localhost:3000>. Set `BEELINE_ROOT` to a BEELINE checkout when runn
 
 ## Checks and contribution rules
 
-Run `npm run check` from `frontend/` and `.venv/bin/python -m pytest -q` from `backend/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions and [docs/refactor-baseline.md](docs/refactor-baseline.md) for the starting state of the full-stack refactor.
+Run `npm run check` from `frontend/` and `.venv/bin/python -m pytest -q` from `backend/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions, [docs/refactor-baseline.md](docs/refactor-baseline.md) for the starting state, and [docs/api-contracts.md](docs/api-contracts.md) for the API route and response inventory.

@@ -9,6 +9,7 @@ import type {
   ProjectManifest,
 } from "../_lib/types";
 import { API_BASE } from "../../../_lib/apiConfig";
+import type { BackendAlgorithmEntry } from "../../../_lib/apiContracts";
 import { apiFetch } from "../../../_lib/clientIdentity";
 import {
   getCachedResults,
@@ -21,39 +22,6 @@ const POLL_INTERVAL_MS = 5000;
 const FIRST_PAINT_EDGE_LIMIT = 800;
 const COMPLETED_RESULTS_ERROR_MESSAGE =
   "We couldn't load the saved algorithm results. Please try again.";
-
-type BackendAlgorithmEntry = {
-  id: string;
-  name: string;
-  description: string;
-  long_description: string;
-  category: string;
-  year: string;
-  journal: string;
-  publication_title: string;
-  publication_url: string;
-  source_url: string | null;
-  docker_image: string;
-  runner: string;
-  directed: boolean;
-  signed: boolean;
-  requires_pseudotime: boolean;
-  supports_expression_matrix: boolean;
-  active: boolean;
-  recommended: boolean;
-  strengths: string[];
-  limitations: string[];
-  recommended_use_cases: string[];
-  parameters: {
-    name: string;
-    label?: string;
-    description?: string;
-    default?: unknown;
-    required?: boolean;
-    value_type?: string;
-    options?: unknown[];
-  }[];
-};
 
 function getDockerVersion(dockerImage: string) {
   const parts = dockerImage.split(":");

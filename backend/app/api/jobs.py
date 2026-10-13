@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 
+from ..api_contracts import ProjectJobsResponse
 from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
@@ -15,7 +16,11 @@ from ..services.worker_queue import enqueue_algorithm_rerun, queue_enabled
 
 router = APIRouter()
 
-@router.get("/api/projects/{project_id}/jobs")
+@router.get(
+    "/api/projects/{project_id}/jobs",
+    response_model=ProjectJobsResponse,
+    response_model_exclude_unset=True,
+)
 async def get_project_jobs(project_id: str, request: Request, response: Response):
     owner_id = get_or_create_client_id(request, response)
     project_dir = PROJECTS_ROOT / project_id
