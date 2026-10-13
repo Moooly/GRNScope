@@ -73,33 +73,9 @@ def get_demo_ranked_edges_path(algorithm_id: str) -> Path:
         "ranked_edges_filename",
         "rankedEdges.csv",
     )
-    candidate_paths = [
-        DEMO_PROJECT_RESULTS_ROOT / normalized_algorithm_id / ranked_edges_filename,
-        DEMO_PROJECT_ROOT
-        / "_beeline_runtime"
-        / normalized_algorithm_id
-        / "rankedEdges_confidence.csv",
-    ]
-
-    result_manifest_path = DEMO_PROJECT_RESULTS_ROOT / f"{normalized_algorithm_id}.json"
-    if result_manifest_path.exists():
-        try:
-            result_manifest = json.loads(result_manifest_path.read_text(encoding="utf-8"))
-            ranked_edges_path_value = result_manifest.get("ranked_edges_path")
-            if ranked_edges_path_value:
-                ranked_edges_path = Path(str(ranked_edges_path_value))
-                if "_beeline_runtime" in ranked_edges_path.parts:
-                    runtime_index = ranked_edges_path.parts.index("_beeline_runtime")
-                    runtime_relative_path = Path(*ranked_edges_path.parts[runtime_index + 1 :])
-                    candidate_paths.append(
-                        DEMO_PROJECT_ROOT / "_beeline_runtime" / runtime_relative_path
-                    )
-        except Exception:
-            pass
-
-    for result_path in candidate_paths:
-        if result_path.exists():
-            return result_path
+    result_path = DEMO_PROJECT_RESULTS_ROOT / normalized_algorithm_id / ranked_edges_filename
+    if result_path.is_file():
+        return result_path
 
     raise FileNotFoundError(
         f"Demo ranked edges file not found for {normalized_algorithm_id}."

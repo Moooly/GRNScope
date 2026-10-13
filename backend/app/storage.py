@@ -11,12 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from .atomic_io import atomic_write_json
+from .config import PROJECTS_ROOT as PROJECTS_DIR
+from .config import TEMP_UPLOAD_ROOT as TEMP_UPLOAD_DIR
 from .validators import MAX_FILE_SIZE_BYTES
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-TEMP_UPLOAD_DIR = BASE_DIR / "temp_uploads"
 TEMP_UPLOAD_ROOT = TEMP_UPLOAD_DIR
-PROJECTS_DIR = BASE_DIR / "projects"
 UPLOAD_COPY_BUFFER_SIZE = 16 * 1024 * 1024
 
 

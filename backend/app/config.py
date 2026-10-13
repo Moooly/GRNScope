@@ -17,7 +17,6 @@ DEMO_PROJECT_RESULTS_ROOT = DEMO_PROJECT_ROOT / "results"
 
 BEELINE_ROOT_CANDIDATES = [
     Path(os.environ.get("BEELINE_ROOT", "")).expanduser() if os.environ.get("BEELINE_ROOT") else None,
-    Path("/Users/molyloo/Documents/TRU/Beeline"),
     PROJECT_ROOT.parent.parent / "Beeline",
     PROJECT_ROOT.parent.parent / "beeline",
     PROJECT_ROOT.parent / "Beeline",

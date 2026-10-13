@@ -19,20 +19,28 @@ The frontend proxies `/api/*` to the backend, so in normal operation only port
 
 ## 9.2 Running locally
 
-Backend:
+From a fresh checkout, create the backend environment and install both sets of dependencies:
 
 ```bash
-cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000
+python3 -m venv backend/.venv
+backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
+npm ci --prefix frontend
 ```
 
-Frontend:
+Start the services in separate terminals:
 
 ```bash
-cd frontend && npm install && npm run dev
+cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 8000
+```
+
+```bash
+cd frontend && npm run dev
 ```
 
 Then open `http://localhost:3000`. The backend on port 8000 serves the API only;
 its root path returns 404, which is expected.
+Open `http://localhost:3000/projects/demo` to load the bundled read-only example.
+The demo does not require Docker or BEELINE; running new inference jobs does.
 
 Python dependencies are `fastapi`, `uvicorn`, `python-multipart`, `pandas`,
 `scanpy>=1.11,<2`, `scipy>=1.11,<2`, `scikit-learn>=1.4,<2`, `pyyaml`, `tqdm`,
@@ -69,14 +77,10 @@ inspect and terminate containers when you stop a task.
 ## 9.4 Locating BEELINE
 
 The BEELINE checkout is found via `resolve_beeline_root()`, which tries, in
-order: the `BEELINE_ROOT` environment variable, a hardcoded developer path, then
-`Beeline`/`beeline` beside or two levels above the backend, then `~/Beeline` and
-`~/beeline`.
-
-> **Set `BEELINE_ROOT` explicitly on any real deployment.** The candidate list in
-> [`app/config.py`](../backend/app/config.py) contains an absolute path from a
-> developer's machine (`/Users/molyloo/Documents/TRU/Beeline`). It is harmless
-> when absent, but relying on path guessing is fragile.
+order: the `BEELINE_ROOT` environment variable, `Beeline`/`beeline` beside or
+two levels above the backend, then `~/Beeline` and `~/beeline`. No developer's
+absolute path is built into the application. Set `BEELINE_ROOT` explicitly for
+deployments and whenever the checkout is elsewhere.
 
 GRNScope copies `BLRunner.py`, `BLRun/`, `Algorithms/` and `utils/` into an
 execution mirror rather than running from the checkout directly, so concurrent
@@ -98,7 +102,7 @@ defaults to the backend's own `sys.executable`.
 | `GRNSCOPE_TOTAL_CPU_CORES` | detected | Overrides the detected core count |
 | `GRNSCOPE_ALGORITHM_CPU_BUDGET` | cores ÷ concurrency | CPU budget per algorithm |
 | `GRNSCOPE_ALGORITHM_MEMORY_MB` | (RAM − 10%) ÷ concurrency | Memory budget per algorithm |
-| `BEELINE_ROOT` | path search | BEELINE checkout location |
+| `BEELINE_ROOT` | relative/home path search | BEELINE checkout location; set explicitly for deployments |
 | `BEELINE_PYTHON` | `sys.executable` | Interpreter for `BLRunner.py` |
 | `GRNSCOPE_SPACE_FREE_LINK_ROOT` | `~/.grnscope/beeline_links` | Whitespace-free mirror root |
 | `GRNSCOPE_SPACE_FREE_RUNTIME_ROOT` | `~/.grnscope/beeline_runtime` | Whitespace-free runtime root |
@@ -195,7 +199,7 @@ backend/
     ├── known_tf_gene_names.txt
     ├── tf_gene_names/       # per-species TF references
     ├── gencode_reference/   # gene coordinates for the Circos layout
-    └── demo_project/
+    └── demo_project/        # compact, read-only bundled fixture
 ```
 
 Sizing depends almost entirely on cell count and bootstrap runs, since every run
@@ -204,6 +208,8 @@ algorithm.
 
 Nothing is cleaned up automatically except staged uploads and the transient
 `_beeline_runtime/` directories. Projects persist until deleted through the API.
+The [data inventory](demo-assets.md) identifies bundled reference files and
+ignored local runtime output.
 
 ## 9.7 Security notes
 
@@ -224,9 +230,11 @@ deployment needs an authenticating reverse proxy in front, and quota enforcement
 
 ## 9.8 Tests
 
-```bash
-cd backend && python -m pytest tests/
-```
+Run `bash scripts/check.sh` from the repository root. It runs frontend lint,
+typecheck, network tests, and production build, then backend pytest. CI runs
+the same sequence and follows it with `bash scripts/smoke-demo.sh` to start both
+services and load the bundled demo. The smoke script requires free local ports
+8000 and 3000.
 
 Around 30 test modules cover preprocessing contracts, confidence settings,
 gene ordering and selection, algorithm parameter validation, execution order,

@@ -33,6 +33,8 @@ npm run dev
 
 Open <http://localhost:3000>. Set `BEELINE_ROOT` to a BEELINE checkout when running inference jobs. The [operations guide](docs/09-operations.md) covers Docker, the optional queue, environment variables, and project storage.
 
+The bundled read-only example is at <http://localhost:3000/projects/demo>. It needs no BEELINE checkout or Docker. Its [tracked inputs and results](docs/demo-assets.md) load on a fresh checkout.
+
 ## Checks and contribution rules
 
-Run `npm run check` from `frontend/` and `.venv/bin/python -m pytest -q` from `backend/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions, [docs/refactor-baseline.md](docs/refactor-baseline.md) for the starting state, and [docs/api-contracts.md](docs/api-contracts.md) for the API route and response inventory.
+Run `bash scripts/check.sh` from the repository root for the same frontend and backend checks used in CI. After the production build, `bash scripts/smoke-demo.sh` starts both services and checks the demo on ports 8000 and 3000. See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions, [docs/refactor-baseline.md](docs/refactor-baseline.md) for the starting state, and [docs/api-contracts.md](docs/api-contracts.md) for the API route and response inventory.

@@ -45,6 +45,9 @@ backend/temp_uploads/
 backend/app/temp_uploads/
 backend/uploads/
 backend/outputs/
+backend/data/demo_project/_beeline_runtime/
+backend/data/uploads/
+backend/data/converted_uploads/
 
 # Node / Next.js
 node_modules/
