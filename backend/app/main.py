@@ -14,6 +14,7 @@ from .api import (
     downloads,
     jobs,
     perturbations,
+    project_reads,
     projects,
     pseudotime,
     results,
@@ -68,6 +69,7 @@ app.include_router(downloads.router)
 app.include_router(jobs.router)
 app.include_router(perturbations.router)
 app.include_router(projects.router)
+app.include_router(project_reads.router)
 app.include_router(pseudotime.router)
 app.include_router(results.router)
 app.include_router(uploads.router)

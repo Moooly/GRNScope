@@ -8,7 +8,7 @@ from unittest.mock import patch
 from fastapi import Response
 from starlette.requests import Request
 
-from app.api import algorithm, projects, results
+from app.api import algorithm, project_reads, results
 from app.algorithm_registry import get_algorithms
 from app.api_contracts import (
     AlgorithmResponse,
@@ -30,10 +30,10 @@ def request() -> Request:
 
 
 async def capture_demo_responses() -> dict:
-    with patch("app.api.projects.list_project_directories", return_value=[]):
-        project_list = await projects.list_projects(request(), Response())
-    project_detail = await projects.get_project("demo", request(), Response())
-    project_metadata = await projects.get_project_metadata("demo", request(), Response())
+    with patch("app.api.project_reads.list_project_directories", return_value=[]):
+        project_list = await project_reads.list_projects(request(), Response())
+    project_detail = await project_reads.get_project("demo", request(), Response())
+    project_metadata = await project_reads.get_project_metadata("demo", request(), Response())
     result_list = await results.get_project_results("demo", request(), Response())
 
     responses = {
@@ -71,6 +71,8 @@ def test_demo_read_response_contracts() -> None:
 
 def test_read_routes_expose_response_schemas() -> None:
     paths = app.openapi()["paths"]
+    assert len(paths) == 42
+    assert sum(len(methods) for methods in paths.values()) == 44
     expected = [
         "/api/algorithms",
         "/api/algorithms/recommended",
@@ -78,11 +80,15 @@ def test_read_routes_expose_response_schemas() -> None:
         "/api/projects",
         "/api/projects/{project_id}",
         "/api/projects/{project_id}/metadata",
+        "/api/projects/{project_id}/validation-report",
         "/api/projects/{project_id}/jobs",
         "/api/projects/{project_id}/results",
         "/api/projects/{project_id}/results/{algorithm_id}",
     ]
     for path in expected:
+        if path.endswith("/validation-report"):
+            assert "get" in paths[path]
+            continue
         schema = paths[path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
         assert schema
         assert "$ref" in schema or "items" in schema
