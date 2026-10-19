@@ -221,17 +221,15 @@ export default function EdgeCalculationGuide() {
               </math>
               <math
                 display="block"
-                aria-label="Consensus confidence of e equals the median of C sub m of e for methods m in the support set S sub e"
+                aria-label="Consensus confidence of e equals the sum of method recovery frequencies divided by all M selected methods"
               >
                 <mrow>
                   <msub><mi>C</mi><mtext>cons</mtext></msub>
                   <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo><mo>=</mo>
-                  <mi mathvariant="normal">median</mi>
-                  <mo stretchy="false">&#123;</mo>
+                  <mfrac><mn>1</mn><mi>M</mi></mfrac>
+                  <munderover><mo>∑</mo><mrow><mi>m</mi><mo>=</mo><mn>1</mn></mrow><mi>M</mi></munderover>
                   <msub><mi>C</mi><mi>m</mi></msub>
                   <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo>
-                  <mo>|</mo><mi>m</mi><mo>∈</mo><msub><mi>S</mi><mi>e</mi></msub>
-                  <mo stretchy="false">&#125;</mo>
                 </mrow>
               </math>
             </div>
@@ -240,9 +238,10 @@ export default function EdgeCalculationGuide() {
           <p>
             <em>M</em> is every selected method. A method without the edge has
             Eₘ(e) = 0, so consensus evidence rewards both strength and breadth.
-            Support is the number of selected methods that report the edge.
-            Consensus confidence is the median finite bootstrap confidence
-            among those supporting methods—not the mean across all methods.
+            Support counts methods that recover the chosen orientation at least
+            once. Consensus confidence is the mean recovery frequency across
+            all selected methods, including zero for methods that never recover
+            the edge. Each method has equal weight regardless of its run count.
           </p>
           <p className="mt-2">
             Rows are sorted by descending Ccons, then Econs. Exact ties receive
@@ -437,15 +436,15 @@ export default function EdgeCalculationGuide() {
           }
         >
           <p>
-            The displayed sign <em>S</em> is the evidence-weighted full-data
+            The displayed sign <em>S</em> is the evidence-weighted bootstrap-mean
             vote: +1 is activation, −1 repression, and 0 unsigned. Unsigned
             methods abstain. Among bootstrap runs where the edge is selected,
             Nₘ⁺ and Nₘ⁻ count positive and negative nonzero raw scores.
           </p>
           <p className="mt-2">
             For one method, sign confidence is the signed selected-run fraction
-            agreeing with the displayed full-data sign; if the edge was absent
-            from the full-data fit, the bootstrap-mean sign is the reference.
+            agreeing with the sign of the mean raw score across runs where the edge
+            was observed. This describes internal ensemble consistency.
             For consensus, positive probability is averaged using signed
             evidence weights wₘ, then converted into agreement with the
             displayed consensus sign. Sign coverage measures how much total

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download controls preview</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 48px; background: #fff; color: #1f2a33; font: 13px/1.45 -apple-system, "Segoe UI", Arial, Helvetica, sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 34px 0 4px; }
+  .sub { color: #5f6b72; margin: 0 0 14px; max-width: 720px; }
+  .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  .col { width: 300px; max-width: 100%; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #8a949e; margin-bottom: 8px; }
+  .tag.pick { color: #1b75a6; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* trigger */
+  .trigger { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; font-weight: 700; color: #334155; }
+  .menu { margin-top: 10px; padding: 6px; background: #fff; border: 1px solid #eceff3; border-radius: 14px; box-shadow: 0 12px 40px rgba(20,30,40,.14), 0 1px 2px rgba(20,30,40,.06); }
+
+  /* A: grouped rows with format chips */
+  .a-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; }
+  .a-row + .a-row { border-top: 1px solid #eef0f3; }
+  .a-name { font-weight: 600; }
+  .chips { display: flex; gap: 6px; }
+  .chip { padding: 5px 10px; border: 1px solid #e3e7ec; border-radius: 8px; background: #fff; font-size: 12px; font-weight: 600; }
+  .chip:hover { border-color: #1b75a6; color: #1b75a6; background: #f2f9fc; }
+
+  /* B: plain list */
+  .b-head { padding: 8px 10px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8a949e; }
+  .b-item { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; text-align: left; }
+  .b-item:hover { background: #f2f9fc; color: #1b75a6; }
+  .b-item span { font-size: 11.5px; color: #8a949e; }
+  .b-sep { height: 1px; margin: 4px 6px; background: #eef0f3; }
+
+  /* figure card */
+  .card { position: relative; padding: 10px 8px 8px; border: 1px solid #eef0f3; border-radius: 11px; background: #fff; }
+  .card svg { display: block; width: 100%; height: auto; font-family: Arial, Helvetica, sans-serif; }
+  .panel { background: #f4f6f8; border-radius: 14px; padding: 10px; }
+  .icon-btn { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #e3e7ec; border-radius: 7px; background: #fff; color: #5f6b72; }
+  .icon-btn:hover { color: #1b75a6; border-color: #1b75a6; }
+  .pop { position: absolute; top: 36px; right: 6px; z-index: 2; padding: 4px; background: #fff; border: 1px solid #eceff3; border-radius: 10px; box-shadow: 0 8px 24px rgba(20,30,40,.14); display: none; }
+  .pop.open { display: block; }
+  .pop button { display: block; width: 100%; padding: 6px 14px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 12.5px; }
+  .pop button:hover { background: #f2f9fc; color: #1b75a6; }
+  .hover-only .icon-btn { opacity: 0; transition: opacity 120ms; }
+  .hover-only:hover .icon-btn, .hover-only .icon-btn:focus { opacity: 1; }
+  .old-actions { display: flex; justify-content: flex-end; gap: 14px; padding: 2px 4px 0; font-size: 12.5px; font-weight: 500; }
+  .said { margin-top: 8px; min-height: 18px; font-size: 12px; color: #1b75a6; }
+</style>
+</head>
+<body>
+<h1>Download controls</h1>
+<p class="sub">Mock-ups only: nothing here downloads a file. Click any option and the line under it says what it would save.</p>
+
+<h2>1 · Network download menu</h2>
+<p class="sub">Both options drop the descriptions (“183 mm wide”, “vector · recommended”, “600 dpi”…) and keep the same seven things the menu can do today.</p>
+<div class="row">
+  <div class="col">
+    <span class="tag">Now</span><br>
+    <button class="trigger">⤓ Download ▾</button>
+    <div class="menu" style="font-size:12px;color:#7a8591">
+      <div class="a-row" style="display:block"><b style="color:#1f2a33;font-size:14px">Figure</b><br>The network as shown, 183 mm wide (two columns)<br><span class="chips" style="margin-top:8px"><span class="chip" style="border-color:#1f2a33"><b style="color:#1f2a33">PDF</b><br>vector · recommended</span><span class="chip"><b style="color:#1f2a33">SVG</b><br>editable text</span><span class="chip"><b style="color:#1f2a33">PNG</b><br>600 dpi</span></span></div>
+      <div class="a-row"><div><b style="color:#1f2a33;font-size:14px">Supplementary table</b><br>Edges, genes and how they were made</div><span class="chips"><span class="chip">XLSX</span><span class="chip">CSV</span></span></div>
+      <div class="a-row"><div><b style="color:#1f2a33;font-size:14px">Figure legend</b><br>Ready-to-paste caption text</div><span class="chip">Copy</span></div>
+      <div class="a-row"><div><b style="color:#1f2a33;font-size:14px">Everything</b><br>Figure (PDF, SVG, PNG) + table + legend</div><span class="chip">ZIP</span></div>
+    </div>
+  </div>
+
+  <div class="col" data-demo>
+    <span class="tag pick">Option A · rows with format buttons</span><br>
+    <button class="trigger">⤓ Download ▾</button>
+    <div class="menu">
+      <div class="a-row"><span class="a-name">Image</span><span class="chips"><button class="chip" data-say="network.png">PNG</button><button class="chip" data-say="network.svg">SVG</button><button class="chip" data-say="network.pdf">PDF</button></span></div>
+      <div class="a-row"><span class="a-name">Data table</span><span class="chips"><button class="chip" data-say="network.xlsx">Excel</button><button class="chip" data-say="network-edges.csv">CSV</button></span></div>
+      <div class="a-row"><span class="a-name">Caption</span><span class="chips"><button class="chip" data-say="caption copied to the clipboard">Copy</button></span></div>
+      <div class="a-row"><span class="a-name">Everything</span><span class="chips"><button class="chip" data-say="network.zip">ZIP</button></span></div>
+    </div>
+    <div class="said"></div>
+  </div>
+
+  <div class="col" data-demo>
+    <span class="tag">Option B · plain list</span><br>
+    <button class="trigger">⤓ Download ▾</button>
+    <div class="menu">
+      <div class="b-head">Image</div>
+      <button class="b-item" data-say="network.png">PNG <span>picture</span></button>
+      <button class="b-item" data-say="network.svg">SVG <span>editable</span></button>
+      <button class="b-item" data-say="network.pdf">PDF <span>for print</span></button>
+      <div class="b-sep"></div>
+      <div class="b-head">Data</div>
+      <button class="b-item" data-say="network.xlsx">Excel table</button>
+      <button class="b-item" data-say="network-edges.csv">CSV table</button>
+      <div class="b-sep"></div>
+      <button class="b-item" data-say="caption copied to the clipboard">Copy caption</button>
+      <button class="b-item" data-say="network.zip">Download everything (ZIP)</button>
+    </div>
+    <div class="said"></div>
+  </div>
+</div>
+
+<h2>2 · Download for the evidence / confidence chart</h2>
+<p class="sub">Three ways to replace the “⤓ PNG ⤓ SVG” text under the chart.</p>
+<div class="row">
+  <div class="col">
+    <span class="tag">Now</span>
+    <div class="panel"><div class="card"><svg class="chart" viewBox="0 0 340 200"></svg><div class="old-actions"><span>⤓ PNG</span><span>⤓ SVG</span></div></div></div>
+  </div>
+  <div class="col" data-demo>
+    <span class="tag pick">Option A · icon in the corner</span>
+    <div class="panel"><div class="card"><svg class="chart" viewBox="0 0 340 200"></svg>
+      <button class="icon-btn" title="Download chart" data-pop><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1.5v7M3.5 6l3 3 3-3M2 11.5h9"/></svg></button>
+      <div class="pop"><button data-say="evidence-confidence.png">PNG</button><button data-say="evidence-confidence.svg">SVG</button></div>
+    </div></div>
+    <div class="said"></div>
+  </div>
+  <div class="col" data-demo>
+    <span class="tag">Option B · icon only on hover</span>
+    <div class="panel"><div class="card hover-only"><svg class="chart" viewBox="0 0 340 200"></svg>
+      <button class="icon-btn" title="Download chart" data-pop><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1.5v7M3.5 6l3 3 3-3M2 11.5h9"/></svg></button>
+      <div class="pop"><button data-say="evidence-confidence.png">PNG</button><button data-say="evidence-confidence.svg">SVG</button></div>
+    </div></div>
+    <div class="said">Move the pointer over the chart to see the icon.</div>
+  </div>
+  <div class="col" data-demo>
+    <span class="tag">Option C · no button on the chart</span>
+    <div class="panel"><div class="card"><svg class="chart" viewBox="0 0 340 200"></svg></div></div>
+    <p class="sub" style="margin:8px 0 6px">The chart moves into the main Download menu as one more row:</p>
+    <div class="menu" style="margin-top:0">
+      <div class="a-row"><span class="a-name">Image</span><span class="chips"><span class="chip">PNG</span><span class="chip">SVG</span><span class="chip">PDF</span></span></div>
+      <div class="a-row"><span class="a-name">Score chart</span><span class="chips"><button class="chip" data-say="evidence-confidence.png">PNG</button><button class="chip" data-say="evidence-confidence.svg">SVG</button></span></div>
+      <div class="a-row" style="color:#8a949e"><span>Data table, caption, everything…</span></div>
+    </div>
+    <div class="said"></div>
+  </div>
+</div>
+
+<script>
+// A small stand-in for the mirrored chart.
+const ev = {12: 5, 13: 11, 14: 11, 15: 2}, cf = {9: 1, 12: 3, 13: 2, 14: 1, 16: 4, 18: 2, 19: 16};
+document.querySelectorAll(".chart").forEach(svg => {
+  const X0 = 30, X1 = 330, MID = 92, H = 70, slot = (X1 - X0) / 20;
+  let s = `<rect x="4" y="4" width="9" height="9" fill="rgb(33,113,181)"/><text x="17" y="12" font-size="10">Evidence</text><rect x="76" y="4" width="9" height="9" fill="rgb(253,141,60)"/><text x="89" y="12" font-size="10">Confidence</text>`;
+  for (const [i, n] of Object.entries(ev)) s += `<rect x="${X0 + i * slot + 1}" y="${MID - n / 16 * H}" width="${slot - 2}" height="${n / 16 * H}" fill="rgb(33,113,181)"/>`;
+  for (const [i, n] of Object.entries(cf)) s += `<rect x="${X0 + i * slot + 1}" y="${MID}" width="${slot - 2}" height="${n / 16 * H}" fill="rgb(253,141,60)"/>`;
+  s += `<path d="M${X0} ${MID - H}V${MID + H + 4}H${X1}M${X0} ${MID}H${X1}" fill="none" stroke="#1a1a1a" stroke-width="0.8"/>`;
+  for (let t = 0; t <= 10; t += 2) s += `<text x="${X0 + t / 10 * (X1 - X0)}" y="${MID + H + 18}" font-size="10" text-anchor="middle">${(t / 10).toFixed(1)}</text>`;
+  svg.innerHTML = s;
+});
+document.querySelectorAll("[data-demo]").forEach(demo => {
+  const said = demo.querySelector(".said"), pop = demo.querySelector(".pop");
+  demo.querySelectorAll("[data-pop]").forEach(b => b.onclick = () => pop.classList.toggle("open"));
+  demo.querySelectorAll("[data-say]").forEach(b => b.onclick = () => { said.textContent = "Would save: " + b.dataset.say; pop && pop.classList.remove("open"); });
+});
+</script>
+</body>
+</html>

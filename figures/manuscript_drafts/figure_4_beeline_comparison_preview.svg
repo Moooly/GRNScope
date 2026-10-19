@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="491.328pt" height="298.319625pt" viewBox="0 0 491.328 298.319625" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-10-14T20:50:31.036007</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 298.319625 
+L 491.328 298.319625 
+L 491.328 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 25.323264 138.877353 
+L 136.924416 138.877353 
+Q 146.462976 138.877353 146.462976 134.028873 
+L 146.462976 89.422857 
+Q 146.462976 84.574377 136.924416 84.574377 
+L 25.323264 84.574377 
+Q 15.784704 84.574377 15.784704 89.422857 
+L 15.784704 134.028873 
+Q 15.784704 138.877353 25.323264 138.877353 
+z
+" clip-path="url(#p46e2527953)" style="fill: #ffffff; stroke: #176f9a; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 189.863424 138.877353 
+L 301.464576 138.877353 
+Q 311.003136 138.877353 311.003136 134.028873 
+L 311.003136 89.422857 
+Q 311.003136 84.574377 301.464576 84.574377 
+L 189.863424 84.574377 
+Q 180.324864 84.574377 180.324864 89.422857 
+L 180.324864 134.028873 
+Q 180.324864 138.877353 189.863424 138.877353 
+z
+" clip-path="url(#p46e2527953)" style="fill: #ffffff; stroke: #176f9a; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 354.403584 138.877353 
+L 466.004736 138.877353 
+Q 475.543296 138.877353 475.543296 134.028873 
+L 475.543296 89.422857 
+Q 475.543296 84.574377 466.004736 84.574377 
+L 354.403584 84.574377 
+Q 344.865024 84.574377 344.865024 89.422857 
+L 344.865024 134.028873 
+Q 344.865024 138.877353 354.403584 138.877353 
+z
+" clip-path="url(#p46e2527953)" style="fill: #ffffff; stroke: #138b84; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 148.940941 111.725865 
+Q 162.917488 111.725865 175.776001 111.725865 
+" clip-path="url(#p46e2527953)" style="fill: none; stroke: #6b7883; stroke-linecap: round"/>
+    <path d="M 172.176001 109.925865 
+L 175.776001 111.725865 
+L 172.176001 113.525865 
+z
+" clip-path="url(#p46e2527953)" style="fill: #6b7883; stroke: #6b7883; stroke-linecap: round"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 313.481101 111.725865 
+Q 327.457648 111.725865 340.316161 111.725865 
+" clip-path="url(#p46e2527953)" style="fill: none; stroke: #6b7883; stroke-linecap: round"/>
+    <path d="M 336.716161 109.925865 
+L 340.316161 111.725865 
+L 336.716161 113.525865 
+z
+" clip-path="url(#p46e2527953)" style="fill: #6b7883; stroke: #6b7883; stroke-linecap: round"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 26.27712 240.210585 
+L 155.04768 240.210585 
+Q 164.58624 240.210585 164.58624 235.362105 
+L 164.58624 174.756105 
+Q 164.58624 169.907625 155.04768 169.907625 
+L 26.27712 169.907625 
+Q 16.73856 169.907625 16.73856 174.756105 
+L 16.73856 235.362105 
+Q 16.73856 240.210585 26.27712 240.210585 
+z
+" clip-path="url(#p46e2527953)" style="fill: #f8fafb; stroke-dasharray: 2.96,1.28; stroke-dashoffset: 0; stroke: #aebcc5; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 181.27872 240.210585 
+L 310.04928 240.210585 
+Q 319.58784 240.210585 319.58784 235.362105 
+L 319.58784 174.756105 
+Q 319.58784 169.907625 310.04928 169.907625 
+L 181.27872 169.907625 
+Q 171.74016 169.907625 171.74016 174.756105 
+L 171.74016 235.362105 
+Q 171.74016 240.210585 181.27872 240.210585 
+z
+" clip-path="url(#p46e2527953)" style="fill: #f8fafb; stroke-dasharray: 2.96,1.28; stroke-dashoffset: 0; stroke: #aebcc5; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 336.28032 240.210585 
+L 465.05088 240.210585 
+Q 474.58944 240.210585 474.58944 235.362105 
+L 474.58944 174.756105 
+Q 474.58944 169.907625 465.05088 169.907625 
+L 336.28032 169.907625 
+Q 326.74176 169.907625 326.74176 174.756105 
+L 326.74176 235.362105 
+Q 326.74176 240.210585 336.28032 240.210585 
+z
+" clip-path="url(#p46e2527953)" style="fill: #f8fafb; stroke-dasharray: 2.96,1.28; stroke-dashoffset: 0; stroke: #aebcc5; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #18344a" x="81.12384" y="106.526895" transform="rotate(-0 81.12384 106.526895)">Matched inputs</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 6.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #6b7883" transform="translate(46.266067 118.270348)">Same expression matrix</text>
+    <text style="font-size: 6.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #6b7883" transform="translate(57.998059 126.075832)">and pseudotime</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #18344a" x="245.664" y="106.526895" transform="rotate(-0 245.664 106.526895)">Matched methods</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 6.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #6b7883" transform="translate(213.510836 118.270348)">Same parameters and</text>
+    <text style="font-size: 6.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #6b7883" transform="translate(226.877984 126.075832)">full-data runs</text>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #18344a" x="410.20416" y="106.526895" transform="rotate(-0 410.20416 106.526895)">Paired outputs</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 6.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #6b7883" transform="translate(368.648847 118.270348)">GRNScope and independent</text>
+    <text style="font-size: 6.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #6b7883" transform="translate(388.888222 126.075832)">Beeline results</text>
+   </g>
+   <g id="text_7">
+    <text style="font-weight: 700; font-size: 7.4px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #18344a" x="90.6624" y="189.301545" transform="rotate(-0 90.6624 189.301545)">Edge-rank concordance</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 6.6px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b7883" x="90.6624" y="213.543945" transform="rotate(-0 90.6624 213.543945)">Paired rank correlation by method</text>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 700; font-size: 6.8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #d67c3c" x="90.6624" y="229.301505" transform="rotate(-0 90.6624 229.301505)">RESULT PENDING</text>
+   </g>
+   <g id="text_10">
+    <text style="font-weight: 700; font-size: 7.4px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #18344a" x="245.664" y="189.301545" transform="rotate(-0 245.664 189.301545)">Top-edge overlap</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 6.6px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b7883" x="245.664" y="213.543945" transform="rotate(-0 245.664 213.543945)">Jaccard at a prespecified top N</text>
+   </g>
+   <g id="text_12">
+    <text style="font-weight: 700; font-size: 6.8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #d67c3c" x="245.664" y="229.301505" transform="rotate(-0 245.664 229.301505)">RESULT PENDING</text>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 700; font-size: 7.4px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #18344a" x="400.6656" y="189.301545" transform="rotate(-0 400.6656 189.301545)">Runtime difference</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 6.6px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b7883" x="400.6656" y="213.543945" transform="rotate(-0 400.6656 213.543945)">Paired elapsed time under matched resources</text>
+   </g>
+   <g id="text_15">
+    <text style="font-weight: 700; font-size: 6.8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #d67c3c" x="400.6656" y="229.301505" transform="rotate(-0 400.6656 229.301505)">RESULT PENDING</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 6.8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: start; fill: #6b7883" x="21.50784" y="271.725705" transform="rotate(-0 21.50784 271.725705)">No comparison values are plotted. This figure is a layout for the validation analysis, not evidence of equivalence.</text>
+   </g>
+  </g>
+  <g id="text_17">
+   <text style="font-weight: 700; font-size: 12px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: start; fill: #18344a" x="7.2" y="15.935625" transform="rotate(-0 7.2 15.935625)">Fig. 4  |  Planned Beeline comparison</text>
+  </g>
+  <g id="text_18">
+   <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: start; fill: #d67c3c" x="7.2" y="33.953625" transform="rotate(-0 7.2 33.953625)">Design preview · independent comparison results have not been generated</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p46e2527953">
+   <rect x="7.2" y="48.695625" width="476.928" height="242.424"/>
+  </clipPath>
+ </defs>
+</svg>

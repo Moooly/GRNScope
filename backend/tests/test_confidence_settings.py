@@ -23,13 +23,13 @@ from app.services.beeline_service import (
 
 
 class ConfidenceSettingsTests(unittest.TestCase):
-    def test_bootstrap_run_ceiling_is_automatically_bounded_to_three_through_fifty(self):
+    def test_bootstrap_run_ceiling_is_automatically_bounded_to_two_through_fifty(self):
         self.assertEqual(
             resolve_confidence_settings(
                 {"confidence_bootstrap_runs": 1},
                 gene_count=100,
             )["bootstrap_runs"],
-            3,
+            2,
         )
         self.assertEqual(
             resolve_confidence_settings(
@@ -69,7 +69,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
 
         self.assertTrue(settings["confidence_enabled"])
         self.assertEqual(settings["bootstrap_runs"], 50)
-        self.assertEqual(settings["min_runs"], 3)
+        self.assertEqual(settings["min_runs"], 2)
         self.assertEqual(settings["subsample_fraction"], 1.0)
         self.assertTrue(settings["early_stopping_enabled"])
         self.assertTrue(settings["sampling_with_replacement"])
@@ -78,6 +78,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
             "cell_bootstrap_with_replacement_v1",
         )
         self.assertEqual(settings["stop_rho"], 0.95)
+        self.assertEqual(settings["stop_streak"], 2)
 
     def test_evidence_threshold_replaces_fixed_top_k_recovery(self):
         self.assertEqual(normalize_confidence_evidence_threshold(80), 0.8)
@@ -117,6 +118,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
             )
 
         self.assertEqual(settings["stop_rho"], 0.95)
+        self.assertEqual(settings["stop_streak"], 2)
 
     def test_legacy_activation_flags_cannot_disable_confidence_runs(self):
         with patch.dict(
@@ -131,7 +133,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
 
         self.assertTrue(settings["confidence_enabled"])
         self.assertEqual(settings["bootstrap_runs"], 50)
-        self.assertEqual(settings["min_runs"], 3)
+        self.assertEqual(settings["min_runs"], 2)
 
     def test_remaining_time_range_uses_stability_streak_and_maximum_runs(self):
         metadata = {
@@ -202,7 +204,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
         self.assertAlmostEqual(summary["median_rho"], 1.0)
         self.assertAlmostEqual(summary["mad_rho"], 0.0)
 
-    def test_spearman_stability_stops_at_point_nine_five(self):
+    def test_spearman_stability_passes_above_point_nine_five(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             check = spearman_stability_check(
                 runtime_root=Path(temp_dir),
@@ -224,7 +226,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
         self.assertTrue(check["stop_early"])
         self.assertEqual(check["status"], "stable")
 
-    def test_planner_adds_full_data_fit_and_n_out_of_n_bootstrap_draws(self):
+    def test_planner_schedules_only_n_out_of_n_bootstrap_draws(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             expression = Path(temp_dir) / "ExpressionData.csv"
             expression.write_text(
@@ -248,12 +250,13 @@ class ConfidenceSettingsTests(unittest.TestCase):
 
         self.assertEqual(
             run_ids,
-            [FULL_DATA_RUN_ID, "bootstrap-1", "bootstrap-2", "bootstrap-3"],
+            ["bootstrap-1", "bootstrap-2", "bootstrap-3"],
         )
-        self.assertEqual(run_columns[FULL_DATA_RUN_ID], [1, 2, 3, 4])
+        self.assertNotIn(FULL_DATA_RUN_ID, run_columns)
+        self.assertNotIn(FULL_DATA_RUN_ID, metadata)
         self.assertEqual(settings["bootstrap_runs"], 3)
-        self.assertEqual(settings["total_algorithm_runs"], 4)
-        for run_id in run_ids[1:]:
+        self.assertEqual(settings["total_algorithm_runs"], 3)
+        for run_id in run_ids:
             self.assertEqual(len(run_columns[run_id]), 4)
             self.assertTrue(metadata[run_id]["sampling_with_replacement"])
             self.assertEqual(
@@ -263,7 +266,7 @@ class ConfidenceSettingsTests(unittest.TestCase):
         self.assertTrue(
             any(
                 len(set(run_columns[run_id])) < len(run_columns[run_id])
-                for run_id in run_ids[1:]
+                for run_id in run_ids
             )
         )
 

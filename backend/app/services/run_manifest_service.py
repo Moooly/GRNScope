@@ -779,7 +779,7 @@ def generate_run_manifest(
             ),
             "random_seeds": random_seeds,
             "random_seed_notes": (
-                "A null seed identifies a full-data run without bootstrap sampling."
+                "Bootstrap draws use the recorded seeds. Archived unresampled runs may have a null seed; new analyses use bootstrap runs only."
             ),
         },
         "pseudotime": _collect_pseudotime(project_dir, project, metadata, inputs),

@@ -9,11 +9,11 @@ The production implementation lives in:
     backend/app/services/beeline_service.py
 
 Current idea:
-    1. Fit the algorithm once on all cells for the displayed edge evidence.
-    2. Draw N cells with replacement from the N-cell matrix.
-    3. Repeat the algorithm on 100 bootstrap matrices by default.
+    1. Draw N cells with replacement from the N-cell matrix.
+    2. Fit the algorithm on each bootstrap matrix, with no full-data fit.
+    3. Use 2–50 bootstrap matrices with adaptive stopping in production.
     4. For each replicate, rank regulators separately for each target gene.
-    5. Count how often each edge appears in the top K ranks.
+    5. Count how often each edge reaches per-target evidence 0.8.
     6. Use the bootstrap percentile distribution for the evidence interval.
 
 Main formulas:
@@ -33,8 +33,8 @@ from dataclasses import dataclass, field
 from math import fsum
 
 
-DEFAULT_TOTAL_RUNS = 100
-DEFAULT_STABILITY_TOP_K = 10
+DEFAULT_TOTAL_RUNS = 50
+DEFAULT_EVIDENCE_THRESHOLD = 0.8
 
 
 @dataclass(frozen=True)
@@ -153,7 +153,7 @@ def rank_edges_by_target(edges: list[EdgePrediction]) -> dict[str, list[EdgePred
 def aggregate_repeated_run_metrics(
     run_edges_by_id: dict[str, list[EdgePrediction]],
     *,
-    stability_top_k: int = DEFAULT_STABILITY_TOP_K,
+    evidence_threshold: float = DEFAULT_EVIDENCE_THRESHOLD,
 ) -> list[AggregatedEdgeMetrics]:
     """
     Aggregate repeated algorithm outputs into Evidence, Stability, and Confidence.
@@ -164,9 +164,8 @@ def aggregate_repeated_run_metrics(
         Mapping from run ID, such as "run-1", to the ranked edge outputs from
         that run.
 
-    stability_top_k:
-        An edge is counted as "selected" in a run if it ranks in the top K
-        regulators for its target gene. Production default is top 10.
+    evidence_threshold:
+        An edge is selected when its per-target evidence reaches this threshold.
 
     Returns
     -------
@@ -187,7 +186,9 @@ def aggregate_repeated_run_metrics(
             denominator = max(len(ranked_edges) - 1, 1)
 
             for index, edge in enumerate(ranked_edges):
-                rank = index + 1
+                tied_positions = [i + 1 for i, candidate in enumerate(ranked_edges)
+                                  if abs(candidate.score) == abs(edge.score)]
+                rank = fsum(tied_positions) / len(tied_positions)
 
                 # Convert rank into a 0-1 per-run evidence score.
                 # Rank 1 gets 1.0. The weakest edge for this target gets 0.0.
@@ -215,7 +216,7 @@ def aggregate_repeated_run_metrics(
                     rank if current.best_rank is None else min(current.best_rank, rank)
                 )
 
-                if rank <= stability_top_k:
+                if percentile >= evidence_threshold:
                     current.selected_runs += 1
 
     aggregated_edges: list[AggregatedEdgeMetrics] = []
@@ -287,7 +288,7 @@ def calculate_metrics_from_known_ranks(
     ranks: list[int | None],
     *,
     regulators_per_target: int,
-    stability_top_k: int = DEFAULT_STABILITY_TOP_K,
+    evidence_threshold: float = DEFAULT_EVIDENCE_THRESHOLD,
 ) -> dict[str, float | int]:
     """
     Small teaching helper for explaining one edge with known ranks.
@@ -313,7 +314,7 @@ def calculate_metrics_from_known_ranks(
         percentile = 1.0 if regulators_per_target <= 1 else 1 - ((rank - 1) / denominator)
         percentiles.append(percentile)
 
-        if rank <= stability_top_k:
+        if percentile >= evidence_threshold:
             selected_runs += 1
 
     evidence = fsum(percentiles) / total_runs
@@ -331,7 +332,7 @@ def calculate_metrics_from_known_ranks(
 
 
 if __name__ == "__main__":
-    # Compact teaching example; production defaults to 100 bootstrap replicates.
+    # Compact teaching example; production uses 2–50 bootstrap replicates.
     # The edge is missing in a few runs, and in observed runs its rank changes.
     example_ranks = [
         2,
@@ -369,7 +370,7 @@ if __name__ == "__main__":
     metrics = calculate_metrics_from_known_ranks(
         example_ranks,
         regulators_per_target=100,
-        stability_top_k=10,
+        evidence_threshold=0.8,
     )
 
     print(f"Example edge metrics from {len(example_ranks)} bootstrap replicates")

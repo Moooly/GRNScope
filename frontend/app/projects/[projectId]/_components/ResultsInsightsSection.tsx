@@ -145,7 +145,7 @@ function RepeatRunStabilityHelpModal({
   uniformRule,
   onClose,
 }: {
-  uniformRule: { stopRho: number; stopStreak: number } | null;
+  uniformRule: { stopRho: number; stopStreak: number; minRuns: number; stopComparison: string } | null;
   onClose: () => void;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -296,29 +296,28 @@ function RepeatRunStabilityHelpModal({
               <li className="rounded-lg border border-slate-200 bg-white p-3">
                 <span className="block font-bold text-slate-800">Run 2 check</span>
                 Compare the Run 1–2 aggregate with the Run 1 aggregate. If ρ =
-                0.96, the passing streak becomes 1.
+                0.96, this is the first passing comparison; sampling continues.
               </li>
               <li className="rounded-lg border border-slate-200 bg-white p-3">
                 <span className="block font-bold text-slate-800">Run 3 check</span>
-                Compare the Run 1–3 aggregate with the Run 1–2 aggregate. If ρ
-                = 0.97, the streak becomes 2.
+                Compare the Run 1–3 aggregate with the Run 1–2 aggregate.
+                If ρ = 0.97, this is the second consecutive pass and sampling stops.
               </li>
             </ol>
             <p className="mt-3 text-xs leading-5 text-slate-500">
-              With a minimum of 3 runs and a rule of ρ ≥ 0.95 for 2 consecutive
-              checks, the analysis may now stop. If the Run 3 check were 0.94,
-              the streak would reset to 0; two new passing checks would then be
-              required.
+              New automatic analyses start checking after Run 2 and can stop
+              after Run 3 when two consecutive comparisons have ρ &gt; 0.95.
+              A failed check resets the passing streak. Sampling continues
+              up to 50 runs. Archived analyses retain their recorded rules.
             </p>
           </section>
 
           <section className="mt-5 rounded-xl border border-[#cfe5ee] bg-[#f2f9fc] p-4">
             <h4 className="font-extrabold text-slate-900">Confidence-run strategy</h4>
             <p className="mt-2">
-              We fit the algorithm once on the full dataset, then run between
-              3 and 50 bootstrap replicates. Each replicate draws the same
+              We construct the network from 2 to 50 bootstrap replicates. Each replicate draws the same
               number of cells as the original dataset, with replacement, and
-              reruns the algorithm. Edge confidence is its recovery frequency
+              reruns the algorithm. Evidence is the mean per-target rank evidence across runs, with missing edges scored zero. Edge confidence is its recovery frequency
               when its normalized per-target evidence reaches the configured
               threshold τ across these replicates. Automatic runs may stop
               early; fixed runs always use the selected count.
@@ -326,8 +325,9 @@ function RepeatRunStabilityHelpModal({
             <p className="mt-2">
               {uniformRule ? (
                 <>
-                  After at least 3 bootstrap runs, we stop when the aggregate
-                  edge-confidence ranking reaches ρ ≥{" "}
+                  These saved results require at least {uniformRule.minRuns} bootstrap runs.
+                  Stopping requires the correlation between successive
+                  aggregate edge-confidence rankings to satisfy ρ {uniformRule.stopComparison}{" "}
                   <strong className="tabular-nums text-slate-800">
                     {uniformRule.stopRho.toFixed(2)}
                   </strong>{" "}
@@ -335,14 +335,16 @@ function RepeatRunStabilityHelpModal({
                   <strong className="tabular-nums text-slate-800">
                     {uniformRule.stopStreak}
                   </strong>{" "}
-                  consecutive checks. Otherwise, the run continues to its cap.
+                  qualifying {uniformRule.stopStreak === 1 ? "check" : "consecutive checks"}.
+                  Otherwise, the run continues to its cap.
                 </>
               ) : (
                 <>
-                  After at least 3 bootstrap runs, consecutive aggregate
-                  edge-confidence rankings are compared for stability. Stored
-                  results in this table use their own recorded thresholds and
-                  streak requirements; otherwise, the run continues to its cap.
+                  New analyses compare cumulative edge-confidence rankings
+                  from Run 2 onward and stop after two consecutive comparisons
+                  with ρ &gt; 0.95, no earlier than Run 3. Stored
+                  results in this table retain their recorded minimum run counts,
+                  thresholds and required checks.
                 </>
               )}
             </p>
@@ -1307,6 +1309,9 @@ export function buildStabilityRows(
       numericValue(earlyStopping?.stop_streak) ??
       numericValue(summary?.stop_streak) ??
       2;
+    const stopComparison = (earlyStopping?.stop_comparison ?? summary?.stop_comparison) === "gt" ? ">" : "≥";
+    const minRuns =
+      numericValue(earlyStopping?.min_runs) ?? numericValue(summary?.min_runs) ?? 2;
     const earlyStoppingEnabled =
       earlyStopping?.enabled === true ||
       summary?.early_stopping_enabled === true;
@@ -1327,6 +1332,8 @@ export function buildStabilityRows(
       madRho,
       stopRho,
       stopStreak,
+      stopComparison,
+      minRuns,
       stoppedEarly: earlyStopping?.stopped_early === true,
       isGenuineBootstrap,
       earlyStoppingEnabled,
@@ -1445,7 +1452,7 @@ function MethodOutputPanel({
   const blank = (value: number | null) => (value === null ? "" : value);
   const handleDownload = () =>
     downloadCsv(`method-output-${current}.csv`, [
-      ["rank", "regulator", "target", "evidence", "raw_score", "mean_evidence_across_runs", "ci95_low", "ci95_high", "confidence", "runs_recovered", "runs", "direction_confidence", "runs_positive", "runs_negative", "sign_confidence", "full_data_rank"],
+      ["rank", "regulator", "target", "evidence", "raw_score", "mean_evidence_across_runs", "ci95_low", "ci95_high", "confidence", "runs_recovered", "runs", "direction_confidence", "runs_positive", "runs_negative", "sign_confidence", "legacy_full_data_rank"],
       ...sorted.map((row) => [
         row.rank, row.source, row.target, row.score, blank(row.raw), blank(row.mean), blank(row.low), blank(row.high),
         blank(row.confidence), blank(row.selected), blank(row.runs), blank(row.directionConfidence), row.positive, row.negative, blank(row.signConfidence), blank(row.fullRank),
@@ -1457,7 +1464,7 @@ function MethodOutputPanel({
   return (
     <Panel
       title="Method output"
-      description="One method's ranked edges, with all of its confidence runs combined. Evidence is the 0–1 score on all cells; confidence and sign confidence come from the runs; direction confidence compares an edge with its reverse."
+      description="One method's ranked edges, with all of its confidence runs combined. Evidence is the mean 0–1 rank score across bootstrap runs; confidence and sign confidence summarize recovery and sign consistency; direction confidence compares an edge with its reverse."
       aside={
         <button
           type="button"
@@ -1589,9 +1596,9 @@ function RepeatRunStabilityPanel({
     rows.length > 0 &&
     rows.every(
       (r) =>
-        r.stopRho === rows[0].stopRho && r.stopStreak === rows[0].stopStreak,
+        r.stopRho === rows[0].stopRho && r.stopStreak === rows[0].stopStreak && r.minRuns === rows[0].minRuns && r.stopComparison === rows[0].stopComparison,
     )
-      ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak }
+      ? { stopRho: rows[0].stopRho, stopStreak: rows[0].stopStreak, minRuns: rows[0].minRuns, stopComparison: rows[0].stopComparison }
       : null;
   const stabilityDescription =
     "Each point is the rank correlation between two bootstrap runs over the whole edge ranking." +

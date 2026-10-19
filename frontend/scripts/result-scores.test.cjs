@@ -18,12 +18,26 @@ require.extensions[".ts"] = (module, filename) =>
 
 const {
   assignAverageRanks,
+  consensusConfidence,
   edgesForScope,
   median,
   numericConfidenceScore,
   numericEvidenceScore,
   numericOptionalProbability,
+  numericSignedEdgeScore,
 } = require("../app/projects/[projectId]/_lib/resultScores.ts");
+
+test("consensus confidence includes every selected method, including zero recovery", () => {
+  const ids = ["A", "B", "C", "D", "E"];
+  const scores = { A: 0.9, B: 0.8, C: 0.7, D: 0, E: 0 };
+  assert.ok(Math.abs(consensusConfidence(ids, scores) - 0.48) < 1e-12);
+  assert.ok(Math.abs(consensusConfidence(ids, { A: 0.95 }) - 0.19) < 1e-12);
+  assert.ok(Math.abs(consensusConfidence(["A", "B", "C"], scores) - 0.8) < 1e-12);
+  assert.equal(consensusConfidence(ids, { A: NaN, B: Infinity }), 0);
+  assert.equal(consensusConfidence(ids, {}), 0);
+  assert.equal(consensusConfidence([], scores), 0);
+  assert.equal(consensusConfidence(ids, Object.fromEntries(ids.map(id => [id, 1]))), 1);
+});
 
 test("result scopes select completed scope edges and preserve the global fallback", () => {
   const globalEdge = { source: "A", target: "B" };
@@ -59,4 +73,18 @@ test("median and average ranks keep ties stable", () => {
   const ranked = assignAverageRanks(rows, (first, second) => first.value === second.value);
   assert.deepEqual(ranked.map((row) => row.rank), [1.5, 1.5, 3]);
   assert.deepEqual(rows.map((row) => row.rank), [0, 0, 0]);
+});
+
+test("bootstrap network estimates override stale full-data fields", () => {
+  const edge = {
+    network_estimator: "bootstrap_mean_v1",
+    bootstrap_mean_evidence: 0.4,
+    bootstrap_mean_raw_score: -2,
+    normalized_score: 1,
+    score: 0.9,
+    mean_raw_score: 8,
+    full_data_raw_score: 8,
+  };
+  assert.equal(numericEvidenceScore(edge, 0), 0.4);
+  assert.equal(numericSignedEdgeScore(edge), -2);
 });

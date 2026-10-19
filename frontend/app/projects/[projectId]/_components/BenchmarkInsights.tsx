@@ -666,7 +666,7 @@ function AdditionalBenchmarkHelpModal({
                 <h4 className="font-extrabold text-slate-900">Network used for counting</h4>
                 <p className="mt-2">
                   For each method, GRNScope removes self-interactions, ranks directed
-                  predictions by descending absolute full-data weight, and keeps exactly
+                  predictions by descending absolute aggregate weight, and keeps exactly
                   the top <strong>{referenceEdgeCount}</strong> edges—the size of the
                   usable reference network. Motifs are counted in that fixed-size
                   predicted network and in the reference.
@@ -860,10 +860,12 @@ function beelineMotifNetwork(
   edges: AlgorithmResultEdge[],
   referenceEdgeCount: number,
 ) {
-  // Confidence-enabled results combine bootstrap evidence with the unmodified
-  // full-data run. BEELINE's motif evaluator receives that full-data ranked
-  // network, so reconstruct it before applying BEELINE's absolute-score top-k.
-  const hasFullDataMarkers = edges.some(
+  // Preserve historical full-data evaluation for archived results. New
+  // bootstrap-only networks use all observed edges and mean raw scores.
+  const bootstrapOnly = edges.some(
+    (edge) => edge.network_estimator === "bootstrap_mean_v1",
+  );
+  const hasFullDataMarkers = !bootstrapOnly && edges.some(
     (edge) => edge.full_data_present !== undefined,
   );
   return edges
@@ -882,7 +884,7 @@ function beelineMotifNetwork(
       target: String(edge.target).trim(),
       weight: Math.abs(
         Number(
-          edge.full_data_raw_score ??
+          (bootstrapOnly ? edge.bootstrap_mean_raw_score : edge.full_data_raw_score) ??
             edge.mean_raw_score ??
             edge.weight ??
             edge.edge_weight ??

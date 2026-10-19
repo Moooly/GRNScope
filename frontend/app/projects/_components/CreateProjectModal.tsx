@@ -1209,10 +1209,10 @@ export default function CreateProjectModal({
                             {confidenceRunMode === "automatic" ? (
                               <div>
                                 <p className="text-xs leading-5 text-slate-500">
-                                  Starts with 3 runs and compares consecutive aggregate rankings using Spearman correlation (ρ).
+                                  Starts with 2 runs and compares consecutive aggregate rankings using Spearman correlation (ρ).
                                 </p>
                                 <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                                  Stops at ρ ≥ 0.95 for 2 consecutive checks; otherwise continues up to 50 runs.
+                                  Stops after two consecutive comparisons have ρ &gt; 0.95 (earliest after 3 runs); otherwise continues up to 50 runs.
                                 </p>
                               </div>
                             ) : (
@@ -1238,7 +1238,7 @@ export default function CreateProjectModal({
                                     if (!/^\d+$/.test(nextValue)) return;
                                     // Keep intermediate values such as "1" so
                                     // users can type "10" before blur enforces
-                                    // the allowed 3–50 range.
+                                    // the allowed 2–50 range.
                                     setConfidenceBootstrapRuns(nextValue);
                                   }}
                                   onBlur={() => {

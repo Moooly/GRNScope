@@ -9,7 +9,7 @@ export const METRICS: Record<
     label: "Confidence",
     scale: "0–100%",
     description:
-      "Recovery across cell-bootstrap samples; consensus uses the median of supporting methods.",
+      "Recovery across cell-bootstrap samples; consensus averages all selected methods, including zero recovery.",
   },
   evidence: {
     label: "Evidence",

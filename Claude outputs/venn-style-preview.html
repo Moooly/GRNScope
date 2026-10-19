@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Venn style preview</title>
+<style>
+  body { margin: 0; padding: 24px 16px 48px; background: #fff; color: #1a1a1a; font: 13px/1.45 Arial, Helvetica, sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 0 0 2px; }
+  .sub { color: #4b5560; margin: 0 0 6px; max-width: 760px; }
+  .row { display: flex; flex-wrap: wrap; gap: 28px 36px; margin-top: 22px; }
+  .fig { width: 600px; max-width: 100%; }
+  svg { display: block; width: 100%; height: auto; font-family: Arial, Helvetica, sans-serif; }
+  .hit { cursor: pointer; }
+  .tip { min-height: 18px; margin: 2px 0 0; font-size: 12px; color: #087ead; }
+</style>
+</head>
+<body>
+<h1>Venn diagram styles from published tools</h1>
+<p class="sub">Your 3-algorithm project (09ac21ad6e1b), Top 100 · Adjacency, real counts. Click a region to select it, as in the app.</p>
+
+<div class="row">
+  <div class="fig"><h2>Now</h2><p class="sub">One pale tint, black outlines.</p><svg id="now" viewBox="0 0 640 450"></svg><p class="tip"></p></div>
+  <div class="fig"><h2>Style A · Regions shaded by count</h2><p class="sub">ggVennDiagram (Gao et al., 2021): each region's fill follows its edge count on one blue ramp, with a colour bar.</p><svg id="a" viewBox="0 0 640 450"></svg><p class="tip"></p></div>
+  <div class="fig"><h2>Style B · One colour per method</h2><p class="sub">eulerr and VennDiagram (Larsson; Chen &amp; Boutros, 2011): each method has its own translucent colour, overlaps blend, names take the method's colour.</p><svg id="b" viewBox="0 0 640 450"></svg><p class="tip"></p></div>
+  <div class="fig"><h2>Style C · Both</h2><p class="sub">Regions shaded by count, outlines and names in the method's colour.</p><svg id="c" viewBox="0 0 640 450"></svg><p class="tip"></p></div>
+</div>
+
+<script>
+const METHODS = ["PEARSON", "PPCOR", "PIDC"];
+const C = [[236, 176], [404, 176], [297, 298]], R = 120, W = 640, H = 450;
+const COUNT = { "100": 59, "010": 70, "001": 57, "101": 22, "011": 11, "111": 10, "110": 9 };
+const UNION = Object.values(COUNT).reduce((a, b) => a + b, 0), MAX = Math.max(...Object.values(COUNT));
+const INK = "#1a1a1a", MUTED = "#6b7580", SELECT = "#087ead";
+const SET = ["#0072b2", "#d55e00", "#009e73"];          // the app's Okabe–Ito hues
+const stops = [[239,245,250],[198,219,239],[107,174,214],[33,113,181],[8,48,107]];
+const blues = t => { const x = Math.max(0, Math.min(1, t)) * 4, i = Math.min(3, Math.floor(x)), f = x - i; return `rgb(${stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f)).join(",")})`; };
+const codeAt = (x, y) => C.map(([cx, cy]) => ((x - cx) ** 2 + (y - cy) ** 2 <= R * R ? "1" : "0")).join("");
+// Region label positions: centroid of the points inside each region.
+const cen = {};
+for (let x = 0; x < W; x += 3) for (let y = 0; y < H; y += 3) { const k = codeAt(x, y); if (k === "000") continue; const a = cen[k] || (cen[k] = [0, 0, 0]); a[0] += x; a[1] += y; a[2]++; }
+const names = code => METHODS.filter((_, i) => code[i] === "1").join(" ∩ ");
+
+function region(id, code, attrs) {
+  const inner = `<rect width="${W}" height="${H}" mask="url(#${id}-m${code})" ${attrs}/>`;
+  return [0, 1, 2].filter(i => code[i] === "1").reduce((s, i) => `<g clip-path="url(#${id}-c${i})">${s}</g>`, inner);
+}
+function draw(id, { fill, outline, nameColor, bar = false, textOn }) {
+  const svg = document.getElementById(id);
+  let selected = "111";
+  const render = () => {
+    let s = `<defs>${C.map(([x, y], i) => `<clipPath id="${id}-c${i}"><circle cx="${x}" cy="${y}" r="${R}"/></clipPath>`).join("")}`;
+    for (const code of Object.keys(COUNT)) s += `<mask id="${id}-m${code}"><rect width="${W}" height="${H}" fill="#fff"/>${C.map(([x, y], i) => code[i] === "0" ? `<circle cx="${x}" cy="${y}" r="${R}" fill="#000"/>` : "").join("")}</mask>`;
+    s += `</defs><rect width="${W}" height="${H}" fill="#fff"/>`;
+    s += fill(id);
+    C.forEach(([x, y], i) => s += `<circle cx="${x}" cy="${y}" r="${R}" fill="none" stroke="${outline(i)}" stroke-width="${outline(i) === INK ? 1.2 : 2}"/>`);
+    if (selected) s += region(id, selected, `fill="none"`) + [0, 1, 2].map(() => "").join("") + selectionRing(id, selected);
+    for (const [code, n] of Object.entries(COUNT)) {
+      const [sx, sy, k] = cen[code], x = sx / k, y = sy / k, on = code === selected, light = textOn(code);
+      s += `<text x="${x}" y="${y}" font-size="${code === "111" ? 16 : 14}" font-weight="${on || code === "111" ? 700 : 500}" text-anchor="middle" fill="${light ? "#fff" : INK}">${n}</text>`;
+      s += `<text x="${x}" y="${y + 13}" font-size="9.5" text-anchor="middle" fill="${light ? "#e6eef5" : MUTED}">${Math.round(n / UNION * 100)}%</text>`;
+    }
+    const anchors = [[C[0][0] - R * 0.72, C[0][1] - R * 0.72 - 12, "end"], [C[1][0] + R * 0.72, C[1][1] - R * 0.72 - 12, "start"], [C[2][0], C[2][1] + R + 22, "middle"]];
+    METHODS.forEach((m, i) => s += `<text x="${anchors[i][0]}" y="${anchors[i][1]}" font-size="12.5" font-weight="700" text-anchor="${anchors[i][2]}" fill="${nameColor(i)}">${m}<tspan font-weight="400" fill="${MUTED}" font-size="10.5" dx="5">100 edges</tspan></text>`);
+    if (bar) {
+      const bx = 580, by = 120, bh = 150;
+      s += `<defs><linearGradient id="${id}-g" x1="0" y1="1" x2="0" y2="0">${[0, .25, .5, .75, 1].map(t => `<stop offset="${t}" stop-color="${blues(t)}"/>`).join("")}</linearGradient></defs>`;
+      s += `<text x="${bx}" y="${by - 10}" font-size="10.5" fill="${INK}">Edges</text><rect x="${bx}" y="${by}" width="12" height="${bh}" fill="url(#${id}-g)"/>`;
+      [0, Math.round(MAX / 2), MAX].forEach(v => { const y = by + bh - (v / MAX) * bh; s += `<line x1="${bx + 12}" x2="${bx + 16}" y1="${y}" y2="${y}" stroke="${INK}" stroke-width=".8"/><text x="${bx + 19}" y="${y + 3.5}" font-size="10" fill="${INK}">${v}</text>`; });
+    }
+    svg.innerHTML = s;
+  };
+  // Selected region: a dark outline that follows the region's own edge.
+  const selectionRing = (id, code) => {
+    const ins = [0, 1, 2].filter(i => code[i] === "1"), outs = [0, 1, 2].filter(i => code[i] === "0");
+    let s = "";
+    // Arcs of each "in" circle, kept inside the other "in" circles and outside the "out" ones.
+    ins.forEach(i => { let ring = `<circle cx="${C[i][0]}" cy="${C[i][1]}" r="${R}" fill="none" stroke="${SELECT}" stroke-width="3.2" mask="url(#${id}-m${code})"/>`; ins.filter(j => j !== i).forEach(j => ring = `<g clip-path="url(#${id}-c${j})">${ring}</g>`); s += ring; });
+    // Arcs of each "out" circle that border the region.
+    outs.forEach(o => { const others = outs.filter(j => j !== o); const m = `${id}-x${code}${o}`; s += `<mask id="${m}"><rect width="${W}" height="${H}" fill="#fff"/>${others.map(j => `<circle cx="${C[j][0]}" cy="${C[j][1]}" r="${R}" fill="#000"/>`).join("")}</mask>`; let ring = `<circle cx="${C[o][0]}" cy="${C[o][1]}" r="${R}" fill="none" stroke="${SELECT}" stroke-width="3.2" mask="url(#${m})"/>`; ins.forEach(j => ring = `<g clip-path="url(#${id}-c${j})">${ring}</g>`); s += ring; });
+    return s;
+  };
+  const tip = svg.parentElement.querySelector(".tip");
+  svg.classList.add("hit");
+  svg.onclick = e => { const b = svg.getBoundingClientRect(), code = codeAt((e.clientX - b.left) / b.width * W, (e.clientY - b.top) / b.height * H); if (COUNT[code]) { selected = code; render(); tip.textContent = `Selected: ${COUNT[code]} edges in ${names(code)}${code.split("1").length === 2 ? " only" : ""}`; } };
+  render();
+  tip.textContent = `Selected: ${COUNT[selected]} edges in ${names(selected)}`;
+}
+const byCount = id => Object.entries(COUNT).map(([code, n]) => region(id, code, `fill="${blues(0.08 + 0.92 * n / MAX)}"`)).join("");
+const lightText = code => COUNT[code] / MAX > 0.6;
+draw("now", { fill: () => C.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${R}" fill="rgba(8,126,173,0.05)"/>`).join(""), outline: () => INK, nameColor: () => INK, textOn: () => false });
+draw("a", { fill: byCount, outline: () => "#ffffff", nameColor: () => INK, bar: true, textOn: lightText });
+draw("b", { fill: () => C.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${R}" fill="${SET[i]}" fill-opacity=".28"/>`).join(""), outline: i => SET[i], nameColor: i => SET[i], textOn: () => false });
+draw("c", { fill: byCount, outline: i => SET[i], nameColor: i => SET[i], bar: true, textOn: lightText });
+</script>
+</body>
+</html>

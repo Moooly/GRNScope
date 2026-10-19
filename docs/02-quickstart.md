@@ -119,9 +119,8 @@ useful results appear early rather than all at the end. You can stop an
 individual algorithm or the whole project at any time, and rerun a single
 algorithm afterwards without redoing the others.
 
-Because each method runs once on the full data and then on several bootstrap
-resamples, a single algorithm reports several sub-runs. That is expected — it is
-where the confidence numbers come from.
+Because each method runs on several bootstrap resamples, a single algorithm reports several sub-runs. That is expected — it is
+where the network evidence and confidence numbers come from.
 
 If you set a **notification email**, you will be told when the job finishes and
 can close the tab.

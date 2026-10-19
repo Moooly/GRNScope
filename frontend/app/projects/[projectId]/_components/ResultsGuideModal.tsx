@@ -41,8 +41,8 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
             <h4 className="text-base font-bold text-slate-950">Evidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
-              Controls the minimum full-data regulation evidence required for a
-              regulation to appear. Evidence is a per-target percentile, so
+              Controls the minimum mean bootstrap evidence required for a
+              regulation to appear. Evidence averages per-target percentiles across bootstrap runs, so
               methods with different native score scales can be compared.
             </p>
           </div>
@@ -70,8 +70,7 @@ export default function ResultsGuideModal({ open, onClose }: ResultsGuideModalPr
             <h4 className="text-base font-bold text-slate-950">Sign confidence</h4>
             <p className="mt-1 text-sm leading-5 text-slate-600">
               Keeps edges only when enough signed bootstrap recoveries agree
-              with the activation or repression shown by the full-data result
-              (or the bootstrap-mean sign for a bootstrap-only edge).
+              with the displayed sign, derived from bootstrap-averaged scores.
               Sign coverage reports how many recovered samples supplied a
               nonzero sign. Unsigned methods and legacy results without
               bootstrap sign data abstain.

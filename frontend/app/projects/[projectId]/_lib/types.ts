@@ -252,6 +252,7 @@ export type SpearmanStabilityCheck = {
   method?: string;
   run_count?: number;
   stop_rho?: number;
+  stop_comparison?: "gt" | "gte";
   compared_edges?: number;
   rho?: number | null;
   stop_early?: boolean;
@@ -283,7 +284,8 @@ export type ConfidenceSummary = {
   bootstrap_runs?: number;
   planned_bootstrap_runs?: number;
   total_algorithm_runs?: number;
-  full_data_run_id?: string;
+  full_data_run_id?: string; // Historical results only.
+  network_estimator?: string;
   resampling_scheme?: string;
   sampling_unit?: string;
   sampling_with_replacement?: boolean;
@@ -295,6 +297,7 @@ export type ConfidenceSummary = {
   sign_coverage_definition?: string;
   min_runs?: number;
   stop_rho?: number;
+  stop_comparison?: "gt" | "gte";
   stop_streak?: number;
   early_stopping_enabled?: boolean;
   subsample_fraction?: number;
@@ -304,6 +307,7 @@ export type ConfidenceSummary = {
     enabled?: boolean;
     method?: string;
     stop_rho?: number;
+    stop_comparison?: "gt" | "gte";
     stop_streak?: number;
     min_runs?: number;
     stopped_early?: boolean;
@@ -328,6 +332,8 @@ export type AlgorithmResultEdge = {
   bootstrap_mean_evidence?: number;
   evidence_ci_lower?: number | null;
   evidence_ci_upper?: number | null;
+  network_estimator?: string;
+  bootstrap_mean_raw_score?: number | null;
   full_data_evidence?: number | null;
   full_data_raw_score?: number | null;
   full_data_rank?: number | null;

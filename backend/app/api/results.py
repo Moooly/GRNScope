@@ -14,6 +14,7 @@ from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
 from ..services.beeline_service import (
     FULL_DATA_RUN_ID,
+    BOOTSTRAP_NETWORK_ESTIMATOR,
     compute_repeat_run_spearman_from_paths,
 )
 from ..services.ranked_edges import compute_beeline_path_stats
@@ -45,6 +46,8 @@ CLIENT_RESULT_EDGE_FIELDS = {
     "mean_percentile",
     "meanPercentile",
     "bootstrap_mean_evidence",
+    "bootstrap_mean_raw_score",
+    "network_estimator",
     "evidence_ci_lower",
     "evidence_ci_upper",
     "full_data_evidence",
@@ -95,7 +98,10 @@ def attach_beeline_path_stats(result: dict, project_dir: Path) -> dict:
     def stats_for_payload(payload: dict) -> dict | None:
         run_paths = payload.get("run_ranked_edges_paths")
         path_value = None
-        if isinstance(run_paths, dict):
+        if (
+            payload.get("network_summary", {}).get("network_estimator") != BOOTSTRAP_NETWORK_ESTIMATOR
+            and isinstance(run_paths, dict)
+        ):
             path_value = run_paths.get(FULL_DATA_RUN_ID)
         path_value = path_value or payload.get("ranked_edges_path")
         if not path_value:
@@ -212,7 +218,10 @@ def compact_result_for_client(result: dict) -> dict:
 
                 full_data_score = edge.get("full_data_raw_score")
                 full_data_present = bool(edge.get("full_data_present"))
-                if full_data_present and full_data_score is not None:
+                if (
+                    edge.get("network_estimator") != BOOTSTRAP_NETWORK_ESTIMATOR
+                    and full_data_present and full_data_score is not None
+                ):
                     reference_score = float(full_data_score)
                     reference = "full_data"
                 else:
@@ -286,6 +295,7 @@ def compact_result_for_client(result: dict) -> dict:
                             "method",
                             "run_count",
                             "stop_rho",
+                            "stop_comparison",
                             "compared_edges",
                             "rho",
                             "stop_early",
@@ -301,6 +311,7 @@ def compact_result_for_client(result: dict) -> dict:
                     "enabled",
                     "method",
                     "stop_rho",
+                    "stop_comparison",
                     "stop_streak",
                     "min_runs",
                     "stopped_early",
@@ -349,6 +360,7 @@ def compact_result_for_client(result: dict) -> dict:
                 "planned_bootstrap_runs",
                 "min_runs",
                 "stop_rho",
+                "stop_comparison",
                 "stop_streak",
                 "early_stopping_enabled",
                 "subsample_fraction",
@@ -358,6 +370,7 @@ def compact_result_for_client(result: dict) -> dict:
                 "resampling_scheme",
                 "confidence_definition",
                 "evidence_definition",
+                "network_estimator",
                 "interval_definition",
                 "sign_confidence_definition",
                 "sign_coverage_definition",

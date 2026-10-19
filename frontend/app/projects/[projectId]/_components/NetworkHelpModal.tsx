@@ -194,33 +194,32 @@ export default function NetworkHelpModal({
                   <em> Bₘ</em> is the total completed confidence runs.
                 </p>
                 <p>
-                  Automatic mode starts with 3 runs and stops when
-                  consecutive aggregate rankings stabilize, up to 50
-                  runs. Fixed mode runs the selected 3–50 runs exactly.
+                  Automatic mode starts checking after 2 runs and stops when
+                  two consecutive comparisons have Spearman ρ &gt; 0.95.
+                  The earliest stop is after 3 runs, with a maximum of 50 runs. Fixed mode runs the selected 2–50 runs exactly.
                   Changing Recovery rank changes which runs count as
                   recovered and recalculates confidence from the saved
                   runs; it does not rerun the algorithms.
                 </p>
                 <p className="text-xs text-slate-500">
                   Example: recovered in 8 of 10 runs gives 80% confidence.
-                  For a consensus edge, confidence is the median of the
-                  supporting methods&apos; confidences:
+                  For a consensus edge, confidence is the mean recovery frequency
+                  across all selected methods, including zero for methods that
+                  never recover the edge. Each method has equal weight:
                 </p>
                 <div className="overflow-x-auto rounded-lg bg-white px-3 py-3 text-center text-slate-800">
                   <math
                     display="block"
-                    aria-label="Consensus confidence of e equals the median of method confidence for methods supporting e"
+                    aria-label="Consensus confidence of e equals the sum of method recovery frequencies divided by all M selected methods"
                   >
                     <mrow>
                       <msub><mi>C</mi><mtext>cons</mtext></msub>
                       <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo>
                       <mo>=</mo>
-                      <mi mathvariant="normal">median</mi>
-                      <mo stretchy="false">&#123;</mo>
+                      <mfrac><mn>1</mn><mi>M</mi></mfrac>
+                      <munderover><mo>∑</mo><mrow><mi>m</mi><mo>=</mo><mn>1</mn></mrow><mi>M</mi></munderover>
                       <msub><mi>C</mi><mi>m</mi></msub>
                       <mo stretchy="false">(</mo><mi>e</mi><mo stretchy="false">)</mo>
-                      <mo>|</mo><mi>m</mi><mo>∈</mo><msub><mi>S</mi><mi>e</mi></msub>
-                      <mo stretchy="false">&#125;</mo>
                     </mrow>
                   </math>
                 </div>
@@ -396,7 +395,7 @@ export default function NetworkHelpModal({
                 <p>
                   Support is the number of selected methods that report
                   the edge. The inspection panel lists each supporting
-                  method&apos;s normalized full-data evidence so a consensus
+                  method&apos;s mean bootstrap evidence so a consensus
                   edge can be audited.
                 </p>
                 <p className="text-xs text-slate-500">

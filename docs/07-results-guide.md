@@ -147,7 +147,7 @@ The main results table. Columns:
 | **Rank** | Saved consensus position; ties show as a range (`1–4`) |
 | **Regulation** | `source → target`. A solid blue arrow means direction is well supported; a dotted grey or amber arrow means direction evidence is limited or split |
 | **Evidence** | Consensus evidence, 0–1 |
-| **Bootstrap confidence** | Median confidence among supporting methods |
+| **Bootstrap confidence** | Mean recovery frequency across all selected methods, including zeros |
 | **Support** | How many selected methods report the edge (`5/5`) |
 | **Direction confidence** | Agreement on orientation, or "no direction data" |
 | **Regulatory sign** | Activation / Repression with its sign confidence |

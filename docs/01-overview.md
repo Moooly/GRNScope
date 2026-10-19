@@ -105,8 +105,8 @@ algorithms, combining their evidence into one ranked edge list.
 ```
   Upload  ──▶  Validate  ──▶  Preprocess  ──▶  Run algorithms  ──▶  Aggregate  ──▶  Explore
     │             │               │                  │                   │             │
- expression   file format    normalize +      full-data fit +      Evidence,      network,
- matrix,      and content    gene selection   N bootstrap runs     Confidence,    comparison,
+ expression   file format    normalize +      bootstrap fits      Evidence,      network,
+ matrix,      and content    gene selection   only     Confidence,    comparison,
  optional     checks         (3 stages)       per algorithm,       consensus,     trajectory,
  extras                                       in Docker            benchmarks     perturbation
 ```
@@ -120,8 +120,8 @@ algorithms, combining their evidence into one ranked edge list.
 3. **Preprocess.** The matrix is put into the state the algorithms expect and
    optionally reduced to a manageable set of genes. See
    [preprocessing](04-preprocessing.md).
-4. **Run.** Each selected algorithm runs once on the full data and then on a
-   series of bootstrap resamples, each inside its own Docker container. Fast
+4. **Run.** Each selected algorithm runs on a series of bootstrap resamples, using
+   its configured container or native runner. Fast
    algorithms are scheduled first so you get early results. See
    [the algorithm catalog](05-algorithms.md).
 5. **Aggregate.** Per-edge Evidence, Stability, Confidence and intervals are
@@ -160,7 +160,7 @@ If long-term access matters, download your results when the run completes — se
 | Maximum size per uploaded file | 500 MB | `MAX_FILE_SIZE_BYTES`, [`app/validators.py`](../backend/app/validators.py) |
 | Accepted file type | `.csv` only (comma, tab, or semicolon separated) | `validate_csv_extension` |
 | Staged uploads expire after | 24 hours by default | `GRNSCOPE_TEMP_UPLOAD_TTL_SECONDS` |
-| Bootstrap runs per algorithm | 3 to 15, chosen automatically | `DEFAULT_CONFIDENCE_MIN_RUNS` / `MAX_RUNS` |
+| Bootstrap runs per algorithm | 2 to 50, chosen automatically | `DEFAULT_CONFIDENCE_MIN_RUNS` / `MAX_RUNS` |
 | Edges kept per target gene | 20 by default, adjustable | "Maximum edges per target" setting |
 | Minimum cells for a per-cluster network | 50 | `MIN_CLUSTER_SCOPE_CELLS`, [`app/services/job_service.py`](../backend/app/services/job_service.py) |
 
@@ -169,7 +169,7 @@ Several methods evaluate every gene pair or every gene triplet, so the cost
 grows quadratically or cubically with gene count. A 500-gene analysis with three
 algorithms may take tens of minutes; the same analysis with 5,000 genes and a
 slow method such as SINGE can take many hours. Every algorithm is additionally
-run 4 to 16 times in total (one full-data fit plus the bootstraps), which is the
+run on 2 to 50 bootstrap resamples, which is the
 price of getting confidence estimates. This is why gene selection matters and
 why the defaults are conservative.
 

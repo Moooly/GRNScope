@@ -118,7 +118,8 @@ class SignedEdgeContractTests(unittest.TestCase):
 
         self.assertEqual(aggregated[0]["mean_raw_score"], -0.9)
         self.assertEqual(aggregated[0]["max_abs_raw_score"], 0.9)
-        self.assertIsNone(aggregated[0]["bootstrap_sign_confidence"])
+        self.assertEqual(aggregated[0]["bootstrap_sign_confidence"], 1.0)
+        self.assertEqual(aggregated[0]["bootstrap_sign_reference"], "bootstrap_mean")
         self.assertEqual(aggregated[0]["bootstrap_negative_probability"], 1.0)
 
     def test_sign_confidence_agrees_with_displayed_full_data_sign(self):

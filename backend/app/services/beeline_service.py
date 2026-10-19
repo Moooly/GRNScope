@@ -53,12 +53,12 @@ from .ranked_edges import (
 )
 
 
-# A confidence analysis consists of one full-data fit plus 3–50 genuine
+# A confidence analysis consists exclusively of 2–50 genuine
 # non-parametric bootstrap replicates. Each replicate draws N cells with
 # replacement from the N uploaded cells. Consecutive aggregate networks are
 # compared with Spearman rank correlation, but no stop decision is made before
-# the third replicate.
-DEFAULT_CONFIDENCE_MIN_RUNS = 3
+# the second replicate; one passing comparison permits stopping.
+DEFAULT_CONFIDENCE_MIN_RUNS = 2
 DEFAULT_CONFIDENCE_MAX_RUNS = 50
 DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS = 15
 CONFIDENCE_RUN_MODE_AUTOMATIC = "automatic"
@@ -68,7 +68,8 @@ DEFAULT_CONFIDENCE_EVIDENCE_THRESHOLD = 0.8
 MIN_CONFIDENCE_EVIDENCE_THRESHOLD = 0.01
 MAX_CONFIDENCE_EVIDENCE_THRESHOLD = 1.0
 CONFIDENCE_RESAMPLING_SCHEME = "cell_bootstrap_with_replacement_v1"
-FULL_DATA_RUN_ID = "full-data"
+FULL_DATA_RUN_ID = "full-data"  # Legacy archive identifier; never scheduled.
+BOOTSTRAP_NETWORK_ESTIMATOR = "bootstrap_mean_v1"
 DEFAULT_CONFIDENCE_STOP_RHO = 0.95
 DEFAULT_CONFIDENCE_STOP_STREAK = 2
 DEFAULT_RANKED_EDGES_PER_TARGET_LIMIT = 20
@@ -718,14 +719,14 @@ def resolve_confidence_settings(
         "confidence_enabled": True,
         "confidence_run_mode": run_mode,
         "bootstrap_runs": bounded_run_count,
-        "total_algorithm_runs": bounded_run_count + 1,
-        "full_data_run_id": FULL_DATA_RUN_ID,
+        "total_algorithm_runs": bounded_run_count,
+        "network_estimator": BOOTSTRAP_NETWORK_ESTIMATOR,
         "resampling_scheme": CONFIDENCE_RESAMPLING_SCHEME,
         "sampling_unit": "cell",
         "sampling_with_replacement": True,
         "sample_size_fraction": 1.0,
         "confidence_definition": "evidence_threshold_recovery_frequency",
-        "evidence_definition": "per_target_rank_normalized_evidence",
+        "evidence_definition": "mean_bootstrap_per_target_rank_evidence",
         "interval_definition": "percentile_95_bootstrap_evidence",
         "sign_confidence_definition": (
             "agreement_with_displayed_sign_given_signed_recovery"
@@ -738,6 +739,7 @@ def resolve_confidence_settings(
         "early_stopping_enabled": early_stopping_enabled,
         "min_runs": bounded_min_runs,
         "stop_rho": DEFAULT_CONFIDENCE_STOP_RHO,
+        "stop_comparison": "gt",
         "stop_streak": DEFAULT_CONFIDENCE_STOP_STREAK,
         "gene_count": gene_count,
         # Project-level cap on edges kept per target (the "Max edges per target"
@@ -2187,23 +2189,9 @@ def plan_confidence_run_inputs(
         cell_column_indices=cell_column_indices,
         bootstrap_runs=bootstrap_runs,
     )
-    run_ids: list[str] = [FULL_DATA_RUN_ID]
+    run_ids: list[str] = []
     run_metadata: dict[str, dict] = {}
     run_column_indices: dict[str, list[int]] = {}
-
-    run_column_indices[FULL_DATA_RUN_ID] = cell_column_indices
-    run_metadata[FULL_DATA_RUN_ID] = {
-        "run_kind": "full_data",
-        "seed": None,
-        "cell_count": len(cell_column_indices),
-        "unique_cell_count": len(cell_column_indices),
-        "total_cell_count": len(cell_column_indices),
-        "gene_count": gene_count,
-        "max_regulators_per_target": max_regulators_per_target,
-        "sampling_with_replacement": False,
-        "sample_size_fraction": 1.0,
-        "resampling_scheme": "full_data",
-    }
 
     for run_index, selected_column_indices in enumerate(bootstrap_draws):
         run_id = f"bootstrap-{run_index + 1}"
@@ -3151,6 +3139,11 @@ def finalize_confidence_accumulator(
             float(current["raw_score_sum"]) / observed_runs if observed_runs else 0.0
         )
 
+        reference_sign = 1 if mean_raw_score > 0 else -1 if mean_raw_score < 0 else 0
+        agreeing_runs = (
+            positive_selected_runs if reference_sign > 0 else negative_selected_runs
+        ) if reference_sign and signed_selected_runs else None
+
         aggregated_edges.append(
             {
                 "source": current["source"],
@@ -3182,12 +3175,14 @@ def finalize_confidence_accumulator(
                 "bootstrap_positive_probability": bootstrap_positive_probability,
                 "bootstrap_negative_probability": bootstrap_negative_probability,
                 "bootstrap_sign_coverage": bootstrap_sign_coverage,
-                # Sign confidence must be calculated against the sign shown to
-                # the user. That reference comes from the full-data fit, which
-                # is attached in merge_full_data_with_bootstrap_edges().
-                "sign_agreeing_runs": None,
-                "bootstrap_sign_confidence": None,
-                "bootstrap_sign_reference": None,
+                # Internal agreement with the sign of the bootstrap mean score.
+                "sign_agreeing_runs": agreeing_runs,
+                "bootstrap_sign_confidence": (
+                    agreeing_runs / signed_selected_runs
+                    if agreeing_runs is not None else None
+                ),
+                "bootstrap_sign_reference": "bootstrap_mean" if reference_sign else None,
+                "network_estimator": BOOTSTRAP_NETWORK_ESTIMATOR,
                 "observed_runs": observed_runs,
                 "run_count": run_count,
                 "best_rank": current["best_rank"],
@@ -3223,6 +3218,9 @@ def finalize_confidence_accumulator(
         index = tie_end
 
     return aggregated_edges, {
+        "network_estimator": BOOTSTRAP_NETWORK_ESTIMATOR,
+        "full_data_run_included": False,
+        "evidence_definition": "mean_bootstrap_per_target_rank_evidence",
         "edge_count": len(aggregated_edges),
         "node_count": len(all_node_names),
         "confidence_scored": True,
@@ -3308,7 +3306,7 @@ def merge_full_data_with_bootstrap_edges(
     bootstrap_runs: int,
     evidence_threshold: float,
 ) -> list[dict]:
-    """Attach the original full-data estimate without changing bootstrap support."""
+    """Legacy archive reconstruction only; new runs use bootstrap estimates."""
 
     def attach_sign_stability(
         edge: dict,
@@ -3400,6 +3398,7 @@ def merge_full_data_with_bootstrap_edges(
                 "full_data_raw_score": estimate["raw_score"],
                 "full_data_rank": estimate["rank"],
                 "full_data_present": True,
+                "network_estimator": "legacy_full_data",
             }
         )
         attach_sign_stability(
@@ -3509,36 +3508,22 @@ def recalculate_confidence_result_payload(
             evidence_threshold=evidence_threshold,
         )
 
-        full_data_path_value = run_paths.get(FULL_DATA_RUN_ID)
-        full_data_present = bool(full_data_path_value)
-        if full_data_path_value:
-            try:
-                full_data_edges, _summary = parse_ranked_edges_csv(
-                    Path(str(full_data_path_value)),
-                    max_edges_per_target=max_edges_per_target,
-                )
-            except EmptyRankedEdgesError:
-                full_data_edges = []
-            aggregated_edges = merge_full_data_with_bootstrap_edges(
-                aggregated_edges,
-                full_data_edges,
-                bootstrap_runs=len(bootstrap_run_ids),
-                evidence_threshold=evidence_threshold,
-            )
-
         previous_network_summary = scope_payload.get("network_summary")
         scope_payload["top_edges"] = aggregated_edges
         scope_payload["network_summary"] = {
             **(previous_network_summary if isinstance(previous_network_summary, dict) else {}),
             **updated_summary,
             "edge_count": len(aggregated_edges),
-            "full_data_run_included": full_data_present,
+            "full_data_run_included": False,
         }
         scope_payload["confidence_summary"] = {
             **confidence_summary,
             **updated_summary,
             "confidence_evidence_threshold": evidence_threshold,
         }
+
+        scope_payload["confidence_summary"].pop("full_data_run_id", None)
+        scope_payload["beeline_path_stats"] = None
 
         ranked_edges_path_value = scope_payload.get("ranked_edges_path")
         if ranked_edges_path_value:
@@ -3692,7 +3677,7 @@ def spearman_stability_check(
     """
     Decide whether the aggregate edge ordering has stabilised between two
     consecutive confidence aggregates using the Spearman rank correlation of
-    their per-edge confidence values. rho >= stop_rho => the ranking is stable.
+    their per-edge confidence values. rho > stop_rho => the ranking is stable.
 
     This replaces the former R `coin::wilcoxsign_test` early-stop check. It is
     pure Python (pandas) and only measures ordering, which is what the website's
@@ -3710,6 +3695,7 @@ def spearman_stability_check(
         "method": "spearman_rank_correlation",
         "run_count": current_run_count,
         "stop_rho": stop_rho,
+        "stop_comparison": "gt",
         "compared_edges": compared_edges,
         "comparison_path": str(comparison_path),
         "rho": None,
@@ -3738,9 +3724,22 @@ def spearman_stability_check(
         return result
 
     result["rho"] = rho
-    result["stop_early"] = rho >= stop_rho
+    result["stop_early"] = rho > stop_rho
     result["status"] = "stable" if result["stop_early"] else "changing"
     return result
+
+
+
+def record_confidence_stability_check(state: dict, check: dict) -> bool:
+    """Record a cumulative comparison and apply the configured stopping rule."""
+    if not state.get("enabled"):
+        return False
+    state["checks"].append(check)
+    state["streak"] = int(state["streak"]) + 1 if check.get("stop_early") else 0
+    return (
+        int(check["run_count"]) >= int(state["min_runs"])
+        and int(state["streak"]) >= int(state["stop_streak"])
+    )
 
 
 def summarize_repeat_run_spearman(
@@ -4182,7 +4181,7 @@ def write_confidence_ranked_edges_csv(destination_path: Path, edges: list[dict])
         "BootstrapMeanEvidence",
         "EvidenceCILower",
         "EvidenceCIUpper",
-        "FullDataPresent",
+        "NetworkEstimator",
         "MeanZ",
         "ZCILower",
         "ZCIUpper",
@@ -4218,7 +4217,7 @@ def write_confidence_ranked_edges_csv(destination_path: Path, edges: list[dict])
                     ),
                     "EvidenceCILower": edge.get("evidence_ci_lower"),
                     "EvidenceCIUpper": edge.get("evidence_ci_upper"),
-                    "FullDataPresent": edge.get("full_data_present", False),
+                    "NetworkEstimator": edge.get("network_estimator", "legacy"),
                     "MeanZ": edge.get("mean_z", 0.0),
                     "ZCILower": edge.get("z_ci_lower"),
                     "ZCIUpper": edge.get("z_ci_upper"),
@@ -4347,23 +4346,6 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
                 confidence_settings["confidence_evidence_threshold"]
             ),
         )
-        full_data_edges, full_data_ranked_path = parse_confidence_run_output(
-            output_dir,
-            dataset_id,
-            FULL_DATA_RUN_ID,
-            algorithm_id,
-            runtime_root=runtime_root,
-            max_edges_per_target=ranked_edges_per_target_limit,
-        )
-        top_edges = merge_full_data_with_bootstrap_edges(
-            top_edges,
-            full_data_edges,
-            bootstrap_runs=len(bootstrap_run_ids),
-            evidence_threshold=float(
-                confidence_settings["confidence_evidence_threshold"]
-            ),
-        )
-        ranked_edge_paths[FULL_DATA_RUN_ID] = str(full_data_ranked_path)
         network_summary["edge_count"] = len(top_edges)
         network_summary["node_count"] = len(
             {
@@ -4373,7 +4355,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
                 if str(edge.get(field, "")).strip()
             }
         )
-        network_summary["full_data_run_included"] = True
+        network_summary["full_data_run_included"] = False
         ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
         write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
     else:
@@ -4508,12 +4490,12 @@ def run_beeline_with_progress(
         scope_label=scope_label,
     )
     confidence_accumulator = create_confidence_accumulator()
-    full_data_edges: list[dict] = []
     ranked_edge_paths: dict[str, str] = {}
     early_stopping = {
         "enabled": bool(confidence_settings.get("early_stopping_enabled")),
         "method": "spearman_rank_correlation",
         "stop_rho": float(confidence_settings.get("stop_rho", DEFAULT_CONFIDENCE_STOP_RHO)),
+        "stop_comparison": "gt",
         "stop_streak": int(confidence_settings.get("stop_streak", DEFAULT_CONFIDENCE_STOP_STREAK)),
         "min_runs": int(confidence_settings.get("min_runs", DEFAULT_CONFIDENCE_MIN_RUNS)),
         "stopped_early": False,
@@ -4770,10 +4752,6 @@ def run_beeline_with_progress(
                     max_edges_per_target=ranked_edges_per_target_limit,
                 )
             except EmptyConfidenceRunError as exc:
-                if run_metadata.get(run_id, {}).get("run_kind") == "full_data":
-                    raise RuntimeError(
-                        f"{algorithm_id} completed its full-data fit but produced no valid edges."
-                    ) from exc
                 ranked_edges_path = exc.ranked_edges_path
                 ranked_edge_paths[run_id] = str(ranked_edges_path)
                 empty_run_summary["total"] = int(empty_run_summary["total"]) + 1
@@ -4816,14 +4794,11 @@ def run_beeline_with_progress(
             )
             confidence_update_started = time.perf_counter()
             run_kind = run_metadata.get(run_id, {}).get("run_kind")
-            if run_kind == "full_data":
-                full_data_edges = run_edges
-            elif confidence_settings.get("confidence_enabled"):
+            if run_kind == "bootstrap" and confidence_settings.get("confidence_enabled"):
                 previous_run_count = int(confidence_accumulator.get("processed_runs", 0))
                 previous_edges: list[dict] = []
-                # Begin comparing aggregates early enough that a full streak can
-                # complete exactly at the min-runs floor, but skip the noisiest
-                # first couple of aggregates.
+                # With the current rule, compare the first two cumulative
+                # estimates and allow stopping at the second bootstrap run.
                 check_start_prev = max(
                     1, int(early_stopping["min_runs"]) - int(early_stopping["stop_streak"])
                 )
@@ -4862,19 +4837,7 @@ def run_beeline_with_progress(
                         current_run_count=current_run_count,
                         stop_rho=float(confidence_settings["stop_rho"]),
                     )
-                    early_stopping["checks"].append(stability_check)
-                    if stability_check.get("stop_early"):
-                        early_stopping["streak"] = int(early_stopping["streak"]) + 1
-                    else:
-                        early_stopping["streak"] = 0
-
-                    # Stop only after the ordering has been stable for the
-                    # required number of consecutive checks AND the min-runs
-                    # floor (protects confidence-filter resolution) is met.
-                    if (
-                        int(early_stopping["streak"]) >= int(early_stopping["stop_streak"])
-                        and current_run_count >= int(early_stopping["min_runs"])
-                    ):
+                    if record_confidence_stability_check(early_stopping, stability_check):
                         early_stopping["stopped_early"] = True
                         early_stopping["stopped_after_runs"] = current_run_count
                         early_stopping["decision"] = stability_check
@@ -4953,14 +4916,6 @@ def run_beeline_with_progress(
                 confidence_settings["confidence_evidence_threshold"]
             ),
         )
-        top_edges = merge_full_data_with_bootstrap_edges(
-            top_edges,
-            full_data_edges,
-            bootstrap_runs=processed_run_count,
-            evidence_threshold=float(
-                confidence_settings["confidence_evidence_threshold"]
-            ),
-        )
         network_summary["edge_count"] = len(top_edges)
         network_summary["node_count"] = len(
             {
@@ -4970,7 +4925,7 @@ def run_beeline_with_progress(
                 if str(edge.get(field, "")).strip()
             }
         )
-        network_summary["full_data_run_included"] = True
+        network_summary["full_data_run_included"] = False
         ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
         write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
     else:

@@ -50,8 +50,8 @@ import {
 } from "./_lib/types";
 import {
   assignAverageRanks,
+  consensusConfidence,
   edgesForScope,
-  median,
   numericConfidenceScore,
   numericEdgeConfidence,
   numericEdgeScore,
@@ -1169,7 +1169,7 @@ export default function ProjectDetailPage() {
       directionVote: number;
       directionDenominator: number;
       directionCoverageEvidence: number;
-      fullDataSignVote: number;
+      aggregateSignVote: number;
       bootstrapPositiveEvidence: number;
       bootstrapSignEvidence: number;
       supportingAlgorithms: string[];
@@ -1213,7 +1213,7 @@ export default function ProjectDetailPage() {
         directionVote: 0,
         directionDenominator: 0,
         directionCoverageEvidence: 0,
-        fullDataSignVote: 0,
+        aggregateSignVote: 0,
         bootstrapPositiveEvidence: 0,
         bootstrapSignEvidence: 0,
         supportingAlgorithms: [],
@@ -1368,7 +1368,7 @@ export default function ProjectDetailPage() {
         }
 
         if (isSigned && methodEvidence.signVote !== 0) {
-          accumulator.fullDataSignVote +=
+          accumulator.aggregateSignVote +=
             methodEvidence.evidence * methodEvidence.signVote;
         }
 
@@ -1392,13 +1392,10 @@ export default function ProjectDetailPage() {
     const sortedRows = Array.from(buckets.entries())
       .map(([key, edge]) => {
         const edgeEvidence = clamp(edge.totalEvidence / sumAlpha, 0, 1);
-        const bootstrapConfidence =
-          median(
-            edge.supportingAlgorithms.flatMap((algorithmId) => {
-              const value = edge.perAlgorithmConfidences[algorithmId];
-              return Number.isFinite(value) ? [value] : [];
-            })
-          ) ?? 0;
+        const bootstrapConfidence = consensusConfidence(
+          activeAlgorithmIds,
+          edge.perAlgorithmConfidences,
+        );
         const singleSupportingAlgorithm =
           edge.supportingAlgorithms.length === 1
             ? edge.supportingAlgorithms[0]
@@ -1416,7 +1413,7 @@ export default function ProjectDetailPage() {
             : null;
         const directionCoverage =
           edge.totalEvidence > 0 ? edge.directionCoverageEvidence / edge.totalEvidence : 0;
-        const sign = signOf(edge.fullDataSignVote);
+        const sign = signOf(edge.aggregateSignVote);
         const bootstrapPositiveProbability =
           edge.bootstrapSignEvidence > 0
             ? clamp(

@@ -137,11 +137,11 @@ Two multipliers on top of the per-method cost:
 
 - **Gene count.** Superlinear for nearly everything, cubic for PIDC. Halving
   your gene set does far more than dropping a method.
-- **Bootstrap runs.** Each algorithm runs **4 to 16 times** in total (one
-  full-data fit plus 3–15 bootstraps). Early stopping usually keeps this at the
+- **Bootstrap runs.** Each algorithm runs on **2 to 50 bootstrap resamples**. Early stopping usually keeps this at the
   low end — see [the metrics reference](06-metrics.md#65-early-stopping).
 
-For scale, the 19-gene × 2,000-cell example project used in these docs:
+Historical timings for the 19-gene × 2,000-cell example below include the old
+full-data fit as well as bootstrap runs. They are not timings of the new bootstrap-only workflow:
 
 | Algorithm | Total runtime |
 | --- | --- |

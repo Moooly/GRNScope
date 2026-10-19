@@ -1,0 +1,123 @@
+import type { Core, ElementDefinition } from "cytoscape";
+
+export type NetworkNode = {
+  id: string;
+  inDegree: number;
+  outDegree: number;
+  degree: number;
+  isTF: boolean;
+  componentIndex?: number;
+  componentColor?: string;
+  showLabel?: boolean;
+};
+
+export type NetworkEdge = {
+  key: string;
+  source: string;
+  target: string;
+  score: number;
+  confidence: number;
+  bootstrapVerified?: boolean;
+  count: number;
+  rank: number;
+  supportingAlgorithms: string[];
+  direction: -1 | 0 | 1;
+  directionConfidence: number | null;
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
+};
+
+export type NetworkLayoutMode =
+  | "force"
+  | "hierarchical"
+  | "concentric"
+  | "circular";
+
+export type NetworkGraphExportOptions = {
+  full?: boolean;
+  scale?: number;
+  bg?: string;
+};
+
+export type NetworkGraphHandle = {
+  kind: "cytoscape" | "g6";
+  zoom: () => number;
+  minZoom: () => number;
+  maxZoom: () => number;
+  width: () => number;
+  height: () => number;
+  stop: () => void;
+  setZoom: (level: number) => void;
+  on: (event: "zoom", listener: () => void) => void;
+  off: (event: "zoom", listener: () => void) => void;
+  destroyed: () => boolean;
+  png: (options?: NetworkGraphExportOptions) => string | Promise<string>;
+  svg: (options?: NetworkGraphExportOptions) => string | Promise<string>;
+};
+
+export type NetworkGraphProps = {
+  nodes: NetworkNode[];
+  edges: NetworkEdge[];
+  selectedGene: string | null;
+  selectedEdgeKey: string | null;
+  layout: NetworkLayoutMode;
+  onSelectGene: (geneId: string | null) => void;
+  onSelectEdge: (edgeKey: string | null) => void;
+  onGraphReady?: (cy: Core | null) => void;
+  metric?: import("./networkVisualEncoding").NetworkMetric;
+  methodCount?: number;
+  highlightedMethod?: string | null;
+  showEdgeLabels?: boolean;
+  focusGene?: string | null;
+  neighborhood?: boolean;
+  appearance?: import("./networkAppearance").NetworkAppearance;
+  /** Relationships passing the filters before the readability budget, so the
+   * caption can say "38 of 67" when the opening view trimmed the figure. */
+  totalRelationships?: number;
+  /** What node size encodes: genes it regulates, all connections, or its regulators. */
+  sizeBy?: import("./network/encoding").NodeSizeBy;
+  /** What edge width encodes: evidence or method support. */
+  widthBy?: import("./network/encoding").EdgeWidthBy;
+  onSizeByChange?: (value: import("./network/encoding").NodeSizeBy) => void;
+  onWidthByChange?: (value: import("./network/encoding").EdgeWidthBy) => void;
+  /** Show only activation, repression or sign-unknown links. */
+  effect?: import("./network/encoding").EffectFilter;
+  /** Display menu: spacing (100–250 %) and a counter that re-solves the layout. */
+  spacing?: number;
+  layoutNonce?: number;
+  /** A table row under the pointer: its link is emphasised and labelled. */
+  hoveredEdgeKey?: string | null;
+  /** Colour palette (temporary switch while the boss chooses). */
+  palette?: import("./network/theme").PaletteName;
+
+};
+
+export type EdgeTooltipState = {
+  x: number;
+  y: number;
+  source: string;
+  target: string;
+  score: number;
+  confidence: number;
+  rank: number;
+  supportingAlgorithms: string[];
+  directionConfidence: number | null;
+  directionCoverage: number;
+  sign: -1 | 0 | 1;
+  signConfidence: number | null;
+  signCoverage: number;
+};
+
+export type PositionMap = Record<string, { x: number; y: number }>;
+
+export type GraphCounts = {
+  nodeCount: number;
+  edgeCount: number;
+};
+
+export type GraphElementsResult = {
+  elements: ElementDefinition[];
+  elementsSignature: string;
+};

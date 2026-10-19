@@ -21,7 +21,7 @@ of the same material, including a full formula walkthrough.
 | *r<sub>m</sub>(e)* | the edge's rank among candidate regulators of its target |
 | *R<sub>t</sub>* | number of ranked candidate regulators for target *t* |
 | *B<sub>m</sub>* | number of completed bootstrap runs for method *m* |
-| *K* | the top-*K* threshold, **10** by default |
+| *τ* | recovery threshold on per-run rank evidence, **0.8** by default |
 | *M* | number of selected methods |
 
 ## 6.2 The bootstrap idea
@@ -47,23 +47,16 @@ Three implementation details that matter:
   (`bootstrap_column_draws`), so every method in your project sees the identical
   set of resampled cells. Differences between methods are therefore real
   differences between methods, not different random draws.
-- **The full-data fit is separate.** In addition to the bootstraps, each method
-  is fitted once on your complete, unresampled data (run id `full-data`). That
-  fit provides the displayed evidence and the reference sign; the bootstraps
-  provide the confidence. They are never mixed up.
+- **All network estimates use bootstrap runs.** Evidence is the mean per-target
+  rank evidence over completed runs, with zero for absent edges. The signed raw
+  score is averaged over runs where the edge was observed. No separate full-data
+  inference fit is scheduled.
 
-**Run count: 3 to 15**, chosen automatically, with early stopping (§6.5). Older
-projects may carry a stored higher number; it is treated as a ceiling and
-clamped into that range (`resolve_confidence_settings`).
-
-Why so few? Each bootstrap run is a complete rerun of the algorithm. At 100
-replicates, a method taking two minutes takes three and a half hours. The
-early-stopping check exists so that runs stop as soon as the ranking has settled,
-which for well-behaved methods happens after three or four.
-
-> **A caveat worth stating.** With 3–15 replicates, confidence is a coarse
-> measure. It distinguishes "always recovered" from "sometimes" from "never"
-> reliably; it does not support fine distinctions like 0.80 versus 0.87.
+**Run count: 2 to 50**, chosen automatically, with early stopping (§6.5).
+Each bootstrap run refits the method. Small completed counts give coarse recovery
+frequencies: with three runs, confidence changes in steps of one third. The
+stopping criterion checks cumulative ranking stability; it does not establish
+that the estimated confidence or network has converged to a fixed-run reference.
 
 ## 6.3 Evidence — how strongly one method ranks an edge
 
@@ -97,20 +90,18 @@ regulator of B?" is naturally about B's regulators. A globally weak score might
 still be the best available explanation for a quietly expressed target. Ranking
 within each target also removes the influence of a method's overall score scale.
 
-**Which evidence is displayed.** When an edge appears in the full-data fit, the
-displayed evidence is the **full-data** percentile. When it appears only in
-bootstraps, the bootstrap mean is shown instead and the edge is flagged as
-absent from the full-data fit
-(`merge_full_data_with_bootstrap_edges`).
+**Which evidence is displayed.** For every edge, the displayed value is the
+mean of its per-run rank evidence across all completed bootstrap runs. Missing
+edges contribute zero. Raw scores are averaged only within a method, over runs
+where the edge was observed; they are not averaged across different methods.
 
 ## 6.4 Stability and Confidence — how reproducible it is
 
-An edge is **selected** in a bootstrap run when it ranks in the **top *K***
-regulators of its target (*K* = 10 by default,
-`DEFAULT_CONFIDENCE_STABILITY_TOP_K`):
+An edge is **selected** in a bootstrap run when its per-target rank evidence
+meets the recovery threshold, $\tau=0.8$ by default:
 
 $$
-I_{m,b}(e) = \begin{cases} 1 & \text{if } r_{m,b}(e) \le K \\ 0 & \text{otherwise} \end{cases}
+I_{m,b}(e) = \mathbf{1}\{E_{m,b}(e) \geq \tau\}.
 $$
 
 **Stability** is the fraction of runs in which that happened:
@@ -131,13 +122,12 @@ user-facing filter while Stability is the underlying statistic
 [`beeline_service.py:3381`](../backend/app/services/beeline_service.py)).
 
 **Read it as:** *"in what fraction of resampled datasets did this method still
-call this one of the target's top 10 regulators?"* 100% means every run; 40%
+rank this edge at or above the recovery threshold?"* 100% means every run; 40%
 means fewer than half.
 
-**Evidence and Confidence are independent and you need both.** An edge can have
-high evidence and low confidence (ranked first once, then vanished — a fluke) or
-moderate evidence and high confidence (consistently rank 6 or 7 — dependable but
-not dominant). The second is usually the better hypothesis.
+**Evidence and Confidence summarize different, related properties.** Evidence
+measures average rank strength; confidence measures how often rank evidence
+crosses the recovery threshold. Neither is a probability of biological truth.
 
 **A missing edge contributes 0, not "no data".** Evidence is divided by the
 **total** run count, not by the number of runs where the edge appeared. An edge
@@ -146,18 +136,18 @@ This is deliberate — absence is evidence of weakness.
 
 ## 6.5 Early stopping
 
-After the minimum of **3** runs, GRNScope compares the current aggregated edge
+Starting after **2** runs, GRNScope compares the current aggregated edge
 ranking against the previous one using the **Spearman rank correlation of
-per-edge confidence values**. When ρ ≥ **0.95** on **2 consecutive** checks, the
-ranking is judged settled and no further bootstraps are run
+per-edge confidence values**. When ρ > **0.95** on **two consecutive** checks, no further bootstraps are run.
+The earliest stop is after **3** runs; a failed check resets the streak
 (`spearman_stability_check`, `DEFAULT_CONFIDENCE_STOP_RHO`,
 `DEFAULT_CONFIDENCE_STOP_STREAK`).
 
-Identical vectors count as perfectly stable. If a vector has no rank variation
-at all, ρ is undefined and no stop is triggered.
+Identical vectors pass by convention, including constant or all-zero vectors.
+For other constant-vector comparisons, Spearman correlation is undefined and the check does not pass.
 
 This is why the Comparison view often shows "3 · stopped early" — it means the
-method's ranking stopped changing, which is a good sign, not a truncated run.
+method's ranking stopped changing, under the configured stopping rule; fixed-run validation remains necessary.
 
 ## 6.6 The evidence interval
 
@@ -168,8 +158,7 @@ evidence 0 and are included in the percentile calculation.
 
 A narrow interval means the edge sits at a consistent rank; a wide one means its
 rank swings with the cells sampled. Note this describes **evidence variability**
-and is a separate statistic from Confidence, which describes top-*K* recovery
-frequency.
+and differs from Confidence, which describes threshold-based recovery frequency.
 
 ## 6.7 Sign — activation or repression, for one method
 
@@ -185,26 +174,22 @@ p_m^+ = \frac{N_m^+}{N_m^+ + N_m^-}, \qquad
 q_m = \frac{N_m^+ + N_m^-}{N_{\text{selected}}}
 $$
 
-- ***p⁺*** is the probability the edge is activating, given that a sign was
-  observed.
+- ***p⁺*** is the fraction of signed recoveries with a positive raw score.
 - ***q*** is **sign coverage** — the fraction of selections that carried a usable
   sign at all. A score of exactly zero has no sign, so *q* can be below 1.
 
-**Sign confidence** is the agreement between the bootstraps and **the sign you
-are actually shown**, which comes from the full-data fit:
+**Sign confidence** is agreement with the sign of the mean bootstrap raw
+score, averaged over runs where the edge was observed:
 
 $$
-S_{\text{conf},m}(e) = \frac{N_{\text{agreeing}}}{N_{\text{signed}}}
+S_{\text{conf},m}(e) = \frac{N_{\text{agreeing}}}{N_{\text{signed}}}.
 $$
 
-where *N<sub>agreeing</sub>* is *N⁺* when the reference sign is positive and
-*N⁻* when it is negative. If the edge never appeared in the full-data fit, the
-bootstrap mean raw score is used as the reference instead, and this is recorded
-in `bootstrap_sign_reference` so you can tell the two cases apart
-(`attach_sign_stability`).
-
-This matters: measuring agreement against a bootstrap-derived sign would be
-circular. Anchoring to the full-data fit keeps the number honest.
+Here the agreeing count is *N⁺* for a positive mean and *N⁻* for a negative
+mean. A zero mean or no signed recoveries makes agreement unavailable.
+`bootstrap_sign_reference` records `bootstrap_mean`. This measures internal
+consistency of the same ensemble; it is not an independent validation of sign
+or a calibrated probability of activation or inhibition.
 
 ## 6.8 Consensus — combining methods
 
@@ -229,25 +214,22 @@ edge ranked first by one method out of five scores at most 0.2.
 
 ### Support
 
-The number of selected methods that report the edge, displayed as `3/5`.
+The number of selected methods that recover the chosen edge orientation in at least one bootstrap run, displayed as `3/5`.
 
 ### Consensus confidence
 
 $$
-C_{\text{cons}}(e) = \operatorname{median}\ \{\, C_m(e) \mid m \in S_e \,\}
+C_{\text{cons}}(e) = \frac{1}{M} \sum_{m=1}^{M} C_m(e)
 $$
 
-where *S<sub>e</sub>* is the set of **supporting** methods.
+Here *M* is the number of selected methods. Use the recovery frequency of
+each method's higher-evidence orientation, with zero for a missing edge or
+a method that never recovers it. Every method has equal weight, regardless
+of how many bootstrap runs it completed.
 
-Two deliberate choices here. It is the **median**, not the mean, so one
-outlier method cannot drag the value. And it is taken over **supporting methods
-only**, unlike evidence — a method that never saw the edge has no opinion about
-how reproducible it is, so including it as a zero would be meaningless.
-
-The practical consequence: **read Confidence and Support together.** A `1/5`
-edge at 100% confidence means one method found it perfectly reproducible and
-four methods did not find it at all. That is a much weaker claim than `5/5` at
-100%.
+For recovery frequencies 0.9, 0.8, 0.7, 0 and 0, consensus confidence is
+0.48 and support is 3/5. If just one of five methods always recovers the edge,
+consensus confidence is 0.20 and support is 1/5.
 
 ### Consensus rank
 
@@ -288,7 +270,7 @@ Two readings that trip people up:
 ## 6.10 Consensus sign
 
 The **displayed sign** is the evidence-weighted vote of the signed methods'
-full-data signs:
+bootstrap mean signs:
 
 $$
 S = \operatorname{sgn}\left(\sum_m E_m(e)\, s_m\right), \qquad s_m \in \{-1, 0, +1\}
@@ -485,7 +467,7 @@ unreliable.
 
 ## 6.15 A worked example
 
-Suppose method *m* is run with 10 bootstraps, *K* = 10, and the target gene has
+Suppose method *m* is run with 10 bootstraps, recovery threshold 0.8, and the target gene has
 100 candidate regulators. Edge *e* gets these ranks, with `–` meaning absent:
 
 ```
@@ -501,25 +483,24 @@ Sum of the eight observed values ≈ 0.9899 + 0.9697 + 0.9293 + 0.9596 + 0.9798 
 
 **Evidence** = 7.525 / **10** (total runs, not 8) = **0.753**.
 
-**Selected runs** (rank ≤ 10): runs 1, 2, 3, 5, 6, 9 → **6**.
+**Selected runs** (evidence ≥ 0.8): all eight observed runs → **8**.
 
-**Stability = Confidence** = 6 / 10 = **0.60**.
+**Stability = Confidence** = 8 / 10 = **0.80**.
 
 Now suppose five methods were selected and three of them report this edge, with
 confidences 0.60, 0.85 and 0.50, and evidences 0.753, 0.812 and 0.410:
 
 - **Consensus evidence** = (0.753 + 0.812 + 0.410 + 0 + 0) / 5 = **0.395**
 - **Support** = **3/5**
-- **Consensus confidence** = median(0.60, 0.85, 0.50) = **0.60**
+- **Consensus confidence** = (0.60 + 0.85 + 0.50 + 0 + 0) / 5 = **0.39**
 
-The edge is reproducible where it is found, but two of five methods do not find
-it at all — which is exactly what the 0.395 evidence and the 3/5 support are
-telling you.
+Both evidence and confidence include the two methods that do not recover the
+edge. Support separately reports how many methods recover it at least once.
 
 ## 6.16 Common misreadings
 
 **"Confidence 100% means this edge is real."** It means every bootstrap run of
-that method put the edge in its target's top 10. If the method is wrong about
+that method ranked the edge at or above the configured evidence threshold. If the method is wrong about
 the biology, it is wrong in every run. Confidence measures reproducibility, not
 correctness. The only correctness measure here is the Benchmark tab, and that
 requires a reference network.

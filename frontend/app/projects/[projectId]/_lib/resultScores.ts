@@ -3,6 +3,18 @@
 import type { AlgorithmResultEdge, AlgorithmStoredResult } from "./types";
 import { clamp } from "./utils";
 
+/** Equal method weights; absent or unavailable confidence contributes zero. */
+export function consensusConfidence(
+  selectedMethodIds: readonly string[],
+  perMethodConfidence: Readonly<Record<string, number>>,
+) {
+  if (selectedMethodIds.length === 0) return 0;
+  return selectedMethodIds.reduce((sum, methodId) => {
+    const value = perMethodConfidence[methodId];
+    return sum + (Number.isFinite(value) ? clamp(value, 0, 1) : 0);
+  }, 0) / selectedMethodIds.length;
+}
+
 export function median(values: number[]) {
   if (values.length === 0) return null;
   const sortedValues = [...values].sort((a, b) => a - b);
@@ -33,6 +45,9 @@ export function numericEdgeScore(edge: AlgorithmResultEdge) {
 }
 
 export function numericEvidenceScore(edge: AlgorithmResultEdge, fallback: number) {
+  if (edge.network_estimator === "bootstrap_mean_v1") {
+    return clamp(Number(edge.bootstrap_mean_evidence ?? edge.mean_percentile ?? edge.score ?? 0), 0, 1);
+  }
   const normalizedScore = Number(edge.normalized_score);
   if (Number.isFinite(normalizedScore)) return clamp(normalizedScore, 0, 1);
 
@@ -64,6 +79,7 @@ export function numericConfidenceScore(edge: AlgorithmResultEdge, fallbackPercen
 
 export function numericSignedEdgeScore(edge: AlgorithmResultEdge) {
   const signedScore = Number(
+    (edge.network_estimator === "bootstrap_mean_v1" ? edge.bootstrap_mean_raw_score : undefined) ??
     edge.mean_raw_score ?? edge.weight ?? edge.edge_weight ?? edge.score ?? 0
   );
   return Number.isFinite(signedScore) ? signedScore : 0;

@@ -1,6 +1,6 @@
 import type { Core, EdgeSingular, NodeCollection, NodeSingular } from "cytoscape";
 import { PALETTES, DEFAULT_PALETTE, type Palette, type PaletteName } from "./theme";
-import { widthEnds, type EdgeWidthBy } from "./encoding";
+import { widthEnds, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 import { planLabels, type LabelCandidate } from "./labels";
 
 /**
@@ -70,7 +70,8 @@ function tipMark(kind: string, tip: Pt, u: Pt, widthMm: number, ink: string): [s
 export function buildPaperFigure(source: Core, options: PaperFigureOptions = {}): PaperFigure {
   const T: Palette = PALETTES[(source.scratch("palette") ?? DEFAULT_PALETTE) as PaletteName];
   const font = options.fontFamily ?? "Arial, Helvetica, sans-serif";
-  const encoding = (source.scratch("networkEncoding") ?? {}) as { widthBy?: EdgeWidthBy; methodCount?: number };
+  const encoding = (source.scratch("networkEncoding") ?? {}) as { widthBy?: EdgeWidthBy; sizeBy?: NodeSizeBy; methodCount?: number };
+  const sizeBy = encoding.sizeBy ?? "all";
   const methodCount = encoding.methodCount ?? 1;
   const widthBy: EdgeWidthBy = encoding.widthBy === "support" && methodCount > 1 ? "support" : "evidence";
 
@@ -167,12 +168,16 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
     const plain: Part = { w: k * 2.1, draw: (x, y) => `<path d="M${f(x)} ${f(y)}H${f(x + k * 2)}" stroke="${ink}" stroke-width="${f(keyW)}"/>` };
     const dashed: Part = { w: k * 2.4, draw: (x, y) => `<path d="M${f(x)} ${f(y)}H${f(x + k * 2.4)}" stroke="${ink}" stroke-width="${f(keyW)}" stroke-dasharray="${f(keyW * 3 + 0.8)} ${f(keyW * 2 + 0.6)}"/>` };
     const pieMark: Part = { w: k * 1.2, draw: (x, y) => pie({ x: x + k * 0.6, y }, k * 0.58, [0.7, 0.3, 0], T.pieTF, T.tf) };
+    // Qualitative size key: do not imply a linear area-to-count scale.
+    const sizes: Part = { w: k * 3.8, draw: (x, y) => [0.28, 0.43, 0.62].map((r, i) => `<circle cx="${f(x + k * (0.5 + i * 1.3))}" cy="${f(y)}" r="${f(k * r)}" fill="#8a949e"/>`).join("") };
+    const sizeLabel = sizeBy === "out" ? "Node size: targets" : sizeBy === "in" ? "Node size: regulators" : "Node size: connections";
     const widths: Part = { w: k * 5.4, draw: (x, y) => PAPER.linkPt.map((pt, i) => `<path d="M${f(x + i * k * 1.35)} ${f(y)}H${f(x + i * k * 1.35 + k)}" stroke="${ink}" stroke-width="${f(pt * PT)}"/>`).join("") };
     const fades: Part = { w: k * 4, draw: (x, y) => [0.15, 0.45, 1].map((o, i) => `<path d="M${f(x + i * k * 1.35)} ${f(y)}H${f(x + i * k * 1.35 + k)}" stroke="${ink}" stroke-width="${f(PAPER.linkPt[2] * PT)}" opacity="${o}"/>`).join("") };
     // Plain ASCII/Latin-1 ends so the standard PDF fonts can set them.
     const [low, high] = widthBy === "support" ? widthEnds(widthBy, methodCount) : ["<0.5", "0.9–1"];
     const groups: Part[][] = [
       [...(hasTF ? [dot(T.tf), text("TF")] : []), ...(hasGene ? [dot(T.node), text("Other gene")] : [])],
+      [sizes, text(`${sizeLabel} (larger = more)`)],
       [...(signs.has(1) ? [act, text("Activation")] : []), ...(signs.has(-1) ? [rep, text("Repression")] : []), ...(signs.has(0) ? [plain, text("Sign unknown")] : []), ...(undirected ? [dashed, text("Direction unknown")] : [])],
       ...(split ? [[pieMark, text("dark regulates · light regulated by")]] : []),
       [text(widthBy === "support" ? "Methods" : "Evidence", "#8a949e"), text(low), widths, text(high)],
