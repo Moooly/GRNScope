@@ -6,55 +6,22 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type Ref,
 } from "react";
-import type { AggregatedEdge, NodeInfo } from "../_lib/types";
+import type { AggregatedEdge, NodeInfo, GenomeReference } from "../_lib/types";
 import { isDenseNetwork } from "./networkGraphLayouts";
+import { getNodeChromosome as chromosomeForNode, getChromosomeLabel, getBundleKey, getRelationKind, getRelationLabel, UNMAPPED_CHROMOSOME, type CircosFocus, type RelationKind } from "./circosModel";
 
 type CircosNetworkGraphProps = {
   nodes: NodeInfo[];
+  genomeReference: GenomeReference;
   edges: AggregatedEdge[];
   selectedGene?: string | null;
   selectedEdgeKey?: string | null;
   onSelectGene?: (geneId: string | null) => void;
   onSelectEdge?: (edgeKey: string | null) => void;
+  focus?: CircosFocus | null;
+  onFocusChange?: (focus: CircosFocus | null) => void;
   svgRef?: Ref<SVGSVGElement>;
 };
-
-const HG38_CHROMOSOME_LENGTHS: Record<string, number> = {
-  chrM: 16569,
-  chr1: 248956422,
-  chr2: 242193529,
-  chr3: 198295559,
-  chr4: 190214555,
-  chr5: 181538259,
-  chr6: 170805979,
-  chr7: 159345973,
-  chr8: 145138636,
-  chr9: 138394717,
-  chr10: 133797422,
-  chr11: 135086622,
-  chr12: 133275309,
-  chr13: 114364328,
-  chr14: 107043718,
-  chr15: 101991189,
-  chr16: 90338345,
-  chr17: 83257441,
-  chr18: 80373285,
-  chr19: 58617616,
-  chr20: 64444167,
-  chr21: 46709983,
-  chr22: 50818468,
-  chrX: 156040895,
-  chrY: 57227415,
-};
-
-const CHROMOSOME_ORDER: Record<string, number> = (() => {
-  const order: Record<string, number> = {};
-  for (let index = 1; index <= 22; index += 1) order[`chr${index}`] = index;
-  order.chrX = 23;
-  order.chrY = 24;
-  order.chrM = 25;
-  return order;
-})();
 
 const WIDTH = 800;
 const HEIGHT = 760;
@@ -89,13 +56,11 @@ const CHROMOSOME_PALETTE = [
   "#df8b42",
   "#686fc0",
 ];
-const UNMAPPED_CHROMOSOME = "unmapped";
 const UNMAPPED_COLOR = "#94a3b8";
 const ACTIVE_COLOR = "#d89a28";
 const ACTIVE_STROKE = "#8f6218";
 const REPRESSION_CAP_COLOR = "#334155";
 
-type RelationKind = "activation" | "repression" | "undirected" | "uncertain";
 
 type ChromosomeLayout = {
   chromosome: string;
@@ -150,51 +115,13 @@ type ChromosomeBundle = {
   geometry: RibbonGeometry;
 };
 
-type CircosFocus =
-  | { kind: "chromosome"; chromosome: string }
-  | { kind: "bundle"; bundleKey: string };
 
 type LabelBox = { left: number; right: number; top: number; bottom: number };
-
-function normalizeChromosome(value?: string | null): string {
-  if (!value) return "";
-  const trimmed = String(value).trim();
-  if (!trimmed) return "";
-  return trimmed.toLowerCase().startsWith("chr") ? trimmed : `chr${trimmed}`;
-}
 
 function getNodeId(node: NodeInfo) {
   return String(node.id);
 }
 
-function hasGenomicCoordinate(node?: NodeInfo) {
-  if (!node) return false;
-  const chromosome = normalizeChromosome(node.chromosome);
-  return (
-    chromosome !== "" &&
-    HG38_CHROMOSOME_LENGTHS[chromosome] !== undefined &&
-    typeof node.start === "number" &&
-    Number.isFinite(node.start)
-  );
-}
-
-function getNodeChromosome(node?: NodeInfo) {
-  return hasGenomicCoordinate(node)
-    ? normalizeChromosome(node?.chromosome)
-    : UNMAPPED_CHROMOSOME;
-}
-
-function getChromosomeSortValue(chromosome: string) {
-  return chromosome === UNMAPPED_CHROMOSOME
-    ? 999
-    : CHROMOSOME_ORDER[chromosome] ?? 998;
-}
-
-function getChromosomeLabel(chromosome: string) {
-  return chromosome === UNMAPPED_CHROMOSOME
-    ? "Unknown"
-    : chromosome.replace("chr", "");
-}
 
 function getEdgeKey(edge: AggregatedEdge) {
   return edge.key || `${edge.source}|||${edge.target}`;
@@ -210,19 +137,6 @@ function getRawEdgeScore(edge: AggregatedEdge) {
   return Number.isFinite(candidate) ? Math.max(0, Math.min(1, candidate)) : 0;
 }
 
-function getRelationKind(edge: AggregatedEdge): RelationKind {
-  if (edge.direction === 0) return "undirected";
-  if (edge.sign > 0) return "activation";
-  if (edge.sign < 0) return "repression";
-  return "uncertain";
-}
-
-function getRelationLabel(relation: RelationKind) {
-  if (relation === "activation") return "activation";
-  if (relation === "repression") return "repression";
-  if (relation === "undirected") return "undirected";
-  return "uncertain sign";
-}
 
 function getEvidenceOpacity(score: number, denseNetwork: boolean) {
   if (denseNetwork) {
@@ -441,23 +355,20 @@ function handleKeyboardActivation(
   action();
 }
 
-function getBundleKey(
-  sourceChromosome: string,
-  targetChromosome: string,
-  relation: RelationKind,
-) {
-  return `${sourceChromosome}|||${targetChromosome}|||${relation}`;
-}
-
 export default function CircosNetworkGraph({
   nodes,
+  genomeReference,
   edges,
   selectedGene = null,
   selectedEdgeKey = null,
   onSelectGene,
   onSelectEdge,
+  focus: controlledFocus,
+  onFocusChange,
   svgRef,
 }: CircosNetworkGraphProps) {
+  const speciesLabel = genomeReference.species === "mouse" ? "Mouse" : "Human";
+  const referenceLabel = `${speciesLabel} · ${genomeReference.assembly} · ${genomeReference.annotation}`;
   const denseNetwork = isDenseNetwork(nodes.length, edges.length);
   const graphHeightClass = denseNetwork
     ? "h-[clamp(720px,80vh,940px)] min-h-[720px]"
@@ -466,12 +377,23 @@ export default function CircosNetworkGraph({
       : nodes.length <= 60
         ? "h-[clamp(680px,76vh,860px)] min-h-[680px]"
         : "h-[clamp(720px,80vh,940px)] min-h-[720px]";
-  const [focus, setFocus] = useState<CircosFocus | null>(null);
+  const [localFocus, setLocalFocus] = useState<CircosFocus | null>(null);
+  const focus = controlledFocus === undefined ? localFocus : controlledFocus;
+  const setFocus = (next: CircosFocus | null | ((previous: CircosFocus | null) => CircosFocus | null)) => {
+    const value = typeof next === "function" ? next(focus) : next;
+    if (controlledFocus === undefined) setLocalFocus(value);
+    onFocusChange?.(value);
+  };
   const [hoveredGene, setHoveredGene] = useState<string | null>(null);
   const [hoveredBundleKey, setHoveredBundleKey] = useState<string | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
 
   const layout = useMemo(() => {
+    const getNodeChromosome = (node?: NodeInfo) => chromosomeForNode(node, genomeReference);
+    const getChromosomeSortValue = (chromosome: string) => {
+      const index = genomeReference.chromosome_order.indexOf(chromosome);
+      return index >= 0 ? index : 999;
+    };
     const nodeMap = new Map(nodes.map((node) => [getNodeId(node), node]));
     const annotatedEdges = edges
       .filter((edge) => {
@@ -787,7 +709,7 @@ export default function CircosNetworkGraph({
       bundleMap: new Map(bundles.map((bundle) => [bundle.key, bundle])),
       maxOutgoingActivity: Math.max(1, ...Array.from(outgoingActivity.values())),
     };
-  }, [denseNetwork, edges, nodes]);
+  }, [denseNetwork, edges, nodes, genomeReference]);
 
   const activeFocus = useMemo(() => {
     if (!focus) return null;
@@ -987,7 +909,7 @@ export default function CircosNetworkGraph({
         aria-label={
           isDetailMode
             ? `Gene-level Circos view for ${modeLabel}`
-            : "Chromosome-level Circos overview of regulatory flow"
+            : `Chromosome-level Circos overview of ${speciesLabel} regulatory flow (${genomeReference.assembly})`
         }
         onClick={returnToOverview}
         onKeyDown={(event) => {
@@ -1002,6 +924,8 @@ export default function CircosNetworkGraph({
             ? `Gene-level Circos view for ${modeLabel}`
             : "Chromosome-level regulatory flow. Select a chromosome or ribbon to inspect individual gene regulations."}
         </title>
+        <desc>{referenceLabel}. Gene positions use this reference assembly; unmatched genes appear in the Unknown group.</desc>
+        <text x={CENTER_X} y="20" textAnchor="middle" fontSize="12" fill="#64748b">{referenceLabel}</text>
         <circle
           cx={CENTER_X}
           cy={CENTER_Y}

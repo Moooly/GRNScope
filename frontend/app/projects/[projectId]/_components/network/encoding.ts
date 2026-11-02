@@ -79,13 +79,6 @@ export function passesEffect(sign: number, effect: EffectFilter) {
 }
 export const EFFECT_NOTE: Record<EffectFilter, string> = { all: "", activation: "activation only", repression: "repression only", unknown: "sign unknown only" };
 
-/** Direction split inside a node, in the node's own hue:
- * dark = regulates, light = regulated by, pale = direction unknown. */
-export const PIE_SHADES = {
-  tf: ["#b8732a", "#e8b779", "#f5e1c6"],
-  gene: ["#9a9a9a", "#d1d1d1", "#ececec"],
-} as const;
-
 /** Evidence and bootstrap confidence as two distributions on one 0–1 axis:
  * the links in each 0.05-wide bin, once by evidence and once by confidence.
  * A link with no verified confidence is left out of the confidence side

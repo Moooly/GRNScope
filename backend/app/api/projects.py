@@ -61,7 +61,7 @@ from ..services.beeline_service import (
     recalculate_confidence_result_payload,
     resolve_ranked_edges_per_target_limit,
 )
-from ..services.email_service import normalize_notification_email
+from ..services.email_service import normalize_notification_email, smtp_is_configured
 from ..services.job_service import (
     finalize_project_stop,
     launch_independent_algorithm_tasks,
@@ -858,6 +858,11 @@ async def update_project_notification_email(
     notification_email = normalize_notification_email(raw_email)
     if raw_email and not notification_email:
         raise HTTPException(status_code=400, detail="Invalid notification email.")
+    if notification_email and not smtp_is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email notifications are not available yet. Please check your results in the workspace.",
+        )
 
     try:
         project_manifest = read_project_manifest(project_dir)

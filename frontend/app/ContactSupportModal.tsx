@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import { API_BASE } from "./_lib/apiConfig";
 import { apiFetch } from "./_lib/clientIdentity";
@@ -50,6 +50,20 @@ export default function ContactSupportModal({
   const [errorMessage, setErrorMessage] = useState("");
   const [isClosing, setIsClosing] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panelRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -149,7 +163,30 @@ export default function ContactSupportModal({
       onClick={requestClose}
     >
       <div
-        className={`w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            requestClose();
+          }
+          if (event.key !== "Tab") return;
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]',
+          ));
+          const first = controls[0];
+          const last = controls[controls.length - 1];
+          if (!first || !last) { event.preventDefault(); return; }
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) {
+            event.preventDefault(); last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault(); first.focus();
+          }
+        }}
+        className={`max-h-[calc(100dvh-5rem)] w-full max-w-lg overflow-y-auto rounded-[1.75rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-900/20 ${
           isClosing ? "animate-modal-panel-out" : "animate-modal-panel"
         }`}
         onClick={(event) => event.stopPropagation()}
@@ -159,7 +196,7 @@ export default function ContactSupportModal({
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#1b75a6]">
               Contact
             </p>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+            <h2 id={titleId} className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
               Tell us what happened
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">

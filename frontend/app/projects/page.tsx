@@ -18,6 +18,7 @@ import DeleteProjectModal from "./_components/DeleteProjectModal";
 import StopProjectModal from "./_components/StopProjectModal";
 import RenameProjectModal from "./_components/RenameProjectModal";
 import { API_BASE } from "../_lib/apiConfig";
+import { startPolling } from "../_lib/polling";
 import { apiFetch } from "../_lib/clientIdentity";
 import {
   loadProjectHistory as fetchProjectHistory,
@@ -81,6 +82,8 @@ function ProjectsPageContent() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<CreateProjectPrefill>();
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
+  const [historyError, setHistoryError] = useState("");
+  const [historyReload, setHistoryReload] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const [projectPendingDelete, setProjectPendingDelete] = useState<Project | null>(null);
@@ -270,11 +273,12 @@ function ProjectsPageContent() {
     }
 
     const loadProjectHistory = async () => {
+      setHistoryError("");
       try {
         const projects = await fetchProjectHistory();
         if (!isCancelled) setProjectHistory(projects);
       } catch {
-        // Keep showing the last successful list when a background refresh fails.
+        if (!isCancelled) setHistoryError("We couldn’t refresh your projects. Check your connection and try again.");
       } finally {
         if (!isCancelled) setIsLoading(false);
       }
@@ -283,37 +287,39 @@ function ProjectsPageContent() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [historyReload]);
 
-  const activeProjectIds = useMemo(
-    () =>
+  const activeProjectIdsKey = useMemo(
+    () => JSON.stringify(
       visibleProjectHistory
         .filter((project) => {
           const latestJob = project.latestJob;
           if (!latestJob) return false;
           const overallStatus = latestJob.overall_status;
           const hasActiveTasks = latestJob.tasks?.some(
-            (task) => task.status === "Queued" || task.status === "Running",
+            (task) => task.status === "Queued" || task.status === "Running" || task.status === "Stopping",
           );
           return (
             overallStatus === "Queued" ||
             overallStatus === "Running" ||
+            overallStatus === "Stopping" ||
             Boolean(hasActiveTasks)
           );
         })
-        .map((project) => project.id),
+        .map((project) => project.id).sort()),
     [visibleProjectHistory],
   );
 
   useEffect(() => {
+    const activeProjectIds = JSON.parse(activeProjectIdsKey) as string[];
     if (activeProjectIds.length === 0) return;
     let isCancelled = false;
-    const updateProjectStatuses = async () => {
+    const updateProjectStatuses = async (signal: AbortSignal) => {
       try {
         const responses = await Promise.all(
           activeProjectIds.map(async (projectId) => {
             try {
-              const response = await apiFetch(`${API_BASE}/projects/${projectId}`);
+              const response = await apiFetch(`${API_BASE}/projects/${projectId}`, { signal });
               if (!response.ok) return null;
               const data = await response.json();
               return {
@@ -356,13 +362,12 @@ function ProjectsPageContent() {
         return;
       }
     };
-    updateProjectStatuses();
-    const intervalId = window.setInterval(updateProjectStatuses, 5000);
+    const stopPolling = startPolling(updateProjectStatuses, 5000, true);
     return () => {
       isCancelled = true;
-      window.clearInterval(intervalId);
+      stopPolling();
     };
-  }, [activeProjectIds]);
+  }, [activeProjectIdsKey]);
 
   const handleProjectCreated = (project: Project) => {
     setProjectHistory((currentProjects) => {
@@ -548,9 +553,16 @@ function ProjectsPageContent() {
           </button>
         </div>
 
+        {historyError && (
+          <div role="alert" className="my-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <span>{historyError}</span>
+            <button type="button" className="font-bold underline underline-offset-2" onClick={() => setHistoryReload((value) => value + 1)}>Try again</button>
+          </div>
+        )}
+
         {isLoading ? (
           <ProjectsLoadingSkeleton />
-        ) : showEmptyLibrary ? (
+        ) : historyError && projectHistory.length === 0 ? null : showEmptyLibrary ? (
           <EmptyProjectsLibrary />
         ) : (
           <>
@@ -573,7 +585,7 @@ function ProjectsPageContent() {
                 }}
               />
             ) : (
-              <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(17.25rem,1fr))] gap-4">
+              <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(17.25rem,100%),1fr))] gap-4">
                 {displayedProjects.map((project) => (
                   <div
                     key={project.id}
@@ -691,7 +703,7 @@ function EmptyProjectsLibrary() {
 
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(17.25rem,1fr))] gap-4">
+    <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(min(17.25rem,100%),1fr))] gap-4">
       {[0, 1, 2].map((idx) => (
         <div
           key={idx}
@@ -707,6 +719,7 @@ function ProjectsLoadingSkeleton() {
 }
 
 function toOptionalNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }

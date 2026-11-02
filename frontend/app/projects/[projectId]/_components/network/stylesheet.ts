@@ -29,13 +29,6 @@ export function buildNetworkStylesheet(T: Palette = PALETTE): StylesheetJson {
       "overlay-opacity": 0, "z-index": 10,
     } },
     { selector: "node[isTF = 1]", style: { "background-color": T.tf } },
-    // Direction split: dark = regulates, light = regulated by, pale = unknown.
-    { selector: "node", style: {
-      "pie-size": "data(pieSize)",
-      "pie-1-background-color": (n: NodeSingular) => (n.data("isTF") === 1 ? T.pieTF : T.pieGene)[0], "pie-1-background-size": (n: NodeSingular) => Number(n.data("pieOut")) || 0,
-      "pie-2-background-color": (n: NodeSingular) => (n.data("isTF") === 1 ? T.pieTF : T.pieGene)[1], "pie-2-background-size": (n: NodeSingular) => Number(n.data("pieIn")) || 0,
-      "pie-3-background-color": (n: NodeSingular) => (n.data("isTF") === 1 ? T.pieTF : T.pieGene)[2], "pie-3-background-size": (n: NodeSingular) => Number(n.data("pieUnknown")) || 0,
-    } },
     // Links filter: hidden links leave the figure; genes left without any fade.
     { selector: "edge[?effectHidden]", style: { display: "none" } },
     { selector: "node[?effectFaded]", style: { opacity: 0.25 } },

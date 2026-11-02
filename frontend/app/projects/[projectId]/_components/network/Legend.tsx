@@ -42,7 +42,6 @@ export function NetworkLinkFilter({ relationships, signCounts, effect, onEffectC
 }
 
 type KeyProps = {
-  directionSplit: boolean;
   hasUndirected: boolean;
   widthBy: EdgeWidthBy;
   methodCount: number;
@@ -70,7 +69,7 @@ const SIZE_ORDER: NodeSizeBy[] = ["all", "out", "in"];
 
 /** One short line above the network: only what the picture can't say itself.
  * Exact steps and counts are in the tooltips. */
-export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE, signs, sizeBy, onSizeByChange, sizeChoice = true, onWidthByChange, filter }: KeyProps) {
+export function NetworkKey({ hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE, signs, sizeBy, onSizeByChange, sizeChoice = true, onWidthByChange, filter }: KeyProps) {
   const T = PALETTES[palette];
   const support = widthBy === "support" && methodCount > 1;
   const steps = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
@@ -89,10 +88,6 @@ export function NetworkKey({ directionSplit, hasUndirected, widthBy, methodCount
         {signs.activation && <span className="key-item"><svg width="22" height="10" aria-hidden="true"><path d="M1 5H14" stroke={T.activates} strokeWidth="1.6"/><path d="M13 1.5L21 5L13 8.5Z" fill={T.activates}/></svg>activation</span>}
         {signs.repression && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H18M18 .5V9.5" stroke={T.represses} strokeWidth="1.8" fill="none"/></svg>repression</span>}
         {signs.unknown && <span className="key-item"><svg width="20" height="10" aria-hidden="true"><path d="M1 5H19" stroke={T.unknown} strokeWidth="1.6"/></svg>sign unknown</span>}
-      </span>}
-      {directionSplit && <span className="key-group" title="Each gene is split by the direction of its edges, in its own colour.">
-        <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill={T.pieTF[1]}/><path d="M7 7V.5A6.5 6.5 0 1 1 1.4 10.3Z" fill={T.pieTF[0]}/></svg>
-        <span>dark regulates · light regulated by{hasUndirected ? " · pale unknown" : ""}</span>
       </span>}
       {hasUndirected && <span className="key-group" title="A solid line has a resolved direction and its tip marks the regulated gene. A dashed line has no resolved direction.">
         <svg width="24" height="8" aria-hidden="true"><path d="M1 4H23" stroke={T.activates} strokeWidth="1.6" strokeDasharray="4 3"/></svg>

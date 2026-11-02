@@ -1768,17 +1768,23 @@ function AgreementView({
   const [pairDetailGroup, setPairDetailGroup] =
     useState<PairDetailGroup>("shared");
 
+  // CellOracle's prior-constrained candidates are not directly comparable to
+  // the de novo methods in the agreement and overlap figures.
+  const comparisonAlgorithmIds = useMemo(
+    () => activeAlgorithmIds.filter((id) => id.toUpperCase() !== "CELLORACLE"),
+    [activeAlgorithmIds],
+  );
   const eligibleAlgorithmIds = useMemo(
     () =>
-      activeAlgorithmIds.filter((algorithmId) => {
+      comparisonAlgorithmIds.filter((algorithmId) => {
         const metadata = algorithmMetaMap.get(algorithmId);
         if (mode === "direction") return metadata?.directed ?? true;
         if (mode === "sign") return metadata?.signed ?? false;
         return true;
       }),
-    [activeAlgorithmIds, algorithmMetaMap, mode],
+    [comparisonAlgorithmIds, algorithmMetaMap, mode],
   );
-  const omittedAlgorithmIds = activeAlgorithmIds.filter(
+  const omittedAlgorithmIds = comparisonAlgorithmIds.filter(
     (algorithmId) => !eligibleAlgorithmIds.includes(algorithmId),
   );
   const rankedKeys = useMemo(() => {
@@ -2102,7 +2108,7 @@ function AgreementView({
         activeAlgorithmIds={activeAlgorithmIds}
         selectedResultScopeId={selectedResultScopeId}
       />
-      {activeAlgorithmIds.length >= 2 ? (
+      {comparisonAlgorithmIds.length >= 2 ? (
       <Panel
         title="Method agreement"
         titleAction={
@@ -2494,7 +2500,7 @@ function AgreementView({
         )}
       </Panel>
       ) : null}
-      {activeAlgorithmIds.length >= 2 && orderedAlgorithmIds.length >= 2 && regulatorRows.length ? (
+      {comparisonAlgorithmIds.length >= 2 && orderedAlgorithmIds.length >= 2 && regulatorRows.length ? (
         <Panel
           title="Key regulators across methods"
           description={`Each cell is a gene's rank as a regulator in one method's top ${topK.toLocaleString()} edges (1 = most targets). Methods often agree more on which regulators matter than on single edges.`}

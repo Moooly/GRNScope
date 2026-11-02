@@ -20,6 +20,9 @@ import {
   type TimingEdge,
 } from "./TrajectoryFigures";
 
+// Temporarily hidden; enable this flag to restore the existing panel.
+const SHOW_REGULATOR_TIMING_PANEL = false;
+
 export type TrajectoryData = {
   available: boolean;
   reason?: string;
@@ -1616,7 +1619,7 @@ export default function TrajectoryInsights({
 
   return (
     <div className="space-y-5">
-      {panels.map((panel) => (
+      {panels.filter((panel) => panel.key !== "timing" || SHOW_REGULATOR_TIMING_PANEL).map((panel) => (
         <section key={panel.key} className="rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="min-w-0 flex-1">

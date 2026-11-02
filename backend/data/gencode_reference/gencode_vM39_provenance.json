@@ -1,0 +1,16 @@
+{
+  "species": "mouse",
+  "assembly": "GRCm39",
+  "annotation": "GENCODE M39",
+  "coordinate_system": "1-based inclusive",
+  "source_url": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M39/gencode.vM39.annotation.gtf.gz",
+  "source_sha256": "ef1e939e7cd622fcf9de20049ad42ee54c1adf2bfecfa20b45bf37cdc81c52c8",
+  "counts": {
+    "gene": 78289,
+    "transcript": 481871
+  },
+  "files": {
+    "gencode_vM39_gene_coordinates.tsv.gz": "40b9f074d7e51fa31a35cacb8c9eb4c02972f2fe86a4fbac875ffe87a1fd091c",
+    "gencode_vM39_transcript_coordinates.tsv.gz": "f53cc54e9ac5c50970994cf8a70d3fc81565b39c73918ee0eb4201517d675d71"
+  }
+}

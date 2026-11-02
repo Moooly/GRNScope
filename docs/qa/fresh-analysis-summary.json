@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "algorithms": {
+    "PEARSON": 529,
+    "GENIE3": 535,
+    "CELLORACLE": 122
+  },
+  "perturbation_gene": "STAT3",
+  "dataset": "synthetic raw counts, 24 genes and 120 cells",
+  "bootstrap_runs": 2,
+  "perturbation": {
+    "gene": "STAT3",
+    "value": 0,
+    "propagation_steps": 3,
+    "status": "Completed"
+  }
+}

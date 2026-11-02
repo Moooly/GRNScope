@@ -67,7 +67,7 @@ const list = (items: string[]) => items.length <= 1 ? items.join("") : `${items.
 export function figureLegend(nodes: NetworkNode[], edges: NetworkEdge[], ctx: PaperContext) {
   const genes = geneRows(nodes, edges);
   const soft = ctx.palette === "soft";
-  const directed = edges.some(hasDirection), undirected = edges.some(e => !hasDirection(e));
+  const undirected = edges.some(e => !hasDirection(e));
   const signs = new Set(edges.map(e => e.sign));
   const faded = edges.some(e => e.bootstrapVerified && e.confidence < 0.8);
   const filters = activeFilters(ctx.filters);
@@ -78,7 +78,6 @@ export function figureLegend(nodes: NetworkNode[], edges: NetworkEdge[], ctx: Pa
       + `${ctx.focus ? `, showing the direct neighbourhood of ${ctx.focus}` : ""}`
       + `${ctx.effect !== "all" ? `; ${ctx.effect === "unknown" ? "edges of unknown sign" : `${ctx.effect} edges`} only` : ""}.`,
     `${soft ? "Blue" : "Orange"} circles, transcription factors; ${soft ? "yellow" : "grey"} circles, other genes; circle size, ${ctx.sizeBy === "out" ? "number of target genes" : ctx.sizeBy === "in" ? "number of regulators" : "number of edges"}.`,
-    ...(directed ? [`Each circle is split by edge direction (dark, regulates; light, regulated by${undirected ? "; pale, direction unknown" : ""}).`] : []),
     [signs.has(1) ? "Arrowheads, activation" : "", signs.has(-1) ? "bars, repression" : "", signs.has(0) ? "no tip, sign unknown" : "", undirected ? "dashed lines, direction not resolved" : ""].filter(Boolean).join("; ").replace(/^./, c => c.toUpperCase()) + ".",
     `Line width, ${ctx.widthBy === "support" ? "number of methods reporting the edge" : "evidence (per-target rank, 0–1)"}${faded ? "; faded lines, bootstrap confidence below 0.8" : ""}.`,
   ].filter(s => s !== ".");

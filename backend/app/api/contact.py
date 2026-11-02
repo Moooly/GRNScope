@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from starlette.concurrency import run_in_threadpool
 
 from ..schemas import ContactSupportRequest, ContactSupportResponse
 from ..services.email_service import (
@@ -35,7 +36,8 @@ async def create_contact_request(
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
 
     try:
-        send_contact_email(
+        await run_in_threadpool(
+            send_contact_email,
             question=question,
             reply_to_email=reply_to_email,
             page_url=(payload.page_url or "").strip() or None,

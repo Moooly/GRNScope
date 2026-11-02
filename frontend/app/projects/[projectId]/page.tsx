@@ -35,6 +35,7 @@ import PerturbationAnalysisSection from "./_components/PerturbationAnalysisSecti
 import AnalysisSetupSection from "./_components/AnalysisSetupSection";
 import StopProjectModal from "../_components/StopProjectModal";
 import useProjectDetailData from "./_hooks/useProjectDetailData";
+import { coordinateMatchesReference, referenceForProject } from "./_lib/genomeCoordinates";
 import { clearCachedResults } from "./_lib/resultsCache";
 import { API_BASE } from "../../_lib/apiConfig";
 import { apiFetch } from "../../_lib/clientIdentity";
@@ -177,6 +178,8 @@ const ALGORITHM_GENE_ADJUSTMENT_REASONS: Record<string, string> = {
 };
 
 type GeneCoordinateInfo = {
+  coordinate_species?: string | null;
+  coordinate_assembly?: string | null;
   chromosome?: string | null;
   start?: number | null;
   end?: number | null;
@@ -192,6 +195,14 @@ export default function ProjectDetailPage() {
   const routeProjectId = Array.isArray(params?.projectId) ? params.projectId[0] : params?.projectId;
   const projectId = routeProjectId === "sample" ? "demo" : routeProjectId;
   const isDemoRoute = projectId === "demo" || routeProjectId === "sample";
+  return <ProjectDetailContent key={projectId} projectId={projectId} routeProjectId={routeProjectId} isDemoRoute={isDemoRoute} />;
+}
+
+function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
+  projectId: string;
+  routeProjectId: string;
+  isDemoRoute: boolean;
+}) {
 
   const {
     project,
@@ -580,8 +591,8 @@ export default function ProjectDetailPage() {
     if (!isDemoProject || hasAppliedDemoDefaultsRef.current) return;
     if (activeAlgorithmIds.length < 7) return;
 
-    setEvidenceThreshold(0.8);
-    setConfidenceThreshold(0.8);
+    setEvidenceThreshold(DEFAULT_EVIDENCE_THRESHOLD);
+    setConfidenceThreshold(0);
     setConsensusThreshold(7);
     setHasTouchedConsensusThreshold(true);
     hasAppliedDemoDefaultsRef.current = true;
@@ -1606,6 +1617,15 @@ export default function ProjectDetailPage() {
     });
   }, [isDemoProject, projectId, evidenceThreshold, confidenceThreshold, directionConfidenceThreshold, signConfidenceThreshold, consensusThreshold]);
 
+  const coordinateSpecies = isDemoProject ? "human" : project?.preprocessing?.dataset_species ?? project?.dataset_species ?? metadata?.preprocessing?.dataset_species;
+  const genomeReference = useMemo(() => {
+    for (const id of activeAlgorithmIds) {
+      const reference = referenceForProject(algorithmResults[id]?.genome_reference, coordinateSpecies);
+      if (reference) return reference;
+    }
+    return null;
+  }, [activeAlgorithmIds, algorithmResults, coordinateSpecies]);
+
   const geneCoordinateMap = useMemo(() => {
     const coordinates = new Map<string, GeneCoordinateInfo>();
 
@@ -1613,14 +1633,14 @@ export default function ProjectDetailPage() {
       const resultCoordinates = algorithmResults[algorithmId]?.gene_coordinates ?? {};
 
       Object.entries(resultCoordinates).forEach(([geneName, coordinate]) => {
-        if (!coordinates.has(geneName)) {
+        if (!coordinates.has(geneName) && coordinateMatchesReference(coordinate, genomeReference)) {
           coordinates.set(geneName, coordinate);
         }
       });
     });
 
     return coordinates;
-  }, [activeAlgorithmIds, algorithmResults]);
+  }, [activeAlgorithmIds, algorithmResults, genomeReference]);
 
   const filteredNetworkEdges = useMemo(() => {
     const query = tableSearch.trim().toLowerCase();
@@ -1653,6 +1673,8 @@ export default function ProjectDetailPage() {
           isTF: visualTFGeneIds.has(edge.source.toUpperCase()),
           topRegulators: [],
           topTargets: [],
+          coordinate_species: coordinate?.coordinate_species ?? null,
+          coordinate_assembly: coordinate?.coordinate_assembly ?? null,
           chromosome: coordinate?.chromosome ?? null,
           start: coordinate?.start ?? null,
           end: coordinate?.end ?? null,
@@ -1673,6 +1695,8 @@ export default function ProjectDetailPage() {
           isTF: visualTFGeneIds.has(edge.target.toUpperCase()),
           topRegulators: [],
           topTargets: [],
+          coordinate_species: coordinate?.coordinate_species ?? null,
+          coordinate_assembly: coordinate?.coordinate_assembly ?? null,
           chromosome: coordinate?.chromosome ?? null,
           start: coordinate?.start ?? null,
           end: coordinate?.end ?? null,
@@ -1980,29 +2004,28 @@ export default function ProjectDetailPage() {
     async (email: string) => {
       if (!projectId || isDemoProject) return false;
 
-      try {
-        const response = await apiFetch(
-          `${API_BASE}/projects/${projectId}/notification-email`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ notification_email: email }),
-          }
-        );
-
-        if (!response.ok) return false;
-
-        const data = await response.json();
-        if (data.latest_job) {
-          setLatestJob(data.latest_job);
+      const response = await apiFetch(
+        `${API_BASE}/projects/${projectId}/notification-email`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ notification_email: email }),
         }
-        await refreshProjectData();
-        return true;
-      } catch {
-        return false;
+      );
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(typeof payload?.detail === "string" ? payload.detail : "Could not save email. Please try again.");
       }
+
+      const data = await response.json();
+      if (data.latest_job) {
+        setLatestJob(data.latest_job);
+      }
+      await refreshProjectData();
+      return true;
     },
     [isDemoProject, projectId, refreshProjectData, setLatestJob]
   );
@@ -2545,6 +2568,7 @@ useEffect(() => {
                       onGraphReady={(cy) => {
                         networkGraphRef.current = cy;
                       }}
+                      genomeReference={genomeReference}
                       networkNodes={networkNodes}
                       filteredNetworkEdges={filteredNetworkEdges}
                       selectedGene={selectedGene}

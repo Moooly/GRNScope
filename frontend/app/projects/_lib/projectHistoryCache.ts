@@ -13,6 +13,7 @@ function storageKey(clientId: string) {
 }
 
 function toOptionalNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }

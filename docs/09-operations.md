@@ -173,8 +173,9 @@ is smaller of one hour or a quarter of the TTL.
 | `GRNSCOPE_CONTACT_EMAIL` / `GRNSCOPE_SUPPORT_EMAIL` | Where the contact form goes |
 | `GRNSCOPE_PUBLIC_URL` | Base URL used in notification links |
 
-Email is optional. Without `GRNSCOPE_SMTP_HOST` the notification field simply has
-no effect.
+Email is optional. When SMTP is not configured, saving a notification email
+returns HTTP 503 with a clear message; the browser keeps the field editable
+instead of claiming the notification was saved.
 
 ### Frontend
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE } from "./_lib/apiConfig";
+import { startPolling } from "./_lib/polling";
 import { apiFetch } from "./_lib/clientIdentity";
 import ProjectCard from "./projects/_components/ProjectCard";
 import DeleteProjectModal from "./projects/_components/DeleteProjectModal";
@@ -24,6 +25,8 @@ const CreateProjectFlow = dynamic(() => import("./projects/_components/CreatePro
 
 export default function HomePage() {
   const [projectHistory, setProjectHistory] = useState<Project[]>([]);
+  const [historyError, setHistoryError] = useState("");
+  const [historyReload, setHistoryReload] = useState(0);
   const [isProjectHistoryLoading, setIsProjectHistoryLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [canScrollProjectHistoryRight, setCanScrollProjectHistoryRight] = useState(false);
@@ -58,11 +61,12 @@ export default function HomePage() {
     }
 
     const loadProjectHistory = async () => {
+      setHistoryError("");
       try {
         const projects = await fetchProjectHistory();
         if (!isCancelled) setProjectHistory(projects);
       } catch {
-        // Keep showing the last successful list when a background refresh fails.
+        if (!isCancelled) setHistoryError("We couldn’t refresh your projects. Check your connection and try again.");
       } finally {
         if (!isCancelled) setIsProjectHistoryLoading(false);
       }
@@ -72,38 +76,40 @@ export default function HomePage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [historyReload]);
 
-  const activeProjectIds = useMemo(
-    () =>
+  const activeProjectIdsKey = useMemo(
+    () => JSON.stringify(
       visibleProjectHistory
         .filter((project) => {
           const latestJob = project.latestJob;
           if (!latestJob) return false;
           const hasActiveTasks = latestJob.tasks?.some(
-            (task) => task.status === "Queued" || task.status === "Running",
+            (task) => task.status === "Queued" || task.status === "Running" || task.status === "Stopping",
           );
           return (
             latestJob.overall_status === "Queued" ||
             latestJob.overall_status === "Running" ||
+            latestJob.overall_status === "Stopping" ||
             Boolean(hasActiveTasks)
           );
         })
-        .map((project) => project.id),
+        .map((project) => project.id).sort()),
     [visibleProjectHistory],
   );
 
   useEffect(() => {
+    const activeProjectIds = JSON.parse(activeProjectIdsKey) as string[];
     if (activeProjectIds.length === 0) return;
 
     let isCancelled = false;
 
-    const updateProjectStatuses = async () => {
+    const updateProjectStatuses = async (signal: AbortSignal) => {
       try {
         const responses = await Promise.all(
           activeProjectIds.map(async (projectId) => {
             try {
-              const response = await apiFetch(`${API_BASE}/projects/${projectId}`);
+              const response = await apiFetch(`${API_BASE}/projects/${projectId}`, { signal });
               if (!response.ok) return null;
               const data = await response.json();
               return {
@@ -151,13 +157,12 @@ export default function HomePage() {
       }
     };
 
-    updateProjectStatuses();
-    const intervalId = window.setInterval(updateProjectStatuses, 5000);
+    const stopPolling = startPolling(updateProjectStatuses, 5000, true);
     return () => {
       isCancelled = true;
-      window.clearInterval(intervalId);
+      stopPolling();
     };
-  }, [activeProjectIds]);
+  }, [activeProjectIdsKey]);
 
   const projectsMissingDimensions = useMemo(
     () =>
@@ -566,7 +571,14 @@ export default function HomePage() {
             </button>
           </div>
 
-          {isProjectHistoryLoading ? (
+          {historyError && (
+          <div role="alert" className="my-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <span>{historyError}</span>
+            <button type="button" className="font-bold underline underline-offset-2" onClick={() => setHistoryReload((value) => value + 1)}>Try again</button>
+          </div>
+        )}
+
+        {isProjectHistoryLoading ? (
             <HomeProjectHistoryLoading />
           ) : visibleProjectHistory.length > 0 ? (
             <div className="group/history relative mt-5">
@@ -605,7 +617,7 @@ export default function HomePage() {
                 </div>
               ) : null}
             </div>
-          ) : (
+          ) : historyError ? null : (
             <Link
               href="/projects"
               className="mt-5 block rounded-[1.5rem] border border-dashed border-slate-300 bg-white px-6 py-8 text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]"
@@ -674,6 +686,7 @@ function HomeProjectHistoryLoading() {
 }
 
 function toOptionalNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }

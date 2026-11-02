@@ -13,6 +13,7 @@ import {
   MODULE_COLORS,
   MODULE_NEUTRAL,
 } from "./networkModules";
+import CircosLegend from "./CircosLegend";
 
 const GROUP_LABEL = {
   fontSize: 10,
@@ -27,7 +28,6 @@ const INK = "#4a5b6b";
 
 export default function NetworkLegend({
   metric,
-  methodCount,
   circos = false,
   appearance = "classic",
   onChangeMetric,
@@ -41,36 +41,7 @@ export default function NetworkLegend({
   confidenceDisabled?: boolean;
 }) {
   const palette = NETWORK_APPEARANCES[appearance];
-  if (circos)
-    return (
-      <footer className="grn-legend" aria-label="Chromosome network legend">
-        <div>
-          <strong>Reading Circos</strong>
-          <p>
-            Outer sectors group genes by chromosome. Ribbons summarize
-            relationships between chromosome groups; wider ribbons represent
-            more relationships.
-          </p>
-        </div>
-        <div>
-          <strong>Explore a ribbon</strong>
-          <p>
-            Select a chromosome or ribbon to inspect its genes and
-            relationships. Color identifies the source chromosome, not
-            regulatory sign. Opacity shows mean evidence (below 0.75, 0.75–0.90,
-            at least 0.90); dense views use lower opacity.
-          </p>
-        </div>
-        <div>
-          <strong>Gene activity</strong>
-          <p>
-            Diamond marks identify TFs. Taller gene tracks mean more outgoing
-            relationships. Sector widths reflect activity, not chromosome
-            length.
-          </p>
-        </div>
-      </footer>
-    );
+  if (circos) return <CircosLegend />;
   // Focused consensus: one uniform line per relationship, with the arrowhead
   // carrying agreement and evidence. Long explanations live in the tooltips so
   // the bar stays a single scannable row.

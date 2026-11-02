@@ -18,7 +18,8 @@ from ..services.beeline_service import (
     compute_repeat_run_spearman_from_paths,
 )
 from ..services.ranked_edges import compute_beeline_path_stats
-from ..services.gene_coordinate_service import get_gene_coordinate
+from ..services.gene_coordinate_service import (get_gene_coordinate, get_coordinate_reference, project_coordinate_species)
+from ..repositories.project_repository import read_project_manifest
 from ..services.demo_service import (
     get_demo_algorithm_ids,
     get_demo_algorithm_result_path,
@@ -503,7 +504,7 @@ def iter_result_edges(result: dict):
                 yield edge
 
 
-def attach_gene_coordinates_to_result(result: dict) -> dict:
+def attach_gene_coordinates_to_result(result: dict, species: str | None) -> dict:
     """Attach chromosome coordinate metadata for genes in a result payload.
 
     The frontend can use `gene_coordinates` to place genes by chromosome/start
@@ -522,7 +523,7 @@ def attach_gene_coordinates_to_result(result: dict) -> dict:
 
     gene_coordinates = {}
     for gene_name in sorted(gene_names):
-        coordinate = get_gene_coordinate(gene_name)
+        coordinate = get_gene_coordinate(gene_name, species)
         if coordinate:
             gene_coordinates[gene_name] = coordinate
 
@@ -530,6 +531,7 @@ def attach_gene_coordinates_to_result(result: dict) -> dict:
         **result,
         "gene_coordinates": gene_coordinates,
         "gene_coordinate_count": len(gene_coordinates),
+        "genome_reference": get_coordinate_reference(species),
     }
 
 
@@ -546,7 +548,7 @@ def read_demo_algorithm_result_from_json(algorithm_id: str) -> dict:
     except FileNotFoundError:
         result.pop("ranked_edges_path", None)
 
-    return attach_gene_coordinates_to_result(compact_result_for_client(result))
+    return attach_gene_coordinates_to_result(compact_result_for_client(result), "human")
 
 
 def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
@@ -628,7 +630,8 @@ def read_demo_algorithm_result_from_csv(algorithm_id: str) -> dict:
                 "ranked_edges": edges,
                 "source_file": str(ranked_edges_path),
             }
-        )
+        ),
+        "human",
     )
 
 
@@ -877,7 +880,9 @@ async def get_algorithm_result(
         )
         if limit and limit > 0:
             compact = limit_result_edges(compact, limit)
-        result = attach_gene_coordinates_to_result(compact)
+        result = attach_gene_coordinates_to_result(
+            compact, project_coordinate_species(read_project_manifest(project_dir))
+        )
         return {
             "ok": True,
             "project_id": project_id,

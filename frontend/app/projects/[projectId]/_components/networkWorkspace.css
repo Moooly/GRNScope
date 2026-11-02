@@ -1336,6 +1336,82 @@
   border-color: #1b75a6;
 }
 
+/* Keep the Circos key visible; reveal the reading guide only on request. */
+.grn-atlas[data-appearance] > .grn-legend.grn-circos-legend {
+  display: block;
+  padding: 0;
+  background: #fff;
+}
+.grn-circos-guide > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  padding: 13px 24px;
+  list-style: none;
+  cursor: pointer;
+}
+.grn-circos-guide > summary::-webkit-details-marker { display: none; }
+.grn-circos-guide > summary:hover { background: #f8fbfd; }
+.grn-circos-guide > summary:focus-visible {
+  outline: 2px solid #1b75a6;
+  outline-offset: -3px;
+  border-radius: 4px;
+}
+.grn-circos-keys {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+.grn-circos-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #4a5f70;
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.grn-circos-key svg { flex-shrink: 0; }
+.grn-circos-guide-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  color: #1b75a6;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.grn-circos-guide[open] .grn-circos-guide-toggle svg { transform: rotate(180deg); }
+.grn-circos-guide-content {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 24px;
+  margin: 0 24px;
+  padding: 18px 0 20px;
+  border-top: 1px solid #e7edf2;
+}
+.grn-circos-guide-content h4 {
+  margin: 0;
+  color: #293e4e;
+  font-size: 12px;
+  font-weight: 650;
+}
+.grn-atlas[data-appearance] .grn-circos-guide-content p {
+  margin: 7px 0 0;
+  color: #526779;
+  font-size: 12px;
+  line-height: 1.7;
+}
+@media (max-width: 760px) {
+  .grn-circos-guide > summary { padding: 12px 20px; gap: 12px; }
+  .grn-circos-keys { gap: 8px 16px; }
+  .grn-circos-guide-content { grid-template-columns: 1fr; margin: 0 20px; gap: 18px; }
+}
+
 /* Compact publication key and controls; label placement reserves their bounds. */
 .publication-legend { color: #4a5953; font-size: 11px; display: flex; flex-wrap: wrap; gap: 10px 18px; padding-block: 12px; border-block: 1px solid #e3e9e6; background: #fff; }
 .publication-views { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: #56665e; font-size: 11px; }
@@ -1474,7 +1550,7 @@
 .tp tbody tr td { transition: background 100ms; }
 .tp tbody tr:hover td { background: #fff; box-shadow: inset 0 1px 0 var(--tp-line), inset 0 -1px 0 var(--tp-line); }
 .tp tbody tr.is-sel td { background: #eaf0f7; }
-.tp td.tp-gl, .tp td.tp-pie { width: 1%; }
+.tp td.tp-gl, .tp td.tp-node-glyph { width: 1%; }
 .tp-glyph, .tp td svg { display: block; flex: none; }
 .tp-gene { display: inline-flex; align-items: center; gap: 7px; }
 .tp-gene em { font-style: italic; }
@@ -1546,6 +1622,46 @@
 .tp-hist span { font-size: 11px; color: #8a949e; font-variant-numeric: tabular-nums; }
 .tp-hist i { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: #56606a; }
 .tp-hist-axis { display: flex; justify-content: space-between; padding: 4px 4px 0; font-size: 11px; color: #9aa3ad; font-variant-numeric: tabular-nums; }
+
+/* Every layout uses the same chart/panel bounds and responsive key height. */
+.grn-workspace-key { position: relative; min-height: 44px; background: #fff; }
+.grn-workspace-key[data-circos="true"] > .grn-standard-key { visibility: hidden; pointer-events: none; }
+.grn-circos-key-overlay { position: absolute; inset: 0; display: flex; align-content: center; align-items: center; flex-wrap: wrap; gap: 8px 24px; padding: 8px 24px; border-top: 1px solid #eef1f3; }
+.grn-circos-key-overlay .figure-filter { font-size: 11.5px; }
+.grn-split > .tp-show { z-index: 30; } /* Above the Circos SVG and its focus controls. */
+.grn-atlas[data-appearance] .grn-split > .grn-graph-region { height: clamp(560px, 72dvh, 900px); background: #fff; }
+.circos-panel-context { display: flex; align-items: center; gap: 8px; padding: 2px 14px 12px; font-size: 12px; font-weight: 600; }
+.circos-panel-context > span { min-width: 0; overflow-wrap: anywhere; }
+.circos-panel-context .tp-x { flex-shrink: 0; }
+.circos-rank-list { display: grid; gap: 3px; }
+.circos-rank-list button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; text-align: left; color: var(--tp-ink); font: inherit; font-size: 12px; cursor: pointer; }
+.circos-rank-list button:hover { background: #fff; }
+.circos-rank-list button:focus-visible { outline: 2px solid #1b75a6; outline-offset: -2px; }
+.circos-rank-list button > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.circos-rank-list b { margin-left: auto; flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.circos-rank-list small { margin-left: 8px; color: var(--tp-muted); font-size: 10.5px; }
+.circos-chromosome-name { flex: 0 0 42px; }
+.circos-rank-track { flex: 1; height: 5px; border-radius: 4px; background: #e0e6ed; overflow: hidden; }
+.circos-rank-track i { display: block; height: 100%; background: #7095b7; border-radius: inherit; }
+.circos-reference { padding: 12px; border: 1px solid #e6ebf0; border-radius: 10px; background: #fff; font-size: 11.5px; color: #687787; }
+.circos-reference h4 { margin: 0 0 3px; color: #344b5f; font-size: 12px; font-weight: 600; }
+.circos-reference p { margin: 8px 0; font-variant-numeric: tabular-nums; }
+.circos-reference .tp-link { font-size: 11.5px; color: #1b75a6; }
+.circos-overview .grn-circos-guide { border: 1px solid #e6ebf0; border-radius: 10px; background: #fff; }
+.circos-overview .grn-circos-guide > summary { padding: 11px 12px; }
+.circos-overview .grn-circos-guide-toggle { width: 100%; justify-content: space-between; }
+.circos-overview .grn-circos-guide-content { grid-template-columns: 1fr; gap: 14px; margin: 0 12px; padding: 14px 0; }
+.circos-overview .grn-circos-guide-content h4 { font-size: 11.5px; }
+.circos-overview .grn-circos-guide-content p { font-size: 11.5px; line-height: 1.65; }
+@media (min-width: 721px) and (max-width: 1023px) {
+  .grn-split .tp-head { padding-inline: 10px; gap: 5px; }
+  .grn-split .tp-tabs [role="tab"] { padding-inline: 6px; font-size: 11px; }
+  .grn-split .tp-hide { flex-shrink: 0; }
+}
+@media (max-width: 720px) {
+  .grn-circos-key-overlay { padding-inline: 12px; }
+  .grn-atlas[data-appearance] .grn-split .tp { height: min(560px, 70dvh); }
+}
 .galaxy-hover-tip { position: absolute; z-index: 5; pointer-events: none; background: #1f2a30; color: #fff; font-size: 12px; padding: 4px 9px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.18); white-space: nowrap; }
 .galaxy-hover-tip i { font-style: italic; }
 

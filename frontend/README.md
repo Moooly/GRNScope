@@ -23,3 +23,8 @@ Run `npm run check` for ESLint, TypeScript, network tests, and a production buil
 - `scripts/` contains network layout and export checks.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the module and styling conventions used during the refactor. `AGENTS.md` requires reading the installed Next.js documentation before editing Next-specific code.
+
+## Supported local Node version
+
+Use Node.js 24 LTS (`.nvmrc`) for local checks and development. This matches the
+engine requirements of the lint tools.

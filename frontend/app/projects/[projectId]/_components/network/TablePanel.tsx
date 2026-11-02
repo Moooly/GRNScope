@@ -37,6 +37,12 @@ type Props = {
   /** The figure's link filter, shown at the top of the sheet. */
   filter?: ReactNode;
   palette?: PaletteName;
+  /** A layout can supply its own overview while sharing tables and detail cards. */
+  overviewContent?: ReactNode;
+  contextHeader?: ReactNode;
+  contextKey?: string;
+  onOverview?: () => void;
+  edgeHoverHint?: boolean;
 };
 
 type View = "overview" | "links" | "genes";
@@ -59,22 +65,13 @@ function csv(rows: string[][]) {
   return rows.map(r => r.map(v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v).join(",")).join("\n");
 }
 
-/** A gene's pie in its own colours: dark = regulates, light = regulated by,
- * pale = direction unknown, from 12 o'clock — the same mark as on the canvas. */
-export function PieGlyph({ tf, out, inn, unknown, size = 14, T }: { tf: boolean; out: number; inn: number; unknown: number; size?: number; T: Palette }) {
-  const pal = tf ? T.pieTF : T.pieGene, r = size / 2, total = out + inn + unknown;
-  if (!total || out + inn === 0) return <svg width={size} height={size} aria-hidden="true"><circle cx={r} cy={r} r={r} fill={tf ? T.tf : T.node} /></svg>;
-  const parts = [out, inn, unknown].map(v => v / total);
-  let start = 0;
-  return <svg width={size} height={size} aria-hidden="true">{parts.map((p, i) => {
-    if (p <= 0) return null;
-    if (p >= 0.9999) return <circle key={i} cx={r} cy={r} r={r} fill={pal[i]} />;
-    const a0 = start * 2 * Math.PI - Math.PI / 2, a1 = (start + p) * 2 * Math.PI - Math.PI / 2; start += p;
-    return <path key={i} fill={pal[i]} d={`M${r},${r}L${r + r * Math.cos(a0)},${r + r * Math.sin(a0)}A${r},${r} 0 ${p > 0.5 ? 1 : 0} 1 ${r + r * Math.cos(a1)},${r + r * Math.sin(a1)}Z`} />;
-  })}</svg>;
+/** A solid gene mark matching its fill on the network canvas. */
+export function GeneGlyph({ tf, size = 14, T }: { tf: boolean; size?: number; T: Palette }) {
+  const r = size / 2;
+  return <svg width={size} height={size} aria-hidden="true"><circle cx={r} cy={r} r={r} fill={tf ? T.tf : T.node} /></svg>;
 }
 
-export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE }: Props) {
+export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE, overviewContent, contextHeader, contextKey, onOverview, edgeHoverHint = true }: Props) {
   const T = PALETTES[palette];
   const [view, setView] = useState<View>("overview");
   const [linkSort, setLinkSort] = useState<{ key: LinkKey; desc: boolean }>({ key: "evidence", desc: true });
@@ -120,7 +117,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
   }, [selectedEdgeKey]);
   // A new card starts at its top, and a row that vanished with the old view
   // must not keep its link focused on the canvas.
-  useEffect(() => { bodyRef.current?.scrollTo?.({ top: 0 }); onHoverEdge(null); }, [selectedGene, selectedEdgeKey, view, onHoverEdge]);
+  useEffect(() => { bodyRef.current?.scrollTo?.({ top: 0 }); onHoverEdge(null); }, [selectedGene, selectedEdgeKey, view, contextKey, onHoverEdge]);
 
   const histogram = useMemo(() => scoreDistributions(edges), [edges]);
   const segKey = segHover ?? segPinned;
@@ -153,7 +150,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
   const gene = (id: string, strong = false) => <span className={`tp-gene${strong ? " is-strong" : ""}`}>
     <i className="tp-dot" style={{ background: tfOf.get(id) ? T.tf : T.node }} aria-label={tfOf.get(id) ? "transcription factor" : "other gene"} /><em>{id}</em>
   </span>;
-  const pie = (id: string, size = 14) => <PieGlyph tf={!!tfOf.get(id)} out={degrees.out.get(id) ?? 0} inn={degrees.in.get(id) ?? 0} unknown={degrees.unknown.get(id) ?? 0} size={size} T={T} />;
+  const geneGlyph = (id: string, size = 14) => <GeneGlyph tf={!!tfOf.get(id)} size={size} T={T} />;
   // Evidence bar: most links sit high on the 0–1 scale, so the bar starts at
   // 0.4 to keep differences visible; the number stays exact.
   const evidence = (v: number, width = 56) => <span className="tp-ev">
@@ -196,9 +193,9 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     return <div className="tp-card">
       {crumb(`${r.regulator} – ${r.target}`, () => onSelectEdge(null))}
       <div className="tp-link-head">
-        <button type="button" onClick={() => onSelectGene(r.regulator)} title={`Open ${r.regulator}`}>{pie(r.regulator, 28)}<em>{r.regulator}</em></button>
+        <button type="button" onClick={() => onSelectGene(r.regulator)} title={`Open ${r.regulator}`}>{geneGlyph(r.regulator, 28)}<em>{r.regulator}</em></button>
         {glyph(r, 40)}
-        <button type="button" onClick={() => onSelectGene(r.target)} title={`Open ${r.target}`}>{pie(r.target, 28)}<em>{r.target}</em></button>
+        <button type="button" onClick={() => onSelectGene(r.target)} title={`Open ${r.target}`}>{geneGlyph(r.target, 28)}<em>{r.target}</em></button>
       </div>
       <p className="tp-sub">{e.sign === 1 ? "Activation" : e.sign === -1 ? "Repression" : "Sign unknown"}{r.directed ? "" : " · direction not resolved"}</p>
       <div className="tp-stats">
@@ -230,7 +227,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     </section>;
     return <div className="tp-card">
       {crumb(id, () => onSelectGene(null))}
-      <div className="tp-gene-head">{pie(id, 56)}<div><h3><i>{id}</i></h3><span className={`tp-tag${tf ? " is-tf" : ""}`}>{tf ? "Transcription factor" : "Other gene"}</span></div></div>
+      <div className="tp-gene-head">{geneGlyph(id, 56)}<div><h3><i>{id}</i></h3><span className={`tp-tag${tf ? " is-tf" : ""}`}>{tf ? "Transcription factor" : "Other gene"}</span></div></div>
       <div className="tp-stats">
         {anyDirected ? <>{stat(regulates.length, "regulates")}{stat(regulatedBy.length, "regulated by")}</> : stat(mine.length, plural(mine.length, "edge").replace(/^\d+ /, ""))}
         {stat(mine.length ? mine[0].edge.score.toFixed(2) : "—", "strongest evidence")}
@@ -324,7 +321,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         <table><tbody>{top.map(g => {
           const v = anyDirected ? g.targets : g.total;
           return <tr key={g.id} onClick={() => onSelectGene(g.id)} title={`Open ${g.id}`}>
-            <td className="tp-pie">{pie(g.id, 16)}</td><td><span className="tp-gene is-strong"><em>{g.id}</em></span></td>
+            <td className="tp-node-glyph">{geneGlyph(g.id, 16)}</td><td><span className="tp-gene is-strong"><em>{g.id}</em></span></td>
             <td className="n"><span className="tp-ev"><span className="tp-track" style={{ width: 110 }}><span className="tp-fill is-tf" style={{ width: Math.round((v / topMax) * 110), background: T.tf }} /></span><span className="tp-num">{v}</span></span></td>
           </tr>;
         })}</tbody></table>
@@ -366,7 +363,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
       <th className="n" onClick={() => sortGene("total")}>Edges{arrow(geneSort.key === "total", geneSort.desc)}</th>
     </tr></thead>
     <tbody>{genes.map(g => <tr key={g.id} className={g.id === selectedGene ? "is-sel" : undefined} onClick={() => onSelectGene(g.id === selectedGene ? null : g.id)}>
-      <td><span className="tp-gene">{pie(g.id, 12)}<em>{g.id}</em></span></td>
+      <td><span className="tp-gene">{geneGlyph(g.id, 12)}<em>{g.id}</em></span></td>
       {anyDirected && <td className="n tp-num">{g.targets}</td>}
       {anyDirected && <td className="n tp-num">{g.regulators}</td>}
       {anyDirected && anyUnknown && <td className="n tp-num">{g.unknown}</td>}
@@ -376,7 +373,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
 
   const card = selectedEdge ? linkCard(selectedEdge) : selectedGene && tfOf.has(selectedGene) ? geneCard(selectedGene) : null;
   const tab = (key: View, label: string, count?: number) => <button type="button" role="tab" aria-selected={!card && view === key}
-    onClick={() => { setView(key); if (selectedEdgeKey) onSelectEdge(null); else if (selectedGene) onSelectGene(null); }}>
+    onClick={() => { setView(key); if (selectedEdgeKey) onSelectEdge(null); else if (selectedGene) onSelectGene(null); if (key === "overview") onOverview?.(); }}>
     {label}{count !== undefined && <span className="tp-count">{count.toLocaleString()}</span>}
   </button>;
 
@@ -390,11 +387,12 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
       <button type="button" className="tp-hide" onClick={onHide} aria-label="Hide panel" title="Hide panel">⟩</button>
     </div>
     {filter && <div className="tp-filter">{filter}</div>}
+    {contextHeader}
     <div className="tp-body" ref={bodyRef} onMouseLeave={() => onHoverEdge(null)}>
-      {card ?? (view === "overview" ? overview() : view === "links" ? linksTable : genesTable)}
+      {card ?? (view === "overview" ? overviewContent ?? overview() : view === "links" ? linksTable : genesTable)}
     </div>
     {!card && view !== "overview" && <div className="tp-foot">
-      <span>{view === "links" ? `${plural(rows.length, "edge")} · hover a row to see it on the network` : plural(genes.length, "gene")}</span>
+      <span>{view === "links" ? `${plural(rows.length, "edge")}${edgeHoverHint ? " · hover a row to see it on the network" : ""}` : plural(genes.length, "gene")}</span>
       <button type="button" className="tp-link" onClick={() => download(view)}>⤓ CSV</button>
     </div>}
   </aside>;

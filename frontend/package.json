@@ -8,9 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/opening-cut.test.cjs scripts/paper-export.test.cjs scripts/result-scores.test.cjs",
-    "check": "npm run lint && npm run typecheck && npm run test:network && npm run build",
-    "compare:network": "node scripts/compare-network-layouts.cjs"
+    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/opening-cut.test.cjs scripts/paper-export.test.cjs scripts/result-scores.test.cjs scripts/genome-coordinates.test.cjs",
+    "check": "npm run lint && npm run typecheck && npm run test:network && npm run test:loading && npm run build",
+    "compare:network": "node scripts/compare-network-layouts.cjs",
+    "test:loading": "node --test scripts/project-loading.test.cjs scripts/glob-compat.test.cjs",
+    "pack:tooling": "npm pack ./tooling/minimatch-compat --pack-destination ./tooling --ignore-scripts"
   },
   "dependencies": {
     "cytoscape": "^3.33.2",
@@ -20,7 +22,7 @@
     "cytoscape-svg": "^0.4.0",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.2",
-    "next": "16.2.2",
+    "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "svg2pdf.js": "^2.8.1"
@@ -33,6 +35,12 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "jsdom": "26.1.0",
+    "minimatch": "file:tooling/grnscope-minimatch-compat-1.0.2.tgz"
+  },
+  "overrides": {
+    "eslint-plugin-react-hooks": "7.0.1",
+    "minimatch": "$minimatch"
   }
 }

@@ -37,6 +37,7 @@ test("the paper figure is 183 mm wide, in print units, with only the figure and 
     assert.ok(svg.includes(">Activation</text>") && svg.includes(">Repression</text>"), "key names the tips drawn");
     assert.ok(!svg.includes("≥"), "key text stays within the standard PDF fonts");
     assert.ok(!/rx=/.test(svg), "nothing rounded");
+    assert.ok(!/dark regulates|light regulated by|regulated by/.test(svg), "no direction-split key");
   } finally { cy.destroy(); }
 });
 
@@ -45,6 +46,7 @@ test("the legend describes what is shown and only the filters that cut", () => {
   const text = figureLegend(nodes, edges, ctx);
   assert.match(text, /Network of 4 genes and 3 regulatory edges \(evidence ≥ 0\.80\), inferred by consensus of 2 methods \(GENIE3 and PIDC\)\./);
   assert.match(text, /Blue circles, transcription factors; yellow circles, other genes/);
+  assert.ok(!/split by|dark, regulates|light, regulated by/.test(text), "caption describes solid nodes");
   assert.match(text, /Arrowheads, activation; bars, repression\./);
   assert.ok(!/faded lines/.test(text), "no confidence sentence when every edge is confident");
 });

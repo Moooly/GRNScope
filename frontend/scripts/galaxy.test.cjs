@@ -426,22 +426,22 @@ test("a round arrangement is widened towards a wide canvas, by at most 1.8x, wit
   assert.ok((Math.max(...xs) - Math.min(...xs)) / (Math.max(...ys) - Math.min(...ys)) > 1.5, "the arrangement uses the wide frame");
 });
 
-test("genes are split by link direction in their own colour, only when the view has directed links", () => {
+test("genes use solid type colours regardless of their incoming and outgoing links", () => {
   const nodes=[{id:"TF",isTF:true},{id:"A",isTF:false},{id:"B",isTF:false}];
   const e=(key,source,target,direction)=>({key,source,target,score:0.8,confidence:0,count:1,rank:1,supportingAlgorithms:[],direction,directionConfidence:1,directionCoverage:1,sign:1,signConfidence:1,signCoverage:1});
   const els=galaxyElements(nodes,[e("1","TF","A",1),e("2","TF","B",1),e("3","A","TF",0),e("4","B","TF",1)]);
   const tf=els.find(x=>x.data.id==="TF").data;
-  // TF regulates A and B, is regulated by B, and has one undirected link with A.
-  assert.equal(tf.pieSize,"100%");
-  assert.equal(Math.round(tf.pieOut),50); assert.equal(Math.round(tf.pieIn),25); assert.equal(Math.round(tf.pieUnknown),25);
-
-  const undirected=galaxyElements(nodes,[e("1","TF","A",0)]);
-  assert.equal(undirected.find(x=>x.data.id==="TF").data.pieSize,"0%","no split without any direction");
+  assert.equal(tf.degreeOut,2);
+  assert.equal(tf.degreeIn,1);
+  assert.equal(tf.pieSize,undefined);
   const cy=cytoscape({headless:true,styleEnabled:true,elements:els,style:buildNetworkStylesheet()});
   try {
-    assert.equal(cy.$id("TF").style("border-width"),"0px");
-    assert.notEqual(cy.$id("TF").style("pie-1-background-color"), cy.$id("A").style("pie-1-background-color"), "TFs and other genes keep their own hue");
-    assert.equal(cy.$id("TF").style("pie-1-background-color"), "rgb(127,166,219)", "the darkest slice is the TF's own blue");
+    assert.equal(cy.$id("TF").style("background-color"),"rgb(127,166,219)");
+    assert.equal(cy.$id("A").style("background-color"),"rgb(235,203,122)");
+    cy.nodes().forEach(node => {
+      assert.equal(node.style("border-width"),"0px");
+      for (let i=1;i<=3;i++) assert.equal(node.style(`pie-${i}-background-size`),"0%");
+    });
   } finally { cy.destroy(); }
 });
 

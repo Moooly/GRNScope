@@ -20,6 +20,34 @@ GENE_COORDINATE_PATHS = (
     GENCODE_GENE_COORDINATES_PATH,
 )
 
+MOUSE_GENE_COORDINATES_PATH = GENCODE_REFERENCE_DIR / "gencode_vM39_gene_coordinates.tsv.gz"
+MOUSE_TRANSCRIPT_COORDINATES_PATH = GENCODE_REFERENCE_DIR / "gencode_vM39_transcript_coordinates.tsv.gz"
+REFERENCE_METADATA = {
+    "human": {"species": "human", "assembly": "GRCh38", "annotation": "GENCODE v50",
+              "chromosome_order": [*[f"chr{i}" for i in range(1, 23)], "chrX", "chrY", "chrM"]},
+    "mouse": {"species": "mouse", "assembly": "GRCm39", "annotation": "GENCODE M39",
+              "chromosome_order": [*[f"chr{i}" for i in range(1, 20)], "chrX", "chrY", "chrM"]},
+}
+
+
+def normalize_coordinate_species(species: str | None) -> str | None:
+    value = str(species or "").strip().lower()
+    return value if value in REFERENCE_METADATA else None
+
+
+def get_coordinate_reference(species: str | None) -> dict | None:
+    normalized = normalize_coordinate_species(species)
+    return {**REFERENCE_METADATA[normalized], "chromosome_order": list(REFERENCE_METADATA[normalized]["chromosome_order"])} if normalized else None
+
+
+def project_coordinate_species(manifest: dict) -> str | None:
+    # An explicit project species is required. CellOracle defaults and shared
+    # symbols are not evidence that a dataset is human.
+    preprocessing = manifest.get("preprocessing")
+    value = preprocessing.get("dataset_species") if isinstance(preprocessing, dict) else None
+    return normalize_coordinate_species(value or manifest.get("dataset_species"))
+
+
 VERSIONED_ENSEMBL_ID_PATTERN = re.compile(
     r"^(ENS[A-Z]*[GT]\d+)\.\d+$",
     re.IGNORECASE,
@@ -83,13 +111,15 @@ def register_alias(
         casefold_aliases.setdefault(versionless_alias.casefold(), target_key)
 
 
-@lru_cache(maxsize=1)
-def load_gene_coordinate_index() -> GeneCoordinateIndex:
+@lru_cache(maxsize=2)
+def load_gene_coordinate_index(species: str) -> GeneCoordinateIndex:
     coordinates: dict[str, dict] = {}
     exact_aliases: dict[str, str] = {}
     casefold_aliases: dict[str, str] = {}
 
-    for source_path in GENE_COORDINATE_PATHS:
+    reference = get_coordinate_reference(species)
+    paths = GENE_COORDINATE_PATHS if species == "human" else (MOUSE_GENE_COORDINATES_PATH,) if species == "mouse" else ()
+    for source_path in paths:
         source_name = source_path.name
         reader = iter_coordinate_rows(source_path)
         for row in reader:
@@ -112,6 +142,8 @@ def load_gene_coordinate_index() -> GeneCoordinateIndex:
                     "gene_type": row.get("gene_type", "").strip(),
                     "gene_id": row.get("gene_id", "").strip(),
                     "coordinate_source": source_name,
+                    "coordinate_species": species,
+                    "coordinate_assembly": reference["assembly"],
                 }
             except ValueError:
                 continue
@@ -142,13 +174,15 @@ def load_gene_coordinate_index() -> GeneCoordinateIndex:
     }
 
 
-@lru_cache(maxsize=1)
-def load_transcript_coordinate_index() -> TranscriptCoordinateIndex:
+@lru_cache(maxsize=2)
+def load_transcript_coordinate_index(species: str) -> TranscriptCoordinateIndex:
     coordinates: dict[str, dict] = {}
     exact_aliases: dict[str, str] = {}
     casefold_aliases: dict[str, str] = {}
 
-    reader = iter_coordinate_rows(GENCODE_TRANSCRIPT_COORDINATES_PATH)
+    reference = get_coordinate_reference(species)
+    path = GENCODE_TRANSCRIPT_COORDINATES_PATH if species == "human" else MOUSE_TRANSCRIPT_COORDINATES_PATH if species == "mouse" else None
+    reader = iter_coordinate_rows(path) if path is not None else ()
     for row in reader:
         parent_gene_name = row.get("gene_name", "").strip()
         transcript_id = row.get("transcript_id", "").strip()
@@ -174,7 +208,9 @@ def load_transcript_coordinate_index() -> TranscriptCoordinateIndex:
                 "transcript_id": transcript_id,
                 "transcript_name": transcript_name,
                 "transcript_type": row.get("transcript_type", "").strip(),
-                "coordinate_source": GENCODE_TRANSCRIPT_COORDINATES_PATH.name,
+                "coordinate_source": path.name,
+                "coordinate_species": species,
+                "coordinate_assembly": reference["assembly"],
             }
         except ValueError:
             continue
@@ -194,8 +230,8 @@ def load_transcript_coordinate_index() -> TranscriptCoordinateIndex:
     }
 
 
-def load_gene_coordinates() -> dict[str, dict]:
-    return load_gene_coordinate_index()["coordinates"]
+def load_gene_coordinates(species: str) -> dict[str, dict]:
+    return load_gene_coordinate_index(species)["coordinates"]
 
 
 def _clean_gene_name(gene_name: str) -> str:
@@ -218,19 +254,19 @@ def _transcript_base_candidates(gene_name: str) -> list[str]:
     return candidates
 
 
-def _resolve_gene_name(gene_name: str) -> tuple[str, str] | None:
+def _resolve_gene_name(gene_name: str, species: str) -> tuple[str, str] | None:
     query = _clean_gene_name(gene_name)
     if not query:
         return None
 
-    index = load_gene_coordinate_index()
+    index = load_gene_coordinate_index(species)
     exact_aliases = index["exact_aliases"]
     casefold_aliases = index["casefold_aliases"]
 
     if query in exact_aliases:
         return exact_aliases[query], "exact"
 
-    curated_alias = CURATED_GENE_ALIASES.get(query.casefold())
+    curated_alias = CURATED_GENE_ALIASES.get(query.casefold()) if species == "human" else None
     if curated_alias:
         target = exact_aliases.get(curated_alias)
         if target:
@@ -256,12 +292,12 @@ def _resolve_gene_name(gene_name: str) -> tuple[str, str] | None:
     return None
 
 
-def _resolve_transcript_coordinate(gene_name: str) -> tuple[dict, str] | None:
+def _resolve_transcript_coordinate(gene_name: str, species: str) -> tuple[dict, str] | None:
     query = _clean_gene_name(gene_name)
     if not query:
         return None
 
-    index = load_transcript_coordinate_index()
+    index = load_transcript_coordinate_index(species)
     coordinates = index["coordinates"]
     exact_aliases = index["exact_aliases"]
     casefold_aliases = index["casefold_aliases"]
@@ -302,12 +338,12 @@ def _resolve_transcript_coordinate(gene_name: str) -> tuple[dict, str] | None:
     return None
 
 
-def _resolve_transcript_base_gene_name(gene_name: str) -> tuple[str, str] | None:
+def _resolve_transcript_base_gene_name(gene_name: str, species: str) -> tuple[str, str] | None:
     query = _clean_gene_name(gene_name)
     if not query:
         return None
 
-    index = load_gene_coordinate_index()
+    index = load_gene_coordinate_index(species)
     exact_aliases = index["exact_aliases"]
     casefold_aliases = index["casefold_aliases"]
 
@@ -321,18 +357,27 @@ def _resolve_transcript_base_gene_name(gene_name: str) -> tuple[str, str] | None
     return None
 
 
-def get_gene_coordinate(gene_name: str) -> dict | None:
-    resolved = _resolve_gene_name(gene_name)
+def get_gene_coordinate(gene_name: str, species: str | None) -> dict | None:
+    species = normalize_coordinate_species(species)
+    if species is None:
+        return None
+    # Species-coded Ensembl gene/transcript IDs cannot be reinterpreted via
+    # another reference (and should not trigger its large transcript index).
+    for token in _split_gene_tokens(gene_name):
+        identifier = re.fullmatch(r"ENS([A-Z]*?)[GT]\d+(?:\.\d+)?", token, re.IGNORECASE)
+        if identifier and {"": "human", "MUS": "mouse"}.get(identifier.group(1).upper()) != species:
+            return None
+    resolved = _resolve_gene_name(gene_name, species)
     if resolved:
         matched_gene_name, match_type = resolved
-        coordinate = load_gene_coordinate_index()["coordinates"].get(matched_gene_name)
+        coordinate = load_gene_coordinate_index(species)["coordinates"].get(matched_gene_name)
         if coordinate:
             result = dict(coordinate)
             result["matched_gene_name"] = matched_gene_name
             result["coordinate_match"] = match_type
             return result
 
-    transcript_resolved = _resolve_transcript_coordinate(gene_name)
+    transcript_resolved = _resolve_transcript_coordinate(gene_name, species)
     if transcript_resolved:
         coordinate, match_type = transcript_resolved
         result = dict(coordinate)
@@ -342,10 +387,10 @@ def get_gene_coordinate(gene_name: str) -> dict | None:
         result["coordinate_match"] = match_type
         return result
 
-    base_resolved = _resolve_transcript_base_gene_name(gene_name)
+    base_resolved = _resolve_transcript_base_gene_name(gene_name, species)
     if base_resolved:
         matched_gene_name, match_type = base_resolved
-        coordinate = load_gene_coordinate_index()["coordinates"].get(matched_gene_name)
+        coordinate = load_gene_coordinate_index(species)["coordinates"].get(matched_gene_name)
         if coordinate:
             result = dict(coordinate)
             result["matched_gene_name"] = matched_gene_name

@@ -27,9 +27,6 @@ export const EDGE_GAP = 130;
 export type Palette = {
   ground: string; node: string; tf: string; label: string; accent: string;
   activates: string; represses: string; unknown: string;
-  /** Direction split: [regulates, regulated by, direction unknown]. The
-   * original fill is the darkest slice, so the split is a gentle tone step. */
-  pieTF: readonly [string, string, string]; pieGene: readonly [string, string, string];
   /** Smallest node diameter (model units); the largest is 100. Low-degree
    * genes stay visible circles. */
   nodeMin: number;
@@ -37,14 +34,6 @@ export type Palette = {
 const SOFT: Palette = {
   ground: NETWORK_THEME.ground, node: NETWORK_THEME.node, tf: NETWORK_THEME.tf, label: NETWORK_THEME.label, accent: NETWORK_THEME.accent,
   activates: NETWORK_THEME.activates, represses: NETWORK_THEME.represses, unknown: NETWORK_THEME.unknown,
-  // Chosen for print: blue/yellow survives every colour-blindness type and
-  // greyscale. Each class shows its own swatch in its usual role: TFs mostly
-  // regulate (out slice = #7FA6DB), other genes are mostly regulated (in
-  // slice = #EBCB7A), so a gene that also regulates gets a deeper ochre. The
-  // palest slice stays >14 dE from white.
-  pieTF: ["#7fa6db", "#b5cbea", "#d6e2f4"], pieGene: ["#cfa13c", "#ebcb7a", "#f6e5b8"],
-  // Previous manual experiment (kept for reference): node #A68A64 / #93A8A1,
-  // TF #56B4E9, pies all one colour (no visible direction split).
   nodeMin: 24,
 };
 
@@ -57,7 +46,6 @@ export const PALETTES: Record<PaletteName, Palette> = {
   contrast: {
     ground: "#ffffff", node: "#d9d9d9", tf: "#d9913a", label: "#1a1a1a", accent: "#1a1a1a",
     activates: "#4a4f55", represses: "#4a4f55", unknown: "#4a4f55",
-    pieTF: ["#b8732a", "#e8b779", "#f5e1c6"], pieGene: ["#9a9a9a", "#d1d1d1", "#ececec"],
     nodeMin: 10,
   },
 };

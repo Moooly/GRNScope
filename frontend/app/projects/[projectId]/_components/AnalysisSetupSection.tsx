@@ -59,8 +59,10 @@ export default function AnalysisSetupSection({
           </svg>
         </div>
 
+        {/* Keep the actions wrapper unpositioned so the status progress track
+            anchors to the full analysis header, including its title. */}
         {onDownloadRunManifests ? (
-          <div className="relative z-10 order-3 flex w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-nowrap sm:justify-end sm:gap-0 sm:border-t-0 sm:px-0 sm:py-0 lg:order-none">
+          <div className="z-10 order-3 flex w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-nowrap sm:justify-end sm:gap-0 sm:border-t-0 sm:px-0 sm:py-0 lg:order-none">
             <div className="contents [&>*]:!order-none [&>*]:!ml-0 [&>*]:!px-0 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
               {status}
             </div>

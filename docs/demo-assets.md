@@ -27,3 +27,7 @@ The other files in `backend/data/`, including the SCODE and CellOracle sample in
 After installing dependencies and building the frontend, run `bash scripts/smoke-demo.sh` from the repository root while ports 8000 and 3000 are free. The script starts both services, opens the demo route, checks the proxied project and result endpoints, and stops its processes. The same check runs in CI after `bash scripts/check.sh`.
 
 To use different ports, build with `NEXT_INTERNAL_API_PROXY_TARGET` set to the backend address, then set `GRNSCOPE_SMOKE_BACKEND_PORT` and `GRNSCOPE_SMOKE_FRONTEND_PORT` when running the smoke script. Next.js stores the proxy rewrite in the build, so changing only the smoke script's backend port is insufficient.
+
+Human and mouse Circos coordinate references are bundled under
+`backend/data/gencode_reference/`. See [Circos species](circos-species.md) for
+assemblies, provenance, and regeneration instructions.

@@ -49,7 +49,6 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const effect = (source.scratch("effectFilter") ?? "all") as EffectFilter;
     const shownEdges = source.edges().filter(e => !e.data("effectHidden"));
     const hasConfidence = shownEdges.some(e => typeof e.data("confidence") === "number");
-    const split = source.nodes().some(n => n.data("pieSize") === "100%");
     const descriptions = [
       `${context.scope} · ${source.nodes().length} genes · ${shownEdges.length} of ${context.matchingEdges} matching relationships${EFFECT_NOTE[effect] ? ` · ${EFFECT_NOTE[effect]}` : ""}`,
       `Methods (${context.methodCount}): ${context.methods.join(", ")}`,
@@ -57,7 +56,6 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
       `Selection: ${context.selectionRule || "Displayed relationships"}`,
       `${T === PALETTES.soft ? "Blue" : "Orange"} circles are transcription factors; ${T === PALETTES.soft ? "yellow" : "grey"} circles are other genes. Node diameter runs linearly (1:10) from the smallest to the largest value of ${sizeBy === "out" ? "the number of displayed genes each gene regulates" : sizeBy === "in" ? "the number of displayed regulators of each gene" : "displayed connections"}. Layout distance represents connectivity, not biological distance; connected genes are drawn a fixed rim-to-rim distance apart where the topology allows; in dense networks each gene is placed by its three strongest edges. Edges passing under an unrelated gene are drawn lighter.`,
       "All edges share one colour. Arrowhead = activation, bar = repression, no tip = sign unknown. A solid line has a resolved direction (the tip marks the regulated gene); a dashed line has no resolved direction (the tip sits at the listed target).",
-      ...(split ? ["Each gene is split by the direction of its displayed edges, in its own colour: dark = regulates, light = regulated by, pale = direction unknown."] : []),
       `Line width: ${widthBy === "support" ? "number of selected methods reporting the relationship" : "evidence (per-target rank, 0–1)"}.${hasConfidence ? " Opacity: bootstrap confidence (≥ 0.8 solid, 0.5–0.8 45%, < 0.5 15%); relationships without a verified value are solid." : ""}`,
       ...(pins.length ? [`Pinned labels: ${pins.join(", ")}`] : []),
     ];
@@ -84,16 +82,9 @@ export async function buildPublicationFigure(source: Core, context: NetworkFigur
     const mark = (w: number, draw: Mark): Part => ({ w, draw });
     const unsigned = shownEdges.some(e => Number(e.data("sign")) === 0);
     const undirectedShown = shownEdges.some(e => Number(e.data("direction")) === 0);
-    const undirected = source.edges().some(e => Number(e.data("direction")) === 0);
-    const swatch = (color: string): Part => mark(12, (x, y) => { add("rect", { x, y: y - 6, width: 12, height: 12, rx: 2, fill: color }); });
     const [low, high] = widthEnds(widthBy, methodCount);
     const groups: Part[][] = [
       [mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.tf }); }), txt("TF"), mark(14, (x, y) => { add("circle", { cx: x + 7, cy: y, r: 7, fill: T.node }); }), txt("Other gene")],
-      ...(split ? [[mark(18, (x, y) => {
-        add("path", { d: `M${x + 9} ${y}V${y - 9}A9 9 0 0 1 ${x + 17.5} ${y + 2.8}Z`, fill: T.pieTF[0] });
-        add("path", { d: `M${x + 9} ${y}L${x + 17.5} ${y + 2.8}A9 9 0 0 1 ${x + 2.1} ${y + 5.8}Z`, fill: T.pieTF[1] });
-        add("path", { d: `M${x + 9} ${y}L${x + 2.1} ${y + 5.8}A9 9 0 0 1 ${x + 9} ${y - 9}Z`, fill: T.pieTF[2] });
-      }), swatch(T.pieTF[0]), txt("regulates"), swatch(T.pieTF[1]), txt("regulated by"), ...(undirected ? [swatch(T.pieTF[2]), txt("unknown")] : [])]] : []),
       [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h20`, stroke: T.activates, "stroke-width": 1.6 }); add("path", { d: `M${x + 19} ${y - 5}l10 5-10 5Z`, fill: T.activates }); }), txt("Activates"),
        mark(28, (x, y) => { add("path", { d: `M${x} ${y}h26m0-7v14`, stroke: T.represses, "stroke-width": 1.8, fill: "none" }); }), txt("Represses"),
        ...(unsigned ? [mark(30, (x, y) => { add("path", { d: `M${x} ${y}h30`, stroke: T.unknown, "stroke-width": 1.6 }); }), txt("Sign unknown")] : []),

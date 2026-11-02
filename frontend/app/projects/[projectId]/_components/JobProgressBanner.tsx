@@ -202,16 +202,19 @@ export default function JobProgressBanner({
     setIsSavingEmail(true);
     setEmailMessage("");
 
-    const ok = await onSaveNotificationEmail(trimmedEmail);
-    setIsSavingEmail(false);
-
-    if (!ok) {
-      setEmailMessage("Could not save email. Please try again.");
-      return;
+    try {
+      const ok = await onSaveNotificationEmail(trimmedEmail);
+      if (!ok) {
+        setEmailMessage("Could not save email. Please try again.");
+        return;
+      }
+      setEmailMessage("Saved.");
+      setIsEditingEmail(false);
+    } catch (error) {
+      setEmailMessage(error instanceof Error ? error.message : "Could not save email. Please try again.");
+    } finally {
+      setIsSavingEmail(false);
     }
-
-    setEmailMessage("Saved.");
-    setIsEditingEmail(false);
   };
 
   return (

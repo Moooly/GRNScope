@@ -29,8 +29,6 @@ export function nodeDegrees(edges: NetworkEdge[]) {
 export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], options: GalaxyOptions = {}): ElementDefinition[] {
   const sizeBy = options.sizeBy ?? "all", widthBy = options.widthBy ?? "evidence", methodCount = options.methodCount ?? 1;
   const degrees = nodeDegrees(edges);
-  // Split nodes by link direction only when the view has directed links.
-  const split = edges.some(e => hasDirection(e));
   const sized = degrees[sizeBy];
   const values = nodes.map(n => sized.get(n.id) ?? 0);
   const minValue = values.length ? Math.min(...values) : 0, maxValue = values.length ? Math.max(...values) : 0;
@@ -38,13 +36,9 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
     ...nodes.map(n => {
       const d = degrees.all.get(n.id) ?? 0, value = sized.get(n.id) ?? 0;
       const box = nodeDiameter(value, minValue, maxValue, options.nodeMin);
-      const out = degrees.out.get(n.id) ?? 0, inn = degrees.in.get(n.id) ?? 0, unk = degrees.unknown.get(n.id) ?? 0;
-      const total = out + inn + unk || 1;
       return { data: { id: n.id, fullLabel: n.id, label: n.id, degree: d,
         degreeOut: degrees.out.get(n.id) ?? 0, degreeIn: degrees.in.get(n.id) ?? 0, sizeValue: value,
         isTF: n.isTF ? 1 : 0,
-        pieSize: split ? "100%" : "0%",
-        pieOut: (100 * out) / total, pieIn: (100 * inn) / total, pieUnknown: (100 * unk) / total,
         diameter: box,
         labelSize: 11,
         labelHalign: "center", labelValign: "center", labelOffsetX: 0, labelOffsetY: 0,

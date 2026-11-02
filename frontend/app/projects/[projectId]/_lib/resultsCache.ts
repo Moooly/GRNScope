@@ -10,6 +10,7 @@ import type { AlgorithmStoredResult } from "./types";
  * can never serve edges that are stale across sessions. Keyed by projectId + the
  * latest jobId, and explicitly cleared on any rerun/stop mutation.
  */
+const MAX_CACHED_PROJECTS = 3;
 const cache = new Map<string, Record<string, AlgorithmStoredResult>>();
 
 function cacheKey(projectId: string, jobId: string | null | undefined) {
@@ -20,7 +21,13 @@ export function getCachedResults(
   projectId: string,
   jobId: string | null | undefined,
 ): Record<string, AlgorithmStoredResult> | undefined {
-  return cache.get(cacheKey(projectId, jobId));
+  const key = cacheKey(projectId, jobId);
+  const result = cache.get(key);
+  if (result) {
+    cache.delete(key);
+    cache.set(key, result);
+  }
+  return result;
 }
 
 export function setCachedResults(
@@ -28,7 +35,9 @@ export function setCachedResults(
   jobId: string | null | undefined,
   results: Record<string, AlgorithmStoredResult>,
 ): void {
+  clearCachedResults(projectId);
   cache.set(cacheKey(projectId, jobId), results);
+  while (cache.size > MAX_CACHED_PROJECTS) cache.delete(cache.keys().next().value!);
 }
 
 /** Drop every cached entry for a project (any jobId) — call after a mutation. */

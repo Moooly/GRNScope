@@ -20,7 +20,11 @@ function readCookie(name: string) {
     .map((item) => item.trim())
     .find((item) => item.startsWith(prefix));
 
-  return value ? decodeURIComponent(value.slice(prefix.length)) : null;
+  try {
+    return value ? decodeURIComponent(value.slice(prefix.length)) : null;
+  } catch {
+    return null;
+  }
 }
 
 function writeCookie(name: string, value: string) {

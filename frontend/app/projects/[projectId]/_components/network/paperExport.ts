@@ -37,22 +37,6 @@ export type PaperFigureOptions = { fontFamily?: string };
 
 type Pt = { x: number; y: number };
 
-function wedge(c: Pt, r: number, a0: number, a1: number, fill: string) {
-  if (a1 - a0 <= 1e-6) return "";
-  if (a1 - a0 >= 0.9999) return `<circle cx="${f(c.x)}" cy="${f(c.y)}" r="${f(r)}" fill="${fill}"/>`;
-  const A = (p: number) => p * 2 * Math.PI - Math.PI / 2;
-  const p0 = { x: c.x + r * Math.cos(A(a0)), y: c.y + r * Math.sin(A(a0)) }, p1 = { x: c.x + r * Math.cos(A(a1)), y: c.y + r * Math.sin(A(a1)) };
-  return `<path d="M${f(c.x)} ${f(c.y)}L${f(p0.x)} ${f(p0.y)}A${f(r)} ${f(r)} 0 ${a1 - a0 > 0.5 ? 1 : 0} 1 ${f(p1.x)} ${f(p1.y)}Z" fill="${fill}"/>`;
-}
-
-function pie(c: Pt, r: number, parts: [number, number, number], shades: readonly [string, string, string], plain: string) {
-  const total = parts[0] + parts[1] + parts[2];
-  if (!total) return `<circle cx="${f(c.x)}" cy="${f(c.y)}" r="${f(r)}" fill="${plain}"/>`;
-  let start = 0, out = "";
-  parts.forEach((v, i) => { const p = v / total; out += wedge(c, r, start, start + p, shades[i]); start += p; });
-  return out;
-}
-
 /** Arrowhead or bar at `tip`, pointing along `u`; returns [svg, how far the line must stop short]. */
 function tipMark(kind: string, tip: Pt, u: Pt, widthMm: number, ink: string): [string, number] {
   const h = 1.15 + 2.1 * widthMm;
@@ -128,14 +112,11 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
       parts.push(`<g${Number.isFinite(opacity) && opacity < 1 ? ` opacity="${opacity}"` : ""}><path d="M${f(start.x)} ${f(start.y)}L${f(end.x)} ${f(end.y)}" stroke="${ink}" stroke-width="${f(w)}" stroke-linecap="butt" fill="none"${dash}/>${marks}</g>`);
     });
 
-    // Genes, with the same direction pie as on screen.
+    // Solid gene fills match the interactive network and inspector.
     nodes.forEach((n: NodeSingular) => {
       const c = pos.get(n.id())!, r = rad.get(n.id())!;
       const tf = Number(n.data("isTF")) === 1;
-      const split = n.data("pieSize") === "100%";
-      parts.push(split
-        ? pie(c, r, [Number(n.data("pieOut")) || 0, Number(n.data("pieIn")) || 0, Number(n.data("pieUnknown")) || 0], tf ? T.pieTF : T.pieGene, tf ? T.tf : T.node)
-        : `<circle cx="${f(c.x)}" cy="${f(c.y)}" r="${f(r)}" fill="${tf ? T.tf : T.node}"/>`);
+      parts.push(`<circle cx="${f(c.x)}" cy="${f(c.y)}" r="${f(r)}" fill="${tf ? T.tf : T.node}"/>`);
     });
 
     // Names: every gene in small networks; in large ones, a name is dropped
@@ -155,7 +136,6 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
     // One-line key, wrapping between groups at the figure width.
     const signs = new Set(edges.map(e => Number(e.data("sign"))));
     const undirected = edges.some(e => Number(e.data("direction")) === 0);
-    const split = nodes.some(n => n.data("pieSize") === "100%");
     const faded = edges.some(e => Number(e.data("inkOpacity")) < 1);
     const hasTF = nodes.some(n => Number(n.data("isTF")) === 1), hasGene = nodes.some(n => Number(n.data("isTF")) !== 1);
     const k = keyMm;
@@ -167,7 +147,6 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
     const rep: Part = { w: k * 2.1, draw: (x, y) => `<path d="M${f(x)} ${f(y)}H${f(x + k * 2)}M${f(x + k * 2)} ${f(y - k * 0.45)}V${f(y + k * 0.45)}" stroke="${ink}" stroke-width="${f(keyW)}" fill="none"/>` };
     const plain: Part = { w: k * 2.1, draw: (x, y) => `<path d="M${f(x)} ${f(y)}H${f(x + k * 2)}" stroke="${ink}" stroke-width="${f(keyW)}"/>` };
     const dashed: Part = { w: k * 2.4, draw: (x, y) => `<path d="M${f(x)} ${f(y)}H${f(x + k * 2.4)}" stroke="${ink}" stroke-width="${f(keyW)}" stroke-dasharray="${f(keyW * 3 + 0.8)} ${f(keyW * 2 + 0.6)}"/>` };
-    const pieMark: Part = { w: k * 1.2, draw: (x, y) => pie({ x: x + k * 0.6, y }, k * 0.58, [0.7, 0.3, 0], T.pieTF, T.tf) };
     // Qualitative size key: do not imply a linear area-to-count scale.
     const sizes: Part = { w: k * 3.8, draw: (x, y) => [0.28, 0.43, 0.62].map((r, i) => `<circle cx="${f(x + k * (0.5 + i * 1.3))}" cy="${f(y)}" r="${f(k * r)}" fill="#8a949e"/>`).join("") };
     const sizeLabel = sizeBy === "out" ? "Node size: targets" : sizeBy === "in" ? "Node size: regulators" : "Node size: connections";
@@ -179,7 +158,6 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
       [...(hasTF ? [dot(T.tf), text("TF")] : []), ...(hasGene ? [dot(T.node), text("Other gene")] : [])],
       [sizes, text(`${sizeLabel} (larger = more)`)],
       [...(signs.has(1) ? [act, text("Activation")] : []), ...(signs.has(-1) ? [rep, text("Repression")] : []), ...(signs.has(0) ? [plain, text("Sign unknown")] : []), ...(undirected ? [dashed, text("Direction unknown")] : [])],
-      ...(split ? [[pieMark, text("dark regulates · light regulated by")]] : []),
       [text(widthBy === "support" ? "Methods" : "Evidence", "#8a949e"), text(low), widths, text(high)],
       ...(faded ? [[text("Confidence", "#8a949e"), text("<0.5"), fades, text("0.8–1")]] : []),
     ].filter(g => g.length);

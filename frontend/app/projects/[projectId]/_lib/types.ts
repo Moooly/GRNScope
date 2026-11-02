@@ -7,6 +7,7 @@ export type {
 } from "../../../_lib/apiContracts";
 
 export type ProjectManifest = {
+  dataset_species?: string;
   project_id: string;
   project_name: string;
   project_description: string;
@@ -179,6 +180,13 @@ export type AlgorithmPreprocessingSummary = {
   gene_audit_available?: boolean;
 };
 
+export type GenomeReference = {
+  species: "human" | "mouse";
+  assembly: "GRCh38" | "GRCm39";
+  annotation: string;
+  chromosome_order: string[];
+};
+
 export type GeneCoordinate = {
   gene_name?: string | null;
   chromosome: string;
@@ -189,6 +197,8 @@ export type GeneCoordinate = {
   gene_id?: string | null;
   matched_gene_name?: string | null;
   coordinate_match?: string | null;
+  coordinate_species?: string | null;
+  coordinate_assembly?: string | null;
 };
 
 export type AlgorithmStoredResult = {
@@ -212,6 +222,7 @@ export type AlgorithmStoredResult = {
   source_file?: string;
   gene_coordinates?: Record<string, GeneCoordinate>;
   gene_coordinate_count?: number;
+  genome_reference?: GenomeReference | null;
   confidence_summary?: ConfidenceSummary | null;
   algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
   beeline_path_stats?: BeelinePathStats | null;
@@ -419,6 +430,8 @@ export type NodeInfo = {
   isTF: boolean;
   topRegulators: string[];
   topTargets: string[];
+  coordinate_species?: string | null;
+  coordinate_assembly?: string | null;
   chromosome?: string | null;
   start?: number | null;
   end?: number | null;

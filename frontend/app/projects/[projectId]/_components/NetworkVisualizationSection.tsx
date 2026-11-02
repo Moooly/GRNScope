@@ -16,6 +16,9 @@ import NetworkGraph, {
 } from "./NetworkGraph";
 import { DownloadIcon } from "./DownloadMenu";
 import CircosNetworkGraph from "./CircosNetworkGraph";
+import { CircosKey } from "./CircosLegend";
+import CircosOverview, { circosFocusLabel } from "./CircosOverview";
+import { buildCircosSummary, circosScope, type CircosFocus } from "./circosModel";
 import NetworkHelpModal from "./NetworkHelpModal";
 import {
   NETWORK_APPEARANCES,
@@ -38,7 +41,7 @@ import {
   hasDirection,
   type NetworkMetric,
 } from "./networkVisualEncoding";
-import type { AggregatedEdge, NodeInfo } from "../_lib/types";
+import type { AggregatedEdge, NodeInfo, GenomeReference } from "../_lib/types";
 import type { NetworkFigureContext } from "./networkFigureExport";
 import { paperFileBase, type PaperContext } from "./network/paperData";
 import "./networkWorkspace.css";
@@ -54,6 +57,7 @@ type Props = {
   onExportCircosPng: (svg: SVGSVGElement) => void | Promise<void>;
   onGraphReady?: (cy: Core | null) => void;
   networkNodes: NodeInfo[];
+  genomeReference: GenomeReference | null;
   filteredNetworkEdges: AggregatedEdge[];
   selectedGene: string | null;
   selectedEdgeKey: string | null;
@@ -109,6 +113,7 @@ export default function NetworkVisualizationSection(props: Props) {
     networkLayout,
     setNetworkLayout,
     networkNodes,
+    genomeReference,
     filteredNetworkEdges,
     selectedGene,
     selectedEdgeKey,
@@ -231,6 +236,7 @@ export default function NetworkVisualizationSection(props: Props) {
   // Side-by-side table: open by default, resizable, can be hidden.
   const [tableOpen, setTableOpen] = useState(true);
   const [tableWidth, setTableWidth] = useState(420);
+  const [circosFocus, setCircosFocus] = useState<CircosFocus | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
   const [highlightedEdgeKeys, setHighlightedEdgeKeys] = useState<string[] | null>(null);
   const splitRef = useRef<HTMLDivElement | null>(null);
@@ -285,10 +291,14 @@ export default function NetworkVisualizationSection(props: Props) {
     [edges, networkNodes],
   );
   const effectiveSizeBy: NodeSizeBy = edges.some((e) => hasDirection(e)) ? sizeBy : "all";
-  const tableMode = useNewCanvas && networkLayout !== "circos";
+  const tableMode = useNewCanvas || networkLayout === "circos";
   const hasUnsignedLinks = edges.some((e) => e.sign === 0);
   const effectiveEffect: EffectFilter = effect === "unknown" && !hasUnsignedLinks ? "all" : effect;
   const visibleEdges = useMemo(() => edges.filter((e) => passesEffect(e.sign, effectiveEffect)), [edges, effectiveEffect]);
+  const circosSummary = useMemo(() => networkLayout === "circos" && genomeReference
+    ? buildCircosSummary(nodes, visibleEdges, genomeReference) : null,
+  [networkLayout, genomeReference, nodes, visibleEdges]);
+  const circosView = circosSummary ? circosScope(circosSummary, circosFocus) : null;
   const linkFilter = (variant: "line" | "chips" | "inline") => (
     <NetworkLinkFilter
       relationships={edges.length}
@@ -334,6 +344,11 @@ export default function NetworkVisualizationSection(props: Props) {
   const clearSelection = () => {
     props.setSelectedGene(null);
     props.setSelectedEdgeKey(null);
+  };
+  const selectCircosFocus = (next: CircosFocus | null) => {
+    setCircosFocus(next);
+    clearSelection();
+    if (next) setTableOpen(true);
   };
   const closeExportConfirm = () => {
     setIsExportConfirmOpen(false);
@@ -463,7 +478,7 @@ export default function NetworkVisualizationSection(props: Props) {
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <h3 className="text-2xl font-bold tracking-[-0.025em] text-slate-950">
-                  {useNewCanvas && networkLayout !== "circos" ? "Regulatory network" : "Regulatory atlas"}
+                  {tableMode ? "Regulatory network" : "Regulatory atlas"}
                 </h3>
                 <button
                   type="button"
@@ -479,10 +494,6 @@ export default function NetworkVisualizationSection(props: Props) {
                   ?
                 </button>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-600 xl:whitespace-nowrap">
-                Click a node or edge to inspect it and explore the network in
-                more detail.
-              </p>
             </div>
             {resultsControls ? (
               <div className="network-atlas-controls shrink-0">
@@ -501,15 +512,17 @@ export default function NetworkVisualizationSection(props: Props) {
               >
                 {layoutOptions.map(({ value, label, title }) => {
                   const isActive = networkLayout === value;
+                  const unavailable = value === "circos" && !genomeReference;
 
                   return (
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setNetworkLayout(value)}
-                      title={title}
+                      onClick={() => { setCircosFocus(null); setNetworkLayout(value); }}
+                      title={unavailable ? "Circos requires matching human (GRCh38) or mouse (GRCm39) coordinates." : title}
+                      disabled={unavailable}
                       aria-pressed={isActive}
-                      className={`h-full rounded-full px-4 text-xs font-bold transition ${
+                      className={`h-full rounded-full px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
                         isActive
                           ? "bg-[#1b75a6] text-white shadow-sm"
                           : "text-slate-600 hover:bg-white hover:text-[#1b75a6]"
@@ -565,7 +578,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 <button
                   type="button"
                   onClick={() => setIsExportConfirmOpen((current) => !current)}
-                  disabled={exporting || !edges.length}
+                  disabled={exporting || !edges.length || (networkLayout === "circos" && !genomeReference)}
                   aria-label="Download current network"
                   aria-expanded={isExportConfirmOpen}
                   aria-haspopup="dialog"
@@ -673,13 +686,15 @@ export default function NetworkVisualizationSection(props: Props) {
             {exportError}
           </p>
         )}
-        {useNewCanvas && networkLayout !== "circos" ? (
-          <>
+        {tableMode ? (
+          <div className="grn-workspace-key" data-circos={networkLayout === "circos"}>
+            {/* The same key reserves the same responsive space in every layout.
+                Its controls are inert while Circos supplies its own key. */}
+            <div className="grn-standard-key" inert={networkLayout === "circos"}>
             {/* Key on top. The edge filter sits with the controls at its right
                 and names the tips itself, with or without the side panel. */}
             {nodes.length > 0 && (
               <NetworkKey
-                directionSplit={edges.some((e) => hasDirection(e))}
                 hasUndirected={edges.some((e) => !hasDirection(e))}
                 widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
                 methodCount={selectedAlgorithmIds.length}
@@ -692,13 +707,14 @@ export default function NetworkVisualizationSection(props: Props) {
                 filter={linkFilter("inline")}
               />
             )}
-          </>
+            </div>
+            {networkLayout === "circos" && <div className="grn-circos-key-overlay"><CircosKey />{linkFilter("inline")}</div>}
+          </div>
         ) : (
         <NetworkLegend
           appearance={activeAppearance}
           metric={metric}
           methodCount={selectedAlgorithmIds.length}
-          circos={networkLayout === "circos"}
           onChangeMetric={setMetric}
           confidenceDisabled={!hasVerifiedConfidence}
         />
@@ -706,8 +722,8 @@ export default function NetworkVisualizationSection(props: Props) {
         <div
           ref={splitRef}
           className={tableMode
-            ? `grn-stage grn-split${tableOpen ? " grn-split-open" : ""}`
-            : `grn-stage${networkLayout === "circos" ? " grn-stage-circos" : ""}${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
+            ? `grn-stage grn-split${tableOpen ? " grn-split-open" : ""}${networkLayout === "circos" ? " grn-stage-circos" : ""}`
+            : `grn-stage${selectedEdge || selectedVisibleNode ? " grn-stage-inspecting" : ""}`}
           style={tableMode ? { "--grn-table-width": `${tableWidth}px` } as CSSProperties : undefined}
         >
           <div className="grn-graph-region">
@@ -725,11 +741,14 @@ export default function NetworkVisualizationSection(props: Props) {
                   </button>
                 )}
               </div>
-            ) : networkLayout === "circos" ? (
+            ) : networkLayout === "circos" ? (genomeReference ? (
               <div className="grn-circos">
                 <CircosNetworkGraph
+                  genomeReference={genomeReference}
                   nodes={nodes}
-                  edges={edges}
+                  edges={visibleEdges}
+                  focus={circosView?.focus ?? null}
+                  onFocusChange={selectCircosFocus}
                   selectedGene={selectedGene}
                   selectedEdgeKey={selectedEdgeKey}
                   onSelectGene={selectGene}
@@ -737,6 +756,12 @@ export default function NetworkVisualizationSection(props: Props) {
                   svgRef={svgRef}
                 />
               </div>
+              ) : (
+              <div className="grn-empty">
+                <h3>Circos is unavailable for this reference</h3>
+                <p>This layout supports human (GRCh38) and mouse (GRCm39) projects with matching gene coordinates.</p>
+              </div>
+              )
             ) : useNewCanvas ? (
               <NetworkCanvas
                 nodes={nodes}
@@ -786,8 +811,8 @@ export default function NetworkVisualizationSection(props: Props) {
                   if (event.key === "ArrowRight") setTableWidth((w) => Math.max(340, w - 24));
                 }} />
               <NetworkTablePanel
-                edges={visibleEdges}
-                nodes={nodes}
+                edges={circosView?.edges ?? visibleEdges}
+                nodes={circosView?.nodes ?? nodes}
                 methodCount={selectedAlgorithmIds.length}
                 selectedGene={selectedVisibleNode?.id ?? null}
                 selectedEdgeKey={selectedEdge?.key ?? null}
@@ -798,6 +823,21 @@ export default function NetworkVisualizationSection(props: Props) {
                 onHide={() => { setTableOpen(false); setHoveredEdgeKey(null); setHighlightedEdgeKeys(null); }}
                 onFocus={(id) => { focus(id); clearSelection(); }}
                 palette={figurePalette}
+                edgeHoverHint={networkLayout !== "circos"}
+                contextKey={circosView?.focus ? circosView.focus.kind === "chromosome" ? circosView.focus.chromosome : circosView.focus.bundleKey : undefined}
+                onOverview={networkLayout === "circos" ? () => selectCircosFocus(null) : undefined}
+                contextHeader={circosSummary && circosView?.focus ? <div className="circos-panel-context">
+                  <span>{circosFocusLabel(circosSummary, circosView.focus)}</span>
+                  <button type="button" className="tp-x" aria-label="Clear chromosome or ribbon selection" onClick={() => selectCircosFocus(null)}>✕</button>
+                </div> : undefined}
+                overviewContent={circosSummary && genomeReference ? <CircosOverview
+                  summary={circosSummary}
+                  reference={genomeReference}
+                  focus={circosView?.focus ?? null}
+                  onFocus={selectCircosFocus}
+                  onSelectGene={selectGene}
+                  onSelectEdge={selectEdge}
+                /> : undefined}
               />
             </>
           ) : (
