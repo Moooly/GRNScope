@@ -1,0 +1,36 @@
+% GRNScope presubmission proposal for the NAR Web Server issue.
+% NAR specifies the required content and a strict one-page limit, but does not
+% prescribe a LaTeX template for the proposal. Replace all bracketed fields.
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[margin=0.82in]{geometry}
+\usepackage{microtype}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+\begin{document}
+
+\begin{center}
+{\large\bfseries GRNScope: a web server for interpretable consensus gene regulatory network inference from single-cell data\par}
+\vspace{0.4em}
+\textit{[First Author], [Second Author], [Additional Authors]}\\
+\textit{[Department, Institution, City, Country for each author]}\\
+\textbf{Web server:} [Public HTTPS URL to be added before proposal submission]
+\end{center}
+
+Single-cell gene expression data can support the inference of candidate gene regulatory networks (GRNs), but inferred interactions can vary with the algorithm and cells analyzed, and method-specific results are difficult to compare directly. GRNScope's distinctive contribution is an integrated web workflow that combines 13 inference methods, targeted optimizations of the BEELINE-derived execution path, Spearman-guided adaptive resampling and a traceable consensus network. The execution path caps retained ranked edges per target, aggregates bootstrap outputs incrementally and reuses a persistent runner worker. For each predicted relationship, GRNScope preserves the contributing method outputs and reports separate measures of rank evidence, bootstrap recovery, method support, and agreement on regulatory direction and sign. Coverage indicators show which methods can contribute to the direction and sign assessments. Together, these features make the basis and limits of a consensus prediction inspectable.
+
+\textbf{Input data.} Users upload a gene-by-cell expression matrix as a CSV or AnnData (.h5ad) file. Depending on the analysis, they may also supply pseudotime, cell-cluster labels and a reference network. The server checks numeric values and gene and cell identifiers, then lets users review the detected matrix state and select normalization, transformation and gene filters before choosing compatible methods. A bundled dataset lets users try the workflow, while a completed example project provides sample results for immediate inspection.
+
+\textbf{Processing method.} GRNScope runs 13 complementary GRN inference methods through a BEELINE-derived execution layer. The runner coordinates computing resources across jobs and limits retained output to top-ranked regulators per target. Each method is fitted to the full dataset and repeated on deterministic bootstrap samples of cells shared across methods. For automatic resampling, GRNScope compares successive cumulative edge-recovery rankings by Spearman correlation and stops after two consecutive correlations above 0.95, up to a maximum of 50 runs. Method-specific scores are converted to ranks within each target gene before predictions are combined. The consensus reports separate measures of rank evidence, bootstrap recovery, method support, and direction and sign agreement with their evidence coverage. Methods unable to infer direction or sign abstain from those votes; coverage shows how much evidence supports each reported agreement. These measures describe computational support; none is a probability that an interaction is biologically correct.
+
+\textbf{Output and utility.} Users can inspect an interactive consensus network and trace each relationship to its contributing methods, within-method ranks and bootstrap recovery. Comparison views show repeat-run consistency and overlap between methods; trajectory and reference-network analyses are available when the required inputs are supplied. Users can export edge tables, network visualizations and analysis settings. In a completed gonadal sex determination simulation comprising 19 model variables and 2,000 cells, all 13 methods completed with three to seven bootstrap replicates each. The result views show substantial variation in repeat-run ranking consistency and how broad method support can coexist with weak agreement on direction. No reference network was uploaded for this run, so this example illustrates interpretation of computational predictions rather than biological accuracy.
+
+\textbf{Previous publications.} GRNScope has not been published previously. It builds on the published BEELINE framework (PMID: 31907445). A related NAR resource, GRNbenchmark (PMID: 35609981), evaluates networks inferred outside its server; GRNScope instead runs inference on user-uploaded expression data and exposes the components of each consensus prediction.
+
+\textbf{Submission history.} [Confirm first submission, or disclose any previous proposal or paper rejection.]
+
+\textbf{Keywords:} single-cell RNA-seq; gene regulatory networks; consensus inference; web server.
+
+\end{document}

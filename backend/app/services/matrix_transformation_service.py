@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 MATRIX_TRANSFORMATION_ENGINE = "scanpy"
-MATRIX_TRANSFORMATION_VERSION = 1
+MATRIX_TRANSFORMATION_VERSION = 2
 NORMALIZATION_TARGET_SUM = 10_000.0
 SUPPORTED_MATRIX_STATES = {"raw", "normalized", "log_normalized"}
 
@@ -69,11 +69,20 @@ def matrix_transformation_signature(matrix_state: str) -> dict:
 def read_expression_frame(source_expression: Path) -> pd.DataFrame:
     delimiter = detect_delimiter(source_expression)
     try:
+        with source_expression.open(encoding="utf-8-sig", newline="") as handle:
+            header = next(csv.reader(handle, delimiter=delimiter), [])
+        names = [name.strip() for name in header[1:]]
+        if not names or any(not name for name in names) or len(set(names)) != len(names):
+            raise ValueError("Cell identifiers must be nonempty and unique.")
         frame = pd.read_csv(
             source_expression,
             sep=delimiter,
-            index_col=0,
+            converters={0: str},
         )
+        identifiers = frame.iloc[:, 0]
+        frame = frame.iloc[:, 1:]
+        frame.index = pd.Index(identifiers.array, name=header[0] or None)
+        frame.columns = names
     except (OSError, UnicodeError, ValueError, pd.errors.ParserError) as exc:
         raise MatrixTransformationError(
             f"Expression matrix could not be loaded for transformation: {exc}"
@@ -95,6 +104,8 @@ def read_expression_frame(source_expression: Path) -> pd.DataFrame:
     frame.columns = pd.Index(
         [str(cell_name).strip() for cell_name in frame.columns]
     )
+    if frame.index.has_duplicates or any(not name for name in frame.index):
+        raise MatrixTransformationError("Gene identifiers must be nonempty and unique.")
 
     try:
         numeric_frame = frame.apply(pd.to_numeric, errors="raise").astype(

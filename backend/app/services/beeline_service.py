@@ -2356,6 +2356,7 @@ class PersistentBLRunnerWorker:
         request = {
             "request_id": run_id,
             "config_path": str(config_path),
+            "overwrite": True,  # This worker owns its temporary runtime outputs.
             "response_path": str(response_path),
         }
         try:
@@ -4298,7 +4299,7 @@ def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
     config_path.write_text(config_text, encoding="utf-8")
 
     python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
-    command = [python_executable, "BLRunner.py", "-c", str(config_path)]
+    command = [python_executable, "BLRunner.py", "-c", str(config_path), "--overwrite"]
 
     completed_process = subprocess.run(
         command,

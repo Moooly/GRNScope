@@ -17,6 +17,7 @@ from app.services.matrix_transformation_service import (
     MatrixTransformationError,
     NORMALIZATION_TARGET_SUM,
     transform_expression_matrix,
+    read_expression_frame,
 )
 
 
@@ -28,6 +29,17 @@ class MatrixTransformationTests(unittest.TestCase):
 
     def read_expression(self, path: Path) -> pd.DataFrame:
         return pd.read_csv(path, index_col=0)
+
+    def test_identifiers_are_literal_and_duplicate_headers_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            source = self.write_expression(directory, ",001,NA\n0001,1,2\nNA,3,4\n")
+            frame = read_expression_frame(source)
+            self.assertEqual(frame.index.tolist(), ["0001", "NA"])
+            self.assertEqual(frame.columns.tolist(), ["001", "NA"])
+            source.write_text(",cell,cell\na,1,2\n")
+            with self.assertRaisesRegex(MatrixTransformationError, "unique"):
+                read_expression_frame(source)
 
     def test_raw_matrix_is_normalized_per_cell_then_log1p_transformed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -189,6 +189,17 @@ ALGORITHMS: list[AlgorithmInfo] = [
         ],
         "parameters": [
             {
+                "name": "seed",
+                "label": "Random seed",
+                "description": "Use the same seed and input to reproduce tree fitting.",
+                "default": 1,
+                "required": False,
+                "value_type": "int",
+                "minimum": 0,
+                "maximum": 4294967295,
+                "advanced": True,
+            },
+            {
                 "name": "nEstimators",
                 "label": "Number of trees",
                 "description": (
@@ -253,6 +264,17 @@ ALGORITHMS: list[AlgorithmInfo] = [
             "Recommended preset selection.",
         ],
         "parameters": [
+            {
+                "name": "seed",
+                "label": "Random seed",
+                "description": "Use the same seed and input to reproduce tree fitting.",
+                "default": 1,
+                "required": False,
+                "value_type": "int",
+                "minimum": 0,
+                "maximum": 4294967295,
+                "advanced": True,
+            },
             {
                 "name": "learningRate",
                 "label": "Learning rate",
@@ -612,7 +634,7 @@ ALGORITHMS: list[AlgorithmInfo] = [
                 "default": 10,
                 "required": False,
                 "value_type": "int",
-                "minimum": 2,
+                "minimum": 5,
                 "maximum": 100,
             },
         ],
@@ -721,8 +743,8 @@ ALGORITHMS: list[AlgorithmInfo] = [
             },
             {
                 "name": "ignorePT",
-                "label": "Ignore pseudotime",
-                "description": "Whether SCRIBE ignores pseudotime.",
+                "label": "Use supplied pseudotime",
+                "description": "Use the project’s supplied cell ordering. Turn off to recompute pseudotime with Monocle.",
                 "default": True,
                 "required": False,
                 "value_type": "bool",

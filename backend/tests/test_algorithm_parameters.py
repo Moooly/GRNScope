@@ -16,12 +16,12 @@ from app.services.beeline_service import (
 
 NON_DEFAULT_PARAMETERS = {
     "PIDC": {"maxGenes": 300},
-    "GENIE3": {"nEstimators": 7, "maxFeatures": "log2"},
-    "GRNBOOST2": {"learningRate": 0.1, "nEstimators": 20, "maxFeatures": 0.5},
+    "GENIE3": {"seed": 17, "nEstimators": 7, "maxFeatures": "log2"},
+    "GRNBOOST2": {"seed": 17, "learningRate": 0.1, "nEstimators": 20, "maxFeatures": 0.5},
     "CELLORACLE": {"maxCells": 50, "pValueCutoff": 0.1},
     "PPCOR": {"maxGenes": 300, "pVal": 0.2},
     "SCODE": {"z": 2, "nIter": 5, "nRep": 2},
-    "SINCERITIES": {"maxGenes": 300, "nBins": 4},
+    "SINCERITIES": {"maxGenes": 300, "nBins": 5},
     "SCRIBE": {
         "maxGenes": 200,
         "delay": 2,
