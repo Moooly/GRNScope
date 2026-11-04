@@ -1,11 +1,15 @@
 fastapi
+pydantic>=2,<3
+starlette
 uvicorn
 python-multipart
+numpy
 pandas
 anndata>=0.10,<1
 scanpy>=1.11,<2
 scipy>=1.11,<2
 scikit-learn>=1.4,<2
+threadpoolctl
 pyyaml
 tqdm
 redis
