@@ -28,9 +28,4 @@ export function getApiBase() {
   return configured;
 }
 
-export function getApiRoot(apiBase = getApiBase()) {
-  return apiBase.replace(/\/api\/?$/, "");
-}
-
 export const API_BASE = getApiBase();
-export const API_ROOT = getApiRoot(API_BASE);

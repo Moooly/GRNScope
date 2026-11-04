@@ -1,19 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import io
-import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.storage import (
-    cleanup_expired_temp_uploads,
-    cleanup_temp_upload,
-    save_upload_file,
-)
-from app.validators import parse_expression_matrix, upload_validation_mode
+from app.api import uploads
+from app.storage import save_upload_file
+from app.services.matrix_transformation_service import read_expression_frame
 
 
 class UploadSafetyTests(unittest.TestCase):
@@ -30,7 +27,7 @@ class UploadSafetyTests(unittest.TestCase):
 
             self.assertFalse(destination.exists())
 
-    def test_strict_validation_is_the_default_and_checks_every_value(self):
+    def test_project_expression_loading_checks_every_value(self):
         with tempfile.TemporaryDirectory() as directory:
             matrix = Path(directory) / "matrix.csv"
             headers = ["gene", *[f"c{index}" for index in range(1, 11)]]
@@ -46,38 +43,26 @@ class UploadSafetyTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch.dict(os.environ):
-                os.environ.pop("GRNSCOPE_UPLOAD_VALIDATION_MODE", None)
-                self.assertEqual(upload_validation_mode(), "strict")
-                with self.assertRaisesRegex(ValueError, "non-numeric"):
-                    parse_expression_matrix(matrix)
+            with self.assertRaisesRegex(ValueError, "non-numeric"):
+                read_expression_frame(matrix)
 
-    def test_expired_cleanup_removes_orphans_and_id_cleanup_needs_no_metadata(self):
-        with tempfile.TemporaryDirectory() as directory:
-            temp_root = Path(directory)
-            old_id = "a" * 32
-            recent_id = "b" * 32
-            old_file = temp_root / f"{old_id}__expression__old.csv"
-            recent_file = temp_root / f"{recent_id}__expression__recent.csv"
-            old_file.write_bytes(b"old")
-            recent_file.write_bytes(b"recent")
-            os.utime(old_file, (100, 100))
-            os.utime(recent_file, (190, 190))
 
-            with patch("app.storage.TEMP_UPLOAD_DIR", temp_root):
-                result = cleanup_expired_temp_uploads(
-                    now=200,
-                    max_age_seconds=50,
-                )
-                recent_result = cleanup_temp_upload(recent_id)
+    def test_anndata_inspection_removes_its_temporary_file_after_failure(self):
+        inspected_paths = []
 
-            self.assertEqual(result, {"removed_count": 1, "removed_bytes": 3})
-            self.assertFalse(old_file.exists())
-            self.assertEqual(
-                recent_result,
-                {"removed_count": 1, "removed_bytes": 6},
-            )
-            self.assertFalse(recent_file.exists())
+        def reject_inspection(path):
+            inspected_paths.append(path)
+            self.assertEqual(path.read_bytes(), b"invalid h5ad")
+            raise ValueError("invalid AnnData")
+
+        upload = SimpleNamespace(filename="input.h5ad", file=io.BytesIO(b"invalid h5ad"))
+        with patch("app.api.uploads.inspect_h5ad_expression", side_effect=reject_inspection):
+            result = asyncio.run(uploads.inspect_expression_upload(upload))
+
+        self.assertFalse(result["ok"])
+        self.assertIn("invalid AnnData", result["errors"])
+        self.assertEqual(len(inspected_paths), 1)
+        self.assertFalse(inspected_paths[0].parent.exists())
 
 
 if __name__ == "__main__":

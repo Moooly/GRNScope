@@ -83,3 +83,10 @@ tmp/
 
 # OS-generated files
 Thumbs.db
+
+# Retired local previews, generated documents, and deployment bundles
+/Claude outputs/
+/previews/
+/output/
+/deployment/
+/tmp_systemd_backup/

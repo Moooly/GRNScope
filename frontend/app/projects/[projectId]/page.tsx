@@ -1589,8 +1589,7 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
       return;
     }
 
-    // Otherwise open at a fixed evidence default. The data-driven cut in
-    // _lib/openingCut.ts (chooseOpeningEvidenceCut) is kept but not used for now.
+    // Otherwise open at the fixed evidence default.
 
     // Evidence alone drives the initial count; relax the other axes so they
     // don't undercut it. The panel then honestly reflects what is shown.

@@ -70,10 +70,7 @@ export function figureCounts(
 
 /** Which links the figure shows by effect. Genes keep their places. */
 export type EffectFilter = "all" | "activation" | "repression" | "unknown";
-export const EFFECT_OPTIONS: Array<{ value: EffectFilter; label: string }> = [
-  { value: "all", label: "All" }, { value: "activation", label: "Activation" },
-  { value: "repression", label: "Repression" }, { value: "unknown", label: "Sign unknown" },
-];
+
 export function passesEffect(sign: number, effect: EffectFilter) {
   return effect === "all" || (effect === "activation" ? sign === 1 : effect === "repression" ? sign === -1 : sign === 0);
 }

@@ -22,7 +22,7 @@ Run `npm run check` for ESLint, TypeScript, network tests, and a production buil
 - `app/projects/[projectId]/` contains the results workspace and network views.
 - `scripts/` contains network layout and export checks.
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for the module and styling conventions used during the refactor. `AGENTS.md` requires reading the installed Next.js documentation before editing Next-specific code.
+`AGENTS.md` requires reading the installed Next.js documentation before editing Next-specific code.
 
 ## Supported local Node version
 

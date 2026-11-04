@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 MATRIX_TRANSFORMATION_ENGINE = "scanpy"
 MATRIX_TRANSFORMATION_VERSION = 2
 NORMALIZATION_TARGET_SUM = 10_000.0
-SUPPORTED_MATRIX_STATES = {"raw", "normalized", "log_normalized"}
 
 
 class MatrixTransformationError(ValueError):

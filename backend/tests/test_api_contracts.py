@@ -71,8 +71,12 @@ def test_demo_read_response_contracts() -> None:
 
 def test_read_routes_expose_response_schemas() -> None:
     paths = app.openapi()["paths"]
-    assert len(paths) == 42
-    assert sum(len(methods) for methods in paths.values()) == 44
+    assert "/api/uploads/temp-dataset" not in paths
+    assert "/api/uploads/temp-dataset/{temp_upload_id}" not in paths
+    assert "/api/projects/create-pending" in paths
+    assert "/api/projects/{project_id}/upload-and-start" in paths
+    assert len(paths) == 40
+    assert sum(len(methods) for methods in paths.values()) == 42
     expected = [
         "/api/algorithms",
         "/api/algorithms/recommended",

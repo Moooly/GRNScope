@@ -79,7 +79,7 @@ def main() -> None:
     stop_requested = False
     processes: dict[int, multiprocessing.Process] = {}
 
-    def request_stop(signum, frame) -> None:  # noqa: ANN001
+    def request_stop(_signum, _frame) -> None:  # noqa: ANN001
         nonlocal stop_requested
         stop_requested = True
         for process in processes.values():

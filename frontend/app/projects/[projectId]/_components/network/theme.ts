@@ -49,8 +49,7 @@ export const PALETTES: Record<PaletteName, Palette> = {
     nodeMin: 10,
   },
 };
-export const PALETTE_LABELS: Record<PaletteName, string> = { soft: "Soft", contrast: "Contrast" };
+
 export const DEFAULT_PALETTE: PaletteName = "soft";
 /** Default palette, for code that does not follow the switch. */
 export const PALETTE: Palette = SOFT;
-export type NetworkTheme = typeof NETWORK_THEME;

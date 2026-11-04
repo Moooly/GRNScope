@@ -82,18 +82,6 @@ def get_demo_ranked_edges_path(algorithm_id: str) -> Path:
     )
 
 
-def list_demo_ranked_edges_paths() -> dict[str, Path]:
-    paths: dict[str, Path] = {}
-
-    for algorithm_id in get_demo_algorithm_ids():
-        try:
-            paths[algorithm_id.upper()] = get_demo_ranked_edges_path(algorithm_id)
-        except FileNotFoundError:
-            continue
-
-    return paths
-
-
 def get_demo_input_file_path(filename: str) -> Path:
     safe_filename = Path(filename).name
     input_path = DEMO_PROJECT_INPUTS_ROOT / safe_filename
@@ -102,11 +90,6 @@ def get_demo_input_file_path(filename: str) -> Path:
         raise FileNotFoundError(f"Demo input file not found: {input_path}")
 
     return input_path
-
-
-def list_demo_input_files() -> list[dict[str, Any]]:
-    manifest = load_demo_manifest()
-    return list(manifest.get("inputs", []))
 
 
 def get_demo_project_root() -> Path:

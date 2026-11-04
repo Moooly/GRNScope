@@ -547,7 +547,7 @@ def normalize_confidence_run_mode(value: object) -> str:
     )
 
 
-def normalize_confidence_bootstrap_runs(value: object, *, mode: str) -> int:
+def normalize_confidence_bootstrap_runs(value: object) -> int:
     parsed = parse_positive_int(value)
     if parsed is None:
         parsed = DEFAULT_CONFIDENCE_BOOTSTRAP_RUNS
@@ -574,23 +574,6 @@ def normalize_confidence_evidence_threshold(value: object) -> float:
         MIN_CONFIDENCE_EVIDENCE_THRESHOLD,
         min(parsed, MAX_CONFIDENCE_EVIDENCE_THRESHOLD),
     )
-
-
-def parse_positive_float(value: object) -> float | None:
-    if value is None:
-        return None
-    try:
-        parsed = float(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed > 0 else None
-
-
-def parse_probability(value: object) -> float | None:
-    parsed = parse_positive_float(value)
-    if parsed is None or parsed >= 1:
-        return None
-    return parsed
 
 
 def read_configured_positive_int(name: str) -> int | None:
@@ -663,10 +646,6 @@ def resolve_adaptive_confidence_bootstrap_runs(gene_count: int | None) -> int:
     return DEFAULT_CONFIDENCE_MAX_RUNS
 
 
-def resolve_confidence_min_runs() -> int:
-    return DEFAULT_CONFIDENCE_MIN_RUNS
-
-
 def count_expression_gene_rows(expression_path: Path) -> int:
     dialect = detect_csv_dialect_from_file(expression_path)
     row_count = 0
@@ -692,12 +671,10 @@ def resolve_confidence_settings(
     if run_mode == CONFIDENCE_RUN_MODE_FIXED:
         run_count = normalize_confidence_bootstrap_runs(
             configured_run_count,
-            mode=run_mode,
         )
     elif legacy_requested_ceiling:
         run_count = normalize_confidence_bootstrap_runs(
             configured_run_count,
-            mode=run_mode,
         )
     else:
         run_count = resolve_adaptive_confidence_bootstrap_runs(gene_count)
@@ -2103,66 +2080,6 @@ def write_pseudotime_view_for_cell_records(
             writer.writerow([record["output"], *source_row[1:]])
 
 
-def subset_pseudotime_rows_by_cells(
-    source_pseudotime: Path,
-    destination_pseudotime: Path,
-    selected_cell_names: set[str],
-) -> None:
-    if not selected_cell_names:
-        shutil.copy2(source_pseudotime, destination_pseudotime)
-        return
-
-    try:
-        dialect = detect_csv_dialect_from_file(source_pseudotime)
-    except Exception:
-        shutil.copy2(source_pseudotime, destination_pseudotime)
-        return
-
-    temporary_path = destination_pseudotime.with_name(
-        f".{destination_pseudotime.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-    )
-    matched = 0
-    data_rows = 0
-
-    try:
-        with source_pseudotime.open("r", encoding="utf-8", newline="") as source_file, (
-            temporary_path.open("w", encoding="utf-8", newline="")
-        ) as destination_file:
-            reader = csv.reader(source_file, dialect=dialect)
-            writer = csv.writer(
-                destination_file,
-                delimiter=getattr(dialect, "delimiter", ","),
-                quotechar=getattr(dialect, "quotechar", '"'),
-                lineterminator="\n",
-            )
-
-            try:
-                header = next(reader)
-            except StopIteration:
-                shutil.copy2(source_pseudotime, destination_pseudotime)
-                return
-
-            writer.writerow(header)
-            for row in reader:
-                if not row or all(str(value).strip() == "" for value in row):
-                    continue
-                data_rows += 1
-                if row[0] in selected_cell_names:
-                    writer.writerow(row)
-                    matched += 1
-    except Exception:
-        temporary_path.unlink(missing_ok=True)
-        shutil.copy2(source_pseudotime, destination_pseudotime)
-        return
-
-    if data_rows == 0 or matched == 0:
-        temporary_path.unlink(missing_ok=True)
-        shutil.copy2(source_pseudotime, destination_pseudotime)
-        return
-
-    temporary_path.replace(destination_pseudotime)
-
-
 def plan_confidence_run_inputs(
     *,
     dataset_id: str,
@@ -2551,42 +2468,6 @@ def materialize_confidence_run_input(
     return run_dir
 
 
-def create_confidence_run_inputs(
-    *,
-    input_dir: Path,
-    dataset_id: str,
-    algorithm_id: str,
-    project_manifest: dict,
-    preprocessed_expression: Path,
-    source_pseudotime: Path | None,
-) -> tuple[list[str], dict[str, dict], dict]:
-    (
-        run_ids,
-        run_metadata,
-        settings,
-        run_column_indices,
-        header,
-    ) = plan_confidence_run_inputs(
-        dataset_id=dataset_id,
-        algorithm_id=algorithm_id,
-        project_manifest=project_manifest,
-        preprocessed_expression=preprocessed_expression,
-    )
-
-    for run_id in run_ids:
-        materialize_confidence_run_input(
-            input_dir=input_dir,
-            dataset_id=dataset_id,
-            run_id=run_id,
-            preprocessed_expression=preprocessed_expression,
-            header=header,
-            selected_column_indices=run_column_indices[run_id],
-            source_pseudotime=source_pseudotime,
-        )
-
-    return run_ids, run_metadata, settings
-
-
 def sanitize_error_message(message: str) -> str:
     cleaned = re.sub(r"\x1b\[[0-9;]*m", "", message)
     cleaned = cleaned.replace("Traceback (most recent call last):", "")
@@ -2808,40 +2689,6 @@ def initialize_beeline_runtime(
         dataset_id,
         preprocessed_expression,
         source_pseudotime,
-    )
-
-
-def prepare_beeline_runtime(
-    project_id: str,
-    algorithm_id: str,
-    project_manifest: dict,
-) -> tuple[Path, Path, Path, str, list[str], dict[str, dict], dict]:
-    (
-        runtime_root,
-        input_dir,
-        output_dir,
-        dataset_id,
-        preprocessed_expression,
-        source_pseudotime,
-    ) = initialize_beeline_runtime(project_id, algorithm_id, project_manifest)
-
-    run_ids, run_metadata, confidence_settings = create_confidence_run_inputs(
-        input_dir=input_dir,
-        dataset_id=dataset_id,
-        algorithm_id=algorithm_id,
-        project_manifest=project_manifest,
-        preprocessed_expression=preprocessed_expression,
-        source_pseudotime=source_pseudotime,
-    )
-
-    return (
-        runtime_root,
-        input_dir,
-        output_dir,
-        dataset_id,
-        run_ids,
-        run_metadata,
-        confidence_settings,
     )
 
 
@@ -3239,213 +3086,6 @@ def finalize_confidence_accumulator(
     }
 
 
-def full_data_edge_estimates(
-    run_edges: list[dict],
-    *,
-    evidence_threshold: float,
-) -> dict[tuple[str, str], dict]:
-    estimates: dict[tuple[str, str], dict] = {}
-    entries_by_target: dict[str, list[dict]] = {}
-    for edge in run_edges:
-        source = str(edge.get("source", "")).strip()
-        target = str(edge.get("target", "")).strip()
-        if source and target and source != target:
-            entries_by_target.setdefault(target, []).append(edge)
-
-    for target, entries in entries_by_target.items():
-        strongest_by_source: dict[str, dict] = {}
-        for edge in entries:
-            source = str(edge.get("source", "")).strip()
-            score = float(edge.get("score", 0.0) or 0.0)
-            current = strongest_by_source.get(source)
-            if current is None or abs(score) > abs(
-                float(current.get("score", 0.0) or 0.0)
-            ):
-                strongest_by_source[source] = edge
-        ranked = sorted(
-            strongest_by_source.values(),
-            key=lambda edge: (
-                -abs(float(edge.get("score", 0.0) or 0.0)),
-                str(edge.get("source", "")),
-            ),
-        )
-        denominator = max(len(ranked) - 1, 1)
-        index = 0
-        while index < len(ranked):
-            weight = abs(float(ranked[index].get("score", 0.0) or 0.0))
-            tie_end = index + 1
-            while (
-                tie_end < len(ranked)
-                and abs(float(ranked[tie_end].get("score", 0.0) or 0.0))
-                == weight
-            ):
-                tie_end += 1
-            rank = ((index + 1) + tie_end) / 2.0
-            percentile = (
-                1.0
-                if len(ranked) <= 1
-                else max(0.0, min(1.0, 1 - ((rank - 1) / denominator)))
-            )
-            for edge in ranked[index:tie_end]:
-                source = str(edge.get("source", "")).strip()
-                estimates[(source, target)] = {
-                    "source": source,
-                    "target": target,
-                    "raw_score": float(edge.get("score", 0.0) or 0.0),
-                    "evidence": percentile,
-                    "rank": rank,
-                    "selected": percentile >= evidence_threshold,
-                }
-            index = tie_end
-    return estimates
-
-
-def merge_full_data_with_bootstrap_edges(
-    bootstrap_edges: list[dict],
-    full_data_edges: list[dict],
-    *,
-    bootstrap_runs: int,
-    evidence_threshold: float,
-) -> list[dict]:
-    """Legacy archive reconstruction only; new runs use bootstrap estimates."""
-
-    def attach_sign_stability(
-        edge: dict,
-        *,
-        reference_score: float | None,
-        reference: str,
-    ) -> None:
-        positive_runs = int(edge.get("positive_selected_runs", 0) or 0)
-        negative_runs = int(edge.get("negative_selected_runs", 0) or 0)
-        signed_runs = positive_runs + negative_runs
-        selected_runs = int(edge.get("selected_runs", 0) or 0)
-
-        edge["signed_selected_runs"] = signed_runs
-        edge["bootstrap_positive_probability"] = (
-            positive_runs / signed_runs if signed_runs else None
-        )
-        edge["bootstrap_negative_probability"] = (
-            negative_runs / signed_runs if signed_runs else None
-        )
-        edge["bootstrap_sign_coverage"] = (
-            signed_runs / selected_runs if selected_runs else None
-        )
-
-        reference_sign = 0
-        if reference_score is not None:
-            if reference_score > 0:
-                reference_sign = 1
-            elif reference_score < 0:
-                reference_sign = -1
-
-        if not reference_sign or not signed_runs:
-            edge["sign_agreeing_runs"] = None
-            edge["bootstrap_sign_confidence"] = None
-            edge["bootstrap_sign_reference"] = (
-                reference if reference_sign else None
-            )
-            return
-
-        agreeing_runs = positive_runs if reference_sign > 0 else negative_runs
-        edge["sign_agreeing_runs"] = agreeing_runs
-        edge["bootstrap_sign_confidence"] = agreeing_runs / signed_runs
-        edge["bootstrap_sign_reference"] = reference
-
-    merged_by_key = {
-        edge_confidence_key(edge): dict(edge)
-        for edge in bootstrap_edges
-        if all(edge_confidence_key(edge))
-        and edge_confidence_key(edge)[0] != edge_confidence_key(edge)[1]
-    }
-    full_estimates = full_data_edge_estimates(
-        full_data_edges,
-        evidence_threshold=evidence_threshold,
-    )
-    for key, estimate in full_estimates.items():
-        edge = merged_by_key.get(key)
-        if edge is None:
-            edge = {
-                "source": estimate["source"],
-                "target": estimate["target"],
-                "confidence": 0.0,
-                "stability": 0.0,
-                "bootstrap_mean_evidence": 0.0,
-                "evidence_ci_lower": 0.0,
-                "evidence_ci_upper": 0.0,
-                "z_ci_lower": None,
-                "z_ci_upper": None,
-                "selected_runs": 0,
-                "positive_selected_runs": 0,
-                "negative_selected_runs": 0,
-                "signed_selected_runs": 0,
-                "bootstrap_positive_probability": None,
-                "bootstrap_negative_probability": None,
-                "bootstrap_sign_coverage": None,
-                "sign_agreeing_runs": None,
-                "bootstrap_sign_confidence": None,
-                "bootstrap_sign_reference": None,
-                "observed_runs": 0,
-                "run_count": bootstrap_runs,
-                "best_rank": None,
-                "bootstrap_mean_raw_score": 0.0,
-            }
-            merged_by_key[key] = edge
-        edge.update(
-            {
-                "score": estimate["evidence"],
-                "mean_percentile": estimate["evidence"],
-                "full_data_evidence": estimate["evidence"],
-                "mean_raw_score": estimate["raw_score"],
-                "full_data_raw_score": estimate["raw_score"],
-                "full_data_rank": estimate["rank"],
-                "full_data_present": True,
-                "network_estimator": "legacy_full_data",
-            }
-        )
-        attach_sign_stability(
-            edge,
-            reference_score=float(estimate["raw_score"]),
-            reference="full_data",
-        )
-
-    for key, edge in merged_by_key.items():
-        if key in full_estimates:
-            continue
-        edge.setdefault(
-            "score",
-            float(edge.get("bootstrap_mean_evidence", 0.0) or 0.0),
-        )
-        edge.setdefault(
-            "mean_percentile",
-            float(edge.get("bootstrap_mean_evidence", 0.0) or 0.0),
-        )
-        edge["full_data_evidence"] = None
-        edge["full_data_raw_score"] = None
-        edge["full_data_rank"] = None
-        edge["full_data_present"] = False
-        bootstrap_reference_score = float(
-            edge.get("bootstrap_mean_raw_score", 0.0) or 0.0
-        )
-        attach_sign_stability(
-            edge,
-            reference_score=bootstrap_reference_score,
-            reference="bootstrap_mean",
-        )
-
-    merged = list(merged_by_key.values())
-    merged.sort(
-        key=lambda edge: (
-            -float(edge.get("confidence", 0.0) or 0.0),
-            -float(edge.get("score", 0.0) or 0.0),
-            str(edge.get("source", "")),
-            str(edge.get("target", "")),
-        )
-    )
-    for rank, edge in enumerate(merged, start=1):
-        edge["rank"] = rank
-    return merged
-
-
 def recalculate_confidence_result_payload(
     result_payload: dict,
     *,
@@ -3728,7 +3368,6 @@ def spearman_stability_check(
     result["stop_early"] = rho > stop_rho
     result["status"] = "stable" if result["stop_early"] else "changing"
     return result
-
 
 
 def record_confidence_stability_check(state: dict, check: dict) -> bool:
@@ -4082,48 +3721,6 @@ def parse_single_run_raw_output(
     return top_edges, network_summary, ranked_edges_path
 
 
-def aggregate_confidence_run_outputs(
-    output_dir: Path,
-    dataset_id: str,
-    run_ids: list[str],
-    algorithm_id: str,
-    *,
-    runtime_root: Path,
-    max_edges_per_target: int | None = None,
-    evidence_threshold: float,
-) -> tuple[list[dict], dict, dict[str, str]]:
-    accumulator = create_confidence_accumulator()
-    ranked_edge_paths: dict[str, str] = {}
-
-    for run_id in run_ids:
-        try:
-            run_edges, ranked_edges_path = parse_confidence_run_output(
-                output_dir,
-                dataset_id,
-                run_id,
-                algorithm_id,
-                runtime_root=runtime_root,
-                max_edges_per_target=max_edges_per_target,
-            )
-        except EmptyConfidenceRunError as exc:
-            run_edges = []
-            ranked_edges_path = exc.ranked_edges_path
-        update_confidence_accumulator(
-            accumulator,
-            run_edges,
-            evidence_threshold=evidence_threshold,
-        )
-        ranked_edge_paths[run_id] = str(ranked_edges_path)
-        del run_edges
-
-    top_edges, network_summary = finalize_confidence_accumulator(
-        accumulator,
-        run_count=len(run_ids),
-        evidence_threshold=evidence_threshold,
-    )
-    return top_edges, network_summary, ranked_edge_paths
-
-
 def count_completed_confidence_run_outputs(
     output_dir: Path,
     dataset_id: str,
@@ -4256,136 +3853,6 @@ def write_confidence_ranked_edges_csv(destination_path: Path, edges: list[dict])
                     "BestRank": edge.get("best_rank"),
                 }
             )
-
-
-def execute_beeline_algorithm(project_id: str, algorithm_id: str) -> dict:
-    project_dir = PROJECTS_ROOT / project_id
-    project_manifest = read_project_manifest(project_dir)
-    beeline_root = resolve_beeline_root()
-
-    (
-        runtime_root,
-        input_dir,
-        output_dir,
-        dataset_id,
-        run_ids,
-        run_metadata,
-        confidence_settings,
-    ) = prepare_beeline_runtime(
-        project_id,
-        algorithm_id,
-        project_manifest,
-    )
-
-    config_path = runtime_root / "config.yaml"
-    ranked_edges_per_target_limit = resolve_ranked_edges_per_target_limit(
-        algorithm_id,
-        confidence_settings,
-    )
-    algorithm_runtime_params = build_algorithm_runtime_params(
-        algorithm_id,
-        project_manifest,
-    )
-    config_text = build_beeline_config(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        dataset_id=dataset_id,
-        run_ids=run_ids,
-        algorithm_id=algorithm_id,
-        include_pseudotime=bool(project_manifest.get("pseudotime_path")),
-        max_regulators_per_target=ranked_edges_per_target_limit,
-        extra_params=algorithm_runtime_params,
-    )
-    config_path.write_text(config_text, encoding="utf-8")
-
-    python_executable = os.environ.get("BEELINE_PYTHON", sys.executable)
-    command = [python_executable, "BLRunner.py", "-c", str(config_path), "--overwrite"]
-
-    completed_process = subprocess.run(
-        command,
-        cwd=beeline_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    (runtime_root / "stdout.log").write_text(
-        completed_process.stdout or "",
-        encoding="utf-8",
-    )
-    (runtime_root / "stderr.log").write_text(
-        completed_process.stderr or "",
-        encoding="utf-8",
-    )
-
-    if completed_process.returncode != 0:
-        friendly_error = extract_user_friendly_beeline_error(
-            "\n".join(
-                [
-                    completed_process.stderr or "",
-                    completed_process.stdout or "",
-                ]
-            ),
-            algorithm_id,
-        )
-        raise RuntimeError(friendly_error)
-
-    if confidence_settings.get("confidence_enabled"):
-        bootstrap_run_ids = [
-            run_id
-            for run_id in run_ids
-            if run_metadata.get(run_id, {}).get("run_kind") == "bootstrap"
-        ]
-        top_edges, network_summary, ranked_edge_paths = aggregate_confidence_run_outputs(
-            output_dir,
-            dataset_id,
-            bootstrap_run_ids,
-            algorithm_id,
-            runtime_root=runtime_root,
-            max_edges_per_target=ranked_edges_per_target_limit,
-            evidence_threshold=float(
-                confidence_settings["confidence_evidence_threshold"]
-            ),
-        )
-        network_summary["edge_count"] = len(top_edges)
-        network_summary["node_count"] = len(
-            {
-                str(edge.get(field, "")).strip()
-                for edge in top_edges
-                for field in ("source", "target")
-                if str(edge.get(field, "")).strip()
-            }
-        )
-        network_summary["full_data_run_included"] = False
-        ranked_edges_path = runtime_root / "rankedEdges_confidence.csv"
-        write_confidence_ranked_edges_csv(ranked_edges_path, top_edges)
-    else:
-        top_edges, network_summary, ranked_edges_path = parse_single_run_raw_output(
-            output_dir,
-            dataset_id,
-            run_ids[0],
-            algorithm_id,
-            runtime_root=runtime_root,
-            max_edges_per_target=ranked_edges_per_target_limit,
-        )
-        ranked_edge_paths = {run_ids[0]: str(ranked_edges_path)}
-
-    docker_image_version = resolve_algorithm_image(algorithm_id)
-    return {
-        "project_id": project_id,
-        "algorithm_id": algorithm_id,
-        "docker_image_version": docker_image_version,
-        "algorithm_preprocessing": load_algorithm_preprocessing_summary(runtime_root),
-        "network_summary": network_summary,
-        "top_edges": top_edges,
-        "confidence_summary": {
-            **confidence_settings,
-            "run_metadata": run_metadata,
-        },
-        "run_ranked_edges_paths": ranked_edge_paths,
-        "runtime_root": str(runtime_root),
-        "ranked_edges_path": str(ranked_edges_path),
-    }
 
 
 def run_beeline_with_progress(

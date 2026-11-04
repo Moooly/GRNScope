@@ -4,7 +4,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.services.job_service import clear_task_control, stop_algorithm_task
+from app.services.job_service import (
+    clear_task_control,
+    finalize_algorithm_task_stop,
+    request_algorithm_task_stop,
+)
 
 
 class AlgorithmStopTests(unittest.TestCase):
@@ -49,7 +53,9 @@ class AlgorithmStopTests(unittest.TestCase):
                         "app.services.job_service.cleanup_algorithm_runtime"
                     ) as cleanup_runtime,
                 ):
-                    task = stop_algorithm_task("project-1", "job-1", "SCRIBE")
+                    task, fallback_pid = request_algorithm_task_stop("project-1", "job-1", "SCRIBE")
+                    if fallback_pid is not None or task.get("status") == "Stopping":
+                        finalize_algorithm_task_stop("project-1", "job-1", "SCRIBE", fallback_pid)
             finally:
                 clear_task_control("project-1", "job-1", "SCRIBE")
 
@@ -77,7 +83,9 @@ class AlgorithmStopTests(unittest.TestCase):
                         "app.services.job_service.cleanup_algorithm_runtime"
                     ) as cleanup_runtime,
                 ):
-                    task = stop_algorithm_task("project-1", "job-1", "SCRIBE")
+                    task, fallback_pid = request_algorithm_task_stop("project-1", "job-1", "SCRIBE")
+                    if fallback_pid is not None or task.get("status") == "Stopping":
+                        finalize_algorithm_task_stop("project-1", "job-1", "SCRIBE", fallback_pid)
             finally:
                 clear_task_control("project-1", "job-1", "SCRIBE")
 

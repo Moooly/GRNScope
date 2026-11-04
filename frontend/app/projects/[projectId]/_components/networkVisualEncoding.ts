@@ -55,14 +55,7 @@ export function edgeMetric(
 export function metricWidth(value: number | null): number {
   return value === null ? 1 : 0.8 + value * 2;
 }
-// Opacity channel for edge strength (confidence / evidence / support). A higher
-// floor keeps low-strength links visible while the full range remains legible.
-/** Evidence drives the central line's thickness. Deliberately a narrow range:
- * support is carried by the thread count, so this only needs to be comparable,
- * not heavy. */
-export function metricWidthPx(value: number | null): number {
-  return value === null ? 1.4 : 1.2 + value * 1.6;
-}
+
 export function metricOpacity(value: number | null): number {
   return value === null ? 0.3 : 0.42 + value * 0.58;
 }

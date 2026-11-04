@@ -22,9 +22,9 @@ ESLint reports one source warning: an unused `methodCount` value in `NetworkLege
 
 ## Existing local artifacts
 
-- `Claude outputs/` was untracked before Stage 1. It contains design previews and other local artifacts. Stage 1 leaves it unchanged and visible in Git status so its ownership can be decided explicitly.
-- `frontend/.next-dev/` was untracked generated output before Stage 1. It is now ignored. Existing files remain in place.
-- `backend/projects/` and `backend/temp_uploads/` are local runtime storage and were already ignored.
+- Historical design previews, document exports, and abandoned deployment bundles were removed during the 2026-11-03 cleanup.
+- Generated development and production build output is ignored and can be regenerated from the frontend source.
+- `backend/projects/` is ignored local runtime storage. The old temporary-upload staging flow was retired during the 2026-11-03 cleanup.
 
 ## Behavioral review for later stages
 

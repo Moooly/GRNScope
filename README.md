@@ -37,4 +37,4 @@ The bundled read-only example is at <http://localhost:3000/projects/demo>. It ne
 
 ## Checks and contribution rules
 
-Run `bash scripts/check.sh` from the repository root for the same frontend and backend checks used in CI. After the production build, `bash scripts/smoke-demo.sh` starts both services and checks the demo on ports 8000 and 3000. See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions, [docs/refactor-baseline.md](docs/refactor-baseline.md) for the starting state, and [docs/api-contracts.md](docs/api-contracts.md) for the API route and response inventory.
+Run `bash scripts/check.sh` from the repository root for the same frontend and backend checks used in CI. After the production build, `bash scripts/smoke-demo.sh` starts both services and checks the demo on ports 8000 and 3000. See [docs/refactor-baseline.md](docs/refactor-baseline.md) for the starting state and [docs/api-contracts.md](docs/api-contracts.md) for the API route and response inventory.

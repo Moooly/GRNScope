@@ -5,11 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import zipfile
-from io import BytesIO
 
 from app.services.run_manifest_service import (
     backfill_terminal_run_manifests,
-    build_run_manifest_zip,
+    write_run_manifest_zip,
     generate_run_manifest,
     latest_run_manifest_path,
     list_run_manifest_paths,
@@ -248,11 +247,10 @@ class RunManifestServiceTests(unittest.TestCase):
         )
 
         archive = zipfile.ZipFile(
-            BytesIO(
-                build_run_manifest_zip(
-                    [manifest_path],
-                    timezone_name="America/Vancouver",
-                )
+            write_run_manifest_zip(
+                [manifest_path],
+                self.project_dir / "manifest-export.zip",
+                timezone_name="America/Vancouver",
             )
         )
         self.assertFalse(any("attempt-" in name for name in archive.namelist()))

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/opening-cut.test.cjs scripts/paper-export.test.cjs scripts/result-scores.test.cjs scripts/genome-coordinates.test.cjs",
+    "test:network": "node --test scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/paper-export.test.cjs scripts/result-scores.test.cjs scripts/genome-coordinates.test.cjs",
     "check": "npm run lint && npm run typecheck && npm run test:network && npm run test:loading && npm run build",
     "compare:network": "node scripts/compare-network-layouts.cjs",
     "test:loading": "node --test scripts/project-loading.test.cjs scripts/glob-compat.test.cjs",

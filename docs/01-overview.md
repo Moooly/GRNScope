@@ -159,7 +159,6 @@ If long-term access matters, download your results when the run completes — se
 | --- | --- | --- |
 | Maximum size per uploaded file | 500 MB | `MAX_FILE_SIZE_BYTES`, [`app/validators.py`](../backend/app/validators.py) |
 | Accepted file type | `.csv` only (comma, tab, or semicolon separated) | `validate_csv_extension` |
-| Staged uploads expire after | 24 hours by default | `GRNSCOPE_TEMP_UPLOAD_TTL_SECONDS` |
 | Bootstrap runs per algorithm | 2 to 50, chosen automatically | `DEFAULT_CONFIDENCE_MIN_RUNS` / `MAX_RUNS` |
 | Edges kept per target gene | 20 by default, adjustable | "Maximum edges per target" setting |
 | Minimum cells for a per-cluster network | 50 | `MIN_CLUSTER_SCOPE_CELLS`, [`app/services/job_service.py`](../backend/app/services/job_service.py) |

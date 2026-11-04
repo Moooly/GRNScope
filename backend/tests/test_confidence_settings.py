@@ -12,7 +12,6 @@ from app.services.beeline_service import (
     estimate_remaining_seconds_range_from_run_timings,
     finalize_confidence_accumulator,
     materialize_confidence_run_input,
-    merge_full_data_with_bootstrap_edges,
     normalize_confidence_evidence_threshold,
     plan_confidence_run_inputs,
     resolve_confidence_settings,
@@ -369,19 +368,16 @@ class ConfidenceSettingsTests(unittest.TestCase):
             run_count=2,
             evidence_threshold=1.0,
         )
-        merged = merge_full_data_with_bootstrap_edges(
-            bootstrap_edges,
-            [{"source": "A", "target": "B", "score": 7.0}],
-            bootstrap_runs=2,
-            evidence_threshold=1.0,
-        )
+        merged = bootstrap_edges
 
         self.assertEqual(len(merged), 1)
         edge = merged[0]
         self.assertEqual(edge["confidence"], 0.5)
         self.assertEqual(edge["selected_runs"], 1)
         self.assertEqual(edge["run_count"], 2)
-        self.assertEqual(edge["score"], 1.0)
+        self.assertEqual(edge["score"], 0.5)
+        # Raw weights average observed edges; absent runs contribute zero percentile.
+        self.assertEqual(edge["mean_raw_score"], 5.0)
         self.assertAlmostEqual(edge["evidence_ci_lower"], 0.025)
         self.assertAlmostEqual(edge["evidence_ci_upper"], 0.975)
 

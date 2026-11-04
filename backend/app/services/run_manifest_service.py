@@ -4,7 +4,6 @@ import csv
 from datetime import datetime, timezone
 import hashlib
 from importlib import metadata as importlib_metadata
-from io import BytesIO
 import json
 import platform
 from pathlib import Path
@@ -1442,26 +1441,6 @@ def _write_run_manifest_archive(
                         / relative_source
                     ).as_posix(),
                 )
-
-
-def build_run_manifest_zip(
-    manifest_paths: list[Path],
-    *,
-    project_dir: Path | None = None,
-    timezone_name: str | None = None,
-) -> bytes:
-    if not manifest_paths:
-        raise FileNotFoundError("No run manifests found.")
-    resolved_project_dir = project_dir or _project_dir_for_manifest(manifest_paths[0])
-    output = BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        _write_run_manifest_archive(
-            archive,
-            manifest_paths,
-            resolved_project_dir,
-            timezone_name,
-        )
-    return output.getvalue()
 
 
 def write_run_manifest_zip(

@@ -150,15 +150,11 @@ of 2) are **not** environment-configurable; they are constants in
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `GRNSCOPE_UPLOAD_VALIDATION_MODE` | `strict` | Anything else selects fast sampling ([§3.2](03-input-data.md#two-validation-modes)) |
-| `GRNSCOPE_UPLOAD_FULL_NUMERIC_CHECK_ROWS` | 5 | Fully checked rows in fast mode |
-| `GRNSCOPE_UPLOAD_EDGE_NUMERIC_CHECK_COLUMNS` | 4 | Leading/trailing columns spot-checked |
-| `GRNSCOPE_UPLOAD_FAST_SAMPLE_ROWS` | 20 | Rows sampled in fast mode |
 | `GRNSCOPE_UPLOAD_NAME_PREVIEW_LIMIT` | 1000 | Gene/cell names returned to the client |
-| `GRNSCOPE_TEMP_UPLOAD_TTL_SECONDS` | 86400 | Staging lifetime |
 
-Expired staged uploads are swept on startup and then periodically, at whichever
-is smaller of one hour or a quarter of the TTL.
+Uploads are written directly to the pending project directory after the project
+is created. AnnData layer inspection uses a temporary directory that is removed
+when inspection finishes.
 
 ### Email
 
@@ -195,7 +191,6 @@ deployment across origins.
 ```
 backend/
 ├── projects/<project-id>/   # one directory per analysis
-├── temp_uploads/            # staging, TTL-swept
 └── data/
     ├── known_tf_gene_names.txt
     ├── tf_gene_names/       # per-species TF references
@@ -207,8 +202,8 @@ Sizing depends almost entirely on cell count and bootstrap runs, since every run
 writes its own ranked-edge CSV. Budget for a multiple of your input size per
 algorithm.
 
-Nothing is cleaned up automatically except staged uploads and the transient
-`_beeline_runtime/` directories. Projects persist until deleted through the API.
+Transient `_beeline_runtime/` directories are cleaned up after execution.
+Projects persist until deleted through the API.
 The [data inventory](demo-assets.md) identifies bundled reference files and
 ignored local runtime output.
 

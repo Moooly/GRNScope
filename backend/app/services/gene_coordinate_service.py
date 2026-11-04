@@ -230,10 +230,6 @@ def load_transcript_coordinate_index(species: str) -> TranscriptCoordinateIndex:
     }
 
 
-def load_gene_coordinates(species: str) -> dict[str, dict]:
-    return load_gene_coordinate_index(species)["coordinates"]
-
-
 def _clean_gene_name(gene_name: str) -> str:
     return gene_name.strip().strip('"').strip("'").strip()
 

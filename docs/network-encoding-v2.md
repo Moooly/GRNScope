@@ -42,8 +42,8 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - **Colours**: TF amber `#D9913A` (further from repression red), other genes `#D9D9D9`.
 - **Group shading**: tried and removed on 2026-09-23 because it looked too busy.
 - **Smooth transitions**: after a new arrangement, genes glide from where the reader last saw them (520 ms); new genes grow out from the centre (620 ms). Skipped for reduced-motion users, networks over 1,500 genes and background tabs.
-- **Gene hover = neighbourhood focus** (2026-09-23, option B of `Claude outputs/gene-hover-proposals.png`; replaces the flowing dashes): the gene, its partners and its links stay; other links fade to 10 % and other genes to 35 %; its links turn `#1F2A33` (≥2 px, ×1.6) on a white casing; partner names turn bold; no halo. A label "*FOXL2* · regulates 5 · regulated by 4" (+ "· N direction unknown"; "N partners" when no link is directed) sits next to the gene, tried above first and then round it, on the spot covering least of its links and partners (`placeGeneLabel` in `network/labels.ts`). Screen-only.
-- **Link hover = focus** (2026-09-23, option B of `Claude outputs/edge-hover-proposals.png`): hovering a link on the canvas, or its row in the table, fades every other link (10 %) and gene (35 %), draws the link near-black `#1F2A33` at ≥3.2 px on a white casing, keeps its two genes full with bold names, and shows a label "*SRY* ⊣ *CTNNB1* · evidence 0.66". The label sits beside the link, never on it: it is pushed off the link's midpoint along its normal until the box clears the line, on the side that keeps it inside the canvas and off the two genes (`placeLinkLabel` in `network/labels.ts`). The old ×1.6 width with flowing dashes was too subtle with one link ink. Screen-only.
+- **Gene hover = neighbourhood focus** (2026-09-23; replaces the flowing dashes): the gene, its partners and its links stay; other links fade to 10 % and other genes to 35 %; its links turn `#1F2A33` (≥2 px, ×1.6) on a white casing; partner names turn bold; no halo. A label "*FOXL2* · regulates 5 · regulated by 4" (+ "· N direction unknown"; "N partners" when no link is directed) sits next to the gene, tried above first and then round it, on the spot covering least of its links and partners (`placeGeneLabel` in `network/labels.ts`). Screen-only.
+- **Link hover = focus** (2026-09-23): hovering a link on the canvas, or its row in the table, fades every other link (10 %) and gene (35 %), draws the link near-black `#1F2A33` at ≥3.2 px on a white casing, keeps its two genes full with bold names, and shows a label "*SRY* ⊣ *CTNNB1* · evidence 0.66". The label sits beside the link, never on it: it is pushed off the link's midpoint along its normal until the box clears the line, on the side that keeps it inside the canvas and off the two genes (`placeLinkLabel` in `network/labels.ts`). The old ×1.6 width with flowing dashes was too subtle with one link ink. Screen-only.
 - **Curved links**: tried and removed on 2026-09-23. Links are straight again; only parallel or reciprocal records get separate lanes. The curved mode is still in `routeGalaxy` (`curved: true`) but nothing turns it on.
 - `npm run test:network`: 41 pass.
 
@@ -96,7 +96,6 @@ Shared rules live in `network/encoding.ts`, used by the canvas, the legend and t
 - Node colours in Soft (publication pick): TF `#7FA6DB` blue, other gene `#EBCB7A` sand-yellow. Blue/yellow survives every colour-blindness type and greyscale, and the sand-yellow stays visible on white paper (the swatch `#FBDD85` was too close to white). Direction-split shades (regulates / regulated by / unknown): TF `#7FA6DB`/`#B5CBEA`/`#D6E2F4`, gene `#CFA13C`/`#EBCB7A`/`#F6E5B8`. Each class shows its own swatch in its usual role: TFs mostly regulate, so their out slice is `#7FA6DB`; other genes are mostly only regulated, so their in slice is `#EBCB7A` (with the old rule every target gene showed only a pale tint). A gene that also regulates gets a deeper ochre slice. The palest slices stay >14 ΔE from white. Contrast is unchanged.
 
 ## Side panel: one surface, context inspector (2026-09-23)
-Mockups: `Claude outputs/table-combo-A.png` (look) + `table-combo-B*.png` (behaviour); the user chose A + B.
 - **Look**: the panel is a soft inset sheet in the same card (`#F7F8FA`, 14 px radius, no hard border or grid lines); the divider is an invisible 7 px gap whose grip appears on hover. Tabs are a segmented control with counts. Rows are 36 px: italic gene names with TF/gene dots in the figure's colours, sign glyph in link ink, a slim evidence bar (bar from 0.4 so differences show; number exact), confidence faded like the links, methods as pips. Hovering a row lifts it to white with a dark left edge and focuses the link on the canvas.
 - **Filter**: with the panel open, the All / Activation / Repression filter is a row of chips at the top of the panel (`NetworkLinkFilter variant="chips"`); with the panel hidden it returns as the line above the network.
 - **Behaviour** (`network/TablePanel.tsx`): the panel shows what was last touched.
@@ -105,14 +104,12 @@ Mockups: `Claude outputs/table-combo-A.png` (look) + `table-combo-B*.png` (behav
   - Link selected → **link card**: both genes as pies (click opens that gene), sign, evidence / bootstrap confidence / methods agree, direction, sign stability, method names.
   - **Links** and **Genes** tabs keep the full sortable tables and CSV.
 
-## Opening cut: adapted to each project (2026-09-23)
-The fixed opening cut (evidence ≥ 0.5) gave 71 links for 19 genes and 422 for 100 genes. Each project now opens at an evidence cut chosen from its own scores (`_lib/openingCut.ts`, used by the seeding effect in `page.tsx`):
-- **Budget**: about 1.5 links per gene, for at most 40 genes' worth; at least 12, at most 70 links (19 genes → 29, 100 genes → 60, 2,000 genes → 60).
-- **Cut**: the evidence value that keeps the strongest links up to the budget; moved to a natural gap in the scores (≥ 0.02) within ±20 % of the budget; rounded down to two decimals unless near-ties would flood the view. Never below 0.5; if fewer than 12 links reach 0.5, the strongest 12.
-- It is an ordinary "Evidence ≥ x" in Results Settings (confidence, direction, sign relaxed to 0, support 1, as before): no hidden trimming and no extra control on screen.
-- **Remembered**: once the reader changes any Results Setting, the five values are kept per project in this browser (`localStorage` key `grnscope:result-settings:<projectId>`) and restored on the next visit instead of the automatic cut. Demo projects keep their curated defaults.
-- Result on the real projects: 19 genes → 25 links (natural gap, all 19 genes); 100 genes → 58 links, 59 genes (was 422 links).
-- Tests: `scripts/opening-cut.test.cjs` (in `npm run test:network`).
+## Opening results settings
+Projects open at the fixed default evidence threshold configured in `page.tsx`.
+Confidence, direction, and sign thresholds start at zero and minimum method
+support starts at one. Settings changed by the reader are remembered per
+project in this browser and restored on the next visit. Demo projects keep
+their curated defaults.
 
 ## Key on top, with link signs (2026-09-23)
 - The key line moved from under the network to above it (between the toolbar and the canvas).
@@ -126,7 +123,7 @@ The fixed opening cut (evidence ≥ 0.5) gave 71 links for 19 genes and 422 for 
 - Side panel: top regulators' names no longer bold.
 
 ## Download for a paper (2026-09-23)
-Preview: `Claude outputs/download-{1-menu,2-figure-on-page,3-table}.png`. The user chose a fixed two-column width.
+The download menu uses a fixed two-column width.
 - **Menu** (Download ▾, new canvas): Figure (PDF · recommended, SVG, PNG 600 dpi), Supplementary table (XLSX, CSV), Figure legend (Copy), Everything (ZIP). The old "Publication vector / Presentation image" items remain only for Circos and the legacy canvas.
 - **Figure** (`network/paperExport.ts`): drawn from the live network's positions and data in millimetres, always 183 mm wide (double column); the network is at most 170 mm tall. It holds the figure only, with no title or paragraph: the network and a one-line key that wraps between groups. Names are Arial 400 italic at 7 pt, the key is 6 pt, links are 0.5 / 0.75 / 1.25 / 2 pt, arrowheads scale with the line, reciprocal pairs get two lanes, and nothing is rounded. Genes with no shown link are left out. Names are all shown up to 60 genes; above that, a name is dropped rather than overlapping another. The key uses plain "<0.5 … 0.9–1" so the standard PDF fonts can set it.
   - PDF: jsPDF + svg2pdf.js, page = figure size, vector. Arial is mapped to the standard Helvetica, which is not embedded.

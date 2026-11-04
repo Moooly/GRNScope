@@ -1,4 +1,4 @@
-import type { Core, ElementDefinition } from "cytoscape";
+import type { Core } from "cytoscape";
 
 export type NetworkNode = {
   id: string;
@@ -35,27 +35,6 @@ export type NetworkLayoutMode =
   | "concentric"
   | "circular";
 
-export type NetworkGraphExportOptions = {
-  full?: boolean;
-  scale?: number;
-  bg?: string;
-};
-
-export type NetworkGraphHandle = {
-  kind: "cytoscape" | "g6";
-  zoom: () => number;
-  minZoom: () => number;
-  maxZoom: () => number;
-  width: () => number;
-  height: () => number;
-  stop: () => void;
-  setZoom: (level: number) => void;
-  on: (event: "zoom", listener: () => void) => void;
-  off: (event: "zoom", listener: () => void) => void;
-  destroyed: () => boolean;
-  png: (options?: NetworkGraphExportOptions) => string | Promise<string>;
-  svg: (options?: NetworkGraphExportOptions) => string | Promise<string>;
-};
 
 export type NetworkGraphProps = {
   nodes: NetworkNode[];
@@ -96,30 +75,10 @@ export type NetworkGraphProps = {
 
 };
 
-export type EdgeTooltipState = {
-  x: number;
-  y: number;
-  source: string;
-  target: string;
-  score: number;
-  confidence: number;
-  rank: number;
-  supportingAlgorithms: string[];
-  directionConfidence: number | null;
-  directionCoverage: number;
-  sign: -1 | 0 | 1;
-  signConfidence: number | null;
-  signCoverage: number;
-};
 
 export type PositionMap = Record<string, { x: number; y: number }>;
 
 export type GraphCounts = {
   nodeCount: number;
   edgeCount: number;
-};
-
-export type GraphElementsResult = {
-  elements: ElementDefinition[];
-  elementsSignature: string;
 };

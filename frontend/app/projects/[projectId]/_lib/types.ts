@@ -440,21 +440,6 @@ export type NodeInfo = {
   gene_id?: string | null;
 };
 
-export type OverlapEntry = {
-  key: string;
-  methods: string[];
-  count: number;
-};
-
-export type BenchmarkMetrics = {
-  methodId: string;
-  evaluatedEdges: number;
-  positivesFound: number;
-  precision: number;
-  recall: number;
-  auprc: number;
-  auprcRatio: number;
-};
 
 export type PerturbationRun = {
   run_id: string;

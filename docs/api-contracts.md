@@ -54,8 +54,6 @@ The result body, pseudotime state, and some metadata extensions remain dynamic b
 | GET | `/api/projects/{project_id}/results/{algorithm_id}` | Get Algorithm Result | 200 AlgorithmResultResponse |
 | POST | `/api/uploads/infer-species` | Infer Uploaded Species | 200 dynamic JSON (undocumented) |
 | POST | `/api/uploads/inspect-expression` | Inspect Expression Upload | 200 dynamic JSON (undocumented) |
-| POST | `/api/uploads/temp-dataset` | Temp Dataset Upload | 200 TempUploadResponse |
-| DELETE | `/api/uploads/temp-dataset/{temp_upload_id}` | Delete Temp Dataset Upload | 200 dynamic JSON (undocumented) |
 
 ## Next contract work
 

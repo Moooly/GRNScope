@@ -5,7 +5,6 @@ from pathlib import Path
 from app.services.beeline_service import (
     create_confidence_accumulator,
     finalize_confidence_accumulator,
-    merge_full_data_with_bootstrap_edges,
     parse_ranked_edges_csv,
     update_confidence_accumulator,
 )
@@ -48,25 +47,8 @@ class SignedEdgeContractTests(unittest.TestCase):
             run_count=1,
             evidence_threshold=1.0,
         )
-        merged = merge_full_data_with_bootstrap_edges(
-            [
-                *bootstrap_edges,
-                {
-                    "source": "A",
-                    "target": "A",
-                    "score": 1.0,
-                    "confidence": 1.0,
-                },
-            ],
-            [
-                {"source": "A", "target": "A", "score": 1.0},
-                {"source": "B", "target": "A", "score": 0.9},
-            ],
-            bootstrap_runs=1,
-            evidence_threshold=1.0,
-        )
         self.assertEqual(
-            {(edge["source"], edge["target"]) for edge in merged},
+            {(edge["source"], edge["target"]) for edge in bootstrap_edges},
             {("B", "A")},
         )
 
@@ -122,7 +104,7 @@ class SignedEdgeContractTests(unittest.TestCase):
         self.assertEqual(aggregated[0]["bootstrap_sign_reference"], "bootstrap_mean")
         self.assertEqual(aggregated[0]["bootstrap_negative_probability"], 1.0)
 
-    def test_sign_confidence_agrees_with_displayed_full_data_sign(self):
+    def test_sign_confidence_agrees_with_displayed_bootstrap_mean_sign(self):
         accumulator = create_confidence_accumulator()
         update_confidence_accumulator(
             accumulator,
@@ -139,20 +121,15 @@ class SignedEdgeContractTests(unittest.TestCase):
             run_count=2,
             evidence_threshold=1.0,
         )
-        aggregated = merge_full_data_with_bootstrap_edges(
-            bootstrap_edges,
-            [{"source": "A", "target": "B", "score": 0.9}],
-            bootstrap_runs=2,
-            evidence_threshold=1.0,
-        )
+        aggregated = bootstrap_edges
 
         self.assertEqual(aggregated[0]["confidence"], 1.0)
         self.assertEqual(aggregated[0]["bootstrap_sign_confidence"], 0.5)
         self.assertEqual(aggregated[0]["bootstrap_sign_coverage"], 1.0)
         self.assertEqual(aggregated[0]["sign_agreeing_runs"], 1)
-        self.assertEqual(aggregated[0]["bootstrap_sign_reference"], "full_data")
+        self.assertEqual(aggregated[0]["bootstrap_sign_reference"], "bootstrap_mean")
 
-    def test_sign_confidence_does_not_hide_disagreement_with_full_data_sign(self):
+    def test_sign_confidence_tracks_the_majority_bootstrap_mean_sign(self):
         accumulator = create_confidence_accumulator()
         for score in (-0.8, -0.7, 0.6):
             update_confidence_accumulator(
@@ -165,18 +142,13 @@ class SignedEdgeContractTests(unittest.TestCase):
             run_count=3,
             evidence_threshold=1.0,
         )
-        aggregated = merge_full_data_with_bootstrap_edges(
-            bootstrap_edges,
-            [{"source": "A", "target": "B", "score": 0.9}],
-            bootstrap_runs=3,
-            evidence_threshold=1.0,
-        )
+        aggregated = bootstrap_edges
 
         edge = aggregated[0]
-        self.assertAlmostEqual(edge["bootstrap_sign_confidence"], 1 / 3)
+        self.assertAlmostEqual(edge["bootstrap_sign_confidence"], 2 / 3)
         self.assertAlmostEqual(edge["bootstrap_positive_probability"], 1 / 3)
         self.assertAlmostEqual(edge["bootstrap_negative_probability"], 2 / 3)
-        self.assertEqual(edge["sign_agreeing_runs"], 1)
+        self.assertEqual(edge["sign_agreeing_runs"], 2)
 
     def test_zero_sign_recoveries_reduce_coverage_not_sign_denominator(self):
         accumulator = create_confidence_accumulator()
@@ -191,12 +163,7 @@ class SignedEdgeContractTests(unittest.TestCase):
             run_count=3,
             evidence_threshold=1.0,
         )
-        aggregated = merge_full_data_with_bootstrap_edges(
-            bootstrap_edges,
-            [{"source": "A", "target": "B", "score": 0.9}],
-            bootstrap_runs=3,
-            evidence_threshold=1.0,
-        )
+        aggregated = bootstrap_edges
 
         edge = aggregated[0]
         self.assertEqual(edge["signed_selected_runs"], 2)

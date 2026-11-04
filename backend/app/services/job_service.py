@@ -1910,36 +1910,6 @@ def launch_independent_algorithm_tasks(
         worker.start()
 
 
-def run_algorithm_job_worker(
-    project_id: str,
-    job_id: str,
-    selected_algorithms_list: list[str],
-) -> None:
-    project_dir = PROJECTS_ROOT / project_id
-
-    if not project_dir.exists():
-        return
-
-    if not prepare_project_dataset_for_algorithms(project_id, job_id):
-        return
-
-    update_job_state(project_dir, job_id, overall_status="Running")
-
-    for algorithm_id in sort_algorithm_ids_by_difficulty(selected_algorithms_list):
-        task = get_task_state(project_dir, job_id, algorithm_id)
-        if task is None:
-            continue
-        if task.get("status") in TERMINAL_JOB_STATUSES:
-            continue
-        if task.get("status") == "Stopping":
-            continue
-
-        get_or_create_task_control(project_id, job_id, algorithm_id)
-        run_single_algorithm_task(project_id, job_id, algorithm_id)
-
-    recompute_overall_status(project_dir, job_id)
-
-
 def request_algorithm_task_stop(
     project_id: str,
     job_id: str,
@@ -2035,17 +2005,6 @@ def finalize_algorithm_task_stop(
         pass
 
     recompute_overall_status(project_dir, job_id)
-
-
-def stop_algorithm_task(project_id: str, job_id: str, algorithm_id: str) -> dict:
-    """Synchronous stop — runs both the fast state flip and the slow teardown
-    inline. Kept for callers (project delete, tests) that need the full effect
-    to complete before returning."""
-    task, fallback_pid = request_algorithm_task_stop(project_id, job_id, algorithm_id)
-    if fallback_pid is not None or task.get("status") == "Stopping":
-        finalize_algorithm_task_stop(project_id, job_id, algorithm_id, fallback_pid)
-    project_dir = PROJECTS_ROOT / project_id
-    return get_task_state(project_dir, job_id, algorithm_id) or task
 
 
 def request_project_stop(project_id: str) -> dict:

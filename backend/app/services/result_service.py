@@ -309,16 +309,6 @@ def archive_beeline_result_artifacts(
     return archived_result
 
 
-def clear_algorithm_result_artifacts(project_dir: Path, algorithm_id: str) -> None:
-    result_dir = algorithm_result_dir(project_dir, algorithm_id)
-    if result_dir.exists():
-        shutil.rmtree(result_dir, ignore_errors=True)
-
-    legacy_result_path = legacy_algorithm_result_path(project_dir, algorithm_id)
-    if legacy_result_path.exists():
-        legacy_result_path.unlink()
-
-
 def discard_algorithm_attempt_artifacts(
     project_dir: Path,
     algorithm_id: str,

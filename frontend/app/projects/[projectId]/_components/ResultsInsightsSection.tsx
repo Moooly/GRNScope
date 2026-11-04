@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Fragment,
   forwardRef,
   useCallback,
   useEffect,
@@ -27,6 +26,7 @@ import TrajectoryInsights, {
 import DownloadMenu from "./DownloadMenu";
 import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, clusterMethods, formatRank, heatmapPlotTop, rankRegulators, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
 import { downloadSvg as downloadSvgFile, downloadSvgPng } from "../_lib/downloads";
+import { median as scoreMedian } from "../_lib/resultScores";
 
 export type VisualizationContext = {
   trajectory?: TrajectoryData;
@@ -68,12 +68,7 @@ function plural(value: number, singular: string, pluralForm = `${singular}s`) {
 }
 
 function median(values: number[]) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2
-    ? sorted[middle]
-    : (sorted[middle - 1] + sorted[middle]) / 2;
+  return scoreMedian(values) ?? 0;
 }
 
 function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
@@ -95,7 +90,6 @@ function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
-
 
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {
@@ -1347,7 +1341,6 @@ export function buildStabilityRows(
   });
 }
 
-export type StabilityRow = ReturnType<typeof buildStabilityRows>[number];
 
 type MethodOutputSortKey = "rank" | "source" | "target" | "score" | "confidence" | "direction" | "sign" | "signStability";
 const METHOD_OUTPUT_PAGE_SIZE = 20;

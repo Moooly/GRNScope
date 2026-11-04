@@ -24,9 +24,8 @@ GRNScope accepts five files. Only the first is required.
   first line contains one, then semicolon, then comma. You do not need to tell
   it which you used.
 - **Completely blank rows are skipped** everywhere.
-- Files are uploaded to a **temporary staging area first** and only committed to
-  a project once validation passes. Staged uploads are deleted automatically
-  after 24 hours (`GRNSCOPE_TEMP_UPLOAD_TTL_SECONDS`).
+- A pending project is created first. Files are then uploaded directly to its
+  directory and validated before analysis starts.
 
 ## 3.2 Expression matrix (required)
 
@@ -58,17 +57,12 @@ as missing and **rejected** in the expression matrix. Infinities are rejected
 too. Impute or zero-fill before uploading — in scRNA-seq a gene not detected in
 a cell is normally recorded as `0`, not as `NA`.
 
-### Two validation modes
+### Validation before analysis
 
-By default GRNScope runs in **strict** mode and checks every value in the file.
-Setting `GRNSCOPE_UPLOAD_VALIDATION_MODE` to anything else switches to **fast**
-mode, which fully checks the first 20 rows, then spot-checks the first and last
-4 columns of subsequent rows, and counts the remaining rows without parsing
-them. Fast mode makes very large uploads quicker but can let a malformed value
-through to run time. Strict is the default for a reason.
-
-Note that even in strict mode, upload validation is a *structural* check. A
-second, deeper content scan runs at analysis time — see
+Project preparation checks the expression matrix before running algorithms,
+including numeric and finite values, identifiers, and matrix structure. There
+is no separate temporary-upload validation mode. Invalid data stops the job
+and is reported in the project's validation status; see
 [the preprocessing failure modes](08-troubleshooting.md#83-dataset-and-preprocessing-errors).
 
 ### Transposed matrices

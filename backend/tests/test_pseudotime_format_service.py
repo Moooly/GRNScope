@@ -11,7 +11,6 @@ from app.services.pseudotime_format_service import (
     ensure_canonical_project_pseudotime,
     read_canonical_pseudotime_frame,
 )
-from app.validators import parse_pseudotime
 
 
 class PseudotimeFormatServiceTests(unittest.TestCase):
@@ -79,7 +78,7 @@ class PseudotimeFormatServiceTests(unittest.TestCase):
             self.assertTrue(np.isnan(frame.loc["Cell3", "Early"]))
             self.assertEqual(frame.loc["Cell2", "Late"], 0.4)
 
-    def test_named_cell_mismatch_is_rejected_during_upload_validation(self):
+    def test_named_cell_mismatch_is_rejected_during_project_validation(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "pseudotime.csv"
             path.write_text(
@@ -94,10 +93,9 @@ class PseudotimeFormatServiceTests(unittest.TestCase):
                 PseudotimeFormatError,
                 "missing 1 expression cells.*unknown cells",
             ):
-                parse_pseudotime(
+                read_canonical_pseudotime_frame(
                     path,
-                    3,
-                    expected_cell_names=["Cell1", "Cell2", "Cell3"],
+                    ["Cell1", "Cell2", "Cell3"],
                 )
 
     def test_project_canonicalization_preserves_source_and_records_provenance(self):

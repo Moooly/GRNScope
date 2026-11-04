@@ -309,7 +309,6 @@ async def create_pending_project(
         normalized_confidence_bootstrap_runs = (
             normalize_confidence_bootstrap_runs(
                 confidence_bootstrap_runs,
-                mode=normalized_confidence_run_mode,
             )
             if normalized_confidence_run_mode == CONFIDENCE_RUN_MODE_FIXED
             else DEFAULT_CONFIDENCE_MAX_RUNS
