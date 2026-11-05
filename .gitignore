@@ -90,3 +90,7 @@ Thumbs.db
 /output/
 /deployment/
 /tmp_systemd_backup/
+
+# Server-specific deployment settings and data-disk link
+/server.env
+/workspace
