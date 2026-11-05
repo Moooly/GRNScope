@@ -28,6 +28,7 @@ KEYS = {
     "WORKER_COUNT", "ALGORITHM_CPU_BUDGET", "ALGORITHM_MEMORY_MB", "PUBLIC_URL",
 }
 PATH_KEYS = ("DATA_ROOT", "DATA_MOUNT", "CONDA_EXE", "NODE_BIN", "BEELINE_ROOT")
+REQUIRED_SETTINGS = {"DATA_ROOT", "PUBLIC_URL", "CONDA_EXE", "NODE_BIN", "BEELINE_ROOT"}
 
 
 def absolute_path(value):
@@ -44,50 +45,6 @@ def detect_mount(data):
             raise ValueError("Cannot detect the data disk; set DATA_MOUNT explicitly")
         current = current.parent
     return str(current)
-
-
-def executable(path):
-    return path.is_file() and os.access(path, os.X_OK)
-
-
-def detect_conda():
-    candidates = [os.environ.get("CONDA_EXE"), shutil.which("conda")]
-    candidates.extend(str(Path.home() / name / "bin/conda") for name in
-                      ("miniconda3", "miniforge3", "anaconda3", "mambaforge"))
-    candidates.extend(["/opt/conda/bin/conda", "/opt/miniconda3/bin/conda"])
-    candidates.extend(map(str, sorted(Path("/apps/software/Miniconda3").glob("*/bin/conda"), reverse=True)))
-    for candidate in candidates:
-        if candidate and executable(Path(candidate)):
-            return absolute_path(candidate)
-    raise ValueError("Conda was not found. Install Conda, or add CONDA_EXE=/full/path/to/conda to server.env")
-
-
-def node_version(directory):
-    if not all(executable(directory / name) for name in ("node", "npm")):
-        return ()
-    try:
-        result = subprocess.run([str(directory / "node"), "--version"], check=True,
-                                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
-        match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)\s*", result.stdout)
-        return tuple(map(int, match.groups())) if match else ()
-    except (OSError, subprocess.SubprocessError):
-        return ()
-
-
-def detect_node():
-    node = shutil.which("node")
-    candidates = [Path(node).parent] if node else []
-    if os.environ.get("NVM_BIN"):
-        candidates.append(Path(os.environ["NVM_BIN"]))
-    nvm = Path(os.environ.get("NVM_DIR", str(Path.home() / ".nvm")))
-    installed = list((nvm / "versions/node").glob("v*/bin"))
-    def version_key(directory):
-        return tuple(map(int, re.findall(r"\d+", directory.parent.name)))
-    candidates.extend(sorted(installed, key=version_key, reverse=True))
-    for candidate in candidates:
-        if node_version(candidate) >= (20, 9):
-            return absolute_path(str(candidate))
-    raise ValueError("Node.js >=20.9 with npm was not found. Install it, or add NODE_BIN=/full/path/to/bin to server.env")
 
 
 def host_memory_mb():
@@ -118,11 +75,11 @@ def read_config(path, repo=REPO):
         if len(tokens) != 1 or key in values:
             raise ValueError("Expected one value for %s at line %d" % (key, number))
         values[key] = tokens[0]
-    missing = {"DATA_ROOT", "PUBLIC_URL"} - set(values)
+    missing = REQUIRED_SETTINGS - set(values)
     if missing:
         raise ValueError("Missing settings: " + ", ".join(sorted(missing)))
     values["DATA_ROOT"] = absolute_path(values["DATA_ROOT"])
-    # Keep selected paths, mount and budgets stable across reboots and failed installs.
+    # Keep optional defaults stable; required settings always come from server.env.
     settings = Path(values["DATA_ROOT"]) / "config"
     saved_path = settings / "resolved-settings.json"
     if not saved_path.exists():
@@ -137,11 +94,6 @@ def read_config(path, repo=REPO):
         values.setdefault(key, value)
     if "DATA_MOUNT" not in values:
         values["DATA_MOUNT"] = detect_mount(values["DATA_ROOT"])
-    if "CONDA_EXE" not in values:
-        values["CONDA_EXE"] = detect_conda()
-    if "NODE_BIN" not in values:
-        values["NODE_BIN"] = detect_node()
-    values.setdefault("BEELINE_ROOT", str(repo.parent / "Beeline"))
     for key in PATH_KEYS:
         values[key] = absolute_path(values[key])
     if any(key not in values for key in ("WORKER_COUNT", "ALGORITHM_CPU_BUDGET", "ALGORITHM_MEMORY_MB")):
@@ -244,7 +196,7 @@ class Server:
             raise ValueError("This deployment requires an x86-64 Linux server")
         if os.getuid() == 0:
             raise ValueError("Run as the project user, not root; enable uses sudo only for service registration")
-        print("Deployment settings (detected/default values can be overridden in server.env):")
+        print("Deployment settings (optional overrides are documented in DEPLOYMENT.md):")
         for key in sorted(self.c):
             print("  %s=%s" % (key, self.c[key]))
         for command in ("git", "docker", "systemctl"):
@@ -260,7 +212,7 @@ class Server:
             raise ValueError("Node.js >=20.9 is required; select a suitable NVM version for this project")
         beeline = Path(self.c["BEELINE_ROOT"])
         if not (beeline / "BLRunner.py").is_file() or not (beeline / "utils/initialize.sh").is_file():
-            raise ValueError("Clone the modified Beeline repository beside GRNScope or set BEELINE_ROOT")
+            raise ValueError("Beeline runner/setup script not found; check BEELINE_ROOT=" + str(beeline))
         if not os.path.ismount(self.c["DATA_MOUNT"]):
             raise ValueError("Data disk is not mounted: " + self.c["DATA_MOUNT"])
         self.check_owner()

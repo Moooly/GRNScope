@@ -14,9 +14,8 @@ Confirm these once:
   Agree use of the `grnbeeline/*` image tags with the administrator: image setup
   can refresh those shared Docker tags.
 - `/data2` is mounted, and the user can create `/data2/platform/grnscope`.
-- Conda and Node.js **>=20.9** are installed. Their locations are detected from
-  the shell and common installation folders, including NVM and the Hong Kong
-  server's shared Conda. Bootstrap `python3` must be >=3.8.
+- Conda and Node.js **>=20.9** are installed. Enter their paths explicitly in
+  `server.env`. Bootstrap `python3` must be >=3.8.
 - Three unused local ports are reserved: **13000** (website), **18000** (API),
   **16379** (project Redis), plus service prefix `grnscope`.
 - An administrator can register systemd services and configure a dedicated
@@ -39,11 +38,15 @@ cp scripts/server.env.example server.env
 nano server.env
 ```
 
-Only two settings are needed:
+Five settings are required. Use your server's actual paths; the paths below are
+examples for a test VM:
 
 ```ini
 DATA_ROOT=~/grnscope-data
 PUBLIC_URL=https://grnscope.your-institute.edu
+CONDA_EXE=~/miniconda3/bin/conda
+NODE_BIN=/usr/bin
+BEELINE_ROOT=~/gene_website/Beeline
 ```
 
 `DATA_ROOT` holds uploads, results and generated files. **On the Hong Kong
@@ -55,14 +58,22 @@ mounted. The home-folder default suits a test VM. Use paths without spaces;
 hostname root, not a subpath. DNS and HTTPS are configured separately below.
 `server.env` is ignored by Git.
 
-Conda, Node, the containing data mount and the sibling Beeline checkout are
-detected automatically. Defaults use ports **13000 / 18000 / 16379** and service
-prefix `grnscope`. Resource limits adapt to the host: **2 simultaneous methods**
+`CONDA_EXE` is the full path to the Conda executable. `NODE_BIN` is the directory
+containing `node` and `npm`. `BEELINE_ROOT` is the modified Beeline checkout.
+The script uses exactly these paths and does not search for alternatives.
+On the Hong Kong server, Conda is
+`/apps/software/Miniconda3/4.9.2/bin/conda` and the Node directory is
+`/home/platform/.nvm/versions/node/v20.18.0/bin`. Set Beeline's path to wherever
+you cloned it in the first step.
+
+The containing data mount is determined from `DATA_ROOT`. Defaults use ports
+**13000 / 18000 / 16379** and service prefix `grnscope`.
+Resource limits adapt to the host: **2 simultaneous methods**
 on hosts with at least 2 CPUs and 8 GiB RAM, otherwise 1. Each gets 1–4 CPUs
 and a share of half the host RAM, capped at 8 GiB per method. These are starting
 limits; larger datasets may require the optional overrides below.
 
-To preview all detected settings without installing anything:
+To validate the paths and preview the settings without installing anything:
 
 ```bash
 python3 scripts/server.py check
@@ -174,14 +185,11 @@ Python versions are recorded in `DATA_ROOT/config` for deployment review.
 
 ## Optional overrides
 
-Most installations need only the two settings above. If detection fails or the
-administrator requests different limits, add the relevant lines to `server.env`:
+Most installations need only the five settings above. If the administrator
+requests different ports or limits, add the relevant lines to `server.env`:
 
 | Setting | Default / purpose |
 |---|---|
-| `CONDA_EXE=/full/path/to/bin/conda` | Override detected Conda executable |
-| `NODE_BIN=/full/path/to/bin` | Override detected directory containing Node and npm |
-| `BEELINE_ROOT=/full/path/to/Beeline` | Override the sibling checkout location |
 | `DATA_MOUNT=/data2` | Override detected mount; refuse setup if it is not mounted |
 | `SERVICE_PREFIX=grnscope` | Service name prefix |
 | `FRONTEND_PORT=13000` | Internal website port |
@@ -192,11 +200,11 @@ administrator requests different limits, add the relevant lines to `server.env`:
 | `ALGORITHM_MEMORY_MB=32768` | Memory cap per algorithm; this example is 32 GiB |
 
 Agree resource overrides with the administrator; website processes and
-preprocessing also need resources. Tool detection does not install Conda or Node.
-Existing longer `server.env` files remain supported. Selected settings are saved
-under `DATA_ROOT/config` and reused on later runs, so a reboot or shell change
-does not silently switch tools, ports, mounts or resource budgets. Explicit
-settings in `server.env` take precedence over saved values.
+preprocessing also need resources. Install Conda and Node before running setup.
+Existing longer `server.env` files remain supported; ensure all five required
+settings are present. Optional settings are saved under `DATA_ROOT/config` and
+reused on later runs. The three software paths must always be specified in
+`server.env`; they are never inferred from the shell or saved settings.
 
 ## References
 

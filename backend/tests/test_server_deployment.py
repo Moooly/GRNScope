@@ -26,6 +26,7 @@ def installation(tmp_path):
     settings = {
         'DATA_ROOT': str(tmp_path / 'data' / 'grnscope'), 'DATA_MOUNT': str(tmp_path / 'data'),
         'CONDA_EXE': str(tmp_path / 'conda/bin/conda'), 'NODE_BIN': str(tmp_path / 'node/bin'),
+        'BEELINE_ROOT': str(repo.parent / 'Beeline'),
         'SERVICE_PREFIX': 'grnscope-test', 'FRONTEND_PORT': '13000', 'BACKEND_PORT': '18000',
         'REDIS_PORT': '16379', 'WORKER_COUNT': '2', 'ALGORITHM_CPU_BUDGET': '8',
         'ALGORITHM_MEMORY_MB': '32768', 'PUBLIC_URL': 'https://grnscope.example.edu',
@@ -50,15 +51,13 @@ def test_defaults_and_invalid_settings(installation):
     (1, 2048, 1, 1, 1024), (2, 4096, 1, 1, 2048),
     (4, 16384, 2, 1, 4096), (128, 1048576, 2, 4, 8192),
 ])
-def test_two_setting_config_selects_bounded_resources(
+def test_five_setting_config_selects_bounded_resources(
         installation, cpus, memory, workers, cpu_budget, memory_budget):
     i = installation
-    i.settings = {key: i.settings[key] for key in ('DATA_ROOT', 'PUBLIC_URL')}
+    i.settings = {key: i.settings[key] for key in deploy.REQUIRED_SETTINGS}
     path = i.repo / 'minimal.env'
     path.write_text('\n'.join(key + '=' + value for key, value in i.settings.items()))
-    with (patch.object(deploy, 'detect_conda', return_value='/opt/conda/bin/conda'),
-          patch.object(deploy, 'detect_node', return_value='/opt/node/bin'),
-          patch.object(deploy, 'host_memory_mb', return_value=memory),
+    with (patch.object(deploy, 'host_memory_mb', return_value=memory),
           patch.object(deploy.os, 'cpu_count', return_value=cpus)):
         config = deploy.read_config(path, i.repo)
     assert config['WORKER_COUNT'] == workers
@@ -66,6 +65,9 @@ def test_two_setting_config_selects_bounded_resources(
     assert config['ALGORITHM_MEMORY_MB'] == memory_budget
     assert config['FRONTEND_PORT'] == 13000
     assert config['SERVICE_PREFIX'] == 'grnscope'
+    assert config['CONDA_EXE'] == i.settings['CONDA_EXE']
+    assert config['NODE_BIN'] == i.settings['NODE_BIN']
+    assert config['BEELINE_ROOT'] == i.settings['BEELINE_ROOT']
     assert config['WORKER_COUNT'] * config['ALGORITHM_CPU_BUDGET'] <= cpus
     assert config['WORKER_COUNT'] * config['ALGORITHM_MEMORY_MB'] <= memory // 2
 
@@ -82,10 +84,10 @@ def test_saved_defaults_survive_machine_changes_and_explicit_overrides(installat
     i = installation
     i.server.initialize_storage()
     path = i.repo / 'minimal.env'
-    path.write_text('DATA_ROOT=%s\nPUBLIC_URL=https://new.example.edu\n' % i.server.data)
-    with (patch.object(deploy, 'detect_conda', side_effect=AssertionError('must keep installed path')),
-          patch.object(deploy, 'detect_node', side_effect=AssertionError('must keep installed path')),
-          patch.object(deploy, 'detect_mount', side_effect=AssertionError('must keep recorded mount')),
+    required = {key: str(i.server.c[key]) for key in deploy.REQUIRED_SETTINGS}
+    required['PUBLIC_URL'] = 'https://new.example.edu'
+    path.write_text('\n'.join(key + '=' + value for key, value in required.items()) + '\n')
+    with (patch.object(deploy, 'detect_mount', side_effect=AssertionError('must keep recorded mount')),
           patch.object(deploy, 'host_memory_mb', side_effect=AssertionError('must keep resource limits'))):
         config = deploy.read_config(path, i.repo)
         assert config == dict(i.server.c, PUBLIC_URL='https://new.example.edu')
@@ -100,7 +102,7 @@ def test_legacy_installation_defaults_are_reused(installation):
     (i.server.settings / 'resolved-settings.json').unlink()
     (i.server.settings / 'installation.json').write_text(json.dumps(i.server.c))
     path = i.repo / 'minimal.env'
-    path.write_text('DATA_ROOT=%s\nPUBLIC_URL=%s\n' % (i.server.data, i.server.c['PUBLIC_URL']))
+    path.write_text('\n'.join(key + '=' + str(i.server.c[key]) for key in deploy.REQUIRED_SETTINGS))
     assert deploy.read_config(path, i.repo) == i.server.c
 
 
@@ -110,41 +112,26 @@ def test_mount_detection_walks_to_containing_mount(tmp_path):
         assert deploy.detect_mount(mount / 'not-created-yet' / 'grnscope') == str(mount)
 
 
-def make_executable(path, output=''):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('#!/bin/sh\nprintf "%s\\n"\n' % output)
-    path.chmod(0o755)
+@pytest.mark.parametrize('key', sorted(deploy.REQUIRED_SETTINGS))
+def test_required_settings_cannot_be_inferred_from_shell_or_saved_config(installation, key):
+    i = installation
+    i.server.initialize_storage()
+    del i.settings[key]
+    with (patch.dict(deploy.os.environ, {'CONDA_EXE': '/other/conda', 'NVM_BIN': '/other/node'}),
+          patch.object(deploy.shutil, 'which', side_effect=AssertionError('must not search PATH'))):
+        with pytest.raises(ValueError, match='Missing settings: ' + key):
+            i.load()
 
 
-def test_conda_detection_finds_user_install_without_shell_activation(tmp_path):
-    conda = tmp_path / 'miniconda3/bin/conda'
-    make_executable(conda)
-    with (patch.object(deploy.Path, 'home', return_value=tmp_path),
-          patch.object(deploy.shutil, 'which', return_value=None),
-          patch.dict(deploy.os.environ, {'CONDA_EXE': '/missing/conda'})):
-        assert deploy.detect_conda() == str(conda)
-
-
-def test_node_detection_skips_old_path_node_and_sorts_nvm_versions(tmp_path):
-    old = tmp_path / 'old/bin'
-    make_executable(old / 'node', 'v18.0.0')
-    make_executable(old / 'npm')
-    nvm = tmp_path / '.nvm'
-    for version in ('v20.9.0', 'v20.18.0'):
-        directory = nvm / 'versions/node' / version / 'bin'
-        make_executable(directory / 'node', version)
-        make_executable(directory / 'npm')
-    with (patch.object(deploy.shutil, 'which', return_value=str(old / 'node')),
-          patch.dict(deploy.os.environ, {'NVM_DIR': str(nvm), 'NVM_BIN': str(old)})):
-        assert deploy.detect_node() == str(nvm / 'versions/node/v20.18.0/bin')
-
-
-def test_missing_tools_explain_optional_overrides():
-    with patch.object(deploy, 'executable', return_value=False):
-        with pytest.raises(ValueError, match='CONDA_EXE='):
-            deploy.detect_conda()
-        with pytest.raises(ValueError, match='NODE_BIN='):
-            deploy.detect_node()
+def test_explicit_tool_paths_override_saved_paths(installation):
+    i = installation
+    i.server.initialize_storage()
+    i.settings.update(CONDA_EXE='/custom/conda/bin/conda', NODE_BIN='/custom/node/bin',
+                      BEELINE_ROOT='/custom/Beeline')
+    with patch.object(deploy.shutil, 'which', side_effect=AssertionError('must not search PATH')):
+        config = i.load()
+    for key in ('CONDA_EXE', 'NODE_BIN', 'BEELINE_ROOT'):
+        assert config[key] == i.settings[key]
 
 
 @pytest.mark.parametrize('port', ['18000', '80', '70000'])
@@ -237,10 +224,8 @@ def test_install_and_enable_scoped_to_project(installation, minimal):
     s = installation.server
     if minimal:
         path = s.repo / 'server.env'
-        path.write_text('DATA_ROOT=%s\nPUBLIC_URL=%s\n' % (s.data, s.c['PUBLIC_URL']))
-        with (patch.object(deploy, 'detect_conda', return_value=s.c['CONDA_EXE']),
-              patch.object(deploy, 'detect_node', return_value=s.c['NODE_BIN']),
-              patch.object(deploy, 'host_memory_mb', return_value=16384),
+        path.write_text('\n'.join(key + '=' + str(s.c[key]) for key in deploy.REQUIRED_SETTINGS))
+        with (patch.object(deploy, 'host_memory_mb', return_value=16384),
               patch.object(deploy.os, 'cpu_count', return_value=4)):
             s = deploy.Server(deploy.read_config(path, s.repo), s.repo)
     (s.repo / 'frontend/.env.local').write_text('do not copy')
