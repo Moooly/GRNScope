@@ -14,8 +14,8 @@ Confirm these once:
   Agree use of the `grnbeeline/*` image tags with the administrator: image setup
   can refresh those shared Docker tags.
 - `/data2` is mounted, and the user can create `/data2/platform/grnscope`.
-- Conda and Node.js **>=20.9** are installed. Enter their paths explicitly in
-  `server.env`. Bootstrap `python3` must be >=3.8.
+- Node.js **>=20.9** is installed. Bootstrap `python3` must be >=3.8.
+  Conda can be installed by the command in step 2 if it is not already available.
 - Three unused local ports are reserved: **13000** (website), **18000** (API),
   **16379** (project Redis), plus service prefix `grnscope`.
 - An administrator can register systemd services and configure a dedicated
@@ -44,7 +44,7 @@ examples for a test VM:
 ```ini
 DATA_ROOT=~/grnscope-data
 PUBLIC_URL=https://grnscope.your-institute.edu
-CONDA_EXE=~/miniconda3/bin/conda
+CONDA_EXE=~/miniforge3/bin/conda
 NODE_BIN=/usr/bin
 BEELINE_ROOT=~/gene_website/Beeline
 ```
@@ -58,7 +58,9 @@ mounted. The home-folder default suits a test VM. Use paths without spaces;
 hostname root, not a subpath. DNS and HTTPS are configured separately below.
 `server.env` is ignored by Git.
 
-`CONDA_EXE` is the full path to the Conda executable. `NODE_BIN` is the directory
+`CONDA_EXE` is the full path to an existing Conda executable, or the future path
+where step 2 should install it. Use a dedicated base folder outside `DATA_ROOT`
+and the source checkout. `NODE_BIN` is the directory
 containing `node` and `npm`. `BEELINE_ROOT` is the modified Beeline checkout.
 The script uses exactly these paths and does not search for alternatives.
 On the Hong Kong server, Conda is
@@ -73,15 +75,28 @@ on hosts with at least 2 CPUs and 8 GiB RAM, otherwise 1. Each gets 1–4 CPUs
 and a share of half the host RAM, capped at 8 GiB per method. These are starting
 limits; larger datasets may require the optional overrides below.
 
-To validate the paths and preview the settings without installing anything:
+## 2. Prepare the application
+
+For a fresh server without Conda, first run:
+
+```bash
+python3 scripts/server.py install-conda
+```
+
+This installs **Miniforge, which provides Conda**, at exactly `CONDA_EXE` from
+`server.env` (by default `~/miniforge3/bin/conda`). The pinned Linux x86-64
+installer is downloaded from the official conda-forge release and its SHA-256
+is verified before execution. No `sudo`, `conda init` or shell restart is needed.
+An existing working Conda is kept unchanged; an existing incomplete installation
+folder is never overwritten. If the server already provides Conda, as on the
+Hong Kong server, skip this command and use its existing path in `server.env`.
+If a new Conda base is needed on that shared server, place it on the data disk,
+for example `/data2/platform/grnscope-conda/bin/conda`.
+
+Then validate the prerequisites and install the application:
 
 ```bash
 python3 scripts/server.py check
-```
-
-## 2. Prepare the application
-
-```bash
 python3 scripts/server.py install
 ```
 
@@ -179,8 +194,8 @@ installation. Set a log retention policy
 for `DATA_ROOT/logs` using the server's existing maintenance tools.
 
 If the old shared Conda cannot resolve the new environment, ask the administrator
-for a newer Conda executable for this project and update `CONDA_EXE`; the script
-does not update the shared base environment. Source revisions and installed
+for a separate new Conda location, set `CONDA_EXE` and run `install-conda`; the
+script does not update the shared base environment. Source revisions and installed
 Python versions are recorded in `DATA_ROOT/config` for deployment review.
 
 ## Optional overrides
@@ -200,7 +215,8 @@ requests different ports or limits, add the relevant lines to `server.env`:
 | `ALGORITHM_MEMORY_MB=32768` | Memory cap per algorithm; this example is 32 GiB |
 
 Agree resource overrides with the administrator; website processes and
-preprocessing also need resources. Install Conda and Node before running setup.
+preprocessing also need resources. Node must be installed before application setup;
+`install-conda` handles a missing Conda installation at the configured path.
 Existing longer `server.env` files remain supported; ensure all five required
 settings are present. Optional settings are saved under `DATA_ROOT/config` and
 reused on later runs. The three software paths must always be specified in
@@ -210,3 +226,4 @@ reused on later runs. The three software paths must always be specified in
 
 - [Apache reverse proxy](https://httpd.apache.org/docs/2.4/howto/reverse_proxy.html)
 - [Conda environments at explicit paths](https://docs.conda.io/projects/conda/en/stable/user-guide/tasks/manage-environments.html)
+- [Official Miniforge installation instructions](https://github.com/conda-forge/miniforge#install)

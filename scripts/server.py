@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import grp
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.parse import urlsplit
 from urllib.request import urlopen
@@ -29,6 +31,11 @@ KEYS = {
 }
 PATH_KEYS = ("DATA_ROOT", "DATA_MOUNT", "CONDA_EXE", "NODE_BIN", "BEELINE_ROOT")
 REQUIRED_SETTINGS = {"DATA_ROOT", "PUBLIC_URL", "CONDA_EXE", "NODE_BIN", "BEELINE_ROOT"}
+CONDA_INSTALLER_URL = (
+    "https://github.com/conda-forge/miniforge/releases/download/26.9.4-1/"
+    "Miniforge3-26.9.4-1-Linux-x86_64.sh"
+)
+CONDA_INSTALLER_SHA256 = "571b410272cc434f28bc6c5c49ca8ffd4a4d1bcba9f57f1b6baccdb46446cfcc"
 
 
 def absolute_path(value):
@@ -171,6 +178,45 @@ class Server:
 
     def units(self):
         return [self.c["SERVICE_PREFIX"] + "-" + name + ".service" for name in SERVICES]
+
+    def install_conda(self):
+        """Install Conda at the explicitly configured path, without shell initialization."""
+        if platform.system() != "Linux" or platform.machine() not in {"x86_64", "amd64"}:
+            raise ValueError("Conda bootstrap requires an x86-64 Linux server")
+        if os.getuid() == 0:
+            raise ValueError("Run install-conda as the project user, not root")
+        conda = Path(self.c["CONDA_EXE"])
+        if conda.is_file() and os.access(conda, os.X_OK):
+            self.run([conda, "--version"])
+            print("Using existing Conda; no installation or upgrade was performed.")
+            return
+        if conda.name != "conda" or conda.parent.name != "bin":
+            raise ValueError("For install-conda, set CONDA_EXE=/new/install/folder/bin/conda")
+        prefix = conda.parent.parent.resolve()
+        if any(within(prefix, root) or within(root, prefix) for root in (self.data, self.repo)):
+            raise ValueError("Install the Conda base in its own folder, separate from DATA_ROOT and the code")
+        if conda.parent.parent.is_symlink() or prefix.exists():
+            raise ValueError("Refusing to overwrite existing Conda installation folder: " + str(prefix))
+        prefix.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".grnscope-conda-", dir=prefix.parent) as temporary:
+            installer = Path(temporary) / "Miniforge3.sh"
+            digest = hashlib.sha256()
+            print("Downloading pinned Miniforge Conda installer...", flush=True)
+            with urlopen(CONDA_INSTALLER_URL, timeout=60) as response, installer.open("wb") as output:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    output.write(chunk)
+            if digest.hexdigest() != CONDA_INSTALLER_SHA256:
+                raise ValueError("Conda installer SHA-256 mismatch; installation was not started")
+            env = dict(os.environ, TMPDIR=temporary)
+            env.pop("PYTHONHOME", None)
+            env.pop("PYTHONPATH", None)
+            self.run(["bash", installer, "-b", "-p", prefix], env=env)
+            self.run([conda, "--version"], env=env)
+        print("Conda installed at " + str(conda) + "; no conda init or shell changes are needed.")
 
     def check_owner(self):
         if self.marker.exists():
@@ -437,7 +483,7 @@ class Server:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("check", "install", "enable", "verify", "status", "logs", "stop", "restart"))
+    parser.add_argument("command", choices=("install-conda", "check", "install", "enable", "verify", "status", "logs", "stop", "restart"))
     parser.add_argument("service", nargs="?", choices=SERVICES)
     parser.add_argument("--config", type=Path, default=REPO / "server.env")
     args = parser.parse_args()
@@ -448,7 +494,7 @@ def main():
         if args.command in {"status", "logs", "stop", "restart"}:
             server.manage(args.command, args.service)
         else:
-            getattr(server, args.command)()
+            getattr(server, args.command.replace("-", "_"))()
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print("ERROR: " + str(error), file=sys.stderr)
         return 1

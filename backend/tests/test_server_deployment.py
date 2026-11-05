@@ -1,5 +1,7 @@
 """Verify deployment scoping and data protection without modifying the host."""
 import importlib.util
+import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -132,6 +134,95 @@ def test_explicit_tool_paths_override_saved_paths(installation):
         config = i.load()
     for key in ('CONDA_EXE', 'NODE_BIN', 'BEELINE_ROOT'):
         assert config[key] == i.settings[key]
+
+
+@pytest.fixture
+def linux_server(installation):
+    with (patch.object(deploy.platform, 'system', return_value='Linux'),
+          patch.object(deploy.platform, 'machine', return_value='x86_64'),
+          patch.object(deploy.os, 'getuid', return_value=1000)):
+        yield installation.server
+
+
+def test_conda_bootstrap_verifies_download_and_installs_only_configured_prefix(linux_server, tmp_path):
+    s = linux_server
+    shell_config = tmp_path / '.bashrc'
+    shell_config.write_text('keep shell configuration')
+    installer = b'''#!/bin/bash
+set -eu
+test "$1" = "-b"
+test "$2" = "-p"
+test -z "${PYTHONHOME+x}"
+test -z "${PYTHONPATH+x}"
+mkdir -p "$3/bin"
+printf '#!/bin/sh\necho conda-test-version\n' > "$3/bin/conda"
+chmod +x "$3/bin/conda"
+'''
+    with (patch.object(deploy, 'urlopen', return_value=io.BytesIO(installer)),
+          patch.object(deploy, 'CONDA_INSTALLER_SHA256', hashlib.sha256(installer).hexdigest()),
+          patch.dict(deploy.os.environ, {'HOME': str(tmp_path), 'PYTHONPATH': 'unused', 'PYTHONHOME': 'unused'})):
+        s.install_conda()
+    assert Path(s.c['CONDA_EXE']).is_file()
+    assert shell_config.read_text() == 'keep shell configuration'
+    assert not s.data.exists()
+    assert not list(Path(s.c['CONDA_EXE']).parents[2].glob('.grnscope-conda-*'))
+
+
+def test_conda_bootstrap_keeps_existing_installation(linux_server):
+    s = linux_server
+    conda = Path(s.c['CONDA_EXE'])
+    conda.parent.mkdir(parents=True)
+    conda.write_text('existing conda')
+    conda.chmod(0o755)
+    with patch.object(s, 'run') as runner, patch.object(deploy, 'urlopen') as download:
+        s.install_conda()
+    runner.assert_called_once_with([conda, '--version'])
+    download.assert_not_called()
+    assert conda.read_text() == 'existing conda'
+
+
+def test_conda_bootstrap_rejects_bad_checksum_before_execution(linux_server):
+    s = linux_server
+    with patch.object(deploy, 'urlopen', return_value=io.BytesIO(b'bad download')), patch.object(s, 'run') as runner:
+        with pytest.raises(ValueError, match='SHA-256 mismatch'):
+            s.install_conda()
+    runner.assert_not_called()
+    assert not Path(s.c['CONDA_EXE']).parents[1].exists()
+
+
+def test_conda_bootstrap_preserves_incomplete_existing_folder(linux_server):
+    s = linux_server
+    prefix = Path(s.c['CONDA_EXE']).parents[1]
+    prefix.mkdir(parents=True)
+    existing = prefix / 'important.txt'
+    existing.write_text('keep')
+    with patch.object(deploy, 'urlopen') as download:
+        with pytest.raises(ValueError, match='Refusing to overwrite'):
+            s.install_conda()
+    download.assert_not_called()
+    assert existing.read_text() == 'keep'
+
+
+@pytest.mark.parametrize('location', ['data', 'code', 'bad-executable'])
+def test_conda_bootstrap_requires_separate_base_folder(linux_server, location):
+    s = linux_server
+    if location == 'bad-executable':
+        s.c['CONDA_EXE'] = str(s.repo.parent / 'conda-not-in-bin')
+    else:
+        s.c['CONDA_EXE'] = str((s.data if location == 'data' else s.repo) / 'conda/bin/conda')
+    with patch.object(deploy, 'urlopen') as download:
+        with pytest.raises(ValueError):
+            s.install_conda()
+    download.assert_not_called()
+
+
+def test_install_conda_command_dispatches_without_application_prerequisite_checks(installation):
+    with (patch.object(deploy.sys, 'argv', ['server.py', 'install-conda']),
+          patch.object(deploy, 'read_config', return_value=installation.server.c),
+          patch.object(deploy.Server, 'install_conda') as install_conda,
+          patch.object(deploy.Server, 'check', side_effect=AssertionError('Conda is not installed yet'))):
+        assert deploy.main() == 0
+    install_conda.assert_called_once_with()
 
 
 @pytest.mark.parametrize('port', ['18000', '80', '70000'])
