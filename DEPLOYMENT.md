@@ -14,8 +14,9 @@ Confirm these once:
   Agree use of the `grnbeeline/*` image tags with the administrator: image setup
   can refresh those shared Docker tags.
 - `/data2` is mounted, and the user can create `/data2/platform/grnscope`.
-- Conda and Node.js **>=20.9** are available at the configured paths. The existing
-  Node.js 20.18.0 installation is sufficient. Bootstrap `python3` must be >=3.8.
+- Conda and Node.js **>=20.9** are installed. Their locations are detected from
+  the shell and common installation folders, including NVM and the Hong Kong
+  server's shared Conda. Bootstrap `python3` must be >=3.8.
 - Three unused local ports are reserved: **13000** (website), **18000** (API),
   **16379** (project Redis), plus service prefix `grnscope`.
 - An administrator can register systemd services and configure a dedicated
@@ -38,15 +39,34 @@ cp scripts/server.env.example server.env
 nano server.env
 ```
 
-Check the paths, reserved ports and `PUBLIC_URL`. Use the final dedicated
-hostname, for example `https://grnscope.your-institute.edu`. The site must be
-served at the hostname root, not a subpath. `server.env` is ignored by Git.
+Only two settings are needed:
 
-The supplied starting allocation runs **2 methods concurrently**, with **8 CPU
-units and 32 GiB per algorithm**. Agree these limits with the administrator;
-website processes and preprocessing also use resources. Reduce the values for
-a smaller test VM. For another Linux server, update the Conda/Node paths and
-set `DATA_MOUNT` to its actual mount point (`/` is allowed for a root-disk test).
+```ini
+DATA_ROOT=~/grnscope-data
+PUBLIC_URL=https://grnscope.your-institute.edu
+```
+
+`DATA_ROOT` holds uploads, results and generated files. **On the Hong Kong
+server, change it to `/data2/platform/grnscope`** after confirming `/data2` is
+mounted. The home-folder default suits a test VM. Use paths without spaces;
+`~/` is expanded automatically. Keep this folder outside the source checkout.
+
+`PUBLIC_URL` is the final website address. The site must be served at the
+hostname root, not a subpath. DNS and HTTPS are configured separately below.
+`server.env` is ignored by Git.
+
+Conda, Node, the containing data mount and the sibling Beeline checkout are
+detected automatically. Defaults use ports **13000 / 18000 / 16379** and service
+prefix `grnscope`. Resource limits adapt to the host: **2 simultaneous methods**
+on hosts with at least 2 CPUs and 8 GiB RAM, otherwise 1. Each gets 1–4 CPUs
+and a share of half the host RAM, capped at 8 GiB per method. These are starting
+limits; larger datasets may require the optional overrides below.
+
+To preview all detected settings without installing anything:
+
+```bash
+python3 scripts/server.py check
+```
 
 ## 2. Prepare the application
 
@@ -86,7 +106,8 @@ services**, enables startup after reboot, and checks the website, API, demo,
 Redis and registered analysis workers. It does not change Apache.
 The project Redis password is generated and configured automatically.
 
-Give the administrator the generated file:
+Give the administrator `DATA_ROOT/config/apache-proxy.conf`. On the Hong Kong
+server this is:
 
 ```text
 /data2/platform/grnscope/config/apache-proxy.conf
@@ -142,14 +163,40 @@ python3 scripts/server.py install && python3 scripts/server.py enable
 
 To change deployment settings, finish running analyses, run `stop`, edit
 `server.env`, then run `install` and `enable`. This keeps the frontend proxy and
-generated services consistent. Keep the
-code and data directories in place after installation. Set a log retention policy
+generated services consistent. Keep the code and data directories in place after
+installation. Set a log retention policy
 for `DATA_ROOT/logs` using the server's existing maintenance tools.
 
 If the old shared Conda cannot resolve the new environment, ask the administrator
 for a newer Conda executable for this project and update `CONDA_EXE`; the script
 does not update the shared base environment. Source revisions and installed
 Python versions are recorded in `DATA_ROOT/config` for deployment review.
+
+## Optional overrides
+
+Most installations need only the two settings above. If detection fails or the
+administrator requests different limits, add the relevant lines to `server.env`:
+
+| Setting | Default / purpose |
+|---|---|
+| `CONDA_EXE=/full/path/to/bin/conda` | Override detected Conda executable |
+| `NODE_BIN=/full/path/to/bin` | Override detected directory containing Node and npm |
+| `BEELINE_ROOT=/full/path/to/Beeline` | Override the sibling checkout location |
+| `DATA_MOUNT=/data2` | Override detected mount; refuse setup if it is not mounted |
+| `SERVICE_PREFIX=grnscope` | Service name prefix |
+| `FRONTEND_PORT=13000` | Internal website port |
+| `BACKEND_PORT=18000` | Internal API port |
+| `REDIS_PORT=16379` | Internal queue port |
+| `WORKER_COUNT=2` | Maximum simultaneous analysis jobs |
+| `ALGORITHM_CPU_BUDGET=8` | CPU allowance per algorithm; overrides the automatic limit |
+| `ALGORITHM_MEMORY_MB=32768` | Memory cap per algorithm; this example is 32 GiB |
+
+Agree resource overrides with the administrator; website processes and
+preprocessing also need resources. Tool detection does not install Conda or Node.
+Existing longer `server.env` files remain supported. Selected settings are saved
+under `DATA_ROOT/config` and reused on later runs, so a reboot or shell change
+does not silently switch tools, ports, mounts or resource budgets. Explicit
+settings in `server.env` take precedence over saved values.
 
 ## References
 

@@ -46,6 +46,107 @@ def test_defaults_and_invalid_settings(installation):
         i.load()
 
 
+@pytest.mark.parametrize('cpus,memory,workers,cpu_budget,memory_budget', [
+    (1, 2048, 1, 1, 1024), (2, 4096, 1, 1, 2048),
+    (4, 16384, 2, 1, 4096), (128, 1048576, 2, 4, 8192),
+])
+def test_two_setting_config_selects_bounded_resources(
+        installation, cpus, memory, workers, cpu_budget, memory_budget):
+    i = installation
+    i.settings = {key: i.settings[key] for key in ('DATA_ROOT', 'PUBLIC_URL')}
+    path = i.repo / 'minimal.env'
+    path.write_text('\n'.join(key + '=' + value for key, value in i.settings.items()))
+    with (patch.object(deploy, 'detect_conda', return_value='/opt/conda/bin/conda'),
+          patch.object(deploy, 'detect_node', return_value='/opt/node/bin'),
+          patch.object(deploy, 'host_memory_mb', return_value=memory),
+          patch.object(deploy.os, 'cpu_count', return_value=cpus)):
+        config = deploy.read_config(path, i.repo)
+    assert config['WORKER_COUNT'] == workers
+    assert config['ALGORITHM_CPU_BUDGET'] == cpu_budget
+    assert config['ALGORITHM_MEMORY_MB'] == memory_budget
+    assert config['FRONTEND_PORT'] == 13000
+    assert config['SERVICE_PREFIX'] == 'grnscope'
+    assert config['WORKER_COUNT'] * config['ALGORITHM_CPU_BUDGET'] <= cpus
+    assert config['WORKER_COUNT'] * config['ALGORITHM_MEMORY_MB'] <= memory // 2
+
+
+def test_home_directory_paths_expand_without_shell_evaluation(installation):
+    i = installation
+    i.settings['DATA_ROOT'] = '~/grnscope-data'
+    i.settings['DATA_MOUNT'] = str(i.repo.parents[1])
+    with patch.dict(deploy.os.environ, {'HOME': str(i.repo.parents[1])}):
+        assert i.load()['DATA_ROOT'] == str(i.repo.parents[1] / 'grnscope-data')
+
+
+def test_saved_defaults_survive_machine_changes_and_explicit_overrides(installation):
+    i = installation
+    i.server.initialize_storage()
+    path = i.repo / 'minimal.env'
+    path.write_text('DATA_ROOT=%s\nPUBLIC_URL=https://new.example.edu\n' % i.server.data)
+    with (patch.object(deploy, 'detect_conda', side_effect=AssertionError('must keep installed path')),
+          patch.object(deploy, 'detect_node', side_effect=AssertionError('must keep installed path')),
+          patch.object(deploy, 'detect_mount', side_effect=AssertionError('must keep recorded mount')),
+          patch.object(deploy, 'host_memory_mb', side_effect=AssertionError('must keep resource limits'))):
+        config = deploy.read_config(path, i.repo)
+        assert config == dict(i.server.c, PUBLIC_URL='https://new.example.edu')
+        with path.open('a') as stream:
+            stream.write('WORKER_COUNT=1\n')
+        assert deploy.read_config(path, i.repo)['WORKER_COUNT'] == 1
+
+
+def test_legacy_installation_defaults_are_reused(installation):
+    i = installation
+    i.server.initialize_storage()
+    (i.server.settings / 'resolved-settings.json').unlink()
+    (i.server.settings / 'installation.json').write_text(json.dumps(i.server.c))
+    path = i.repo / 'minimal.env'
+    path.write_text('DATA_ROOT=%s\nPUBLIC_URL=%s\n' % (i.server.data, i.server.c['PUBLIC_URL']))
+    assert deploy.read_config(path, i.repo) == i.server.c
+
+
+def test_mount_detection_walks_to_containing_mount(tmp_path):
+    mount = tmp_path.resolve()
+    with patch.object(deploy.os.path, 'ismount', side_effect=lambda path: Path(path) == mount):
+        assert deploy.detect_mount(mount / 'not-created-yet' / 'grnscope') == str(mount)
+
+
+def make_executable(path, output=''):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('#!/bin/sh\nprintf "%s\\n"\n' % output)
+    path.chmod(0o755)
+
+
+def test_conda_detection_finds_user_install_without_shell_activation(tmp_path):
+    conda = tmp_path / 'miniconda3/bin/conda'
+    make_executable(conda)
+    with (patch.object(deploy.Path, 'home', return_value=tmp_path),
+          patch.object(deploy.shutil, 'which', return_value=None),
+          patch.dict(deploy.os.environ, {'CONDA_EXE': '/missing/conda'})):
+        assert deploy.detect_conda() == str(conda)
+
+
+def test_node_detection_skips_old_path_node_and_sorts_nvm_versions(tmp_path):
+    old = tmp_path / 'old/bin'
+    make_executable(old / 'node', 'v18.0.0')
+    make_executable(old / 'npm')
+    nvm = tmp_path / '.nvm'
+    for version in ('v20.9.0', 'v20.18.0'):
+        directory = nvm / 'versions/node' / version / 'bin'
+        make_executable(directory / 'node', version)
+        make_executable(directory / 'npm')
+    with (patch.object(deploy.shutil, 'which', return_value=str(old / 'node')),
+          patch.dict(deploy.os.environ, {'NVM_DIR': str(nvm), 'NVM_BIN': str(old)})):
+        assert deploy.detect_node() == str(nvm / 'versions/node/v20.18.0/bin')
+
+
+def test_missing_tools_explain_optional_overrides():
+    with patch.object(deploy, 'executable', return_value=False):
+        with pytest.raises(ValueError, match='CONDA_EXE='):
+            deploy.detect_conda()
+        with pytest.raises(ValueError, match='NODE_BIN='):
+            deploy.detect_node()
+
+
 @pytest.mark.parametrize('port', ['18000', '80', '70000'])
 def test_port_collisions_and_privileged_ports(installation, port):
     installation.settings['FRONTEND_PORT'] = port
@@ -131,8 +232,17 @@ def test_generated_units_and_environment_use_private_project_paths(installation)
     assert 'http://127.0.0.1:13000/' in (s.settings / 'apache-proxy.conf').read_text()
 
 
-def test_install_and_enable_scoped_to_project(installation):
+@pytest.mark.parametrize('minimal', [False, True])
+def test_install_and_enable_scoped_to_project(installation, minimal):
     s = installation.server
+    if minimal:
+        path = s.repo / 'server.env'
+        path.write_text('DATA_ROOT=%s\nPUBLIC_URL=%s\n' % (s.data, s.c['PUBLIC_URL']))
+        with (patch.object(deploy, 'detect_conda', return_value=s.c['CONDA_EXE']),
+              patch.object(deploy, 'detect_node', return_value=s.c['NODE_BIN']),
+              patch.object(deploy, 'host_memory_mb', return_value=16384),
+              patch.object(deploy.os, 'cpu_count', return_value=4)):
+            s = deploy.Server(deploy.read_config(path, s.repo), s.repo)
     (s.repo / 'frontend/.env.local').write_text('do not copy')
     calls = []
     def fake_run(args, **kwargs):
@@ -147,6 +257,7 @@ def test_install_and_enable_scoped_to_project(installation):
         s.install()
     assert not (s.frontend / '.env.local').exists()
     assert json.loads((s.settings / 'installation.json').read_text()) == s.c
+    assert deploy.read_config(s.repo / 'server.env', s.repo) == s.c
     assert not any(cmd[0] in {'sudo', 'apt', 'apt-get'} for cmd in calls)
     assert any('redis>=7,<8' in cmd for cmd in calls)
     assert any(cmd[1:] == ['ci', '--include=dev'] for cmd in calls)

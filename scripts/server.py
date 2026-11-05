@@ -27,6 +27,74 @@ KEYS = {
     "SERVICE_PREFIX", "FRONTEND_PORT", "BACKEND_PORT", "REDIS_PORT",
     "WORKER_COUNT", "ALGORITHM_CPU_BUDGET", "ALGORITHM_MEMORY_MB", "PUBLIC_URL",
 }
+PATH_KEYS = ("DATA_ROOT", "DATA_MOUNT", "CONDA_EXE", "NODE_BIN", "BEELINE_ROOT")
+
+
+def absolute_path(value):
+    value = os.path.expanduser(value)
+    if not re.fullmatch(r"/[A-Za-z0-9_./-]*", value):
+        raise ValueError("Use absolute paths or ~/ paths without spaces or shell variables")
+    return os.path.abspath(value)
+
+
+def detect_mount(data):
+    current = Path(data).resolve()
+    while not os.path.ismount(current):
+        if current == current.parent:
+            raise ValueError("Cannot detect the data disk; set DATA_MOUNT explicitly")
+        current = current.parent
+    return str(current)
+
+
+def executable(path):
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def detect_conda():
+    candidates = [os.environ.get("CONDA_EXE"), shutil.which("conda")]
+    candidates.extend(str(Path.home() / name / "bin/conda") for name in
+                      ("miniconda3", "miniforge3", "anaconda3", "mambaforge"))
+    candidates.extend(["/opt/conda/bin/conda", "/opt/miniconda3/bin/conda"])
+    candidates.extend(map(str, sorted(Path("/apps/software/Miniconda3").glob("*/bin/conda"), reverse=True)))
+    for candidate in candidates:
+        if candidate and executable(Path(candidate)):
+            return absolute_path(candidate)
+    raise ValueError("Conda was not found. Install Conda, or add CONDA_EXE=/full/path/to/conda to server.env")
+
+
+def node_version(directory):
+    if not all(executable(directory / name) for name in ("node", "npm")):
+        return ()
+    try:
+        result = subprocess.run([str(directory / "node"), "--version"], check=True,
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+        match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)\s*", result.stdout)
+        return tuple(map(int, match.groups())) if match else ()
+    except (OSError, subprocess.SubprocessError):
+        return ()
+
+
+def detect_node():
+    node = shutil.which("node")
+    candidates = [Path(node).parent] if node else []
+    if os.environ.get("NVM_BIN"):
+        candidates.append(Path(os.environ["NVM_BIN"]))
+    nvm = Path(os.environ.get("NVM_DIR", str(Path.home() / ".nvm")))
+    installed = list((nvm / "versions/node").glob("v*/bin"))
+    def version_key(directory):
+        return tuple(map(int, re.findall(r"\d+", directory.parent.name)))
+    candidates.extend(sorted(installed, key=version_key, reverse=True))
+    for candidate in candidates:
+        if node_version(candidate) >= (20, 9):
+            return absolute_path(str(candidate))
+    raise ValueError("Node.js >=20.9 with npm was not found. Install it, or add NODE_BIN=/full/path/to/bin to server.env")
+
+
+def host_memory_mb():
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") // (1024 * 1024)
+    except (ValueError, OSError):
+        raise ValueError("Cannot detect host memory on this platform")
 
 
 def within(path, parent):
@@ -50,14 +118,40 @@ def read_config(path, repo=REPO):
         if len(tokens) != 1 or key in values:
             raise ValueError("Expected one value for %s at line %d" % (key, number))
         values[key] = tokens[0]
-    required = KEYS - {"BEELINE_ROOT"}
-    missing = required - set(values)
+    missing = {"DATA_ROOT", "PUBLIC_URL"} - set(values)
     if missing:
         raise ValueError("Missing settings: " + ", ".join(sorted(missing)))
+    values["DATA_ROOT"] = absolute_path(values["DATA_ROOT"])
+    # Keep selected paths, mount and budgets stable across reboots and failed installs.
+    settings = Path(values["DATA_ROOT"]) / "config"
+    saved_path = settings / "resolved-settings.json"
+    if not saved_path.exists():
+        saved_path = settings / "installation.json"
+    if saved_path.exists():
+        saved = json.loads(saved_path.read_text())
+        if not isinstance(saved, dict):
+            raise ValueError("Invalid saved deployment settings: " + str(saved_path))
+        values = {**{key: value for key, value in saved.items() if key in KEYS}, **values}
+    for key, value in {"SERVICE_PREFIX": "grnscope", "FRONTEND_PORT": 13000,
+                       "BACKEND_PORT": 18000, "REDIS_PORT": 16379}.items():
+        values.setdefault(key, value)
+    if "DATA_MOUNT" not in values:
+        values["DATA_MOUNT"] = detect_mount(values["DATA_ROOT"])
+    if "CONDA_EXE" not in values:
+        values["CONDA_EXE"] = detect_conda()
+    if "NODE_BIN" not in values:
+        values["NODE_BIN"] = detect_node()
     values.setdefault("BEELINE_ROOT", str(repo.parent / "Beeline"))
-    for key in ("DATA_ROOT", "DATA_MOUNT", "CONDA_EXE", "NODE_BIN", "BEELINE_ROOT"):
-        if not re.fullmatch(r"/[A-Za-z0-9_./-]+", values[key]):
-            raise ValueError(key + " must be an absolute path without spaces or shell variables")
+    for key in PATH_KEYS:
+        values[key] = absolute_path(values[key])
+    if any(key not in values for key in ("WORKER_COUNT", "ALGORITHM_CPU_BUDGET", "ALGORITHM_MEMORY_MB")):
+        cpus, memory = os.cpu_count() or 1, host_memory_mb()
+        values.setdefault("WORKER_COUNT", 2 if cpus >= 2 and memory >= 8192 else 1)
+        workers = int(values["WORKER_COUNT"])
+        if workers <= 0:
+            raise ValueError("WORKER_COUNT must be positive")
+        values.setdefault("ALGORITHM_CPU_BUDGET", min(4, max(1, cpus // (2 * workers))))
+        values.setdefault("ALGORITHM_MEMORY_MB", min(8192, max(1, memory // (2 * workers))))
     if not re.fullmatch(r"/[A-Za-z0-9_./-]+", str(repo)):
         raise ValueError("Place the code checkout in an absolute path without spaces")
     for key in ("FRONTEND_PORT", "BACKEND_PORT", "REDIS_PORT", "WORKER_COUNT",
@@ -150,6 +244,9 @@ class Server:
             raise ValueError("This deployment requires an x86-64 Linux server")
         if os.getuid() == 0:
             raise ValueError("Run as the project user, not root; enable uses sudo only for service registration")
+        print("Deployment settings (detected/default values can be overridden in server.env):")
+        for key in sorted(self.c):
+            print("  %s=%s" % (key, self.c[key]))
         for command in ("git", "docker", "systemctl"):
             if not shutil.which(command):
                 raise ValueError("Administrator prerequisite is missing: " + command)
@@ -184,7 +281,7 @@ class Server:
                         raise ValueError("%s is occupied; reserve another port in server.env" % key) from error
         if self.c["WORKER_COUNT"] * self.c["ALGORITHM_CPU_BUDGET"] > (os.cpu_count() or 1):
             raise ValueError("Worker CPU budgets exceed this host; reduce them in server.env")
-        total_mb = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") // (1024 * 1024)
+        total_mb = host_memory_mb()
         if self.c["WORKER_COUNT"] * self.c["ALGORITHM_MEMORY_MB"] > total_mb * 0.8:
             raise ValueError("Worker memory budgets leave insufficient host memory; reduce them in server.env")
         docker_root = self.run([self.docker, "info", "--format", "{{.DockerRootDir}}"], capture=True).stdout.strip()
@@ -242,6 +339,7 @@ class Server:
             private_write(password, secrets.token_hex(32) + "\n")
         ensure_link(self.repo / "workspace", self.data)
         ensure_link(self.repo / "backend" / "projects", self.data / "projects")
+        (self.settings / "resolved-settings.json").write_text(json.dumps(self.c, indent=2) + "\n")
 
     def render(self):
         c, env = self.c, self.environment()
