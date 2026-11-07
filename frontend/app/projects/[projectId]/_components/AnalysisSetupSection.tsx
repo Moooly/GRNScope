@@ -59,10 +59,10 @@ export default function AnalysisSetupSection({
           </svg>
         </div>
 
-        {/* Keep the actions wrapper unpositioned so the status progress track
-            anchors to the full analysis header, including its title. */}
+        {/* Let status-area clicks reach the header toggle. Keep this wrapper
+            unpositioned so the progress track anchors to the full header. */}
         {onDownloadRunManifests ? (
-          <div className="z-10 order-3 flex w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-nowrap sm:justify-end sm:gap-0 sm:border-t-0 sm:px-0 sm:py-0 lg:order-none">
+          <div className="pointer-events-none z-10 order-3 flex w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-nowrap sm:justify-end sm:gap-0 sm:border-t-0 sm:px-0 sm:py-0 lg:order-none">
             <div className="contents [&>*]:!order-none [&>*]:!ml-0 [&>*]:!px-0 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
               {status}
             </div>
@@ -82,7 +82,7 @@ export default function AnalysisSetupSection({
                   ? "The analysis package is available after an algorithm run finishes"
                   : "Download analysis package"
               }
-              className="relative z-20 inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 sm:mr-6 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+              className="pointer-events-auto relative z-20 inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 sm:mr-6 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
             >
               <svg viewBox="0 0 18 18" className="h-4 w-4" fill="none" aria-hidden="true">
                 <path
