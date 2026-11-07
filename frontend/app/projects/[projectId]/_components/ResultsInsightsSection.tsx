@@ -24,7 +24,7 @@ import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
 import DownloadMenu from "./DownloadMenu";
-import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, clusterMethods, formatRank, heatmapPlotTop, rankRegulators, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
+import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, agreementHeatmapLayout, clusterMethods, formatRank, rankRegulators, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
 import { downloadSvg as downloadSvgFile, downloadSvgPng } from "../_lib/downloads";
 import { median as scoreMedian } from "../_lib/resultScores";
 
@@ -493,16 +493,15 @@ function MethodAgreementHelpModal({ onClose }: { onClose: () => void }) {
             <h4 className="font-extrabold text-slate-900">How to read the views</h4>
             <p className="mt-2">
               In Matrix, each row and column is an algorithm. Select a scored cell to
-              inspect shared and method-specific edges. Only the lower half is
-              filled because every comparison is symmetric; the pale diagonal
-              represents a method compared with itself.
+              inspect shared and method-specific edges. The matrix is symmetric:
+              mirrored cells show the same comparison. The diagonal shows perfect
+              self-agreement (1.00).
             </p>
             <p className="mt-2">
-              Darker blue means higher agreement. The color scale uses the
-              lowest and highest off-diagonal values currently visible, so use
-              the numbers—not color alone—when comparing different settings.
-              Similar methods are placed near one another; this ordering does
-              not change their scores.
+              Darker blue means higher agreement. The scale beside the matrix
+              shows the displayed range. Jaccard and RBO use 0 to 1. Negative
+              Spearman correlations extend the lower end of the scale.
+              Methods are ordered alphabetically.
             </p>
             <p className="mt-2">
               The overlap view changes automatically with the comparison: Venn
@@ -1836,8 +1835,7 @@ function AgreementView({
     [similarityMatrix],
   );
 
-  // Rows and columns follow average-linkage clustering on 1 − similarity; the
-  // tree is drawn beside the heatmap and the UpSet rows use the same order.
+  // Clustering orders the overlap and regulator views. The matrix uses alphabetical labels.
   const agreementTree = useMemo(
     () => clusterMethods(eligibleAlgorithmIds, pairSimilarity),
     [eligibleAlgorithmIds, pairSimilarity],
@@ -1866,6 +1864,11 @@ function AgreementView({
     () => agreementTree?.members ?? eligibleAlgorithmIds,
     [agreementTree, eligibleAlgorithmIds],
   );
+  const matrixAlgorithmIds = useMemo(
+    () => [...eligibleAlgorithmIds].sort((a, b) => a.localeCompare(b)),
+    [eligibleAlgorithmIds],
+  );
+  const heatmapLayout = agreementHeatmapLayout(matrixAlgorithmIds);
   const heatmapSvgRef = useRef<SVGSVGElement | null>(null);
   const overlapSvgRef = useRef<SVGSVGElement | null>(null);
   const [showAgreementValues, setShowAgreementValues] = useState(true);
@@ -1954,8 +1957,8 @@ function AgreementView({
   // Default selection: the first off-diagonal cell (first two methods in the
   // heatmap order), at the top-left corner where the eye starts reading.
   const defaultPair = useMemo<[string, string] | null>(
-    () => (orderedAlgorithmIds.length >= 2 ? [orderedAlgorithmIds[1], orderedAlgorithmIds[0]] : null),
-    [orderedAlgorithmIds],
+    () => (matrixAlgorithmIds.length >= 2 ? [matrixAlgorithmIds[0], matrixAlgorithmIds[1]] : null),
+    [matrixAlgorithmIds],
   );
   const isDefaultPair = !(
     requestedPair &&
@@ -2134,9 +2137,9 @@ function AgreementView({
                 agreementDisplay === "matrix"
                   ? [
                       {
-                        label: "Heatmap figure",
+                        label: "Agreement matrix",
                         format: "PNG",
-                        description: "Clustered heatmap with its tree, at print resolution.",
+                        description: "Symmetric agreement matrix, at print resolution.",
                         onSelect: handleDownloadAgreementPng,
                       },
                       {
@@ -2148,10 +2151,10 @@ function AgreementView({
                           downloadCsv(
                             `method-agreement-${metric}-${mode}-top-${topK}.csv`,
                             [
-                              ["algorithm", ...orderedAlgorithmIds],
-                              ...orderedAlgorithmIds.map((rowId) => [
+                              ["algorithm", ...matrixAlgorithmIds],
+                              ...matrixAlgorithmIds.map((rowId) => [
                                 rowId,
-                                ...orderedAlgorithmIds.map((columnId) =>
+                                ...matrixAlgorithmIds.map((columnId) =>
                                   rowId === columnId
                                     ? 1
                                     : pairSimilarity(rowId, columnId).toFixed(6),
@@ -2247,18 +2250,24 @@ function AgreementView({
             <div id="method-agreement-view" role="tabpanel">
             {agreementDisplay === "matrix" ? (
               <>
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+            <div
+              className="mx-auto grid w-full gap-6 xl:grid-cols-[minmax(0,var(--agreement-figure-width))_minmax(340px,1fr)] xl:items-stretch"
+              style={{
+                ["--agreement-figure-width" as string]: `${heatmapLayout.width}px`,
+                maxWidth: heatmapLayout.width + 444,
+              }}
+            >
               <div className="min-w-0">
             {shortMethodNote ? (
               <p className="mb-3 inline-block border-l-[3px] border-[#fd8d3c] bg-[#fff7ef] px-3 py-1.5 text-[12.5px] text-slate-800">
                 {shortMethodNote}
               </p>
             ) : null}
-            <div className="overflow-x-auto">
-              {agreementTree ? (
+            <div className="overflow-x-auto pb-1">
+              {matrixAlgorithmIds.length > 0 ? (
                 <AgreementHeatmap
                   svgRef={heatmapSvgRef}
-                  tree={agreementTree}
+                  methods={matrixAlgorithmIds}
                   similarity={pairSimilarity}
                   sizeOf={(id) => rankedKeys.get(id)?.length ?? 0}
                   topK={topK}
@@ -2272,10 +2281,9 @@ function AgreementView({
                 />
               ) : null}
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
               <p>
-                Selected pair outlined; click any cell to compare another pair. Rows and columns ordered by
-                average-linkage clustering on 1 − {AGREEMENT_METRIC_SHORT_LABELS[metric]}.
+                Select a cell to compare methods. Mirrored cells show the same score.
               </p>
               <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
                 <input
@@ -2292,7 +2300,7 @@ function AgreementView({
               {pairDetails ? (
                 <AgreementDetailPanel
                   eyebrow="Selected pair"
-                  plotTop={heatmapPlotTop(orderedAlgorithmIds)}
+                  fitToFigure
                   selectionKey={pairDetails.firstId + "|" + pairDetails.secondId}
                   title={`${pairDetails.firstId} × ${pairDetails.secondId}`}
                   subtitle={`Top ${topK.toLocaleString()} edges · ${COMPARISON_MODE_LABELS[mode]}`}
@@ -2529,7 +2537,7 @@ function AgreementView({
               <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
                 Darker = ranked higher; blank = no edge in that method&apos;s top {topK.toLocaleString()}. Directed methods rank genes by
                 targets, undirected ones{regulatorDirected.some((value) => !value) ? ` (${orderedAlgorithmIds.filter((_, index) => !regulatorDirected[index]).join(", ")})` : ""} by
-                all connections. Rows sorted by median rank; columns follow the agreement heatmap. Top-edge limit is set in Method agreement.
+                all connections. Rows sorted by median rank; columns grouped by method similarity. Top-edge limit is set in Method agreement.
               </p>
             </div>
             {selectedRegulator ? (

@@ -2,8 +2,7 @@
 
 /**
  * Method-agreement figures drawn as journal figures (Comparison tab):
- *  - AgreementHeatmap: clustered similarity heatmap with a dendrogram
- *    (average linkage on 1 − similarity) — the pheatmap / ComplexHeatmap layout used in McCalla et al. (G3 2023).
+ *  - AgreementHeatmap: symmetric pairwise similarity matrix
  *  - UpSetPlot: UpSetR default styling (gray23 marks, gray88 row shading,
  *    set sizes pointing left), optionally grouped by number of methods
  *    ("aggregate by degree", Lex et al. 2014).
@@ -77,10 +76,38 @@ function blues(t: number) {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+/** Shared sizing and colour range for the agreement and regulator heatmaps. */
+const HEATMAP_ROW_HEIGHT = 30;
+
+function heatmapCellSize(methodCount: number) {
+  return methodCount <= 5 ? 66 : methodCount <= 8 ? 58 : methodCount <= 12 ? 52 : 40;
+}
+
+function heatmapTone(value: number) {
+  return 0.1 + 0.85 * value;
+}
+
 /** Distance from the top of the heatmap SVG to its first row of cells. */
 export function heatmapPlotTop(methods: string[]) {
   const longest = Math.max(0, ...methods.map((id) => id.length));
   return Math.min(120, 24 + longest * 6.2);
+}
+
+/** Figure bounds also size the comparison workspace around the actual matrix. */
+export function agreementHeatmapLayout(methods: string[]) {
+  const cell = heatmapCellSize(methods.length);
+  const longestName = Math.max(0, ...methods.map((id) => id.length));
+  const left = Math.max(64, longestName * 8 + 12) + 8;
+  const top = heatmapPlotTop(methods);
+  const plotSize = methods.length * cell;
+  return {
+    cell,
+    left,
+    top,
+    plotSize,
+    width: left + plotSize + Math.max(86, longestName * 5 - cell / 2 + 12),
+    height: top + methods.length * HEATMAP_ROW_HEIGHT + 12,
+  };
 }
 /** Distance from the top of the UpSet SVG to the top of its bar axis. */
 export function upsetPlotTop(byDegree: boolean) {
@@ -88,7 +115,7 @@ export function upsetPlotTop(byDegree: boolean) {
 }
 
 export function AgreementHeatmap({
-  tree,
+  methods,
   similarity,
   sizeOf,
   topK,
@@ -98,28 +125,27 @@ export function AgreementHeatmap({
   onSelectPair,
   svgRef,
 }: {
-  tree: ClusterNode;
+  methods: string[];
   similarity: (a: string, b: string) => number;
   sizeOf: (id: string) => number;
   topK: number;
   metricLabel: string;
   showValues: boolean;
+  /** The selected cell's row and column, in that order. */
   selectedPair: [string, string] | null;
   onSelectPair: (pair: [string, string] | null) => void;
   svgRef?: Ref<SVGSVGElement>;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const order = tree.members;
+  const order = methods;
+  const gradientId = useId().replace(/:/g, "");
   const n = order.length;
-  const showTree = n >= 3;
-  const cell = n <= 5 ? 66 : n <= 8 ? 54 : n <= 12 ? 48 : 34;
-  const treeW = showTree ? 96 : 0;
-  const nameW = 128;
-  const strip = 0;
-  const top = heatmapPlotTop(order);
-  const left = treeW + nameW + strip + 8;
-  const W = left + n * cell + 24;
-  const H = top + n * cell + (showTree ? 50 : 20);
+  const { cell, left, top, plotSize, width: W, height: H } = agreementHeatmapLayout(order);
+  const rowH = HEATMAP_ROW_HEIGHT;
+  const radius = 2;
+  const legendHeight = Math.min(n * rowH, 160);
+  const legendX = left + plotSize + 24;
+  const legendY = top + (n * rowH - legendHeight) / 2;
   // What a short method does to a cell, for the hover text.
   const sizeNote = (a: string, b: string) => {
     const sa = sizeOf(a), sb = sizeOf(b);
@@ -134,22 +160,7 @@ export function AgreementHeatmap({
   const lo = Math.min(0, Math.floor(minValue * 10) / 10);
   const scale = (v: number) => (v - lo) / (1 - lo);
 
-  // Dendrogram geometry: distance axis runs right (0) to left (max).
-  const maxDist = Math.max(1, Math.ceil(tree.height * 2) / 2);
-  const hx = (h: number) => treeW - 8 - (h / maxDist) * (treeW - 16);
-  const leafY = new Map(order.map((id, index) => [id, top + index * cell + cell / 2]));
-  const branches: string[] = [];
-  const walk = (node: ClusterNode): { x: number; y: number } => {
-    if (!node.left || !node.right) return { x: treeW - 8, y: leafY.get(node.members[0]) ?? 0 };
-    const a = walk(node.left);
-    const b = walk(node.right);
-    const x = hx(node.height);
-    branches.push(`M${a.x} ${a.y}H${x}V${b.y}H${b.x}`);
-    return { x, y: (a.y + b.y) / 2 };
-  };
-  if (showTree) walk(tree);
-
-  const valueText = (v: number) => (Math.abs(v) >= 0.995 ? v.toFixed(1) : v.toFixed(2).replace(/^(-?)0\./, "$1."));
+  const valueText = (v: number) => v.toFixed(2);
 
   return (
     <svg
@@ -159,33 +170,28 @@ export function AgreementHeatmap({
       height={H}
       style={{ display: "block" }}
       fontFamily={FONT}
-      role="img"
-      aria-label={`Clustered heatmap of ${metricLabel} between methods' top ${topK} edges`}
+      role="group"
+      aria-label={`Symmetric matrix of ${metricLabel} between methods' top ${topK} edges`}
       onMouseLeave={() => setHovered(null)}
     >
       <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
-      {showTree && (
-        <>
-          {branches.map((d, i) => <path key={i} d={d} fill="none" stroke={INK} strokeWidth="0.8" />)}
-          <line x1={hx(maxDist)} x2={hx(0)} y1={top + n * cell + 10} y2={top + n * cell + 10} stroke={INK} strokeWidth="0.8" />
-          {[0, maxDist / 2, maxDist].map((t) => (
-            <g key={t}>
-              <line x1={hx(t)} x2={hx(t)} y1={top + n * cell + 10} y2={top + n * cell + 14} stroke={INK} strokeWidth="0.8" />
-              <text x={hx(t)} y={top + n * cell + 25} fontSize="9.5" textAnchor="middle" fill={INK}>{t === 0 ? "0" : String(Number(t.toFixed(2))).replace(/^0\./, ".")}</text>
-            </g>
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
+          {[0, 0.25, 0.5, 0.75, 1].map((value) => (
+            <stop key={value} offset={value} stopColor={blues(heatmapTone(value))} />
           ))}
-          <text x={hx(maxDist / 2)} y={top + n * cell + 39} fontSize="9.5" textAnchor="middle" fill={MUTED}>1 − similarity</text>
-        </>
-      )}
+        </linearGradient>
+      </defs>
       {order.map((id, index) => {
-        const y = top + index * cell;
-        const on = !!selectedPair && selectedPair.includes(id);
+        const y = top + index * rowH;
+        const rowSelected = selectedPair?.[0] === id;
+        const columnSelected = selectedPair?.[1] === id;
         return (
           <g key={id}>
-            <text x={treeW + nameW - 4} y={y + cell / 2 + 4} fontSize="12.5" textAnchor="end" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">
+            <text x={left - 8} y={y + rowH / 2 + 4} fontSize="12.5" textAnchor="end" fill={rowSelected ? SELECT : INK} fontWeight={rowSelected ? 700 : 400} data-export-fill={INK} data-export-weight="400">
               {id}
             </text>
-            <text transform={`translate(${left + index * cell + cell / 2 + 4} ${top - 10}) rotate(-50)`} fontSize="12" fill={on ? SELECT : INK} fontWeight={on ? 700 : 400} data-export-fill={INK} data-export-weight="400">
+            <text transform={`translate(${left + index * cell + cell / 2 + 4} ${top - 10}) rotate(-50)`} fontSize="12" fill={columnSelected ? SELECT : INK} fontWeight={columnSelected ? 700 : 400} data-export-fill={INK} data-export-weight="400">
               {id}
             </text>
           </g>
@@ -194,52 +200,71 @@ export function AgreementHeatmap({
       {order.map((rowId, r) =>
         order.map((columnId, c) => {
           const x = left + c * cell;
-          const y = top + r * cell;
+          const y = top + r * rowH;
           if (rowId === columnId) {
-            // A method compared with itself: similarity 1, drawn like any other cell.
             return (
-              <g key={`${r}-${c}`}>
-                <title>{`${rowId} vs itself: ${metricLabel} 1`}</title>
-                <rect x={x} y={y} width={cell} height={cell} fill={blues(scale(1))} stroke="#ffffff" strokeWidth="1" />
+              <g key={`self-${r}`} aria-label={`${rowId} compared with itself: ${metricLabel} 1.00`}>
+                <title>{`${rowId} compared with itself: ${metricLabel} 1.00.`}</title>
+                <rect x={x} y={y} width={cell} height={rowH} rx={radius} fill={blues(heatmapTone(1))} stroke="#ffffff" strokeWidth="1" />
                 {showValues && (
-                  <text x={x + cell / 2} y={y + cell / 2 + 3.5} fontSize={cell >= 48 ? 11.5 : cell >= 40 ? 10.5 : 9} textAnchor="middle" fill="#ffffff" pointerEvents="none">
-                    1
+                  <text x={x + cell / 2} y={y + rowH / 2 + 4} fontSize="12" textAnchor="middle" fill="#ffffff">
+                    1.00
                   </text>
                 )}
               </g>
             );
           }
+          const pair: [string, string] = [rowId, columnId];
+          const pairKey = `${r}:${c}`;
           const v = similarity(rowId, columnId);
           const selected =
             !!selectedPair &&
-            ((selectedPair[0] === rowId && selectedPair[1] === columnId) || (selectedPair[0] === columnId && selectedPair[1] === rowId));
-          const t = scale(v);
+            selectedPair[0] === rowId && selectedPair[1] === columnId;
+          const t = heatmapTone(scale(v));
           return (
             <g
               key={`${r}-${c}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`${rowId} and ${columnId}: ${metricLabel} ${v.toFixed(3)}. Inspect shared edges.`}
+              aria-pressed={selected}
               style={{ cursor: "pointer" }}
-              onMouseEnter={() => setHovered(`${rowId}|${columnId}`)}
-              onClick={() => onSelectPair(selected ? null : [columnId, rowId])}
+              onMouseEnter={() => setHovered(pairKey)}
+              onClick={() => onSelectPair(selected ? null : pair)}
+              onFocus={() => setHovered(pairKey)}
+              onBlur={() => setHovered(null)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectPair(selected ? null : pair);
+                }
+              }}
             >
               <title>{`${rowId} vs ${columnId}: ${metricLabel} ${v.toFixed(3)}.${sizeNote(rowId, columnId)} Click to inspect shared edges.`}</title>
-              <rect x={x} y={y} width={cell} height={cell} fill={blues(t)} stroke="#ffffff" strokeWidth="1" />
+              <rect x={x} y={y} width={cell} height={rowH} rx={radius} fill={blues(t)} stroke="#ffffff" strokeWidth="1" />
               {showValues && (
-                <text x={x + cell / 2} y={y + cell / 2 + 3.5} fontSize={cell >= 48 ? 11.5 : cell >= 40 ? 10.5 : 9} textAnchor="middle" fill={t > 0.55 ? "#ffffff" : "#1f2a33"} pointerEvents="none">
+                <text x={x + cell / 2} y={y + rowH / 2 + 4} fontSize="12" textAnchor="middle" fill={t > 0.55 ? "#ffffff" : "#1f2a33"} pointerEvents="none">
                   {valueText(v)}
                 </text>
               )}
               {selected ? (
                 <>
-                  <rect x={x + 1.5} y={y + 1.5} width={cell - 3} height={cell - 3} fill="none" stroke="#111111" strokeWidth="3" pointerEvents="none" data-ui="" />
-                  <rect x={x + 3.5} y={y + 3.5} width={cell - 7} height={cell - 7} fill="none" stroke="#ffffff" strokeWidth="1.2" pointerEvents="none" data-ui="" />
+                  <rect x={x + 1.5} y={y + 1.5} width={cell - 3} height={rowH - 3} rx={radius} fill="none" stroke="#111111" strokeWidth="3" pointerEvents="none" data-ui="" />
+                  <rect x={x + 3.5} y={y + 3.5} width={cell - 7} height={rowH - 7} rx="1" fill="none" stroke="#ffffff" strokeWidth="1.2" pointerEvents="none" data-ui="" />
                 </>
-              ) : hovered === `${rowId}|${columnId}` ? (
-                <rect x={x + 1} y={y + 1} width={cell - 2} height={cell - 2} fill="none" stroke="#111111" strokeWidth="1.2" pointerEvents="none" data-ui="" />
+              ) : hovered === pairKey ? (
+                <rect x={x + 1} y={y + 1} width={cell - 2} height={rowH - 2} rx={radius} fill="none" stroke="#111111" strokeWidth="1.2" pointerEvents="none" data-ui="" />
               ) : null}
             </g>
           );
         }),
       )}
+      <g aria-label={`${metricLabel} color scale: ${Number(lo.toFixed(1))} at the bottom to 1 at the top`}>
+        <rect x={legendX} y={legendY} width="7" height={legendHeight} rx="3.5" fill={`url(#${gradientId})`} />
+        <text x={legendX + 15} y={legendY + 4} fontSize="11" fill={MUTED}>1</text>
+        <text x={legendX + 15} y={legendY + legendHeight} fontSize="11" fill={MUTED}>{Number(lo.toFixed(1))}</text>
+        <text transform={`translate(${legendX + 47} ${legendY + legendHeight / 2}) rotate(-90)`} fontSize="10.5" textAnchor="middle" fill={MUTED}>Higher agreement</text>
+      </g>
     </svg>
   );
 }
@@ -662,8 +687,8 @@ export function RegulatorHeatmap({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const n = methods.length;
-  const cell = n <= 5 ? 66 : n <= 8 ? 58 : n <= 12 ? 52 : 40;
-  const rowH = 30;
+  const cell = heatmapCellSize(n);
+  const rowH = HEATMAP_ROW_HEIGHT;
   const longest = Math.max(4, ...rows.map((row) => row.gene.length));
   const nameW = Math.min(170, 18 + longest * 7.6);
   const top = regulatorPlotTop(methods);
@@ -674,7 +699,7 @@ export function RegulatorHeatmap({
   const H = top + rows.length * rowH + 12;
   const shown = rows.flatMap((row) => row.ranks.filter((rank): rank is number => rank !== null));
   const maxRank = Math.max(8, ...shown);
-  const tone = (rank: number) => 0.1 + 0.85 * (1 - (rank - 1) / (maxRank - 1));
+  const tone = (rank: number) => heatmapTone(1 - (rank - 1) / (maxRank - 1));
 
   return (
     <svg
@@ -780,6 +805,7 @@ export function AgreementDetailPanel({
   onReset,
   resetLabel,
   plotTop = 0,
+  fitToFigure = false,
   selectionKey,
   secondaryStats,
   extraHeader,
@@ -801,6 +827,8 @@ export function AgreementDetailPanel({
   resetLabel?: string;
   /** Pixels between the top of the figure and its plot area; the panel starts there on wide screens. */
   plotTop?: number;
+  /** Fit the inspector to the figure column instead of imposing its default minimum height. */
+  fitToFigure?: boolean;
   /** Changes whenever the selection does, to replay the short fade. */
   selectionKey?: string;
   /** Smaller figures under the key stats, each with a one-line explanation. */
@@ -820,7 +848,7 @@ export function AgreementDetailPanel({
     // plot's top edge to the bottom of the figure column, so both sides end
     // together; the edge list scrolls inside whatever height remains.
     <div
-      className="relative min-w-0 xl:self-stretch xl:min-h-[calc(var(--plot-top)+580px)]"
+      className={`relative min-w-0 xl:self-stretch ${fitToFigure ? "xl:min-h-[480px]" : "xl:min-h-[calc(var(--plot-top)+580px)]"}`}
       style={{ ["--plot-top" as string]: `${plotTop}px` }}
     >
     <aside
@@ -829,7 +857,7 @@ export function AgreementDetailPanel({
       aria-label={`${title} details`}
       aria-live="polite"
     >
-      <div className="border-b border-slate-100 px-5 pb-4 pt-5">
+      <div className="shrink-0 border-b border-slate-100 px-5 pb-4 pt-5">
         <div className="flex items-start justify-between gap-3">
           <p className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#087ead]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#087ead]" aria-hidden="true" />
@@ -886,7 +914,7 @@ export function AgreementDetailPanel({
       </div>
 
       {groups.length > 1 ? (
-        <div className="flex gap-4 border-b border-slate-100 px-5" role="tablist" aria-label="Edge groups">
+        <div className="flex shrink-0 gap-4 border-b border-slate-100 px-5" role="tablist" aria-label="Edge groups">
           {groups.map((item) => {
             const on = item.key === group?.key;
             return (
@@ -906,7 +934,7 @@ export function AgreementDetailPanel({
         </div>
       ) : null}
 
-      <div className="max-h-[330px] min-h-[120px] overflow-y-auto px-5 xl:max-h-none xl:flex-1">
+      <div className={`max-h-[330px] min-h-[120px] overflow-y-auto overscroll-contain px-5 xl:max-h-none xl:flex-1 ${fitToFigure ? "xl:min-h-0" : ""}`}>
         {group && group.rows.length ? (
           <table className="w-full table-fixed border-collapse text-[12.5px]">
             <colgroup>
@@ -942,7 +970,7 @@ export function AgreementDetailPanel({
         )}
       </div>
 
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500">
+      <div className="mt-auto flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500">
         <span>
           {group && group.rows.length > limit
             ? `Showing ${limit} of ${group.rows.length.toLocaleString()} · ${footnote ?? "rank = position in each method's list"}`
