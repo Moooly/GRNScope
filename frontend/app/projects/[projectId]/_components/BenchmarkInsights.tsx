@@ -16,11 +16,9 @@ import type {
   ProjectTask,
 } from "../_lib/types";
 import {
-  auprcUncertainty,
   benchmarkEdgeKey,
   computeBeelineBenchmarkMetrics,
   consensusEdges,
-  type AuprcUncertainty,
   type BeelineRankedEdge,
   normalizeReferenceSign,
   type BenchmarkCurvePoint,
@@ -408,10 +406,10 @@ function BenchmarkSummaryHelpModal({
               Methods are ranked by their mean rank over AUPRC ratio, early precision ratio
               and AUROC (the bar on the left). In each column, circle size and shade compare
               the methods: larger and darker is better. Grey dots mark values no better than
-              random; n/a means the method reports no edges of that kind. The Consensus row is
+              random; n/a means the metric is unavailable for that method or reference. The Consensus row is
               the rank average of all selected methods, as in DREAM5. Hover a circle for the
-              exact value. The CSV keeps the raw metrics, ratios, confidence intervals,
-              p-values, selected-edge counts, directionality, stability and runtime.
+              exact value. The CSV keeps the raw metrics, ratios, selected-edge counts,
+              directionality, stability and runtime.
             </p>
           </section>
         </div>
@@ -1042,8 +1040,6 @@ export default function BenchmarkInsights({
       return {
         rows: [] as BenchmarkRow[],
         consensus: null as BenchmarkRow | null,
-        candidateGenes: new Set<string>(),
-        truth: new Set<string>(),
         eligibleReferenceEdges: 0,
         uploadedReferenceEdges: 0,
         excludedReferenceEdges: 0,
@@ -1144,8 +1140,6 @@ export default function BenchmarkInsights({
     return {
       rows,
       consensus,
-      candidateGenes,
-      truth,
       eligibleReferenceEdges: truth.size,
       uploadedReferenceEdges:
         groundTruth?.edge_count ?? truthEdges.length,
@@ -1167,22 +1161,6 @@ export default function BenchmarkInsights({
     tasks,
   ]);
 
-  // Bootstrap intervals and permutation p-values for every method and the
-  // consensus; deterministic (seeded) so they do not jump between renders.
-  const uncertainty = useMemo(() => {
-    const values = new Map<string, AuprcUncertainty>();
-    const all = benchmark.consensus ? [...benchmark.rows, benchmark.consensus] : benchmark.rows;
-    all.forEach((row, index) => {
-      const result = auprcUncertainty({
-        rankedEdges: row.rankedEdges,
-        truth: benchmark.truth,
-        candidateGenes: benchmark.candidateGenes,
-        seed: 17 + index,
-      });
-      if (result) values.set(row.algorithmId, result);
-    });
-    return values;
-  }, [benchmark]);
   const summarySvgRef = useRef<SVGSVGElement | null>(null);
   const curveSvgRef = useRef<SVGSVGElement | null>(null);
   const motifSvgRef = useRef<SVGSVGElement | null>(null);
@@ -1248,12 +1226,9 @@ export default function BenchmarkInsights({
     eprRatio: row.earlyPrecisionRatio,
     auroc: row.auroc,
     activation: row.activationEpr,
-    // A method with no inhibitory predictions at all reports 0; show n/a instead.
-    inhibition: row.inhibitionEpr && row.inhibitionEpr > 0 ? row.inhibitionEpr : row.inhibitionEpr === null ? null : row.rankedEdges.some((edge) => Number((edge.edge as AlgorithmResultEdge).negative_selected_runs ?? 0) > 0) ? row.inhibitionEpr : null,
+    inhibition: row.inhibitionEpr,
     stability: isConsensus ? null : stabilityOf(row.algorithmId),
     runtime: isConsensus ? null : row.runtimeSeconds,
-    ci: uncertainty.get(row.algorithmId)?.ci ?? null,
-    pValue: uncertainty.get(row.algorithmId)?.pValue ?? null,
     pr: row.pr,
     roc: row.roc,
   });
@@ -1326,9 +1301,6 @@ export default function BenchmarkInsights({
                       "overall_rank",
                       "auprc",
                       "auprc_ratio",
-                      "auprc_ratio_ci_low",
-                      "auprc_ratio_ci_high",
-                      "permutation_p",
                       "early_precision",
                       "early_precision_ratio",
                       "early_precision_selected_edges",
@@ -1343,7 +1315,6 @@ export default function BenchmarkInsights({
                       "runtime_seconds",
                     ],
                     ...allRows.map((row) => {
-                      const u = uncertainty.get(row.algorithmId);
                       const isConsensus = row.algorithmId === CONSENSUS_ID;
                       return [
                         row.algorithmId,
@@ -1356,9 +1327,6 @@ export default function BenchmarkInsights({
                         (ranks.get(row.algorithmId) ?? 0).toFixed(2),
                         row.auprc.toFixed(3),
                         row.auprcRatio.toFixed(3),
-                        u ? u.ci[0].toFixed(3) : "",
-                        u ? u.ci[1].toFixed(3) : "",
-                        u ? u.pValue.toFixed(4) : "",
                         row.precisionAtK.toFixed(3),
                         row.earlyPrecisionRatio.toFixed(3),
                         row.earlyPrecisionSelectedCount,

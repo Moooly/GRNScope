@@ -56,8 +56,6 @@ export type FigureRow = {
   inhibition: number | null;
   stability: number | null;
   runtime: number | null;
-  ci: [number, number] | null;
-  pValue: number | null;
   pr: CurvePoint[];
   roc: CurvePoint[];
 };
@@ -97,7 +95,6 @@ export function SummaryHeatmap({
   showStability: boolean;
   svgRef?: Ref<SVGSVGElement>;
 }) {
-  const showStats = rows.some((row) => row.ci);
   const [boxWidth, measure] = useWidth();
   const columns: SummaryColumn[] = [
     { group: "Accuracy", key: "auprcRatio", title: ["AUPRC", "ratio"], random: 1, palette: BLUES },
@@ -122,13 +119,12 @@ export function SummaryHeatmap({
 
   const nameW = Math.min(170, 24 + Math.max(...display.map((row) => label(row).length)) * 7.4);
   const rankW = 132;
-  // Fill the panel: spare width widens the metric columns first, then the
-  // confidence-interval track, each up to a comfortable maximum.
-  const baseW = nameW + rankW + 18 + columns.length * 84 + 3 * 18 + (showStats ? 26 + 250 + 14 + 112 + 70 : 8);
-  const spare = Math.max(0, (boxWidth || baseW) - baseW - 4);
-  const colW = 84 + Math.min(36, (spare * 0.55) / columns.length);
-  const forestExtra = Math.min(160, spare - (colW - 84) * columns.length);
+  // Use the available panel width for the remaining metric columns.
   const groupGap = 18;
+  const groupGaps = columns.filter((column, index) => index > 0 && columns[index - 1].group !== column.group).length;
+  const baseW = nameW + rankW + 18 + columns.length * 84 + groupGaps * groupGap + 8;
+  const spare = Math.max(0, (boxWidth || baseW) - baseW - 4);
+  const colW = 84 + Math.min(52, spare / columns.length);
   const rowH = 32;
   const top = 54;
   const consensusGap = consensus ? 10 : 0;
@@ -139,21 +135,8 @@ export function SummaryHeatmap({
     colX.push(x);
     x += colW;
   });
-  // Statistical support: the AUPRC ratio with its 95% interval, drawn as a
-  // forest plot in the same rows, then the permutation p-value.
-  const forestX = x + groupGap + 8;
-  const forestW = 250 + Math.max(0, forestExtra);
-  // Axis spans the data (and 1×, random), not 0 to max, so the intervals use the width.
-  const ciValues = rows.flatMap((row) => (row.ci ? [row.ci[0], row.ci[1], row.auprcRatio] : []));
-  const ciMin = showStats ? Math.max(0, Math.min(1, Math.floor(Math.min(...ciValues) * 4) / 4 - 0.25)) : 0;
-  const ciMax = showStats ? Math.max(1.5, Math.ceil(Math.max(...ciValues) * 4) / 4 + 0.25) : 2;
-  const ciStep = ciMax - ciMin > 2 ? 0.5 : 0.25;
-  const fx = (value: number) => forestX + ((Math.max(ciMin, Math.min(ciMax, value)) - ciMin) / (ciMax - ciMin)) * forestW;
-  const ciTextX = forestX + forestW + 14;
-  const pX = ciTextX + 112;
-  const W = showStats ? pX + 70 : x + 8;
-  const axisH = showStats ? 34 : 0;
-  const H = top + display.length * rowH + consensusGap + 12 + axisH;
+  const W = x + 8;
+  const H = top + display.length * rowH + consensusGap + 12;
   const rowY = (index: number) => top + index * rowH + (consensus && index === display.length - 1 ? consensusGap : 0);
 
   return (
@@ -170,39 +153,6 @@ export function SummaryHeatmap({
         </>
       ) : null}
       <text x={nameW + 8} y={top - 10} fontSize="11" fill={MUTED}>Overall rank</text>
-      {showStats ? (
-        <g>
-          <text x={ciTextX + 50} y={20} fontSize="11" textAnchor="middle" fill={INK}>
-            <tspan x={ciTextX + 50}>Ratio</tspan>
-            <tspan x={ciTextX + 50} dy={13}>[95% CI]</tspan>
-          </text>
-          <text x={forestX + forestW / 2} y={20} fontSize="11" textAnchor="middle" fill={INK}>
-            <tspan x={forestX + forestW / 2}>AUPRC ratio</tspan>
-            <tspan x={forestX + forestW / 2} dy={13}>with 95% CI</tspan>
-          </text>
-          <text x={pX + 30} y={20} fontSize="11" textAnchor="middle" fill={INK}>
-            <tspan x={pX + 30}>p vs</tspan>
-            <tspan x={pX + 30} dy={13}>random</tspan>
-          </text>
-          <line x1={fx(1)} x2={fx(1)} y1={top} y2={top + display.length * rowH + consensusGap} stroke={FAINT} strokeDasharray="4 3" />
-          {(() => {
-            const y = top + display.length * rowH + consensusGap + 6;
-            const ticks: number[] = [];
-            for (let v = Math.ceil(ciMin / ciStep) * ciStep; v <= ciMax + 1e-9; v += ciStep) ticks.push(Number(v.toFixed(2)));
-            return (
-              <g>
-                <line x1={fx(ciMin)} x2={fx(ciMax)} y1={y} y2={y} stroke={INK} />
-                {ticks.map((tick) => (
-                  <g key={tick}>
-                    <line x1={fx(tick)} x2={fx(tick)} y1={y} y2={y + 4} stroke={INK} />
-                    <text x={fx(tick)} y={y + 16} fontSize="10.5" textAnchor="middle" fill={INK}>{`${tick}×`}</text>
-                  </g>
-                ))}
-              </g>
-            );
-          })()}
-        </g>
-      ) : null}
       {columns.map((column, index) => (
         <text key={column.key} x={colX[index] + colW / 2} y={20} fontSize="11" textAnchor="middle" fill={INK}>
           {column.title.map((line, lineIndex) => (
@@ -253,28 +203,6 @@ export function SummaryHeatmap({
                 </g>
               );
             })}
-            {showStats && row.ci ? (() => {
-              const [lo, hi] = row.ci;
-              const solid = lo > 1;
-              const color = row.consensus ? CONSENSUS : solid ? INK : FAINT;
-              const p = row.pValue;
-              const significant = p !== null && p < 0.05;
-              return (
-                <g>
-                  <title>{`${label(row)}: AUPRC ratio ${row.auprcRatio.toFixed(2)}× (95% CI ${lo.toFixed(2)}–${hi.toFixed(2)})${p !== null ? `, p = ${p.toFixed(3)}` : ""}`}</title>
-                  <line x1={fx(lo)} x2={fx(hi)} y1={y} y2={y} stroke={color} strokeWidth="1.6" />
-                  <line x1={fx(lo)} x2={fx(lo)} y1={y - 4} y2={y + 4} stroke={color} strokeWidth="1.6" />
-                  <line x1={fx(hi)} x2={fx(hi)} y1={y - 4} y2={y + 4} stroke={color} strokeWidth="1.6" />
-                  <rect x={fx(row.auprcRatio) - 4.5} y={y - 4.5} width={9} height={9} fill={solid ? color : "#ffffff"} stroke={color} strokeWidth="1.4" />
-                  <text x={ciTextX + 50} y={y + 4} fontSize="11" textAnchor="middle" fill={solid ? INK : MUTED}>
-                    {`${row.auprcRatio.toFixed(2)} [${lo.toFixed(2)}–${hi.toFixed(2)}]`}
-                  </text>
-                  <text x={pX + 30} y={y + 4} fontSize="11" textAnchor="middle" fill={significant ? INK : MUTED} fontWeight={significant ? 700 : 400}>
-                    {p === null ? "n/a" : `${p < 0.001 ? "<0.001" : p.toFixed(3)}${p < 0.01 ? " **" : p < 0.05 ? " *" : ""}`}
-                  </text>
-                </g>
-              );
-            })() : null}
           </g>
         );
       })}
