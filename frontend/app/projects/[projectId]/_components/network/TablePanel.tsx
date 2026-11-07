@@ -157,8 +157,8 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     <span className="tp-track" style={{ width }}><span className="tp-fill" style={{ width: Math.round(Math.max(0.04, Math.min(1, (v - 0.4) / 0.6)) * width) }} /></span>
     <span className="tp-num">{v.toFixed(3)}</span>
   </span>;
-  const pips = (count: number) => <span className="tp-pips" aria-label={`${count} of ${methodCount} methods`} title={`${count} of ${methodCount} methods`}>
-    {Array.from({ length: Math.min(methodCount, 12) }, (_, i) => <i key={i} className={i < count ? "is-on" : undefined} />)}
+  const methodSupport = (count: number) => <span className="tp-num" aria-label={`${count} of ${methodCount} methods`} title={`${count} of ${methodCount} methods`}>
+    {count.toLocaleString()}
   </span>;
   const confidence = (e: NetworkEdge) => e.bootstrapVerified
     ? <span className="tp-num" style={{ opacity: e.confidence >= 0.9 ? 1 : e.confidence >= 0.6 ? 0.7 : 0.45 }}>{pct(e.confidence)}</span>
@@ -222,7 +222,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     const list = (title: string, items: Row[], other: (r: Row) => string, empty: string) => <section className="tp-section">
       <h4>{title} · {items.length}</h4>
       {items.length ? <table><tbody>{items.map(r => <tr key={r.edge.key} {...rowEvents(r)} className={r.edge.key === selectedEdgeKey ? "is-sel" : undefined}>
-        <td className="tp-gl">{glyph(r)}</td><td>{gene(other(r))}</td><td className="n">{evidence(r.edge.score, 84)}</td><td className="n">{pips(r.edge.count)}</td>
+        <td className="tp-gl">{glyph(r)}</td><td>{gene(other(r))}</td><td className="n">{evidence(r.edge.score, 84)}</td><td className="n">{methodSupport(r.edge.count)}</td>
       </tr>)}</tbody></table> : <p className="tp-empty">{empty}</p>}
     </section>;
     return <div className="tp-card">
@@ -349,7 +349,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
       </tr></thead>
       <tbody>{shownRows.map(r => <tr key={r.edge.key} {...rowEvents(r)} className={r.edge.key === selectedEdgeKey ? "is-sel" : undefined}>
         <td>{gene(r.regulator)}</td><td className="tp-gl">{glyph(r)}</td><td>{gene(r.target)}</td>
-        <td className="n">{evidence(r.edge.score)}</td><td className="n">{confidence(r.edge)}</td><td className="n">{pips(r.edge.count)}</td>
+        <td className="n">{evidence(r.edge.score)}</td><td className="n">{confidence(r.edge)}</td><td className="n">{methodSupport(r.edge.count)}</td>
       </tr>)}</tbody>
     </table>
     {rows.length > LIMIT && !showAll && <button type="button" className="tp-more" onClick={() => setShowAll(true)}>Show all {rows.length.toLocaleString()} edges</button>}
