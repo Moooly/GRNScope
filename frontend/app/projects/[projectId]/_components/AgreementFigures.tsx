@@ -174,7 +174,6 @@ export function AgreementHeatmap({
       aria-label={`Symmetric matrix of ${metricLabel} between methods' top ${topK} edges`}
       onMouseLeave={() => setHovered(null)}
     >
-      <rect x="0" y="0" width={W} height={H} fill="#ffffff" />
       <defs>
         <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
           {[0, 0.25, 0.5, 0.75, 1].map((value) => (
@@ -668,6 +667,11 @@ export function regulatorPlotTop(methods: string[]) {
   return heatmapPlotTop([...methods, "Median rank"]);
 }
 
+export function regulatorLabelWidth(rows: { gene: string }[]) {
+  const longest = Math.max(4, ...rows.map((row) => row.gene.length));
+  return Math.min(170, 18 + longest * 7.6);
+}
+
 export function RegulatorHeatmap({
   methods,
   directed,
@@ -689,8 +693,7 @@ export function RegulatorHeatmap({
   const n = methods.length;
   const cell = heatmapCellSize(n);
   const rowH = HEATMAP_ROW_HEIGHT;
-  const longest = Math.max(4, ...rows.map((row) => row.gene.length));
-  const nameW = Math.min(170, 18 + longest * 7.6);
+  const nameW = regulatorLabelWidth(rows);
   const top = regulatorPlotTop(methods);
   const left = nameW;
   const medX = left + n * cell + 12;

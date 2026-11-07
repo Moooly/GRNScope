@@ -24,7 +24,7 @@ import TrajectoryInsights, {
   type TrajectoryData,
 } from "./TrajectoryInsights";
 import DownloadMenu from "./DownloadMenu";
-import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, agreementHeatmapLayout, clusterMethods, formatRank, rankRegulators, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
+import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, agreementHeatmapLayout, clusterMethods, formatRank, rankRegulators, regulatorLabelWidth, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
 import { downloadSvg as downloadSvgFile, downloadSvgPng } from "../_lib/downloads";
 import { median as scoreMedian } from "../_lib/resultScores";
 
@@ -2061,6 +2061,9 @@ function AgreementView({
     [algorithmEdgeRows, algorithmMetaMap, orderedAlgorithmIds, topK],
   );
   const regulatorDirected = orderedAlgorithmIds.map((id) => algorithmMetaMap.get(id)?.directed ?? true);
+  // Both cell grids start at the same x position; the agreement SVG keeps its
+  // wider label gutter so method names and exported figures remain unclipped.
+  const matrixAlignmentOffset = regulatorLabelWidth(regulatorRows) - heatmapLayout.left;
   const [requestedGene, setRequestedGene] = useState<string | null>(null);
   const selectedRegulator =
     regulatorRows.find((row) => row.gene === requestedGene) ?? regulatorRows[0] ?? null;
@@ -2251,10 +2254,10 @@ function AgreementView({
             {agreementDisplay === "matrix" ? (
               <>
             <div
-              className="mx-auto grid w-full gap-6 xl:grid-cols-[minmax(0,var(--agreement-figure-width))_minmax(340px,1fr)] xl:items-stretch"
+              className="grid w-full gap-6 xl:grid-cols-[minmax(0,var(--agreement-figure-width))_minmax(340px,1fr)] xl:items-stretch"
               style={{
-                ["--agreement-figure-width" as string]: `${heatmapLayout.width}px`,
-                maxWidth: heatmapLayout.width + 444,
+                ["--agreement-figure-width" as string]: `${heatmapLayout.width + matrixAlignmentOffset}px`,
+                maxWidth: heatmapLayout.width + matrixAlignmentOffset + 444,
               }}
             >
               <div className="min-w-0">
@@ -2263,7 +2266,7 @@ function AgreementView({
                 {shortMethodNote}
               </p>
             ) : null}
-            <div className="overflow-x-auto pb-1">
+            <div className="overflow-x-auto pb-1" style={{ marginLeft: matrixAlignmentOffset }}>
               {matrixAlgorithmIds.length > 0 ? (
                 <AgreementHeatmap
                   svgRef={heatmapSvgRef}
