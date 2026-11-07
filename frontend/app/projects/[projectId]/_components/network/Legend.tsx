@@ -111,7 +111,7 @@ export function NetworkKey({ hasUndirected, widthBy, methodCount, counts, palett
         </select>
       </label>}
       {onWidthByChange && <label className="key-control" title={widthTip}>
-        <svg width="20" height="12" aria-hidden="true"><path d="M1 10L19 10" stroke="#5f6b72" strokeWidth=".8"/><path d="M1 6H19" stroke="#5f6b72" strokeWidth="1.6"/><path d="M1 2H19" stroke="#5f6b72" strokeWidth="2.6"/></svg>
+        <svg width="20" height="12" aria-hidden="true"><path d="M1 10L19 10" stroke="#5f6b72" strokeWidth=".8"/><path d="M1 2H19" stroke="#5f6b72" strokeWidth="2.6"/></svg>
         <span className="key-control-name">Line width</span>
         <select value={support ? "support" : "evidence"} onChange={event => onWidthByChange(event.target.value as EdgeWidthBy)} aria-label="Line width">
           <option value="evidence">evidence score</option>
