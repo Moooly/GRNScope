@@ -22,6 +22,7 @@ type DownloadMenuProps = {
   align?: "left" | "right";
   className?: string;
   icon?: ReactNode;
+  variant?: "default" | "quiet";
 };
 
 export const DOWNLOAD_BUTTON_CLASS =
@@ -53,6 +54,7 @@ export default function DownloadMenu({
   align = "right",
   className = "",
   icon,
+  variant = "default",
 }: DownloadMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -106,11 +108,13 @@ export default function DownloadMenu({
         aria-expanded={isOpen}
         aria-label={ariaLabel}
         title={ariaLabel}
-        className={DOWNLOAD_BUTTON_CLASS}
+        className={variant === "quiet"
+          ? "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 disabled:cursor-wait disabled:opacity-60"
+          : DOWNLOAD_BUTTON_CLASS}
       >
         {icon ?? <DownloadIcon />}
         <span>{isPreparing ? "Preparing…" : label}</span>
-        <svg
+        {variant !== "quiet" && <svg
           viewBox="0 0 16 16"
           className={`h-3.5 w-3.5 transition-transform ${
             isOpen ? "rotate-180" : ""
@@ -125,7 +129,7 @@ export default function DownloadMenu({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-        </svg>
+        </svg>}
       </button>
 
       {isOpen ? (

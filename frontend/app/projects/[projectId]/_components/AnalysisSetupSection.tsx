@@ -3,18 +3,18 @@
 import { useId, useState, type ReactNode } from "react";
 
 type AnalysisSetupSectionProps = {
+  title?: string;
   status?: ReactNode;
   autoExpand?: boolean;
-  onDownloadRunManifests?: () => void;
-  runManifestDownloadDisabled?: boolean;
+  downloadMenu: ReactNode;
   children: ReactNode;
 };
 
 export default function AnalysisSetupSection({
+  title = "Analysis details",
   status,
   autoExpand = false,
-  onDownloadRunManifests,
-  runManifestDownloadDisabled = false,
+  downloadMenu,
   children,
 }: AnalysisSetupSectionProps) {
   const [openOverride, setOpenOverride] = useState<boolean | null>(null);
@@ -23,18 +23,18 @@ export default function AnalysisSetupSection({
   const toggleOpen = () => setOpenOverride(!isOpen);
 
   return (
-    <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.025)]">
+    <section className="mt-5 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.025)]">
       <div className="group/analysis-bar relative flex min-h-[64px] flex-wrap items-center gap-x-4 transition hover:bg-slate-50/60">
         <button
           type="button"
           onClick={toggleOpen}
           aria-expanded={isOpen}
           aria-controls={contentId}
-          aria-label={isOpen ? "Collapse analysis details" : "Expand analysis details"}
+          aria-label={`${isOpen ? "Collapse" : "Expand"} ${title.toLowerCase()}`}
           className="absolute inset-0 z-0 cursor-pointer rounded-2xl focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/10"
         >
           <span className="sr-only">
-            {isOpen ? "Collapse analysis details" : "Expand analysis details"}
+            {`${isOpen ? "Collapse" : "Expand"} ${title.toLowerCase()}`}
           </span>
         </button>
 
@@ -45,7 +45,7 @@ export default function AnalysisSetupSection({
                 <path d="M4 13.5V9m5 4.5v-9m5 9V7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
               </svg>
             </span>
-            Analysis details
+            {title}
           </span>
           <svg
             viewBox="0 0 16 16"
@@ -61,46 +61,14 @@ export default function AnalysisSetupSection({
 
         {/* Let status-area clicks reach the header toggle. Keep this wrapper
             unpositioned so the progress track anchors to the full header. */}
-        {onDownloadRunManifests ? (
-          <div className="pointer-events-none z-10 order-3 flex w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-nowrap sm:justify-end sm:gap-0 sm:border-t-0 sm:px-0 sm:py-0 lg:order-none">
-            <div className="contents [&>*]:!order-none [&>*]:!ml-0 [&>*]:!px-0 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
-              {status}
-            </div>
-
-            <span className="mx-4 hidden h-6 w-px shrink-0 bg-slate-200 sm:block" aria-hidden="true" />
-
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDownloadRunManifests();
-              }}
-              disabled={runManifestDownloadDisabled}
-              aria-label="Download analysis package"
-              title={
-                runManifestDownloadDisabled
-                  ? "The analysis package is available after an algorithm run finishes"
-                  : "Download analysis package"
-              }
-              className="pointer-events-auto relative z-20 inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 transition hover:bg-[#eef7fb] hover:text-[#1b75a6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/25 sm:mr-6 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
-            >
-              <svg viewBox="0 0 18 18" className="h-4 w-4" fill="none" aria-hidden="true">
-                <path
-                  d="M9 2.75v8m0 0L6.25 8M9 10.75 11.75 8M3.5 14.75h11"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Download
-            </button>
-          </div>
-        ) : (
-          <div className="contents [&>*]:z-10 [&>*]:pointer-events-none [&_button]:pointer-events-auto [&_form]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_textarea]:pointer-events-auto">
+        <div className="pointer-events-none z-10 ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 px-4 py-2 sm:flex-1 sm:px-5">
+          <div className="contents [&>*]:!order-none [&>*]:!m-0 [&>*]:!p-0 [&_button]:pointer-events-auto">
             {status}
           </div>
-        )}
+          <div className="pointer-events-auto border-l border-slate-200 pl-3">
+            {downloadMenu}
+          </div>
+        </div>
       </div>
 
       {isOpen ? (

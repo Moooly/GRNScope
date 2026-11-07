@@ -3,10 +3,10 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { API_BASE } from "../../../_lib/apiConfig";
@@ -16,10 +16,6 @@ import type {
   PreprocessingConfig,
   PreprocessingResult,
 } from "../_lib/types";
-import {
-  DOWNLOAD_BUTTON_CLASS,
-  DownloadIcon,
-} from "./DownloadMenu";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 export type MethodGeneAdjustment = {
@@ -43,10 +39,6 @@ type DatasetPreprocessingSectionProps = {
   preprocessingStatus?: string | null;
   preprocessingResult?: PreprocessingResult | null;
   methodAdjustments: MethodGeneAdjustment[];
-  onOpenDownloadMenu: () => void;
-  onCloseDownloadMenu: () => void;
-  isDownloadMenuOpen: boolean;
-  downloadMenu: ReactNode;
   divided?: boolean;
   compact?: boolean;
 };
@@ -81,7 +73,7 @@ function formatCount(value?: number | null) {
 
 function formatStageRule(stage: string, config?: PreprocessingConfig) {
   if (stage === "detection") {
-    return `Detected in ≥${config?.detection?.minimum_cell_percent ?? "—"}% of cells`;
+    return `Detected in at least ${config?.detection?.minimum_cell_percent ?? "—"}% of cells`;
   }
   if (stage === "trajectory") {
     return [
@@ -573,16 +565,13 @@ export default function DatasetPreprocessingSection({
   preprocessingStatus,
   preprocessingResult,
   methodAdjustments,
-  onOpenDownloadMenu,
-  onCloseDownloadMenu,
-  isDownloadMenuOpen,
-  downloadMenu,
   divided = true,
   compact = false,
 }: DatasetPreprocessingSectionProps) {
+  const filterDetailsId = useId();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [methodAdjustmentsOpen, setMethodAdjustmentsOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<GeneAuditTarget | null>(null);
-  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const enabledStages = preprocessing?.enabled_stages ?? [];
   const resultByStage = useMemo(
     () =>
@@ -622,10 +611,11 @@ export default function DatasetPreprocessingSection({
   const excludedGeneCount = hasGeneCounts
     ? Math.max(0, inputGeneCount - methodSourceGeneCount)
     : null;
-  const retainedPercent =
-    hasGeneCounts && inputGeneCount > 0
-      ? Math.round((methodSourceGeneCount / inputGeneCount) * 100)
-      : null;
+  const geneSummary = hasGeneCounts
+    ? `${formatCount(methodSourceGeneCount)} of ${formatCount(inputGeneCount)} ${inputGeneCount === 1 ? "gene" : "genes"} used`
+    : normalizedPreprocessingStatus === "failed"
+      ? "Gene selection unavailable"
+      : "Preparing gene selection";
   const singleStage =
     enabledStages.length === 1 ? enabledStages[0] : undefined;
   const singleStageResult = singleStage
@@ -637,27 +627,6 @@ export default function DatasetPreprocessingSection({
     typeof singleStageResult.retained_gene_count === "number" &&
     singleStageResult.input_gene_count !== singleStageResult.retained_gene_count;
 
-  useEffect(() => {
-    if (!isDownloadMenuOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !downloadMenuRef.current?.contains(target)) {
-        onCloseDownloadMenu();
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCloseDownloadMenu();
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isDownloadMenuOpen, onCloseDownloadMenu]);
-
   return (
     <>
       <section
@@ -667,114 +636,41 @@ export default function DatasetPreprocessingSection({
             : `${divided ? "border-t border-slate-200 pt-6" : ""} text-slate-900`
         }
       >
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2
-              className={
-                compact
-                  ? "text-lg font-bold tracking-tight text-slate-950"
-                  : RESULT_SECTION_HEADING_CLASS
-              }
-            >
-              Data used for analysis
-            </h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              {formatCount(cellCount)} cells
-              <span className="mx-2 text-slate-300" aria-hidden="true">·</span>
-              {matrixTreatmentLabel}
-            </p>
-          </div>
-          <div ref={downloadMenuRef} className="relative shrink-0">
+        <div className="space-y-1">
+          <h2
+            className={
+              compact
+                ? "self-center text-lg font-bold tracking-tight text-slate-950"
+                : RESULT_SECTION_HEADING_CLASS
+            }
+          >
+            Data used for analysis
+          </h2>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-slate-500">
+            <span>{formatCount(cellCount)} {cellCount === 1 ? "cell" : "cells"}</span>
+            <span aria-hidden="true" className="text-slate-300">·</span>
             <button
               type="button"
-              onClick={
-                isDownloadMenuOpen ? onCloseDownloadMenu : onOpenDownloadMenu
-              }
-              aria-expanded={isDownloadMenuOpen}
-              aria-haspopup="dialog"
-              aria-label="Download project files"
-              title="Download project files"
-              className={DOWNLOAD_BUTTON_CLASS}
+              aria-controls={filterDetailsId}
+              aria-expanded={filtersOpen}
+              aria-label={`${geneSummary}. ${filtersOpen ? "Hide" : "Show"} filtering details`}
+              onClick={() => setFiltersOpen((open) => !open)}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-sm hover:text-[#1b75a6] focus-visible:outline-[#1b75a6]"
             >
-              <DownloadIcon />
-              Download
-              <svg
-                viewBox="0 0 16 16"
-                className={`h-3.5 w-3.5 transition-transform ${
-                  isDownloadMenuOpen ? "rotate-180" : ""
-                }`}
-                fill="none"
-                aria-hidden="true"
-              >
-                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              {geneSummary}
+              <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <circle cx="8" cy="8" r="6" />
+                <path d="M8 7.5v3.25M8 5.25v.25" strokeLinecap="round" />
               </svg>
             </button>
-            {downloadMenu}
+            <span aria-hidden="true" className="text-slate-300">·</span>
+            <span>{matrixTreatmentLabel}</span>
           </div>
         </div>
 
-        <div className="relative mt-4 overflow-hidden rounded-[1.2rem] border border-slate-200 bg-white">
-          <div className="px-5 py-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-950">
-                  Genes included
-                </h3>
-                <p className="mt-1 text-lg font-bold tracking-tight text-slate-950">
-                  {hasGeneCounts ? (
-                    <>
-                      <span className="text-[#1b75a6]">
-                        {formatCount(methodSourceGeneCount)}
-                      </span>{" "}
-                      of {formatCount(inputGeneCount)} genes retained
-                    </>
-                  ) : (
-                    normalizedPreprocessingStatus === "failed"
-                      ? "Gene selection unavailable"
-                      : "Preparing gene selection"
-                  )}
-                </p>
-              </div>
-
-              {canInspectSingleStage && singleStage ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAuditTarget({
-                      title: STAGE_LABELS[singleStage] ?? singleStage,
-                      detail: "Genes retained or excluded by this filter.",
-                      stage: singleStage,
-                    })
-                  }
-                  className="inline-flex h-8 items-center rounded-full border border-slate-200 px-3 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                >
-                  Review genes
-                </button>
-              ) : null}
-            </div>
-
-            {retainedPercent !== null ? (
-              <div className="mt-3 flex items-center gap-3">
-                <div
-                  className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"
-                  role="progressbar"
-                  aria-label="Genes retained"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={retainedPercent}
-                >
-                  <div
-                    className="h-full rounded-full bg-[#1b75a6]"
-                    style={{ width: `${retainedPercent}%` }}
-                  />
-                </div>
-                <span className="w-9 text-right text-xs font-bold text-[#1b75a6]">
-                  {retainedPercent}%
-                </span>
-              </div>
-            ) : null}
-
-            <p className="mt-2 text-xs font-medium leading-5 text-slate-500">
+        <div id={filterDetailsId} hidden={!filtersOpen} className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm leading-5 text-slate-500">
               {singleStage
                 ? formatStageRule(singleStage, preprocessing)
                 : enabledStages.length > 1
@@ -790,63 +686,67 @@ export default function DatasetPreprocessingSection({
                 </>
               ) : null}
             </p>
+            {canInspectSingleStage && singleStage ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setAuditTarget({
+                    title: STAGE_LABELS[singleStage] ?? singleStage,
+                    detail: "Genes retained or excluded by this filter.",
+                    stage: singleStage,
+                  })
+                }
+                className="inline-flex h-8 items-center rounded-full border border-slate-200 px-3 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+              >
+                Review genes
+              </button>
+            ) : null}
           </div>
 
           {enabledStages.length > 1 ? (
-            <details className="group border-t border-slate-100">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-[#1b75a6]">
-                View {enabledStages.length} filter steps
-                <span
-                  className="text-base text-slate-400 transition group-open:rotate-180"
-                  aria-hidden="true"
-                >
-                  ⌄
-                </span>
-              </summary>
-              <ol className="border-t border-slate-100">
-                {enabledStages.map((stage, index) => {
-                  const result = resultByStage.get(stage);
-                  const changed =
-                    typeof result?.input_gene_count === "number" &&
-                    typeof result?.retained_gene_count === "number" &&
-                    result.input_gene_count !== result.retained_gene_count;
-                  const canInspect =
-                    changed && result?.gene_audit_available === true;
-                  return (
-                    <li
-                      key={stage}
-                      className="grid gap-2 border-b border-slate-100 px-5 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
-                    >
-                      <p className="text-xs font-semibold text-slate-600">
-                        <span className="mr-2 font-bold text-slate-800">
-                          {index + 1}. {STAGE_LABELS[stage] ?? stage}
-                        </span>
-                        {formatStageRule(stage, preprocessing)}
-                      </p>
-                      <p className="text-xs font-bold text-slate-500">
-                        {stageCounts(result)}
-                      </p>
-                      {canInspect ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAuditTarget({
-                              title: STAGE_LABELS[stage] ?? stage,
-                              detail:
-                                "Genes retained or excluded at this filter step.",
-                              stage,
-                            })
-                          }
-                          className="w-fit rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
-                        >
-                          Review genes
-                        </button>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ol>
-            </details>
+            <ol className="divide-y divide-slate-100 border-t border-slate-100">
+              {enabledStages.map((stage, index) => {
+                const result = resultByStage.get(stage);
+                const changed =
+                  typeof result?.input_gene_count === "number" &&
+                  typeof result?.retained_gene_count === "number" &&
+                  result.input_gene_count !== result.retained_gene_count;
+                const canInspect =
+                  changed && result?.gene_audit_available === true;
+                return (
+                  <li
+                    key={stage}
+                    className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+                  >
+                    <p className="text-xs font-semibold text-slate-600">
+                      <span className="mr-2 font-bold text-slate-800">
+                        {index + 1}. {STAGE_LABELS[stage] ?? stage}
+                      </span>
+                      {formatStageRule(stage, preprocessing)}
+                    </p>
+                    <p className="text-xs font-bold text-slate-500">
+                      {stageCounts(result)}
+                    </p>
+                    {canInspect ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAuditTarget({
+                            title: STAGE_LABELS[stage] ?? stage,
+                            detail:
+                              "Genes retained or excluded at this filter step.",
+                            stage,
+                          })
+                        }
+                        className="w-fit rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6]"
+                      >
+                        Review genes
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
           ) : null}
 
           {methodAdjustments.length > 0 ? (

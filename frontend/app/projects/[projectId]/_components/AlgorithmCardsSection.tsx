@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent } from "react";
-import { runtimeLabel, runtimeTitle } from "../_lib/runtime";
+import { formatAlgorithmRuntime, runtimeLabel, runtimeTitle } from "../_lib/runtime";
 import { RESULT_SECTION_HEADING_CLASS } from "./sectionStyles";
 
 type AlgorithmTask = {
@@ -37,12 +37,6 @@ type AlgorithmCardsSectionProps = {
   compact?: boolean;
 };
 
-/**
- * Compact summary of every algorithm that participated in this project's job.
- * Lives at the bottom of the project page now — the live progress for any
- * still-running algorithms is surfaced separately by JobProgressBanner near
- * the top, so this section keeps final status, runtime, and actions compact.
- */
 export default function AlgorithmCardsSection({
   tasks,
   algorithmMetaMap,
@@ -52,127 +46,98 @@ export default function AlgorithmCardsSection({
   compact = false,
 }: AlgorithmCardsSectionProps) {
   if (tasks.length === 0) return null;
-  const hasStartedTask = tasks.some(
-    (task) => task.status !== "NotStarted" && task.status !== "Queued",
-  );
+  const nameOf = (task: AlgorithmTask) =>
+    algorithmMetaMap.get(task.algorithm_id)?.name ?? task.algorithm_id;
+  const sorted = [...tasks].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  const hasWarning = (task: AlgorithmTask) =>
+    task.status === "Completed" && task.latest_attempt_status === "Failed";
+  const issues = sorted.filter((task) => task.status === "Failed" || hasWarning(task));
+  const completed = sorted.filter((task) => task.status === "Completed" && !hasWarning(task));
+  const remaining = sorted.filter((task) => task.status !== "Failed" && task.status !== "Completed");
 
-  return (
-    <section className={compact
-      ? "py-6 text-slate-900"
-      : "text-slate-900"
-    }>
-      <h2 className={compact ? "text-lg font-bold tracking-tight text-slate-950" : RESULT_SECTION_HEADING_CLASS}>
-        {hasStartedTask ? "Algorithms executed" : "Algorithms selected"}
-      </h2>
-
-      <div className={compact
-        ? "mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-        : "mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),17rem))]"
-      }>
-        {tasks.map((task) => {
-          const meta = algorithmMetaMap.get(task.algorithm_id);
-          const name = meta?.name ?? task.algorithm_id;
-          const isCompleted = task.status === "Completed";
-          const isFailed = task.status === "Failed";
-          const isStopped = task.status === "Stopped";
-          const retainedAfterFailedRerun =
-            isCompleted && task.latest_attempt_status === "Failed";
-          const canStop = task.status === "Running" || task.status === "Queued";
-          const algorithmRuntimeLabel = runtimeLabel(
-            task.status,
-            task.elapsed_seconds,
-            task.progress_label,
-          );
-          const algorithmRuntimeTitle = runtimeTitle({
-            status: task.status,
-            elapsedSeconds: task.elapsed_seconds,
-            progressLabel: task.progress_label,
-            startedAt: task.started_at,
-            completedAt: task.completed_at,
-          });
-
-          return (
-            <div
-              key={task.algorithm_id}
-              className={compact
-                ? `group relative flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${
-                    isFailed
-                      ? "border-rose-200 bg-rose-50/50"
-                      : retainedAfterFailedRerun
-                        ? "border-amber-200 bg-amber-50/50"
-                      : isCompleted
-                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                        : "border-slate-200 bg-white"
-                  }`
-                : `group relative flex min-h-[4.25rem] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-150 ${
-                    isFailed
-                      ? "border-rose-200 bg-rose-50/50"
-                      : retainedAfterFailedRerun
-                        ? "border-amber-200 bg-amber-50/50"
-                      : isCompleted
-                        ? "border-[#1b75a6]/25 bg-[#f7fbff]"
-                        : "border-slate-200 bg-white hover:border-[#1b75a6]/20 hover:bg-[#f7fbff]"
-                  }`}
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <StatusGlyph
-                  status={task.status}
-                  onClick={
-                    isFailed || retainedAfterFailedRerun
-                      ? (event) =>
-                          onOpenAlgorithmError(
-                            {
-                              algorithmId: task.algorithm_id,
-                              errorType:
-                                retainedAfterFailedRerun
-                                  ? "rerun"
-                                  : task.error_type,
-                              errorMessage:
-                                (
-                                  retainedAfterFailedRerun
-                                    ? task.latest_attempt_error_message
-                                    : task.error_message
-                                )?.replace(/\/Users\/[^ ]+/g, "server log file") ||
-                                (task.error_type === "matrix_validation"
-                                  ? "GRNScope found a problem in the uploaded matrix while preparing the project."
-                                  : "This algorithm failed. The server did not return a detailed message."),
-                            },
-                            event.currentTarget,
-                          )
-                      : canStop
-                        ? () =>
-                            onStopAlgorithm({
-                              algorithmId: task.algorithm_id,
-                              algorithmName: name,
-                            })
-                        : isStopped
-                          ? () =>
-                              onRerunAlgorithm({
-                                algorithmId: task.algorithm_id,
-                                algorithmName: name,
-                              })
-                      : undefined
-                  }
-                />
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate text-sm font-semibold text-slate-950"
-                    title={name}
-                  >
-                    {name}
-                  </p>
-                  <p
-                    className="mt-0.5 max-w-full whitespace-normal text-[11px] font-bold uppercase leading-tight tracking-[0.06em] text-slate-500"
-                    title={algorithmRuntimeTitle}
-                  >
-                    {algorithmRuntimeLabel}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
+  function renderTask(task: AlgorithmTask) {
+    const name = nameOf(task);
+    const warning = hasWarning(task);
+    const failed = task.status === "Failed";
+    const canStop = task.status === "Running" || task.status === "Queued";
+    const actionTask = { algorithmId: task.algorithm_id, algorithmName: name };
+    const elapsed = task.status === "Completed" || (failed && task.elapsed_seconds != null)
+      ? formatAlgorithmRuntime(task.elapsed_seconds)
+      : runtimeLabel(task.status, task.elapsed_seconds, task.progress_label);
+    const duration = (
+      <span
+        className="ml-auto text-right text-xs font-medium tabular-nums text-slate-500"
+        title={runtimeTitle({
+          status: task.status,
+          elapsedSeconds: task.elapsed_seconds,
+          progressLabel: task.progress_label,
+          startedAt: task.started_at,
+          completedAt: task.completed_at,
         })}
-      </div>
+      >
+        {elapsed}
+      </span>
+    );
+
+    if (failed || warning) {
+      const message = warning ? task.latest_attempt_error_message : task.error_message;
+      const showDetails = (event: MouseEvent<HTMLButtonElement>) =>
+        onOpenAlgorithmError({
+          algorithmId: task.algorithm_id,
+          errorType: warning ? "rerun" : task.error_type,
+          errorMessage: message?.replace(/\/Users\/[^ ]+/g, "server log file") ||
+            (task.error_type === "matrix_validation"
+              ? "GRNScope found a problem in the uploaded matrix while preparing the project."
+              : "This algorithm failed. The server did not return a detailed message."),
+        }, event.currentTarget);
+
+      return (
+        <li key={task.algorithm_id} className={`rounded-r-lg border-l-2 px-3 py-2.5 ${warning ? "border-amber-400 bg-amber-50/60" : "border-rose-300 bg-rose-50/60"}`}>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-semibold text-slate-900">{name}</span>
+            <span className={warning ? "text-xs text-amber-800" : "text-xs text-rose-700"}>
+              {warning ? "Last attempt failed · Previous result retained" : "Failed"}
+            </span>
+            {duration}
+          </div>
+          <button type="button" onClick={showDetails} className="mt-1 rounded-sm py-1 text-xs font-semibold text-slate-600 hover:text-[#1b75a6] hover:underline">
+            {warning ? "Warning details" : "Error details"}
+          </button>
+        </li>
+      );
+    }
+
+    return (
+      <li key={task.algorithm_id} className="flex min-w-0 items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
+        {task.status !== "Completed" && (
+          <StatusGlyph
+            status={task.status}
+            onClick={canStop ? () => onStopAlgorithm(actionTask) :
+              task.status === "Stopped" ? () => onRerunAlgorithm(actionTask) : undefined}
+          />
+        )}
+        <span className="min-w-0 truncate font-medium text-slate-800" title={name}>{name}</span>
+        {duration}
+      </li>
+    );
+  }
+
+  const listClass = "mt-3 grid gap-2 text-sm [grid-template-columns:repeat(auto-fill,minmax(min(100%,13rem),1fr))]";
+  return (
+    <section className={compact ? "py-5 text-slate-900" : "text-slate-900"}>
+      <h2 className={compact ? "text-lg font-bold tracking-tight text-slate-950" : RESULT_SECTION_HEADING_CLASS}>
+        Algorithms and runtime
+      </h2>
+      {issues.length > 0 && <ul className="mt-3 space-y-2 text-sm">{issues.map(renderTask)}</ul>}
+      {remaining.length > 0 && <ul className={listClass}>{remaining.map(renderTask)}</ul>}
+      {completed.length > 0 && (
+        <>
+          {completed.length < tasks.length && (
+            <h3 className="mt-4 text-xs font-semibold text-slate-500">Completed methods</h3>
+          )}
+          <ul className={listClass}>{completed.map(renderTask)}</ul>
+        </>
+      )}
     </section>
   );
 }
@@ -184,41 +149,6 @@ function StatusGlyph({
   status: string;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  if (status === "Completed") {
-    return (
-      <span
-        aria-label="Completed"
-        title="Completed"
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#20b779]/25 bg-[#20b779]/10 text-[#178a62]"
-      >
-        <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3 w-3">
-          <path
-            d="M3.4 8.1 6.5 11.2 12.8 4.8"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-    );
-  }
-
-  if (status === "Failed") {
-    return (
-      <button
-        type="button"
-        aria-label="View algorithm error"
-        title="View error"
-        onClick={onClick}
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 hover:text-rose-700"
-      >
-        !
-      </button>
-    );
-  }
-
   if (status === "Stopped") {
     return (
       <button

@@ -2,8 +2,10 @@
 
 "use client";
 
+import DownloadMenu from "./DownloadMenu";
+
 type FileDownloadMenuModalProps = {
-  open: boolean;
+  analysisPackage?: { href: string; filename: string; disabled: boolean };
   projectId?: string;
   apiBase: string;
   expressionFilename?: string | null;
@@ -16,12 +18,11 @@ type FileDownloadMenuModalProps = {
   directionConfidenceThreshold: number;
   signConfidenceThreshold: number;
   consensusThreshold: number;
-  onClose: () => void;
   onOpenDownload: (label: string, href: string, filename: string) => void;
 };
 
 export default function FileDownloadMenuModal({
-  open,
+  analysisPackage,
   projectId,
   apiBase,
   expressionFilename,
@@ -34,11 +35,8 @@ export default function FileDownloadMenuModal({
   directionConfidenceThreshold,
   signConfidenceThreshold,
   consensusThreshold,
-  onClose,
   onOpenDownload,
 }: FileDownloadMenuModalProps) {
-  if (!open) return null;
-
   const expressionFileLabel = expressionFilename || "ExpressionData.csv";
   const pseudotimeFileLabel = pseudotimeFilename || "PseudoTime.csv";
   const selectedView =
@@ -56,6 +54,12 @@ export default function FileDownloadMenuModal({
     selected_algorithms: activeAlgorithmIds.join(","),
   });
   const files = [
+    ...(analysisPackage ? [{
+      label: "Analysis package",
+      description: "Run manifests for this analysis.",
+      type: "ZIP",
+      ...analysisPackage,
+    }] : []),
     {
       label: "Expression matrix",
       description: expressionFileLabel,
@@ -85,39 +89,16 @@ export default function FileDownloadMenuModal({
   ];
 
   return (
-    <div
-      className="absolute bottom-[calc(100%+0.75rem)] right-0 z-40 w-[min(28rem,calc(100vw-3rem))] text-slate-900"
-      role="dialog"
-      aria-modal="false"
-      aria-label="Download project files"
-    >
-      <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20">
-        <div className="p-2">
-          {files.map((file) => (
-            <button
-              key={file.label}
-              type="button"
-              disabled={file.disabled}
-              onClick={() => {
-                if (file.disabled) return;
-                onClose();
-                onOpenDownload(file.label, file.href, file.filename);
-              }}
-              className="group flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f2f9fc] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
-            >
-              <div>
-                <p className="text-sm font-bold text-slate-950 group-hover:text-[#1b75a6] group-disabled:text-slate-500">
-                  {file.label}
-                </p>
-                <p className="mt-0.5 text-xs leading-5 text-slate-500">{file.description}</p>
-              </div>
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                {file.type}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+    <DownloadMenu
+      variant="quiet"
+      ariaLabel="Download project files"
+      items={files.map((file) => ({
+        label: file.label,
+        description: file.description,
+        format: file.type,
+        disabled: file.disabled,
+        onSelect: () => onOpenDownload(file.label, file.href, file.filename),
+      }))}
+    />
   );
 }

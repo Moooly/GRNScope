@@ -236,7 +236,6 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
   const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
-  const [isFileDownloadMenuOpen, setIsFileDownloadMenuOpen] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
   const [isApplyingConfidenceRecoveryRank, setIsApplyingConfidenceRecoveryRank] = useState(false);
   const [confidenceRecoveryRankError, setConfidenceRecoveryRankError] = useState("");
@@ -2258,18 +2257,32 @@ useEffect(() => {
             projectId={projectId}
             projectContext={(
               <AnalysisSetupSection
-                onDownloadRunManifests={
-                  isDemoProject
-                    ? undefined
-                    : () =>
-                        openDownloadModal(
-                          "Analysis package",
-                          runManifestDownloadUrl(projectId),
-                          runManifestArchiveFilename(project?.project_name),
-                        )
-                }
-                runManifestDownloadDisabled={!allJobTasks.some((task) =>
-                  ["Completed", "Failed", "Stopped"].includes(task.status),
+                title={allJobTasks.length > 0 && allJobTasks.every((task) => task.status === "Completed")
+                  ? "Completed analysis"
+                  : "Analysis details"}
+                downloadMenu={(
+                  <FileDownloadMenuModal
+                    analysisPackage={isDemoProject ? undefined : {
+                      href: runManifestDownloadUrl(projectId),
+                      filename: runManifestArchiveFilename(project?.project_name),
+                      disabled: !allJobTasks.some((task) =>
+                        ["Completed", "Failed", "Stopped"].includes(task.status),
+                      ),
+                    }}
+                    projectId={projectId}
+                    apiBase={API_BASE}
+                    expressionFilename={metadata?.expression_filename || project?.expression_filename}
+                    pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
+                    hasPseudotime={metadata?.has_pseudotime}
+                    activeAlgorithmIds={activeAlgorithmIds}
+                    selectedResultScopeId={selectedResultScopeId}
+                    evidenceThreshold={evidenceThreshold}
+                    confidenceThreshold={confidenceThreshold}
+                    directionConfidenceThreshold={directionConfidenceThreshold}
+                    signConfidenceThreshold={signConfidenceThreshold}
+                    consensusThreshold={consensusThreshold}
+                    onOpenDownload={openDownloadModal}
+                  />
                 )}
                 status={(
                   projectSetupError ? (
@@ -2321,6 +2334,23 @@ useEffect(() => {
                   />
                 ) : null}
 
+                <DatasetPreprocessingSection
+                  projectId={projectId}
+                  inputGeneCount={metadata?.gene_count}
+                  cellCount={metadata?.cell_count}
+                  finalGeneCount={metadata?.preprocessing_result?.gene_count}
+                  matrixTreatmentLabel={matrixTreatmentLabel}
+                  preprocessing={metadata?.preprocessing}
+                  preprocessingStatus={
+                    metadata?.preprocessing_status ??
+                    project?.preprocessing_status
+                  }
+                  preprocessingResult={metadata?.preprocessing_result}
+                  methodAdjustments={methodGeneAdjustments}
+                  divided={allJobTasks.length > 0}
+                  compact
+                />
+
                 <AlgorithmCardsSection
                   tasks={allJobTasks}
                   algorithmMetaMap={algorithmMetaMap}
@@ -2359,48 +2389,6 @@ useEffect(() => {
                   onStopAlgorithm={(task) => requestAlgorithmAction("stop", task)}
                   onRerunAlgorithm={(task) => requestAlgorithmAction("rerun", task)}
                   compact
-                />
-
-                <DatasetPreprocessingSection
-                  projectId={projectId}
-                  inputGeneCount={metadata?.gene_count}
-                  cellCount={metadata?.cell_count}
-                  finalGeneCount={metadata?.preprocessing_result?.gene_count}
-                  matrixTreatmentLabel={matrixTreatmentLabel}
-                  preprocessing={metadata?.preprocessing}
-                  preprocessingStatus={
-                    metadata?.preprocessing_status ??
-                    project?.preprocessing_status
-                  }
-                  preprocessingResult={metadata?.preprocessing_result}
-                  methodAdjustments={methodGeneAdjustments}
-                  onOpenDownloadMenu={() => {
-                    if (!projectId) return;
-                    setIsFileDownloadMenuOpen(true);
-                  }}
-                  onCloseDownloadMenu={() => setIsFileDownloadMenuOpen(false)}
-                  isDownloadMenuOpen={isFileDownloadMenuOpen}
-                  divided={allJobTasks.length > 0}
-                  compact
-                  downloadMenu={(
-                    <FileDownloadMenuModal
-                      open={isFileDownloadMenuOpen}
-                      projectId={projectId}
-                      apiBase={API_BASE}
-                      expressionFilename={metadata?.expression_filename || project?.expression_filename}
-                      pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
-                      hasPseudotime={metadata?.has_pseudotime}
-                      activeAlgorithmIds={activeAlgorithmIds}
-                      selectedResultScopeId={selectedResultScopeId}
-                      evidenceThreshold={evidenceThreshold}
-                      confidenceThreshold={confidenceThreshold}
-                      directionConfidenceThreshold={directionConfidenceThreshold}
-                      signConfidenceThreshold={signConfidenceThreshold}
-                      consensusThreshold={consensusThreshold}
-                      onClose={() => setIsFileDownloadMenuOpen(false)}
-                      onOpenDownload={openDownloadModal}
-                    />
-                  )}
                 />
               </AnalysisSetupSection>
             )}

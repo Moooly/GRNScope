@@ -3,6 +3,7 @@
 type JobTask = {
   algorithm_id: string;
   status: string;
+  latest_attempt_status?: string | null;
   elapsed_seconds?: number | null;
   progress_percent?: number | null;
   progress_label?: string | null;
@@ -49,12 +50,19 @@ export default function JobProgressBanner({
   const hasStarted = tasks.some((task) => task.status !== "NotStarted");
 
   if (!hasActiveWork) {
-    const hasIssues = failed.length > 0 || stopped.length > 0;
+    const warnings = completed.filter((task) => task.latest_attempt_status === "Failed").length;
+    const hasIssues = failed.length > 0 || stopped.length > 0 || warnings > 0;
+    const counts = [
+      completed.length > 0 && `${completed.length} completed`,
+      failed.length > 0 && `${failed.length} failed`,
+      stopped.length > 0 && `${stopped.length} stopped`,
+      warnings > 0 && `${warnings} ${warnings === 1 ? "warning" : "warnings"}`,
+    ].filter(Boolean).join(" · ");
     const statusTitle = !hasStarted
       ? "Ready"
-      : hasIssues
-        ? "Completed with issues"
-        : "Complete";
+      : completed.length === total && !hasIssues
+        ? `${total} of ${total} complete`
+        : counts || "Complete";
 
     return (
       <div
@@ -78,7 +86,7 @@ export default function JobProgressBanner({
             </svg>
           )}
         </span>
-        <p className="truncate text-sm font-bold text-slate-800">{statusTitle}</p>
+        <p className="text-right text-sm font-semibold text-slate-700">{statusTitle}</p>
       </div>
     );
   }
