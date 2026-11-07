@@ -221,6 +221,8 @@ interface CreateProjectModalProps {
   grnvbemDefaultMaxGenes: number;
   grisliDefaultMaxGenes: number;
   cellOracleSpecies: string;
+  cellOracleBaseGrnSource: CellOracleBaseGrnSource;
+  setCellOracleBaseGrnSource: (value: CellOracleBaseGrnSource) => void;
   hasCellOracleSettingsConfigured: boolean;
   estimatePseudotime: boolean;
   onToggleEstimatePseudotime: (value: boolean) => void;
@@ -315,6 +317,8 @@ export default function CreateProjectModal({
   grnvbemDefaultMaxGenes,
   grisliDefaultMaxGenes,
   cellOracleSpecies,
+  cellOracleBaseGrnSource,
+  setCellOracleBaseGrnSource,
   hasCellOracleSettingsConfigured,
   estimatePseudotime,
   onToggleEstimatePseudotime,
@@ -372,8 +376,6 @@ export default function CreateProjectModal({
   const [isCustomTfHelpOpen, setIsCustomTfHelpOpen] = useState(false);
   const [openAdvancedSection, setOpenAdvancedSection] =
     useState<AdvancedSection | null>(null);
-  const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] =
-    useState<CellOracleBaseGrnSource>("built-in");
   const [cellOracleHelpTopic, setCellOracleHelpTopic] = useState<CellOracleHelpTopic | null>(null);
   const [isCellOracleHelpClosing, setIsCellOracleHelpClosing] = useState(false);
   const [expandedAlgorithmId, setExpandedAlgorithmId] = useState<string | null>(null);
@@ -399,6 +401,9 @@ export default function CreateProjectModal({
   );
   const isModalClosing = isCreateClosing || isOutsideClosing;
   const hasExpressionFile = Boolean(expressionFileName);
+  const hasBuiltInCellOracleSpecies = CELLORACLE_SPECIES_OPTIONS.some(
+    (species) => species.value === datasetSpecies,
+  );
 
   const selectExpressionFile = (file: File | null) => {
     if (!file && expressionFileName) {
@@ -442,7 +447,6 @@ export default function CreateProjectModal({
       setIsCustomizeOpen(false);
       setIsCustomTfHelpOpen(false);
       setOpenAdvancedSection(null);
-      setCellOracleBaseGrnSource("built-in");
       setCellOracleHelpTopic(null);
       setIsCellOracleHelpClosing(false);
       setExpandedAlgorithmId(null);
@@ -693,7 +697,10 @@ export default function CreateProjectModal({
                         <EditableChip
                           value={datasetSpecies}
                           options={DATASET_SPECIES_OPTIONS}
-                          onChange={setDatasetSpecies}
+                          onChange={(species) => {
+                            setCellOracleBaseGrnSource("built-in");
+                            setDatasetSpecies(species);
+                          }}
                           unsetLabel="Choose species"
                           ariaLabel="Dataset species, required"
                           detecting={isSpeciesDetecting && !datasetSpecies}
@@ -1011,6 +1018,7 @@ export default function CreateProjectModal({
                 }
               >
                 <OptionalInputsPanel
+                  datasetSpecies={datasetSpecies}
                   groundTruthFileName={groundTruthFileName}
                   cellOracleConfigLabel={cellOracleConfigLabel}
                   cellOracleBaseGrnSource={cellOracleBaseGrnSource}
@@ -1019,16 +1027,16 @@ export default function CreateProjectModal({
                   onSelectGroundTruth={selectGroundTruthFile}
                   onClearGroundTruth={clearGroundTruthFile}
                   onActivateCellOracle={() => {
-                    if (cellOracleBaseGrnSource === "built-in") {
+                    if (cellOracleBaseGrnSource === "built-in" && hasBuiltInCellOracleSpecies) {
                       setHasCellOracleSettingsConfigured(true);
                     }
                   }}
                   onCellOracleBaseGrnSourceChange={(value) => {
                     setCellOracleBaseGrnSource(value);
-                    setHasCellOracleSettingsConfigured(value === "built-in");
+                    setHasCellOracleSettingsConfigured(value === "built-in" && hasBuiltInCellOracleSpecies);
                   }}
                   onSelectClusterLabels={(file) => {
-                    if (file && cellOracleBaseGrnSource === "built-in") {
+                    if (file && cellOracleBaseGrnSource === "built-in" && hasBuiltInCellOracleSpecies) {
                       setHasCellOracleSettingsConfigured(true);
                     }
                     selectClusterLabelsFile(file);
@@ -1399,6 +1407,7 @@ function AdvancedAccordionSection({
 }
 
 function OptionalInputsPanel({
+  datasetSpecies,
   groundTruthFileName,
   cellOracleConfigLabel,
   cellOracleBaseGrnSource,
@@ -1412,6 +1421,7 @@ function OptionalInputsPanel({
   onClearClusterLabels,
   onShowCellOracleHelp,
 }: {
+  datasetSpecies: string;
   groundTruthFileName: string;
   cellOracleConfigLabel: string;
   cellOracleBaseGrnSource: CellOracleBaseGrnSource;
@@ -1435,6 +1445,7 @@ function OptionalInputsPanel({
         />
 
         <CellOracleInputRow
+          datasetSpecies={datasetSpecies}
           configLabel={cellOracleConfigLabel}
           baseGrnSource={cellOracleBaseGrnSource}
           cellOracleSpecies={cellOracleSpecies}
@@ -1619,6 +1630,7 @@ function GroundTruthInputRow({
 }
 
 function CellOracleInputRow({
+  datasetSpecies,
   configLabel,
   baseGrnSource,
   cellOracleSpecies,
@@ -1629,6 +1641,7 @@ function CellOracleInputRow({
   onClearClusterLabels,
   onShowHelp,
 }: {
+  datasetSpecies: string;
   configLabel: string;
   baseGrnSource: CellOracleBaseGrnSource;
   cellOracleSpecies: string;
@@ -1642,6 +1655,9 @@ function CellOracleInputRow({
   const [open, setOpen] = useState(false);
   const clusterLabelsInputRef = useRef<HTMLInputElement | null>(null);
   const isBuiltInGrn = baseGrnSource === "built-in";
+  const hasBuiltInSpecies = CELLORACLE_SPECIES_OPTIONS.some(
+    (species) => species.value === datasetSpecies,
+  );
 
   return (
     <section className="border-t border-slate-200">
@@ -1726,16 +1742,19 @@ function CellOracleInputRow({
                   CellOracle species
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  Inherited from the dataset species selected above.
+                  {hasBuiltInSpecies
+                    ? "Inherited from the dataset species selected above."
+                    : "Choose a supported dataset species above to use a built-in GRN."}
                 </span>
               </span>
               <span className="flex items-center border-b border-slate-200 py-2 transition focus-within:border-[#1b75a6]">
                 <select
-                  value={cellOracleSpecies}
+                  value={hasBuiltInSpecies ? cellOracleSpecies : ""}
                   disabled
                   aria-label="CellOracle species inherited from dataset"
                   className="w-full appearance-none bg-transparent pr-7 text-sm font-medium text-slate-500 outline-none disabled:cursor-not-allowed"
                 >
+                  {!hasBuiltInSpecies ? <option value="">No matching built-in GRN</option> : null}
                   {CELLORACLE_SPECIES_OPTIONS.map((species) => (
                     <option key={species.value} value={species.value}>
                       {species.label}

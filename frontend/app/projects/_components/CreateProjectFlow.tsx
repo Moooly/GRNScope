@@ -431,10 +431,14 @@ export default function CreateProjectFlow({
   const [confidenceBootstrapRuns, setConfidenceBootstrapRuns] =
     useState(DEFAULT_CONFIDENCE_RUNS);
   const [cellOracleSpecies, setCellOracleSpecies] = useState("human");
+  const [cellOracleBaseGrnSource, setCellOracleBaseGrnSource] = useState<"built-in" | "upload">("built-in");
   const [hasCellOracleSettingsConfigured, setHasCellOracleSettingsConfigured] = useState(false);
 
   useEffect(() => {
-    if (datasetSpecies && datasetSpecies !== "other") {
+    const hasBuiltInGrn = Boolean(datasetSpecies && datasetSpecies !== "other");
+    setCellOracleBaseGrnSource("built-in");
+    setHasCellOracleSettingsConfigured(hasBuiltInGrn);
+    if (hasBuiltInGrn) {
       setCellOracleSpecies(datasetSpecies);
       setCustomTfListFile(null);
       setCustomTfListFileName("");
@@ -512,8 +516,9 @@ export default function CreateProjectFlow({
         : initialValues?.cellOracleSpecies ?? "human",
     );
     setHasCellOracleSettingsConfigured(
-      Boolean(initialValues?.selectedIds?.includes("CELLORACLE")),
+      Boolean(initialDatasetSpecies && initialDatasetSpecies !== "other"),
     );
+    setCellOracleBaseGrnSource("built-in");
     setSelectedIds(initialValues?.selectedIds ?? []);
     setHasUserAdjustedAlgorithms(Boolean(initialValues?.selectedIds?.length));
     setAlgorithmParameters(initialValues?.algorithmParameters ?? {});
@@ -793,6 +798,8 @@ export default function CreateProjectFlow({
   const handleSetDatasetSpecies = (nextSpecies: string) => {
     speciesSelectionSourceRef.current = "manual";
     setDatasetSpecies(nextSpecies);
+    setCellOracleBaseGrnSource("built-in");
+    setHasCellOracleSettingsConfigured(Boolean(nextSpecies && nextSpecies !== "other"));
     if (nextSpecies && nextSpecies !== "other") {
       setCellOracleSpecies(nextSpecies);
     }
@@ -1163,6 +1170,8 @@ export default function CreateProjectFlow({
       grnvbemDefaultMaxGenes={grnvbemDefaultMaxGenes}
       grisliDefaultMaxGenes={grisliDefaultMaxGenes}
       cellOracleSpecies={cellOracleSpecies}
+      cellOracleBaseGrnSource={cellOracleBaseGrnSource}
+      setCellOracleBaseGrnSource={setCellOracleBaseGrnSource}
       hasCellOracleSettingsConfigured={hasCellOracleSettingsConfigured}
       selectedIds={selectedIds}
       algorithmParameters={algorithmParameters}
