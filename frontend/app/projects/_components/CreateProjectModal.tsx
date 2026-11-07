@@ -585,10 +585,6 @@ export default function CreateProjectModal({
   ) : (
     "No gene filtering"
   );
-  const collapsedGeneSelectionSummary =
-    geneSelectionSummaryItems.length > 1
-      ? `${geneSelectionSummaryItems.length} filters active`
-      : geneSelectionSummaryItems[0] ?? "No filters";
   const optionalInputsSummaryItems = [
     pseudotimeFileName
       ? "Pseudotime uploaded"
@@ -619,28 +615,6 @@ export default function CreateProjectModal({
           : "Automatic confidence",
       ]}
     />
-  );
-  const willRunSummary = hasExpressionFile ? (
-    <InlineSummary
-      items={[
-        <>
-          <span className="font-semibold text-slate-700">Genes:</span>{" "}
-          {collapsedGeneSelectionSummary}
-        </>,
-        <>
-          <span className="font-semibold text-slate-700">Methods:</span>{" "}
-          {selectedAlgorithms.length} selected
-        </>,
-        <>
-          <span className="font-semibold text-slate-700">Confidence:</span>{" "}
-          {confidenceRunMode === "fixed"
-            ? `${confidenceBootstrapRuns || "—"} runs`
-            : "Automatic"}
-        </>,
-      ]}
-    />
-  ) : (
-    "Upload a matrix to configure"
   );
 
   return (
@@ -941,37 +915,27 @@ export default function CreateProjectModal({
             </label>
           ) : null}
 
-          <div className="pt-5">
-            <div
-              className={`flex flex-wrap items-center justify-between gap-4 rounded-xl px-4 py-3 ${
-                hasExpressionFile ? "bg-slate-50/80" : "bg-slate-50/55"
-              }`}
+          {hasExpressionFile ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (isCustomizeOpen) setOpenAdvancedSection(null);
+                setIsCustomizeOpen((previous) => !previous);
+              }}
+              className="inline-flex w-fit cursor-pointer items-center gap-1 py-1 text-sm font-medium text-slate-500 transition hover:text-slate-700 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1b75a6]/30"
+              aria-expanded={isCustomizeOpen}
+              aria-controls="create-project-options"
             >
-              <div className="min-w-0 w-full flex-auto sm:w-auto sm:flex-1">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1b75a6]">
-                  Advanced settings
-                </p>
-                <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
-                  {willRunSummary}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={!hasExpressionFile}
-                onClick={() => {
-                  if (isCustomizeOpen) setOpenAdvancedSection(null);
-                  setIsCustomizeOpen((prev) => !prev);
-                }}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc] hover:text-[#1b75a6] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:hover:border-slate-200"
-                aria-expanded={isCustomizeOpen}
-              >
-                {isCustomizeOpen ? "Hide advanced ▴" : "Show advanced ▾"}
-              </button>
-            </div>
-          </div>
+              <DisclosureChevron open={isCustomizeOpen} />
+              More options
+            </button>
+          ) : null}
 
           {isCustomizeOpen && (
-            <div className="rounded-[1.25rem] border border-slate-200 bg-white">
+            <div
+              id="create-project-options"
+              className="rounded-[1.25rem] border border-slate-200 bg-white"
+            >
               <AdvancedAccordionSection
                 title="Gene selection"
                 summary={geneSelectionSummary}
