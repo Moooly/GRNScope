@@ -78,6 +78,7 @@ def _sanitize_text(value: str, project_dir: Path) -> str:
 
 def _sanitize_value(value: Any, project_dir: Path) -> Any:
     if isinstance(value, dict):
+        # Keep legacy project email addresses out of downloadable manifests.
         return {
             str(key): _sanitize_value(item, project_dir)
             for key, item in value.items()

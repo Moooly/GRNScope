@@ -10,10 +10,6 @@ class CreateProjectResponse(BaseModel):
     errors: list[str] = []
 
 
-class UpdateNotificationEmailRequest(BaseModel):
-    notification_email: Optional[str] = None
-
-
 class UpdateProjectNameRequest(BaseModel):
     project_name: str
 

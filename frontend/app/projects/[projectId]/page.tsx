@@ -1999,38 +1999,6 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
     (task) => task.status === "Queued",
   ).length;
 
-  const handleSaveNotificationEmail = useCallback(
-    async (email: string) => {
-      if (!projectId || isDemoProject) return false;
-
-      const response = await apiFetch(
-        `${API_BASE}/projects/${projectId}/notification-email`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ notification_email: email }),
-        }
-      );
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(typeof payload?.detail === "string" ? payload.detail : "Could not save email. Please try again.");
-      }
-
-      const data = await response.json();
-      if (data.latest_job) {
-        setLatestJob(data.latest_job);
-      }
-      await refreshProjectData();
-      return true;
-    },
-    [isDemoProject, projectId, refreshProjectData, setLatestJob]
-  );
-
-
-
   const handleExportCircosPng = useCallback(
     async (svgElement: SVGSVGElement) => {
       const activeViewLabel =
@@ -2318,10 +2286,6 @@ useEffect(() => {
                     <JobProgressBanner
                       tasks={allJobTasks}
                       algorithmMetaMap={algorithmMetaMap}
-                      notificationEmail={project?.notification_email ?? null}
-                      onSaveNotificationEmail={
-                        isDemoProject ? undefined : handleSaveNotificationEmail
-                      }
                       onStopProject={
                         isDemoProject || !hasStoppableTasks
                           ? undefined

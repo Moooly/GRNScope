@@ -5,7 +5,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..schemas import ContactSupportRequest, ContactSupportResponse
 from ..services.email_service import (
-    normalize_notification_email,
+    normalize_email,
     send_contact_email,
 )
 from .client_identity import get_or_create_client_id
@@ -31,7 +31,7 @@ async def create_contact_request(
         )
 
     raw_reply_to_email = (payload.reply_to_email or "").strip()
-    reply_to_email = normalize_notification_email(raw_reply_to_email)
+    reply_to_email = normalize_email(raw_reply_to_email)
     if raw_reply_to_email and not reply_to_email:
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
 

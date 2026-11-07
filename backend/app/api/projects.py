@@ -27,7 +27,7 @@ from ..algorithm_registry import (
     validate_selected_algorithm_parameters,
 )
 from ..atomic_io import atomic_write_json
-from ..config import JOB_FILE_LOCK, PROJECTS_ROOT
+from ..config import PROJECTS_ROOT
 from ..matrix_state_detection import detect_matrix_state
 from ..preprocessing_contract import build_preprocessing_config
 from .client_identity import (
@@ -35,9 +35,7 @@ from .client_identity import (
     require_project_owner,
 )
 from ..repositories.job_repository import (
-    jobs_manifest_lock,
     read_jobs_manifest,
-    write_jobs_manifest,
 )
 from ..repositories.project_repository import (
     read_project_manifest,
@@ -48,7 +46,6 @@ from ..services.anndata_service import convert_h5ad_to_csv, is_h5ad_filename
 from ..schemas import (
     CreateProjectResponse,
     UpdateConfidenceRecoveryRankRequest,
-    UpdateNotificationEmailRequest,
     UpdateProjectNameRequest,
 )
 from ..validators import validate_csv_extension, validate_expression_extension
@@ -61,13 +58,11 @@ from ..services.beeline_service import (
     recalculate_confidence_result_payload,
     resolve_ranked_edges_per_target_limit,
 )
-from ..services.email_service import normalize_notification_email, smtp_is_configured
 from ..services.job_service import (
     finalize_project_stop,
     launch_independent_algorithm_tasks,
     mark_project_setup_failure,
     request_project_stop,
-    send_job_completion_notification_if_needed,
     stop_and_delete_project,
     update_job_state,
 )
@@ -343,7 +338,6 @@ async def create_pending_project(
         "project_description": project_description,
         "created_at": time.time(),
         "created_at_display": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
-        "notification_email": None,
         "preprocessing": preprocessing_config,
         "ranked_edges_per_target_limit": normalize_ranked_edges_per_target(ranked_edges_per_target),
         "confidence_run_mode": normalized_confidence_run_mode,
@@ -839,70 +833,6 @@ async def mark_project_upload_failed(
         return {"ok": True, "project_id": project_id, "job_id": job_id, "errors": []}
     except Exception as exc:
         return {"ok": False, "project_id": project_id, "errors": [str(exc)]}
-
-
-@router.patch("/api/projects/{project_id}/notification-email")
-async def update_project_notification_email(
-    project_id: str,
-    payload: UpdateNotificationEmailRequest,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    response: Response,
-):
-    owner_id = get_or_create_client_id(request, response)
-    project_dir = PROJECTS_ROOT / project_id
-    require_project_owner(project_dir, owner_id)
-
-    raw_email = (payload.notification_email or "").strip()
-    notification_email = normalize_notification_email(raw_email)
-    if raw_email and not notification_email:
-        raise HTTPException(status_code=400, detail="Invalid notification email.")
-    if notification_email and not smtp_is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="Email notifications are not available yet. Please check your results in the workspace.",
-        )
-
-    try:
-        project_manifest = read_project_manifest(project_dir)
-        project_manifest["notification_email"] = notification_email
-        write_project_manifest(project_dir, project_manifest)
-
-        latest_job = None
-        with JOB_FILE_LOCK, jobs_manifest_lock(project_dir):
-            jobs_manifest = read_jobs_manifest(project_dir)
-            if jobs_manifest:
-                latest_job = jobs_manifest[-1]
-                if isinstance(latest_job, dict):
-                    latest_job.pop("notification_sent_at", None)
-                    latest_job.pop("notification_started_at", None)
-                    latest_job.pop("notification_error", None)
-                    latest_job.pop("notification_attempted_at", None)
-                    write_jobs_manifest(project_dir, jobs_manifest)
-
-        if (
-            notification_email
-            and isinstance(latest_job, dict)
-            and latest_job.get("overall_status") in {"Completed", "Failed", "Stopped"}
-            and latest_job.get("job_id")
-        ):
-            background_tasks.add_task(
-                send_job_completion_notification_if_needed,
-                project_dir,
-                str(latest_job.get("job_id")),
-            )
-
-        return {
-            "ok": True,
-            "project_id": project_id,
-            "notification_email": notification_email,
-            "project": project_manifest,
-            "latest_job": latest_job,
-        }
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.patch("/api/projects/{project_id}/name")

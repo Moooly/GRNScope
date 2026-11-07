@@ -7,7 +7,7 @@ from email.message import EmailMessage
 from email.utils import parseaddr
 
 
-def normalize_notification_email(value: str | None) -> str | None:
+def normalize_email(value: str | None) -> str | None:
     if not value:
         return None
 
@@ -20,13 +20,6 @@ def normalize_notification_email(value: str | None) -> str | None:
         return None
 
     return email
-
-
-def smtp_is_configured() -> bool:
-    return bool(
-        os.environ.get("GRNSCOPE_SMTP_HOST")
-        and os.environ.get("GRNSCOPE_SMTP_FROM", os.environ.get("GRNSCOPE_SMTP_USERNAME"))
-    )
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -44,7 +37,7 @@ def _smtp_port() -> int:
 
 
 def resolve_contact_email() -> str | None:
-    return normalize_notification_email(
+    return normalize_email(
         os.environ.get("GRNSCOPE_CONTACT_EMAIL")
         or os.environ.get("GRNSCOPE_SUPPORT_EMAIL")
         or os.environ.get("GRNSCOPE_SMTP_FROM")
@@ -87,54 +80,6 @@ def _send_smtp_message(message: EmailMessage) -> None:
         if smtp_username:
             smtp.login(smtp_username, smtp_password)
         smtp.send_message(message)
-
-
-def send_job_completion_email(
-    *,
-    to_email: str,
-    project_id: str,
-    project_name: str,
-    job_status: str,
-    completed_count: int,
-    failed_count: int,
-    stopped_count: int,
-    total_count: int,
-) -> None:
-    smtp_username = os.environ.get("GRNSCOPE_SMTP_USERNAME", "").strip()
-    from_email = os.environ.get("GRNSCOPE_SMTP_FROM", smtp_username).strip()
-    public_url = os.environ.get("GRNSCOPE_PUBLIC_URL", "").rstrip("/")
-    project_url = f"{public_url}/projects/{project_id}" if public_url else ""
-
-    if not from_email:
-        raise RuntimeError("Email notification is not configured on the server.")
-
-    subject_status = "completed" if job_status == "Completed" else job_status.lower()
-    subject = f"GRNScope analysis {subject_status}: {project_name}"
-
-    result_lines = [
-        f"Project: {project_name}",
-        f"Status: {job_status}",
-        f"Algorithms: {completed_count} completed, {failed_count} failed, {stopped_count} stopped, {total_count} total",
-    ]
-    if project_url:
-        result_lines.append(f"Open results: {project_url}")
-    else:
-        result_lines.append("Open GRNScope and go to Workspace to view the results.")
-
-    result_lines.extend(
-        [
-            "",
-            "This notification was sent because an email address was saved for this analysis.",
-        ]
-    )
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = from_email
-    message["To"] = to_email
-    message.set_content("\n".join(result_lines))
-
-    _send_smtp_message(message)
 
 
 def send_contact_email(

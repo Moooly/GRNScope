@@ -25,7 +25,6 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX },
 }).outputText, filename);
 require.extensions['.tsx'] = require.extensions['.ts'];
-const JobProgressBanner = require('../app/projects/[projectId]/_components/JobProgressBanner.tsx').default;
 const useProjectDetailData = require('../app/projects/[projectId]/_hooks/useProjectDetailData.ts').default;
 const { loadCompletedAlgorithmResults } = require('../app/projects/[projectId]/_lib/loadResults.ts');
 const { startPolling } = require('../app/_lib/polling.ts');
@@ -192,27 +191,6 @@ test('an explicit refresh supersedes an old in-flight result without stale repla
   assert.equal(state.isLoadingCompletedResults, false);
   await act(async () => root.unmount());
   clearCachedResults('refresh-test');
-});
-
-
-test('a rejected email save shows the server message and makes retry available', async () => {
-  let root;
-  await act(async () => {
-    root = create(React.createElement(JobProgressBanner, {
-      tasks: [{ algorithm_id: 'A', status: 'Running' }],
-      onSaveNotificationEmail: async () => { throw new Error('Email notifications are not available yet.'); },
-    }));
-  });
-  await act(async () => root.container.querySelector('[aria-label="Email me when analysis is done"]').click());
-  const input = root.container.querySelector('input');
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, 'qa@example.invalid');
-    input.dispatchEvent(new window.Event('input', { bubbles: true }));
-  });
-  await act(async () => root.container.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
-  assert.match(root.container.textContent, /Email notifications are not available yet/);
-  assert.equal(root.container.querySelector('[type="submit"]').disabled, false);
-  await act(async () => root.unmount());
 });
 
 

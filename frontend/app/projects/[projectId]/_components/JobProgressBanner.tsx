@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 type JobTask = {
   algorithm_id: string;
   status: string;
@@ -22,8 +21,6 @@ type PseudotimeEstimation = {
 type JobProgressBannerProps = {
   tasks: JobTask[];
   algorithmMetaMap?: Map<string, { name: string }>;
-  notificationEmail?: string | null;
-  onSaveNotificationEmail?: (email: string) => Promise<boolean>;
   onStopProject?: () => void;
   estimationStatus?: PseudotimeEstimation;
 };
@@ -34,16 +31,9 @@ type JobProgressBannerProps = {
 export default function JobProgressBanner({
   tasks,
   algorithmMetaMap,
-  notificationEmail = null,
-  onSaveNotificationEmail,
   onStopProject,
   estimationStatus = null,
 }: JobProgressBannerProps) {
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [emailDraft, setEmailDraft] = useState(notificationEmail ?? "");
-  const [emailMessage, setEmailMessage] = useState("");
-  const [isSavingEmail, setIsSavingEmail] = useState(false);
-
   if (tasks.length === 0) return null;
 
   const queued = tasks.filter((task) => task.status === "Queued");
@@ -116,7 +106,6 @@ export default function JobProgressBanner({
     stopped.length > 0 ? `${stopped.length} stopped` : null,
   ].filter(Boolean);
 
-  const hasNotificationEmail = Boolean(notificationEmail);
   const getAlgorithmName = (algorithmId: string) =>
     algorithmMetaMap?.get(algorithmId)?.name ?? algorithmId;
   const runningItems = running.map((task) => {
@@ -186,162 +175,49 @@ export default function JobProgressBanner({
       ? `${queued.length} ${queued.length === 1 ? "method" : "methods"} waiting`
       : null;
 
-  const saveNotificationEmail = async () => {
-    if (!onSaveNotificationEmail || isSavingEmail) return;
-
-    const trimmedEmail = emailDraft.trim();
-    if (!trimmedEmail) {
-      setEmailMessage("Enter an email address first.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setEmailMessage("Enter a valid email address.");
-      return;
-    }
-
-    setIsSavingEmail(true);
-    setEmailMessage("");
-
-    try {
-      const ok = await onSaveNotificationEmail(trimmedEmail);
-      if (!ok) {
-        setEmailMessage("Could not save email. Please try again.");
-        return;
-      }
-      setEmailMessage("Saved.");
-      setIsEditingEmail(false);
-    } catch (error) {
-      setEmailMessage(error instanceof Error ? error.message : "Could not save email. Please try again.");
-    } finally {
-      setIsSavingEmail(false);
-    }
-  };
-
   return (
     <div
       className="order-3 ml-auto flex min-w-0 flex-1 items-center justify-end gap-3 px-5 py-3 sm:px-6 lg:order-none lg:py-2"
       aria-live="polite"
     >
-      {!isEditingEmail ? (
-        <>
-          <p className="mr-2 min-w-0 truncate text-sm font-semibold text-slate-700 sm:mr-5">
-            <span className="font-bold text-slate-900">{activeWorkSummary}</span>
-            {estimationSecondary ? (
-              <span className="hidden font-medium text-slate-400 sm:inline"> · {estimationSecondary}</span>
-            ) : null}
-              <span className="hidden">
-                {completionSummary.length > 0 ? (
-                  <>
-                    <span className="text-slate-300"> · </span>
-                    <span>{completionSummary.join(" · ")}</span>
-                  </>
-                ) : null}
-                {timingSummary ? ` · ${timingSummary}` : ""}
-                {waitingSummary ? ` · ${waitingSummary}` : ""}
-              </span>
-          </p>
-
-          {/* <span className="hidden shrink-0 rounded-full bg-[#eef7fb] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6] sm:inline-flex">
-            {overall}%
-          </span> */}
-
-          {onStopProject ? (
-            <button
-              type="button"
-              onClick={onStopProject}
-              aria-label="Stop project"
-              title="Analysis is running — click to stop all methods"
-              className="group/stop inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white pl-3 pr-3.5 text-xs font-bold text-slate-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-            >
-              {/* Live pulse (was the standalone dot) — blue while running, turns
-                  amber on hover to read as part of the stop action. */}
-              <span aria-hidden="true" className="relative flex h-3 w-3 items-center justify-center">
-                <span className="absolute h-3 w-3 animate-ping rounded-full bg-[#1b75a6]/25 transition group-hover/stop:bg-amber-500/25" />
-                <span className="h-2 w-2 rounded-full bg-[#1b75a6] transition group-hover/stop:bg-amber-500" />
-              </span>
-              Stop
-            </button>
+      <p className="mr-2 min-w-0 truncate text-sm font-semibold text-slate-700 sm:mr-5">
+        <span className="font-bold text-slate-900">{activeWorkSummary}</span>
+        {estimationSecondary ? (
+          <span className="hidden font-medium text-slate-400 sm:inline"> · {estimationSecondary}</span>
+        ) : null}
+        <span className="hidden">
+          {completionSummary.length > 0 ? (
+            <>
+              <span className="text-slate-300"> · </span>
+              <span>{completionSummary.join(" · ")}</span>
+            </>
           ) : null}
+          {timingSummary ? ` · ${timingSummary}` : ""}
+          {waitingSummary ? ` · ${waitingSummary}` : ""}
+        </span>
+      </p>
 
-          {onSaveNotificationEmail ? (
-            <button
-              type="button"
-              onClick={() => {
-                setEmailMessage("");
-                setEmailDraft(notificationEmail ?? "");
-                setIsEditingEmail(true);
-              }}
-              aria-label={
-                hasNotificationEmail
-                  ? `Completion email set to ${notificationEmail}`
-                  : "Email me when analysis is done"
-              }
-              title={
-                hasNotificationEmail
-                  ? `Completion email: ${notificationEmail}`
-                  : "Email me when done"
-              }
-              className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border px-3 text-xs font-bold transition ${
-                hasNotificationEmail
-                  ? "border-[#1b75a6]/25 bg-[#eaf5fb] text-[#1b75a6]"
-                  : "border-slate-200 bg-white text-slate-500 hover:border-[#1b75a6]/30 hover:text-[#1b75a6]"
-              }`}
-            >
-              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
-                <path d="M3.5 5.5h13v9h-13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                <path d="m4.2 6.2 5.8 4.2 5.8-4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span className="hidden sm:inline">{hasNotificationEmail ? "Email set" : "Notify me"}</span>
-              {hasNotificationEmail ? (
-                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#20b779]" />
-              ) : null}
-            </button>
-          ) : null}
-        </>
-      ) : (
-        <form
-          className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void saveNotificationEmail();
-          }}
+      {/* <span className="hidden shrink-0 rounded-full bg-[#eef7fb] px-2.5 py-1 text-xs font-bold tabular-nums text-[#1b75a6] sm:inline-flex">
+        {overall}%
+      </span> */}
+
+      {onStopProject ? (
+        <button
+          type="button"
+          onClick={onStopProject}
+          aria-label="Stop project"
+          title="Analysis is running — click to stop all methods"
+          className="group/stop inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white pl-3 pr-3.5 text-xs font-bold text-slate-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
         >
-          <input
-            type="email"
-            value={emailDraft}
-            onChange={(event) => setEmailDraft(event.target.value)}
-            placeholder="Email when finished"
-            aria-label="Completion notification email"
-            className="grnscope-email-input h-9 min-w-[12rem] flex-1 rounded-full border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#1b75a6]/40 focus:ring-4 focus:ring-[#1b75a6]/10"
-          />
-          <button
-            type="submit"
-            disabled={isSavingEmail}
-            className="inline-flex h-9 items-center justify-center rounded-full bg-[#1b75a6] px-3.5 text-xs font-bold text-white transition hover:bg-[#155f87] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSavingEmail ? "Saving…" : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsEditingEmail(false);
-              setEmailDraft(notificationEmail ?? "");
-              setEmailMessage("");
-            }}
-            aria-label="Cancel email notification editing"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-          >
-            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
-              <path d="m4 4 8 8m0-8-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-          {emailMessage ? (
-            <p className="w-full text-right text-xs font-semibold text-rose-600">
-              {emailMessage}
-            </p>
-          ) : null}
-        </form>
-      )}
+          {/* Live pulse (was the standalone dot) — blue while running, turns
+              amber on hover to read as part of the stop action. */}
+          <span aria-hidden="true" className="relative flex h-3 w-3 items-center justify-center">
+            <span className="absolute h-3 w-3 animate-ping rounded-full bg-[#1b75a6]/25 transition group-hover/stop:bg-amber-500/25" />
+            <span className="h-2 w-2 rounded-full bg-[#1b75a6] transition group-hover/stop:bg-amber-500" />
+          </span>
+          Stop
+        </button>
+      ) : null}
 
       <div
         className="absolute inset-x-0 bottom-0 h-[3px] bg-[#e7f0f5]"

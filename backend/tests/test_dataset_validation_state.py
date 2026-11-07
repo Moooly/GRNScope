@@ -33,10 +33,7 @@ class DatasetValidationStateTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch(
-                "app.services.job_service.send_job_completion_notification_if_needed"
-            ):
-                recompute_overall_status(project_dir, job_id)
+            recompute_overall_status(project_dir, job_id)
 
             saved_job = json.loads(
                 (project_dir / "jobs.json").read_text(encoding="utf-8")

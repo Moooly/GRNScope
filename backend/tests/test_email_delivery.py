@@ -3,18 +3,15 @@ import asyncio
 from contextlib import contextmanager
 from email import policy
 from email.parser import BytesParser
-import json
 import socketserver
 import threading
 from unittest.mock import patch
 
-from fastapi import BackgroundTasks, HTTPException, Response
-import pytest
+from fastapi import Response
 from starlette.requests import Request
 
-from app.api import contact, projects
-from app.schemas import ContactSupportRequest, UpdateNotificationEmailRequest
-from app.services.job_service import send_job_completion_notification_if_needed
+from app.api import contact
+from app.schemas import ContactSupportRequest
 
 CLIENT_ID = 'qa_email_validation_20261101'
 
@@ -59,7 +56,6 @@ def local_mailbox():
             'GRNSCOPE_SMTP_USERNAME': '', 'GRNSCOPE_SMTP_PASSWORD': '',
             'GRNSCOPE_CONTACT_EMAIL': 'support@example.invalid',
             'GRNSCOPE_SMTP_USE_TLS': 'false', 'GRNSCOPE_SMTP_USE_SSL': 'false',
-            'GRNSCOPE_PUBLIC_URL': 'https://grnscope.example.invalid',
         }
         try:
             with patch.dict('os.environ', env):
@@ -83,42 +79,6 @@ def test_contact_sends_to_local_smtp_and_preserves_reply_and_context():
     assert message['Reply-To'] == 'reply@example.invalid'
     assert 'qa-project' in message.get_content()
     assert 'Synthetic QA message' in message.get_content()
-
-
-def test_job_completion_sends_once_and_persists_delivery_state(tmp_path):
-    (tmp_path / 'project.json').write_text(json.dumps({
-        'project_id': 'qa-project', 'project_name': 'QA',
-        'notification_email': 'results@example.invalid',
-    }))
-    (tmp_path / 'jobs.json').write_text(json.dumps([{
-        'job_id': 'qa-job', 'overall_status': 'Completed',
-        'tasks': [{'algorithm_id': 'PEARSON', 'status': 'Completed'}],
-    }]))
-    with local_mailbox() as messages:
-        send_job_completion_notification_if_needed(tmp_path, 'qa-job')
-        send_job_completion_notification_if_needed(tmp_path, 'qa-job')
-    assert len(messages) == 1
-    assert messages[0]['To'] == 'results@example.invalid'
-    assert 'https://grnscope.example.invalid/projects/qa-project' in messages[0].get_content()
-    saved = json.loads((tmp_path / 'jobs.json').read_text())[0]
-    assert saved['notification_sent_at']
-    assert not saved.get('notification_error')
-
-
-def test_unconfigured_notifications_are_not_silently_saved(tmp_path):
-    directory = tmp_path / 'qa-project'
-    directory.mkdir()
-    original = {'project_id': 'qa-project', 'owner_id': CLIENT_ID, 'notification_email': None}
-    (directory / 'project.json').write_text(json.dumps(original))
-    with patch.object(projects, 'PROJECTS_ROOT', tmp_path), patch.object(projects, 'smtp_is_configured', return_value=False):
-        with pytest.raises(HTTPException) as error:
-            asyncio.run(projects.update_project_notification_email(
-                'qa-project', UpdateNotificationEmailRequest(notification_email='results@example.invalid'),
-                BackgroundTasks(), request(), Response(),
-            ))
-    assert error.value.status_code == 503
-    assert 'not available' in error.value.detail
-    assert json.loads((directory / 'project.json').read_text()) == original
 
 
 def test_contact_mail_work_runs_outside_the_request_event_loop():
