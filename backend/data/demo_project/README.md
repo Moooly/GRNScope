@@ -31,3 +31,17 @@ backend/.venv/bin/python backend/scripts/import_demo_project.py /path/to/Express
 ```
 
 The importer also updates `frontend/public/samples/` so sample downloads match the demo inputs. It removes obsolete inputs, method results, bootstrap runs and legacy local execution files from the managed demo directory. Algorithm outputs are never rerun during import.
+
+## Precomputed perturbation examples
+
+Six real CellOracle simulations are bundled under `perturbations/`: knockout and overexpression of FOXL2, NR5A1 and NR0B1, the three regulators with the most outgoing archived CellOracle edges. These were computed with the local CellOracle Docker runtime using the imported server project's expression, pseudotime and network, rather than supplied by the original inference export. The manifest records timestamps, simulation settings and checksums tying each package to the exact demo inputs. Overexpression targets use the larger of the observed maximum and twice the mean, capped by the model's safe upper limit.
+
+Visitors can browse the saved results and download CSVs. New runs, reruns and pseudotime estimation remain unavailable in the read-only demo. Regular projects retain their normal simulation controls.
+
+To recompute the examples with the configured CellOracle image and Docker running:
+
+```sh
+backend/.venv/bin/python backend/scripts/precompute_demo_perturbations.py
+```
+
+An isolated, ignored project stores the simulation model and runtime files. Only completed result JSON and CSV exports are copied into the demo. The viewer rejects examples whose input fingerprints no longer match after a demo replacement.

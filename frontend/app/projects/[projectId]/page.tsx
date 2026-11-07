@@ -378,7 +378,7 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
     () => allJobTasks.find((task) => task.algorithm_id.toUpperCase() === "CELLORACLE") ?? null,
     [allJobTasks]
   );
-  const cellOracleReady = cellOracleTask?.status === "Completed" && !isDemoProject;
+  const cellOracleReady = cellOracleTask?.status === "Completed";
 
   useEffect(() => {
     if (!cellOracleReady || !projectId) {
@@ -2359,6 +2359,7 @@ useEffect(() => {
                   <PerturbationAnalysisSection
                     projectId={projectId}
                     cellOracleStatus={cellOracleTask?.status}
+                    readOnly={isDemoProject}
                     initialGene={perturbationEntryGene}
                   />
                 ) : (

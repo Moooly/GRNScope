@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field
 from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..services.demo_service import is_demo_project
+from ..services.demo_perturbation_service import (
+    get_demo_perturbation_state, get_demo_perturbation_result,
+    demo_perturbation_download_path,
+)
 from ..services.perturbation_service import (
     create_perturbation_run,
     get_gene_expression_profile,
@@ -37,15 +41,8 @@ async def get_project_perturbations(
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         return {
-            "ok": True,
-            "project_id": project_id,
-            "perturbations": {
-                "available": False,
-                "reason": "Perturbation runs are disabled for the read-only demo project.",
-                "eligible_genes": [],
-                "runs": [],
-                "latest_result": None,
-            },
+            "ok": True, "project_id": project_id,
+            "perturbations": get_demo_perturbation_state(),
         }
 
     project_dir = PROJECTS_ROOT / project_id
@@ -92,6 +89,11 @@ async def get_project_perturbation_result(
     response: Response,
 ):
     owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        try:
+            return {"ok": True, "project_id": project_id, "result": get_demo_perturbation_result(run_id)}
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
     require_project_owner(project_dir, owner_id)
     try:
@@ -157,6 +159,12 @@ async def download_perturbation_result(
     response: Response,
 ):
     owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        try:
+            path = demo_perturbation_download_path(run_id, filename)
+            return FileResponse(path, filename=filename, media_type="text/csv")
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
     project_dir = PROJECTS_ROOT / project_id
     require_project_owner(project_dir, owner_id)
     try:

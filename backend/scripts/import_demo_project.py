@@ -253,6 +253,21 @@ def import_demo(archive: Path, destination: Path, samples: Path) -> dict:
         legacy_runtime = destination / "_beeline_runtime"
         if legacy_runtime.exists():
             shutil.rmtree(legacy_runtime)
+        # Saved simulations are valid only for the exact inference inputs.
+        example_manifest = destination / "perturbations/manifest.json"
+        if example_manifest.is_file():
+            try:
+                examples = json.loads(example_manifest.read_text())
+            except (OSError, json.JSONDecodeError):
+                examples = {}
+            expected_fingerprints = {
+                "expression": hashlib.sha256(expression).hexdigest(),
+                "prepared_expression": hashlib.sha256(assets["preprocessed/ExpressionData.csv"]).hexdigest(),
+                "pseudotime": hashlib.sha256(pseudotime).hexdigest(),
+                "celloracle_network": hashlib.sha256(assets["results/CELLORACLE/rankedEdges.csv"]).hexdigest(),
+            }
+            if examples.get("source_project") != manifest["provenance"]["source_project"] or examples.get("fingerprints") != expected_fingerprints:
+                shutil.rmtree(example_manifest.parent)
 
         readme = (
             "GRNScope sample dataset\n=======================\n\n"

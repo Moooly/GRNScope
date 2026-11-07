@@ -43,6 +43,7 @@ const PROPAGATION_OPTIONS = [
 type PerturbationAnalysisSectionProps = {
   projectId: string;
   cellOracleStatus?: string | null;
+  readOnly?: boolean;
   initialGene?: string | null;
 };
 
@@ -1128,12 +1129,14 @@ function PerturbationHistoryStrip({
 
 function PerturbationRunActions({
   runCount,
+  readOnly = false,
   onOpenHistory,
   onOpenNewRun,
   historyExpanded,
   newRunExpanded,
 }: {
   runCount: number;
+  readOnly?: boolean;
   onOpenHistory: () => void;
   onOpenNewRun: () => void;
   historyExpanded: boolean;
@@ -1165,7 +1168,7 @@ function PerturbationRunActions({
           {runCount}
         </span>
       </button>
-      <button
+      {!readOnly && <button
         type="button"
         onClick={onOpenNewRun}
         aria-expanded={newRunExpanded}
@@ -1176,13 +1179,14 @@ function PerturbationRunActions({
           <path d="M9 4v10M4 9h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
         New run
-      </button>
+      </button>}
     </div>
   );
 }
 
 function SelectedResultHeader({
   result,
+  readOnly = false,
   resultScope,
   onScopeChange,
   onRerunWithClipping,
@@ -1194,6 +1198,7 @@ function SelectedResultHeader({
   newRunExpanded,
 }: {
   result: PerturbationResult;
+  readOnly?: boolean;
   resultScope: string;
   onScopeChange: (scope: string) => void;
   onRerunWithClipping: () => void;
@@ -1349,6 +1354,7 @@ function SelectedResultHeader({
             ) : null}
 
             <PerturbationRunActions
+              readOnly={readOnly}
               runCount={runCount}
               onOpenHistory={onOpenHistory}
               onOpenNewRun={onOpenNewRun}
@@ -1449,7 +1455,7 @@ function SelectedResultHeader({
                       </p>
                     )}
 
-                    {!result.clip_delta_x ? (
+                    {!readOnly && !result.clip_delta_x ? (
                       <div className="flex justify-end px-4 py-3">
                         <button
                           type="button"
@@ -2056,10 +2062,12 @@ type DevelopmentImpactLayout = "side-by-side" | "overlay";
 // available when the user wants to inspect both fields at the same coordinates.
 function DevelopmentImpactPanel({
   projectId,
+  readOnly = false,
   result,
   controlsHost,
 }: {
   projectId: string;
+  readOnly?: boolean;
   result: PerturbationResult;
   controlsHost: HTMLDivElement | null;
 }) {
@@ -2231,7 +2239,7 @@ function DevelopmentImpactPanel({
           Compare this perturbation against the natural differentiation trajectory.{" "}
           {reason ?? "This needs a pseudotime trajectory."}
         </p>
-        {needsPseudotime ? (
+        {needsPseudotime && !readOnly ? (
           <div className="mt-3">
             <button
               type="button"
@@ -2843,10 +2851,12 @@ function CellFateHelpModal({
 
 function ResultSummary({
   projectId,
+  readOnly = false,
   result,
   resultScope,
 }: {
   projectId: string;
+  readOnly?: boolean;
   result: PerturbationResult;
   resultScope: string;
 }) {
@@ -3454,7 +3464,7 @@ function ResultSummary({
 
           </div>
         ) : (
-          <DevelopmentImpactPanel key={result.run_id} projectId={projectId} result={result} controlsHost={mapControlsHost} />
+          <DevelopmentImpactPanel readOnly={readOnly} key={result.run_id} projectId={projectId} result={result} controlsHost={mapControlsHost} />
         )}
       </section>
 
@@ -3581,6 +3591,7 @@ function ResultSummary({
 export default function PerturbationAnalysisSection({
   projectId,
   cellOracleStatus,
+  readOnly = false,
   initialGene,
 }: PerturbationAnalysisSectionProps) {
   const [state, setState] = useState<PerturbationState | null>(null);
@@ -3631,11 +3642,30 @@ export default function PerturbationAnalysisSection({
   useEffect(() => {
     if (!initialGene || !state?.eligible_genes.includes(initialGene)) return;
     setSelectedGene(initialGene);
-    setOpenPanel("form");
-  }, [initialGene, state?.eligible_genes]);
+    if (!readOnly) {
+      setOpenPanel("form");
+      return;
+    }
+    const example = state.runs.find((run) => run.gene === initialGene);
+    if (!example || example.run_id === state.latest_result?.run_id) {
+      setSelectedResult(null);
+      return;
+    }
+    const controller = new AbortController();
+    setLoadingHistoryRunId(example.run_id);
+    void apiFetch(`${API_BASE}/projects/${projectId}/perturbations/${example.run_id}`, {signal: controller.signal})
+      .then(async (response) => {
+        if (!response.ok) throw new Error("The saved example could not be loaded.");
+        return response.json();
+      })
+      .then((payload) => { if (!controller.signal.aborted) setSelectedResult(payload.result); })
+      .catch((loadError) => { if (!controller.signal.aborted) setError(loadError.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingHistoryRunId(null); });
+    return () => controller.abort();
+  }, [initialGene, state, readOnly, projectId]);
 
   useEffect(() => {
-    if (!selectedGene) {
+    if (!selectedGene || readOnly) {
       setExpressionProfile(null);
       return;
     }
@@ -3661,7 +3691,7 @@ export default function PerturbationAnalysisSection({
         if (!controller.signal.aborted) setIsExpressionProfileLoading(false);
       });
     return () => controller.abort();
-  }, [projectId, selectedGene]);
+  }, [projectId, selectedGene, readOnly]);
 
   const activeRun = useMemo(
     () => state?.runs.find((run) => ACTIVE_STATUSES.has(run.status)) ?? null,
@@ -3690,7 +3720,7 @@ export default function PerturbationAnalysisSection({
     propagation: number;
     clip: boolean;
   }) => {
-    if (!gene || isSubmitting) return;
+    if (readOnly || !gene || isSubmitting) return;
     setIsSubmitting(true);
     setError("");
     try {
@@ -3839,7 +3869,7 @@ export default function PerturbationAnalysisSection({
   if (!state?.available) {
     return (
       <div className="rounded-[1.25rem] border border-dashed border-slate-300 bg-slate-50/80 p-8 text-center">
-        <h3 className="text-lg font-bold text-slate-950">CellOracle perturbation is not available yet</h3>
+        <h3 className="text-lg font-bold text-slate-950">{readOnly ? "Precomputed perturbation examples" : "CellOracle perturbation is not available yet"}</h3>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
           {state?.reason || "A completed CellOracle network is required."}
         </p>
@@ -3876,6 +3906,7 @@ export default function PerturbationAnalysisSection({
       {!displayedResult ? (
         <div className="flex items-center">
           <PerturbationRunActions
+            readOnly={readOnly}
             runCount={state.runs.length}
             onOpenHistory={() => openSheet("history")}
             onOpenNewRun={() => openSheet("form")}
@@ -3885,7 +3916,7 @@ export default function PerturbationAnalysisSection({
         </div>
       ) : null}
 
-      {openPanel && createPortal(
+      {openPanel && (!readOnly || openPanel === "history") && createPortal(
         <div className="fixed inset-0 z-[80]">
           <div
             className={`absolute inset-0 bg-slate-950/40 backdrop-blur-sm ${
@@ -4106,6 +4137,7 @@ export default function PerturbationAnalysisSection({
       {displayedResult ? (
         <div ref={resultViewRef} className="scroll-mt-24 rounded-[1.25rem] border border-slate-200 bg-white p-5 sm:p-6">
           <SelectedResultHeader
+            readOnly={readOnly}
             result={displayedResult}
             resultScope={resultScope}
             onScopeChange={setResultScope}
@@ -4118,6 +4150,7 @@ export default function PerturbationAnalysisSection({
             newRunExpanded={openPanel === "form"}
           />
           <ResultSummary
+            readOnly={readOnly}
             key={displayedResult.run_id}
             projectId={projectId}
             result={displayedResult}
