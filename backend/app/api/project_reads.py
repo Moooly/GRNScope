@@ -20,7 +20,7 @@ from ..repositories.project_repository import (
     list_project_directories,
     read_project_manifest,
 )
-from ..services.demo_service import get_demo_project, is_demo_project, load_demo_manifest
+from ..services.demo_service import get_demo_project, get_demo_tasks, is_demo_project, load_demo_manifest
 from ..services.project_read_support import (
     backfill_dataset_dimensions,
     load_known_tf_gene_names,
@@ -59,23 +59,7 @@ async def list_projects(request: Request, response: Response):
                         "job_id": "demo",
                         "project_id": "demo",
                         "overall_status": "Completed",
-                        "tasks": [
-                            {
-                                "algorithm_id": algorithm_id,
-                                "status": "Completed",
-                                "elapsed_seconds": 0,
-                                "error_message": None,
-                                "error_type": None,
-                                "result_path": None,
-                                "started_at": None,
-                                "started_at_timestamp": None,
-                                "completed_at": "demo",
-                                "completed_at_timestamp": None,
-                                "progress_percent": 100,
-                                "progress_label": "Completed",
-                            }
-                            for algorithm_id in demo_project.get("algorithms", [])
-                        ],
+                        "tasks": get_demo_tasks(),
                     },
                     "isDemo": True,
                     "readOnly": True,
@@ -177,23 +161,7 @@ async def get_project(project_id: str, request: Request, response: Response):
                 "project_id": "demo",
                 "overall_status": "Completed",
                 "ensemble_enabled": True,
-                "tasks": [
-                    {
-                        "algorithm_id": algorithm_id,
-                        "status": "Completed",
-                        "elapsed_seconds": 0,
-                        "error_message": None,
-                        "error_type": None,
-                        "result_path": None,
-                        "started_at": None,
-                        "started_at_timestamp": None,
-                        "completed_at": "demo",
-                        "completed_at_timestamp": None,
-                        "progress_percent": 100,
-                        "progress_label": "Completed",
-                    }
-                    for algorithm_id in demo_project.get("algorithms", [])
-                ],
+                "tasks": get_demo_tasks(),
             },
         }
     project_dir = PROJECTS_ROOT / project_id
@@ -272,34 +240,15 @@ async def get_project_metadata(project_id: str, request: Request, response: Resp
                 "pseudotime_filename": dataset.get("pseudotime_file", "PseudoTime.csv"),
                 "gene_count": dataset.get("gene_count"),
                 "cell_count": dataset.get("cell_count"),
-                "gene_names": [],
+                "gene_names": dataset.get("gene_names", []),
                 "cell_names": [],
                 "known_tf_gene_names": load_known_tf_gene_names("human"),
                 "has_pseudotime": dataset.get("has_pseudotime", True),
                 "has_ground_truth": dataset.get("has_ground_truth", False),
-                "preprocessing": {
-                    "schema_version": PREPROCESSING_SCHEMA_VERSION,
-                    "matrix_state": "log_normalized",
-                    "dataset_species": "human",
-                    "enabled_stages": [],
-                    "detection": {
-                        "enabled": False,
-                        "minimum_cell_percent": 10,
-                    },
-                    "trajectory": {
-                        "enabled": False,
-                        "gene_ordering_source": "calculate",
-                        "gene_ordering_filename": None,
-                        "p_value_threshold": 0.01,
-                        "bonferroni_correction": True,
-                        "retain_significant_tfs": True,
-                    },
-                    "variance": {
-                        "enabled": False,
-                        "gene_count": 500,
-                        "include_known_tfs": True,
-                    },
-                },
+                "preprocessing": manifest.get("preprocessing", {}),
+                "preprocessing_result": manifest.get("preprocessing_result", {}),
+                "pseudotime_source": manifest.get("pseudotime_source"),
+                "pseudotime_method": manifest.get("pseudotime_method"),
                 "selected_algorithms": manifest.get("algorithms", []),
                 "ensemble_enabled": True,
                 "is_demo": True,

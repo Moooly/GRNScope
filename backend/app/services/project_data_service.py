@@ -35,7 +35,13 @@ def load_project_data(project_dir: Path, *, demo: bool = False) -> dict:
             "project_name": source.get("name", "Demo Project"),
             "project_description": source.get("description"),
             "selected_algorithms": source.get("algorithms", []),
-            "preprocessing": {"matrix_state": "log_normalized", "enabled_stages": []},
+            "preprocessing": source.get("preprocessing", {}),
+            "preprocessing_result": source.get("preprocessing_result", {}),
+            "preprocessed_expression_path": source.get("preprocessed_expression_path"),
+            "pseudotime_estimated": source.get("pseudotime_source") == "estimated",
+            "pseudotime_embedding_path": source.get("pseudotime_embedding_path"),
+            "pseudotime_curves_path": source.get("pseudotime_curves_path"),
+            "algorithm_parameters": source.get("algorithm_parameters", {}),
             "preprocessing_status": "completed",
         }
         for role, key in (
@@ -49,7 +55,7 @@ def load_project_data(project_dir: Path, *, demo: bool = False) -> dict:
                 )
                 project[f"{role}_filename"] = Path(dataset[key]).name
         metadata = dataset
-        job = {}
+        job = {"resolved_algorithm_parameters": source.get("algorithm_parameters", {})}
     else:
         project = read_project_manifest(project_dir)
         metadata = _read_optional(project_dir / "metadata.json", {})

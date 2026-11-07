@@ -1,0 +1,15 @@
+Gene1,Gene2,EdgeWeight,Confidence,Stability,MeanPercentile,BootstrapMeanEvidence,EvidenceCILower,EvidenceCIUpper,NetworkEstimator,MeanZ,ZCILower,ZCIUpper,SelectedRuns,PositiveSelectedRuns,NegativeSelectedRuns,SignedSelectedRuns,SignAgreeingRuns,BootstrapSignConfidence,BootstrapSignCoverage,BootstrapPositiveProbability,BootstrapNegativeProbability,BootstrapSignReference,ObservedRuns,RunCount,BestRank
+FOXL2,CTNNB1,0.8269390265146891,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,0.0,,,3,3,0,3,3,1.0,1.0,1.0,0.0,bootstrap_mean,3,3,1.0
+FOXL2,GATA4,0.07494338601827621,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,1.0,,,3,3,0,3,3,1.0,1.0,1.0,0.0,bootstrap_mean,3,3,1.0
+FOXL2,SOX9,-0.33210501074790955,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,0.0,,,3,0,3,3,3,1.0,1.0,0.0,1.0,bootstrap_mean,3,3,1.0
+FOXL2,SRY,-0.5338846643765768,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,1.0,,,3,0,3,3,3,1.0,1.0,0.0,1.0,bootstrap_mean,3,3,1.0
+NR0B1,AMH,-0.4847535192966461,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,0.0,,,3,0,3,3,3,1.0,1.0,0.0,1.0,bootstrap_mean,3,3,1.0
+NR5A1,DKK1,0.4047639270623525,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,0.0,,,3,3,0,3,3,1.0,1.0,1.0,0.0,bootstrap_mean,3,3,1.0
+NR5A1,FGF9,0.4241425096988678,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,0.0,,,3,3,0,3,3,1.0,1.0,1.0,0.0,bootstrap_mean,3,3,1.0
+NR5A1,NR0B1,-0.5687645872433981,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,1.0,,,3,0,3,3,3,1.0,1.0,0.0,1.0,bootstrap_mean,3,3,1.0
+SOX9,CBX2,-0.3877388834953308,1.0,1.0,1.0,1.0,1.0,1.0,bootstrap_mean_v1,1.4033099409417158,,,3,0,3,3,3,1.0,1.0,0.0,1.0,bootstrap_mean,3,3,1.0
+FOXL2,CBX2,-0.28809669613838196,0.0,0.0,0.3333333333333333,0.3333333333333333,0.025,0.5,bootstrap_mean_v1,-0.6889460161646301,,,0,0,0,0,,,,,,bootstrap_mean,3,3,2.0
+NR0B1,CBX2,-0.2855861186981201,0.0,0.0,0.16666666666666666,0.16666666666666666,0.0,0.475,bootstrap_mean_v1,-0.7143639247770844,,,0,0,0,0,,,,,,bootstrap_mean,3,3,2.0
+NR5A1,SRY,0.5078735748926798,0.0,0.0,0.0,0.0,0.0,0.0,bootstrap_mean_v1,-1.0,,,0,0,0,0,,,,,,bootstrap_mean,3,3,2.0
+SOX9,GATA4,0.04798076177636782,0.0,0.0,0.0,0.0,0.0,0.0,bootstrap_mean_v1,-1.0,,,0,0,0,0,,,,,,bootstrap_mean,3,3,2.0
+SRY,NR0B1,-0.25845638414223987,0.0,0.0,0.0,0.0,0.0,0.0,bootstrap_mean_v1,-1.0,,,0,0,0,0,,,,,,bootstrap_mean,3,3,2.0

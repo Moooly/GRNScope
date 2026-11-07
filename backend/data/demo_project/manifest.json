@@ -1,19 +1,162 @@
 {
   "project_id": "demo",
   "name": "Demo Project",
-  "description": "This demo uses selected GRN inference algorithms to show how GRNScope compares individual methods, builds a consensus network, and visualizes predicted gene regulatory relationships through an interactive graph, edge table, and overlap summary.",
+  "description": "Completed 19-gene, 2,000-cell analysis with 13 inference methods, genuine bootstrap runs, Slingshot trajectories, and the uploaded reference network.",
   "is_demo": true,
   "read_only": true,
   "preprocessing": {
-    "matrix_state": "raw"
+    "schema_version": 1,
+    "matrix_state": "log_normalized",
+    "matrix_state_selection": {
+      "source": "automatic",
+      "selected_state": "log_normalized",
+      "server_detection": {
+        "version": 1,
+        "sampled_cells": 96,
+        "detected_state": "log_normalized",
+        "confidence": "medium",
+        "reasons": [
+          "Values are non-integer with a compressed non-negative range.",
+          "The original normalization method cannot be proven from values alone."
+        ],
+        "metrics": {
+          "sampled_values": 1824,
+          "integer_fraction": 0.000548,
+          "negative_values": 0,
+          "maximum_value": 3.066428,
+          "linear_sum_cv": 0.315185,
+          "inverse_log_sum_cv": 0.359942,
+          "inverse_log_base": "2"
+        }
+      },
+      "agrees_with_server": true
+    },
+    "dataset_species": "human",
+    "enabled_stages": [
+      "detection"
+    ],
+    "detection": {
+      "enabled": true,
+      "minimum_cell_percent": 10.0
+    },
+    "trajectory": {
+      "enabled": false,
+      "gene_ordering_source": "calculate",
+      "gene_ordering_filename": null,
+      "p_value_threshold": 0.01,
+      "bonferroni_correction": true,
+      "retain_significant_tfs": false,
+      "retain_significant_tfs_requested": true
+    },
+    "variance": {
+      "enabled": false,
+      "gene_count": 500,
+      "include_known_tfs": true
+    }
   },
-  "dataset": {
-    "name": "BEELINE GSD example",
-    "expression_file": "ExpressionData.csv",
-    "pseudotime_file": "PseudoTime.csv",
-    "ground_truth_file": "refNetwork.csv",
+  "preprocessing_result": {
+    "signature": {
+      "source_expression_path": "${SOURCE_PROJECT_DIR}/expression__ExpressionData.csv",
+      "source_expression_size": 768024,
+      "source_expression_mtime_ns": 1793929694675663916,
+      "matrix_transformation": {
+        "engine": "scanpy",
+        "version": 2,
+        "matrix_state": "log_normalized",
+        "operations": [],
+        "normalization_target_sum": null
+      },
+      "detection_filter": {
+        "engine": "grnscope",
+        "version": 3,
+        "enabled": true,
+        "minimum_cell_percent": 10.0
+      },
+      "trajectory_filter": {
+        "engine": "grnscope",
+        "version": 3,
+        "enabled": false,
+        "gene_ordering_source": null,
+        "p_value_threshold": null,
+        "bonferroni_correction": null,
+        "retain_significant_tfs": null,
+        "gene_ordering_path": null,
+        "pseudotime_path": null
+      },
+      "variance_filter": {
+        "engine": "grnscope",
+        "version": 3,
+        "enabled": false,
+        "gene_count": null,
+        "include_known_tfs": null,
+        "configured_include_known_tfs": null,
+        "retain_significant_trajectory_tfs": null,
+        "known_tf_gene_names_sha256": null
+      }
+    },
+    "transformation": {
+      "engine": "scanpy",
+      "version": 2,
+      "matrix_state": "log_normalized",
+      "operations": [],
+      "normalization_target_sum": null
+    },
+    "gene_selection": [
+      {
+        "stage": "detection",
+        "minimum_cell_percent": 10.0,
+        "minimum_detected_cell_count": 200,
+        "input_gene_count": 19,
+        "retained_gene_count": 19,
+        "removed_gene_count": 0,
+        "cell_count": 2000,
+        "gene_audit_available": true
+      }
+    ],
+    "generated_gene_ordering": null,
+    "created_at": 1793929728.0748491,
     "gene_count": 19,
     "cell_count": 2000,
+    "preprocessed_expression_path": "${PROJECT_DIR}/preprocessed/ExpressionData.csv"
+  },
+  "preprocessing_status": "completed",
+  "preprocessed_expression_path": "preprocessed/ExpressionData.csv",
+  "pseudotime_source": "estimated",
+  "pseudotime_method": "Slingshot",
+  "pseudotime_estimated": true,
+  "pseudotime_trajectory_method": "Slingshot",
+  "pseudotime_embedding_path": "inputs/SlingshotEmbedding.csv",
+  "pseudotime_curves_path": "inputs/SlingshotCurves.csv",
+  "pseudotime_embedding_method": "PCA",
+  "dataset": {
+    "name": "ExpressionData",
+    "species": "human",
+    "expression_file": "ExpressionData.csv",
+    "pseudotime_file": "PseudoTime.csv",
+    "ground_truth_file": "GroundTruthNetwork.csv",
+    "gene_count": 19,
+    "cell_count": 2000,
+    "gene_names": [
+      "DMRT1",
+      "FGF9",
+      "RSPO1",
+      "DHH",
+      "CTNNB1",
+      "PGD2",
+      "WT1mKTS",
+      "SRY",
+      "DKK1",
+      "WNT4",
+      "CBX2",
+      "AMH",
+      "NR0B1",
+      "NR5A1",
+      "WT1pKTS",
+      "FOXL2",
+      "UGR",
+      "SOX9",
+      "GATA4"
+    ],
     "dimensions": {
       "rows": 19,
       "columns": 2000,
@@ -27,20 +170,31 @@
     {
       "name": "ExpressionData.csv",
       "path": "inputs/ExpressionData.csv",
-      "description": "Demo expression matrix with genes as rows and cells as columns."
+      "description": "Original uploaded expression matrix; genes \u00d7 cells, declared log-normalized."
     },
     {
       "name": "PseudoTime.csv",
       "path": "inputs/PseudoTime.csv",
-      "description": "Demo pseudotime file used by pseudotime-based algorithms."
+      "description": "Canonical Slingshot pseudotime actually used in the completed analysis."
     },
     {
-      "name": "refNetwork.csv",
-      "path": "inputs/refNetwork.csv",
-      "description": "Illustrative GSD-style reference network used to demonstrate the benchmark views. Not a curated gold standard."
+      "name": "GroundTruthNetwork.csv",
+      "path": "inputs/GroundTruthNetwork.csv",
+      "description": "Reference network uploaded with the completed project."
+    },
+    {
+      "name": "SlingshotEmbedding.csv",
+      "path": "inputs/SlingshotEmbedding.csv",
+      "description": "Saved Slingshot cell embedding."
+    },
+    {
+      "name": "SlingshotCurves.csv",
+      "path": "inputs/SlingshotCurves.csv",
+      "description": "Saved Slingshot lineage curves."
     }
   ],
   "algorithms": [
+    "CELLORACLE",
     "GENIE3",
     "GRISLI",
     "GRNBOOST2",
@@ -54,8 +208,160 @@
     "SINCERITIES",
     "SINGE"
   ],
+  "algorithm_runs": {
+    "CELLORACLE": {
+      "started_at": "2026-11-06T01:49:19.707805+00:00",
+      "completed_at": "2026-11-06T01:50:48.464520+00:00",
+      "elapsed_seconds": 88,
+      "run_count": 3
+    },
+    "GENIE3": {
+      "started_at": "2026-11-06T01:53:40.983618+00:00",
+      "completed_at": "2026-11-06T01:55:47.991188+00:00",
+      "elapsed_seconds": 127,
+      "run_count": 3
+    },
+    "GRISLI": {
+      "started_at": "2026-11-06T01:53:36.700779+00:00",
+      "completed_at": "2026-11-06T02:27:24.202409+00:00",
+      "elapsed_seconds": 2027,
+      "run_count": 5
+    },
+    "GRNBOOST2": {
+      "started_at": "2026-11-06T01:50:51.625783+00:00",
+      "completed_at": "2026-11-06T01:53:34.069157+00:00",
+      "elapsed_seconds": 162,
+      "run_count": 3
+    },
+    "GRNVBEM": {
+      "started_at": "2026-11-06T02:07:43.937058+00:00",
+      "completed_at": "2026-11-06T22:29:27.043400+00:00",
+      "elapsed_seconds": 73303,
+      "run_count": 5
+    },
+    "LEAP": {
+      "started_at": "2026-11-06T01:50:44.521538+00:00",
+      "completed_at": "2026-11-06T01:51:58.111013+00:00",
+      "elapsed_seconds": 73,
+      "run_count": 3
+    },
+    "PEARSON": {
+      "started_at": "2026-11-06T01:48:48.457031+00:00",
+      "completed_at": "2026-11-06T01:48:56.180889+00:00",
+      "elapsed_seconds": 7,
+      "run_count": 3
+    },
+    "PIDC": {
+      "started_at": "2026-11-06T01:49:45.696006+00:00",
+      "completed_at": "2026-11-06T01:50:41.835534+00:00",
+      "elapsed_seconds": 56,
+      "run_count": 3
+    },
+    "PPCOR": {
+      "started_at": "2026-11-06T01:48:48.707776+00:00",
+      "completed_at": "2026-11-06T01:49:16.447392+00:00",
+      "elapsed_seconds": 27,
+      "run_count": 5
+    },
+    "SCODE": {
+      "started_at": "2026-11-06T02:00:09.845809+00:00",
+      "completed_at": "2026-11-06T02:07:41.573967+00:00",
+      "elapsed_seconds": 451,
+      "run_count": 6
+    },
+    "SCRIBE": {
+      "started_at": "2026-11-06T01:52:00.666362+00:00",
+      "completed_at": "2026-11-06T01:53:37.577989+00:00",
+      "elapsed_seconds": 96,
+      "run_count": 6
+    },
+    "SINCERITIES": {
+      "started_at": "2026-11-06T01:49:01.047693+00:00",
+      "completed_at": "2026-11-06T01:49:43.197405+00:00",
+      "elapsed_seconds": 42,
+      "run_count": 6
+    },
+    "SINGE": {
+      "started_at": "2026-11-06T01:55:50.700268+00:00",
+      "completed_at": "2026-11-06T02:00:07.306426+00:00",
+      "elapsed_seconds": 256,
+      "run_count": 4
+    }
+  },
+  "algorithm_parameters": {
+    "CELLORACLE": {
+      "maxCells": 30000,
+      "pValueCutoff": 0.05
+    },
+    "GENIE3": {
+      "seed": 1,
+      "nEstimators": 400,
+      "maxFeatures": "sqrt"
+    },
+    "GRISLI": {
+      "maxGenes": 19,
+      "L": 10,
+      "R": 1000,
+      "alphaMin": 0.0
+    },
+    "GRNBOOST2": {
+      "seed": 1,
+      "learningRate": 0.01,
+      "nEstimators": 5000,
+      "maxFeatures": 0.1
+    },
+    "GRNVBEM": {
+      "maxGenes": 19
+    },
+    "LEAP": {
+      "maxLag": 0.33
+    },
+    "PEARSON": {},
+    "PIDC": {
+      "maxGenes": 19
+    },
+    "PPCOR": {
+      "maxGenes": 500,
+      "pVal": 0.01
+    },
+    "SCODE": {
+      "z": 4,
+      "nIter": 1000,
+      "nRep": 3
+    },
+    "SCRIBE": {
+      "maxGenes": 19,
+      "delay": 5,
+      "method": "ucRDI",
+      "lowerDetectionLimit": 0,
+      "expressionFamily": "uninormal",
+      "log": false,
+      "ignorePT": true
+    },
+    "SINCERITIES": {
+      "maxGenes": 19,
+      "nBins": 10
+    },
+    "SINGE": {
+      "maxGenes": 19,
+      "lambda": 0.01,
+      "dT": 15,
+      "num_lags": 5,
+      "kernel_width": 0.5,
+      "prob_zero_removal": 0,
+      "prob_remove_samples": 0.0,
+      "family": "gaussian",
+      "num_replicates": 3
+    }
+  },
   "result_layout": {
     "base_dir": "results",
     "ranked_edges_filename": "rankedEdges.csv"
+  },
+  "provenance": {
+    "archive": "ExpressionData_run-manifests-4.zip",
+    "sha256": "67fa9fa70c5da6836ab7dcf14da3f9e94d0dee0cc0ffa11cabc75bc0696869ce",
+    "exported_at": "2026-11-07 14:42:20 EST",
+    "source_project": "eb163264f98e"
   }
 }

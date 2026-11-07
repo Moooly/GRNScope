@@ -72,7 +72,7 @@ project = json.loads((root / "proxy-project.json").read_text())
 results = json.loads((root / "results.json").read_text())
 pidc = json.loads((root / "pidc.json").read_text())
 assert project["project"]["project_id"] == "demo"
-assert len(results["results"]) == 12
+assert len(results["results"]) == 13
 assert pidc["result"]["top_edges"]
 print("Demo route, proxy, result list, and PIDC result are available.")
 PY

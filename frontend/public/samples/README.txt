@@ -1,18 +1,15 @@
 GRNScope sample dataset
 =======================
 
-These are the input files used by the completed GRNScope demo.
+Inputs from the completed 19-gene, 2,000-cell demo project (13 methods).
+Species: human. Matrix values: log-normalized. Detection filter: 10%.
 
-ExpressionData.csv
-  Required expression matrix with genes as rows and cells as columns.
-  This sample contains 19 genes and 2,000 cells.
+ExpressionData.csv: exact original uploaded expression matrix (genes as rows).
+PseudoTime.csv: canonical Slingshot pseudotime used by the analysis; cell IDs
+match the expression columns. It contains two trajectory columns; NA means
+that a cell is not assigned to that trajectory.
+GroundTruthNetwork.csv: the project's uploaded reference network, with
+Gene1, Gene2 and Type (+/-) columns.
 
-PseudoTime.csv
-  Optional pseudotime input with one row per cell and two trajectory columns.
-  Cell IDs match the columns in ExpressionData.csv.
-
-GroundTruthNetwork.csv
-  Optional reference network with regulator (Gene1), target (Gene2), and
-  regulatory type (Type) columns.
-
-Cluster labels and a custom TF list are not part of this demo dataset.
+These files are analysis inputs; rerunning methods may produce different
+results. The demo preserves the actual archived outputs and bootstrap counts.

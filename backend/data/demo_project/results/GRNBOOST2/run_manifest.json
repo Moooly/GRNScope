@@ -1,0 +1,2334 @@
+{
+  "schema": {
+    "name": "grnscope.run-manifest",
+    "version": "2.0.0"
+  },
+  "identity": {
+    "project_id": "eb163264f98e",
+    "project_name": "ExpressionData",
+    "algorithm_id": "GRNBOOST2",
+    "status": "Completed",
+    "created_at": "2026-11-06T01:53:34.295169+00:00"
+  },
+  "inputs": {
+    "checksum_algorithm": "sha256",
+    "files": [
+      {
+        "role": "expression_matrix",
+        "original_filename": "ExpressionData.csv",
+        "project_path": "expression__ExpressionData.csv",
+        "size_bytes": 768024,
+        "sha256": "d1998d31fffc33b5a70965a11177614efa125c9e8002ccf411dfa0c43b9edcd7"
+      },
+      {
+        "role": "pseudotime",
+        "original_filename": "PseudoTime.csv",
+        "project_path": "PseudoTime.csv",
+        "size_bytes": 67588,
+        "sha256": "f50226d9f487b52e6188960c5fe150ae18d103819997b10cb80779e24e771661"
+      },
+      {
+        "role": "ground_truth_network",
+        "original_filename": "GroundTruthNetwork.csv",
+        "project_path": "ground_truth__GroundTruthNetwork.csv",
+        "size_bytes": 1122,
+        "sha256": "ced52bd994d01fda11b4c84c13c345de45cb02784ccdef936b1ae8fe50eb8d14"
+      },
+      {
+        "role": "effective_preprocessed_expression_matrix",
+        "original_filename": "ExpressionData.csv",
+        "project_path": "preprocessed/ExpressionData.csv",
+        "size_bytes": 521236,
+        "sha256": "61f1a48a47f5c650b870c719053f8990a9c3705ea648c55fc314b09a61b10ef1"
+      },
+      {
+        "role": "transcription_factor_reference",
+        "original_filename": "human.csv",
+        "project_path": "human.csv",
+        "size_bytes": 36362,
+        "sha256": "19d8dee2e49964c10915a1d30e6cf3b8c6b81ce84b19dc6a4e311549a7fbfc6b",
+        "source": "GRNScope bundled species reference"
+      }
+    ]
+  },
+  "matrix_and_preprocessing": {
+    "declared_input_state": "log_normalized",
+    "detected_input_state": "log_normalized",
+    "output_state": null,
+    "transformation_engine": "scanpy",
+    "transformation_version": 2,
+    "operations": [],
+    "normalization_target_sum": null,
+    "project_configuration": {
+      "schema_version": 1,
+      "matrix_state": "log_normalized",
+      "matrix_state_selection": {
+        "source": "automatic",
+        "selected_state": "log_normalized",
+        "server_detection": {
+          "version": 1,
+          "sampled_cells": 96,
+          "detected_state": "log_normalized",
+          "confidence": "medium",
+          "reasons": [
+            "Values are non-integer with a compressed non-negative range.",
+            "The original normalization method cannot be proven from values alone."
+          ],
+          "metrics": {
+            "sampled_values": 1824,
+            "integer_fraction": 0.000548,
+            "negative_values": 0,
+            "maximum_value": 3.066428,
+            "linear_sum_cv": 0.315185,
+            "inverse_log_sum_cv": 0.359942,
+            "inverse_log_base": "2"
+          }
+        },
+        "agrees_with_server": true
+      },
+      "dataset_species": "human",
+      "enabled_stages": [
+        "detection"
+      ],
+      "detection": {
+        "enabled": true,
+        "minimum_cell_percent": 10.0
+      },
+      "trajectory": {
+        "enabled": false,
+        "gene_ordering_source": "calculate",
+        "gene_ordering_filename": null,
+        "p_value_threshold": 0.01,
+        "bonferroni_correction": true,
+        "retain_significant_tfs": false,
+        "retain_significant_tfs_requested": true
+      },
+      "variance": {
+        "enabled": false,
+        "gene_count": 500,
+        "include_known_tfs": true
+      }
+    },
+    "filter_steps": [
+      {
+        "stage": "detection",
+        "minimum_cell_percent": 10.0,
+        "minimum_detected_cell_count": 200,
+        "input_gene_count": 19,
+        "retained_gene_count": 19,
+        "removed_gene_count": 0,
+        "cell_count": 2000,
+        "gene_audit_available": true
+      }
+    ]
+  },
+  "genes": {
+    "before_filtering": {
+      "count": 19,
+      "genes": [
+        "DMRT1",
+        "FGF9",
+        "RSPO1",
+        "DHH",
+        "CTNNB1",
+        "PGD2",
+        "WT1mKTS",
+        "SRY",
+        "DKK1",
+        "WNT4",
+        "CBX2",
+        "AMH",
+        "NR0B1",
+        "NR5A1",
+        "WT1pKTS",
+        "FOXL2",
+        "UGR",
+        "SOX9",
+        "GATA4"
+      ]
+    },
+    "after_project_filtering": {
+      "count": 19,
+      "genes": [
+        "DMRT1",
+        "FGF9",
+        "RSPO1",
+        "DHH",
+        "CTNNB1",
+        "PGD2",
+        "WT1mKTS",
+        "SRY",
+        "DKK1",
+        "WNT4",
+        "CBX2",
+        "AMH",
+        "NR0B1",
+        "NR5A1",
+        "WT1pKTS",
+        "FOXL2",
+        "UGR",
+        "SOX9",
+        "GATA4"
+      ]
+    },
+    "after_algorithm_filtering": {
+      "count": 19,
+      "genes": [
+        "DMRT1",
+        "FGF9",
+        "RSPO1",
+        "DHH",
+        "CTNNB1",
+        "PGD2",
+        "WT1mKTS",
+        "SRY",
+        "DKK1",
+        "WNT4",
+        "CBX2",
+        "AMH",
+        "NR0B1",
+        "NR5A1",
+        "WT1pKTS",
+        "FOXL2",
+        "UGR",
+        "SOX9",
+        "GATA4"
+      ]
+    },
+    "project_filter_stages": [
+      {
+        "stage": "detection",
+        "input_gene_count": 19,
+        "retained_gene_count": 19,
+        "removed_gene_count": 0,
+        "retained_genes": [
+          "DMRT1",
+          "FGF9",
+          "RSPO1",
+          "DHH",
+          "CTNNB1",
+          "PGD2",
+          "WT1mKTS",
+          "SRY",
+          "DKK1",
+          "WNT4",
+          "CBX2",
+          "AMH",
+          "NR0B1",
+          "NR5A1",
+          "WT1pKTS",
+          "FOXL2",
+          "UGR",
+          "SOX9",
+          "GATA4"
+        ],
+        "removed_genes": []
+      }
+    ],
+    "algorithm_filter": {}
+  },
+  "execution": {
+    "algorithm": {
+      "id": "GRNBOOST2",
+      "name": "GRNBOOST2",
+      "runner": "BLRun/grnboost2Runner.py",
+      "version": "base"
+    },
+    "container": {
+      "image": "grnbeeline/arboreto:base",
+      "digest": null
+    },
+    "software_versions": {
+      "python": "3.11.18",
+      "platform": "Linux-5.4.0-165-generic-x86_64-with-glibc2.31",
+      "fastapi": "0.162.0",
+      "numpy": "2.4.6",
+      "pandas": "2.3.3",
+      "scanpy": "1.11.5",
+      "anndata": "0.12.19",
+      "scipy": "1.17.1",
+      "scikit-learn": "1.9.1",
+      "grnscope_git_commit": "3e6dda2f5cf549dcc236fdafbabf805055224661"
+    },
+    "parameters": {
+      "seed": 1,
+      "learningRate": 0.01,
+      "nEstimators": 5000,
+      "maxFeatures": 0.1
+    },
+    "run_settings": {
+      "ensemble_enabled": "true",
+      "confidence_run_mode": "automatic",
+      "confidence_bootstrap_runs": 50,
+      "confidence_evidence_threshold": 0.8,
+      "ranked_edges_per_target_limit": 19,
+      "scope_order": [
+        "global"
+      ],
+      "celloracle": null
+    },
+    "random_seeds": [
+      {
+        "run_id": "bootstrap-1",
+        "seed": 35060,
+        "status": "Completed",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 53
+      },
+      {
+        "run_id": "bootstrap-10",
+        "seed": 35069,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-11",
+        "seed": 35070,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-12",
+        "seed": 35071,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-13",
+        "seed": 35072,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-14",
+        "seed": 35073,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-15",
+        "seed": 35074,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-16",
+        "seed": 35075,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-17",
+        "seed": 35076,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-18",
+        "seed": 35077,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-19",
+        "seed": 35078,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-2",
+        "seed": 35061,
+        "status": "Completed",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 55
+      },
+      {
+        "run_id": "bootstrap-20",
+        "seed": 35079,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-21",
+        "seed": 35080,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-22",
+        "seed": 35081,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-23",
+        "seed": 35082,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-24",
+        "seed": 35083,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-25",
+        "seed": 35084,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-26",
+        "seed": 35085,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-27",
+        "seed": 35086,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-28",
+        "seed": 35087,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-29",
+        "seed": 35088,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-3",
+        "seed": 35062,
+        "status": "Completed",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 51
+      },
+      {
+        "run_id": "bootstrap-30",
+        "seed": 35089,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-31",
+        "seed": 35090,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-32",
+        "seed": 35091,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-33",
+        "seed": 35092,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-34",
+        "seed": 35093,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-35",
+        "seed": 35094,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-36",
+        "seed": 35095,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-37",
+        "seed": 35096,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-38",
+        "seed": 35097,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-39",
+        "seed": 35098,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-4",
+        "seed": 35063,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-40",
+        "seed": 35099,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-41",
+        "seed": 35100,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-42",
+        "seed": 35101,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-43",
+        "seed": 35102,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-44",
+        "seed": 35103,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-45",
+        "seed": 35104,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-46",
+        "seed": 35105,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-47",
+        "seed": 35106,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-48",
+        "seed": 35107,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-49",
+        "seed": 35108,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-5",
+        "seed": 35064,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-50",
+        "seed": 35109,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-6",
+        "seed": 35065,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-7",
+        "seed": 35066,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-8",
+        "seed": 35067,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      },
+      {
+        "run_id": "bootstrap-9",
+        "seed": 35068,
+        "status": "Skipped",
+        "cell_count": 2000,
+        "gene_count": 19,
+        "elapsed_seconds": 0
+      }
+    ],
+    "random_seed_notes": "Bootstrap draws use the recorded seeds. Archived unresampled runs may have a null seed; new analyses use bootstrap runs only."
+  },
+  "pseudotime": {
+    "source": "estimated",
+    "filename": "PseudoTime.csv",
+    "sha256": "f50226d9f487b52e6188960c5fe150ae18d103819997b10cb80779e24e771661",
+    "method": "Slingshot",
+    "start_cluster": null,
+    "input_contract": {
+      "version": 2,
+      "source_expression": {
+        "path": "${SOURCE_PROJECT_DIR}/expression__ExpressionData.csv",
+        "size": 768024,
+        "mtime_ns": 1793929694675663916
+      },
+      "matrix_transformation": {
+        "engine": "scanpy",
+        "version": 2,
+        "matrix_state": "log_normalized",
+        "operations": [],
+        "normalization_target_sum": null
+      },
+      "cluster_labels": null,
+      "start_cluster": null,
+      "slingshot_image": "grnbeeline/slingshot:0.1.0",
+      "slingshot_runtime_matrix_state": "log_normalized"
+    },
+    "canonicalization": {
+      "signature": {
+        "version": 1,
+        "source_pseudotime": {
+          "path": "${SOURCE_PROJECT_DIR}/PseudoTime.csv",
+          "size": 67588,
+          "mtime_ns": 1793929726151535353
+        },
+        "source_expression": {
+          "path": "${SOURCE_PROJECT_DIR}/expression__ExpressionData.csv",
+          "size": 768024,
+          "mtime_ns": 1793929694675663916
+        },
+        "expression_cell_count": 2000
+      },
+      "source_format": "cell_id_trajectory_columns",
+      "trajectory_count": 2,
+      "cell_count": 2000,
+      "trajectory_names": [
+        "PseudoTime1",
+        "PseudoTime2"
+      ]
+    },
+    "metadata_has_pseudotime": true
+  },
+  "results": {
+    "all_runs_included": true,
+    "expected_run_ids": [
+      "bootstrap-1",
+      "bootstrap-2",
+      "bootstrap-3"
+    ],
+    "included_run_ids": [
+      "bootstrap-1",
+      "bootstrap-2",
+      "bootstrap-3"
+    ],
+    "run_result_count": 3,
+    "files": [
+      {
+        "role": "combined_result",
+        "run_id": null,
+        "scope_id": "global",
+        "path": "results/rankedEdges.csv",
+        "size_bytes": 65603,
+        "sha256": "0d3f7fe25f90e4f75a255eda200b777f7b3da8b876a2c5d3b6434ef9f7d863ca"
+      },
+      {
+        "role": "run_result",
+        "run_id": "bootstrap-1",
+        "scope_id": "global",
+        "path": "results/runs/bootstrap-1/rankedEdges.csv",
+        "size_bytes": 10040,
+        "sha256": "5390bd89916b5ddd4b5d70dfc4a3f28ce1964d31162ea76a5478aea7ee57b401"
+      },
+      {
+        "role": "run_result",
+        "run_id": "bootstrap-2",
+        "scope_id": "global",
+        "path": "results/runs/bootstrap-2/rankedEdges.csv",
+        "size_bytes": 10046,
+        "sha256": "6262418497184e4ec3701ed0cd2a185fe1409c9b55fd6b82f94e2f0bae0223ed"
+      },
+      {
+        "role": "run_result",
+        "run_id": "bootstrap-3",
+        "scope_id": "global",
+        "path": "results/runs/bootstrap-3/rankedEdges.csv",
+        "size_bytes": 10031,
+        "sha256": "b0b5a0623d0d8007f5db992a48a0e17f0f67995be18d5a8932e113f956e21904"
+      }
+    ]
+  },
+  "runtime": {
+    "started_at": "2026-11-06T01:50:51.625783+00:00",
+    "completed_at": "2026-11-06T01:53:34.069157+00:00",
+    "elapsed_seconds": 162,
+    "replicates": {
+      "bootstrap-1": {
+        "run_kind": "bootstrap",
+        "seed": 35060,
+        "cell_count": 2000,
+        "unique_cell_count": 1257,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "stages_seconds": {
+          "job_runtime_initialization": 0.009456,
+          "job_confidence_planning": 0.032768,
+          "input_materialization": 0.002999,
+          "config_generation": 0.000597,
+          "blrunner_request": 53.668531,
+          "persistent_worker_startup": 0.304751,
+          "blrunner_request_overhead_estimate": 0.518977,
+          "output_ingestion": 0.006474,
+          "confidence_update": 0.003542
+        },
+        "status": "Completed",
+        "started_at": "2026-11-06 09:50:51",
+        "started_at_timestamp": 1793929851.99265,
+        "completed_at": "2026-11-06 09:51:45",
+        "completed_at_timestamp": 1793929905.6626782,
+        "elapsed_seconds": 53,
+        "runner_observability": {
+          "schema_version": 1,
+          "algorithm_image": "grnbeeline/arboreto:base",
+          "status": "Completed",
+          "resource_allocation": {
+            "host_cpu_count": 128,
+            "host_memory_mb": 1031668,
+            "effective_concurrency": 2,
+            "cpu_budget": 4,
+            "memory_budget_mb": 8192,
+            "trajectory_workers": 4
+          },
+          "stages_seconds": {
+            "runner_setup": 0.000746,
+            "input_generation": 0.120888,
+            "algorithm_execution": 52.852,
+            "container_and_wrapper_overhead_estimate": 1.992,
+            "output_parsing": 0.015477,
+            "runner_pipeline_total": 53.148808,
+            "runner_observed_total": 53.149554
+          },
+          "provenance": {
+            "source_sha256": "2ea146daf888706d92d7bfbc45dddbd21a8209163e37a7b05aeea94e06b64a08",
+            "python": "3.11.18",
+            "numpy": "2.4.6",
+            "pandas": "2.3.3",
+            "parameters": {
+              "seed": 1,
+              "learningRate": 0.01,
+              "nEstimators": 5000,
+              "maxFeatures": 0.1,
+              "matrixFormat": "sparse",
+              "maxRegulatorsPerTarget": 19
+            },
+            "edge_policy": "no_self_unique_max_absolute_positive_sign_tie_lexical_names_v1",
+            "source_revision": "6eb083e0be4737dfc60db8ee9da8f0a382097d02",
+            "image_id": "sha256:87a88bcee5159dd80b890fd3329a5c5767a56e9bd14fce95a5fb9eaebcf1e01d",
+            "image_digests": []
+          },
+          "resource_usage": {
+            "time_file_count": 1,
+            "parsed_time_file_count": 1,
+            "container_wall_seconds": 50.86,
+            "cpu_user_seconds": 53.38,
+            "cpu_system_seconds": 11.52,
+            "cpu_total_seconds": 64.9,
+            "effective_cpu_percent": 127.61,
+            "maximum_resident_set_kib": 261452,
+            "wall_time_semantics": "sum_of_container_elapsed_times",
+            "rss_semantics": "maximum_single_process_high_water_mark_not_aggregate"
+          },
+          "output_reduction": {
+            "input_edge_count": 342,
+            "retained_edge_count": 342,
+            "max_regulators_per_target": 19,
+            "ranked_edges_preserved": true
+          },
+          "fingerprints": {
+            "expression_sha256": "61f1a48a47f5c650b870c719053f8990a9c3705ea648c55fc314b09a61b10ef1",
+            "pseudotime_sha256": "6545de91eadecf4435c5f7b3d1c2696380a52d7a2daaa0cecca14ae93e989857",
+            "generated_inputs_sha256": {
+              "ExpressionData.csv": "0b485cd9460846c42a69df9ce78df00ba623efd1339feb0f8cf854c586bc00cb"
+            },
+            "selected_cells_sha256": "df51c84bde8a224204ad576323914b03bfeb4838482023c6c501b248134e4eb0",
+            "algorithm_parameters_sha256": "431e4f671063f442726740a7244deafd33de54aa3bffc05a3168d4216487252d",
+            "ranked_edges_sha256": "5390bd89916b5ddd4b5d70dfc4a3f28ce1964d31162ea76a5478aea7ee57b401"
+          },
+          "input_cache": {
+            "hits": 0,
+            "misses": 1,
+            "entries": 1
+          }
+        }
+      },
+      "bootstrap-2": {
+        "run_kind": "bootstrap",
+        "seed": 35061,
+        "cell_count": 2000,
+        "unique_cell_count": 1262,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "stages_seconds": {
+          "input_materialization": 0.005448,
+          "config_generation": 0.000661,
+          "blrunner_request": 55.815289,
+          "blrunner_request_overhead_estimate": 0.97377,
+          "output_ingestion": 0.006509,
+          "confidence_update": 0.012416
+        },
+        "status": "Completed",
+        "started_at": "2026-11-06 09:51:45",
+        "started_at_timestamp": 1793929905.857313,
+        "completed_at": "2026-11-06 09:52:41",
+        "completed_at_timestamp": 1793929961.6875975,
+        "elapsed_seconds": 55,
+        "runner_observability": {
+          "schema_version": 1,
+          "algorithm_image": "grnbeeline/arboreto:base",
+          "status": "Completed",
+          "resource_allocation": {
+            "host_cpu_count": 128,
+            "host_memory_mb": 1031668,
+            "effective_concurrency": 2,
+            "cpu_budget": 4,
+            "memory_budget_mb": 8192,
+            "trajectory_workers": 4
+          },
+          "stages_seconds": {
+            "runner_setup": 0.002242,
+            "input_generation": 0.051999,
+            "algorithm_execution": 54.705435,
+            "container_and_wrapper_overhead_estimate": 1.655435,
+            "output_parsing": 0.019088,
+            "runner_pipeline_total": 54.839276,
+            "runner_observed_total": 54.841519
+          },
+          "provenance": {
+            "source_sha256": "2ea146daf888706d92d7bfbc45dddbd21a8209163e37a7b05aeea94e06b64a08",
+            "python": "3.11.18",
+            "numpy": "2.4.6",
+            "pandas": "2.3.3",
+            "parameters": {
+              "seed": 1,
+              "learningRate": 0.01,
+              "nEstimators": 5000,
+              "maxFeatures": 0.1,
+              "matrixFormat": "sparse",
+              "maxRegulatorsPerTarget": 19
+            },
+            "edge_policy": "no_self_unique_max_absolute_positive_sign_tie_lexical_names_v1",
+            "source_revision": "6eb083e0be4737dfc60db8ee9da8f0a382097d02",
+            "image_id": "sha256:87a88bcee5159dd80b890fd3329a5c5767a56e9bd14fce95a5fb9eaebcf1e01d",
+            "image_digests": []
+          },
+          "resource_usage": {
+            "time_file_count": 1,
+            "parsed_time_file_count": 1,
+            "container_wall_seconds": 53.05,
+            "cpu_user_seconds": 71.62,
+            "cpu_system_seconds": 25.7,
+            "cpu_total_seconds": 97.32,
+            "effective_cpu_percent": 183.45,
+            "maximum_resident_set_kib": 264932,
+            "wall_time_semantics": "sum_of_container_elapsed_times",
+            "rss_semantics": "maximum_single_process_high_water_mark_not_aggregate"
+          },
+          "output_reduction": {
+            "input_edge_count": 342,
+            "retained_edge_count": 342,
+            "max_regulators_per_target": 19,
+            "ranked_edges_preserved": true
+          },
+          "fingerprints": {
+            "expression_sha256": "61f1a48a47f5c650b870c719053f8990a9c3705ea648c55fc314b09a61b10ef1",
+            "pseudotime_sha256": "6545de91eadecf4435c5f7b3d1c2696380a52d7a2daaa0cecca14ae93e989857",
+            "generated_inputs_sha256": {
+              "ExpressionData.csv": "009109035ab6ef980e0822ff358fd1f83246adb0471e11a74810e2e48c13b6d5"
+            },
+            "selected_cells_sha256": "a945603937bafdb4c2d8ebd145356882d02431a8e19be55802b8af047a2860b7",
+            "algorithm_parameters_sha256": "431e4f671063f442726740a7244deafd33de54aa3bffc05a3168d4216487252d",
+            "ranked_edges_sha256": "6262418497184e4ec3701ed0cd2a185fe1409c9b55fd6b82f94e2f0bae0223ed"
+          },
+          "input_cache": {
+            "hits": 1,
+            "misses": 0,
+            "entries": 1
+          }
+        }
+      },
+      "bootstrap-3": {
+        "run_kind": "bootstrap",
+        "seed": 35062,
+        "cell_count": 2000,
+        "unique_cell_count": 1268,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "stages_seconds": {
+          "input_materialization": 0.005908,
+          "config_generation": 0.012207,
+          "blrunner_request": 51.724932,
+          "blrunner_request_overhead_estimate": 0.338028,
+          "output_ingestion": 0.001911,
+          "confidence_update": 0.007967
+        },
+        "status": "Completed",
+        "started_at": "2026-11-06 09:52:41",
+        "started_at_timestamp": 1793929961.8412235,
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.570445,
+        "elapsed_seconds": 51,
+        "runner_observability": {
+          "schema_version": 1,
+          "algorithm_image": "grnbeeline/arboreto:base",
+          "status": "Completed",
+          "resource_allocation": {
+            "host_cpu_count": 128,
+            "host_memory_mb": 1031668,
+            "effective_concurrency": 2,
+            "cpu_budget": 4,
+            "memory_budget_mb": 8192,
+            "trajectory_workers": 4
+          },
+          "stages_seconds": {
+            "runner_setup": 0.00211,
+            "input_generation": 0.053868,
+            "algorithm_execution": 51.223135,
+            "container_and_wrapper_overhead_estimate": 1.733135,
+            "output_parsing": 0.018036,
+            "runner_pipeline_total": 51.384794,
+            "runner_observed_total": 51.386904
+          },
+          "provenance": {
+            "source_sha256": "2ea146daf888706d92d7bfbc45dddbd21a8209163e37a7b05aeea94e06b64a08",
+            "python": "3.11.18",
+            "numpy": "2.4.6",
+            "pandas": "2.3.3",
+            "parameters": {
+              "seed": 1,
+              "learningRate": 0.01,
+              "nEstimators": 5000,
+              "maxFeatures": 0.1,
+              "matrixFormat": "sparse",
+              "maxRegulatorsPerTarget": 19
+            },
+            "edge_policy": "no_self_unique_max_absolute_positive_sign_tie_lexical_names_v1",
+            "source_revision": "6eb083e0be4737dfc60db8ee9da8f0a382097d02",
+            "image_id": "sha256:87a88bcee5159dd80b890fd3329a5c5767a56e9bd14fce95a5fb9eaebcf1e01d",
+            "image_digests": []
+          },
+          "resource_usage": {
+            "time_file_count": 1,
+            "parsed_time_file_count": 1,
+            "container_wall_seconds": 49.49,
+            "cpu_user_seconds": 77.26,
+            "cpu_system_seconds": 28.72,
+            "cpu_total_seconds": 105.98,
+            "effective_cpu_percent": 214.14,
+            "maximum_resident_set_kib": 263496,
+            "wall_time_semantics": "sum_of_container_elapsed_times",
+            "rss_semantics": "maximum_single_process_high_water_mark_not_aggregate"
+          },
+          "output_reduction": {
+            "input_edge_count": 342,
+            "retained_edge_count": 342,
+            "max_regulators_per_target": 19,
+            "ranked_edges_preserved": true
+          },
+          "fingerprints": {
+            "expression_sha256": "61f1a48a47f5c650b870c719053f8990a9c3705ea648c55fc314b09a61b10ef1",
+            "pseudotime_sha256": "6545de91eadecf4435c5f7b3d1c2696380a52d7a2daaa0cecca14ae93e989857",
+            "generated_inputs_sha256": {
+              "ExpressionData.csv": "de4835742888f1153c875a9547dde554e6d2c8f97ede6e3dfa192972d8dd4245"
+            },
+            "selected_cells_sha256": "6fa9acb69911e511c749dd6b6c5761826c20ee127c1882621b1812c9eaa509f2",
+            "algorithm_parameters_sha256": "431e4f671063f442726740a7244deafd33de54aa3bffc05a3168d4216487252d",
+            "ranked_edges_sha256": "b0b5a0623d0d8007f5db992a48a0e17f0f67995be18d5a8932e113f956e21904"
+          },
+          "input_cache": {
+            "hits": 1,
+            "misses": 0,
+            "entries": 1
+          }
+        }
+      },
+      "bootstrap-4": {
+        "run_kind": "bootstrap",
+        "seed": 35063,
+        "cell_count": 2000,
+        "unique_cell_count": 1264,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-5": {
+        "run_kind": "bootstrap",
+        "seed": 35064,
+        "cell_count": 2000,
+        "unique_cell_count": 1255,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-6": {
+        "run_kind": "bootstrap",
+        "seed": 35065,
+        "cell_count": 2000,
+        "unique_cell_count": 1260,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-7": {
+        "run_kind": "bootstrap",
+        "seed": 35066,
+        "cell_count": 2000,
+        "unique_cell_count": 1259,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-8": {
+        "run_kind": "bootstrap",
+        "seed": 35067,
+        "cell_count": 2000,
+        "unique_cell_count": 1262,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-9": {
+        "run_kind": "bootstrap",
+        "seed": 35068,
+        "cell_count": 2000,
+        "unique_cell_count": 1288,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-10": {
+        "run_kind": "bootstrap",
+        "seed": 35069,
+        "cell_count": 2000,
+        "unique_cell_count": 1275,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-11": {
+        "run_kind": "bootstrap",
+        "seed": 35070,
+        "cell_count": 2000,
+        "unique_cell_count": 1266,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-12": {
+        "run_kind": "bootstrap",
+        "seed": 35071,
+        "cell_count": 2000,
+        "unique_cell_count": 1263,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-13": {
+        "run_kind": "bootstrap",
+        "seed": 35072,
+        "cell_count": 2000,
+        "unique_cell_count": 1261,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-14": {
+        "run_kind": "bootstrap",
+        "seed": 35073,
+        "cell_count": 2000,
+        "unique_cell_count": 1279,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-15": {
+        "run_kind": "bootstrap",
+        "seed": 35074,
+        "cell_count": 2000,
+        "unique_cell_count": 1273,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-16": {
+        "run_kind": "bootstrap",
+        "seed": 35075,
+        "cell_count": 2000,
+        "unique_cell_count": 1253,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-17": {
+        "run_kind": "bootstrap",
+        "seed": 35076,
+        "cell_count": 2000,
+        "unique_cell_count": 1274,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-18": {
+        "run_kind": "bootstrap",
+        "seed": 35077,
+        "cell_count": 2000,
+        "unique_cell_count": 1279,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-19": {
+        "run_kind": "bootstrap",
+        "seed": 35078,
+        "cell_count": 2000,
+        "unique_cell_count": 1278,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-20": {
+        "run_kind": "bootstrap",
+        "seed": 35079,
+        "cell_count": 2000,
+        "unique_cell_count": 1257,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-21": {
+        "run_kind": "bootstrap",
+        "seed": 35080,
+        "cell_count": 2000,
+        "unique_cell_count": 1261,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-22": {
+        "run_kind": "bootstrap",
+        "seed": 35081,
+        "cell_count": 2000,
+        "unique_cell_count": 1275,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-23": {
+        "run_kind": "bootstrap",
+        "seed": 35082,
+        "cell_count": 2000,
+        "unique_cell_count": 1249,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-24": {
+        "run_kind": "bootstrap",
+        "seed": 35083,
+        "cell_count": 2000,
+        "unique_cell_count": 1276,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-25": {
+        "run_kind": "bootstrap",
+        "seed": 35084,
+        "cell_count": 2000,
+        "unique_cell_count": 1265,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-26": {
+        "run_kind": "bootstrap",
+        "seed": 35085,
+        "cell_count": 2000,
+        "unique_cell_count": 1264,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-27": {
+        "run_kind": "bootstrap",
+        "seed": 35086,
+        "cell_count": 2000,
+        "unique_cell_count": 1256,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-28": {
+        "run_kind": "bootstrap",
+        "seed": 35087,
+        "cell_count": 2000,
+        "unique_cell_count": 1281,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-29": {
+        "run_kind": "bootstrap",
+        "seed": 35088,
+        "cell_count": 2000,
+        "unique_cell_count": 1262,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-30": {
+        "run_kind": "bootstrap",
+        "seed": 35089,
+        "cell_count": 2000,
+        "unique_cell_count": 1235,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-31": {
+        "run_kind": "bootstrap",
+        "seed": 35090,
+        "cell_count": 2000,
+        "unique_cell_count": 1266,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-32": {
+        "run_kind": "bootstrap",
+        "seed": 35091,
+        "cell_count": 2000,
+        "unique_cell_count": 1278,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-33": {
+        "run_kind": "bootstrap",
+        "seed": 35092,
+        "cell_count": 2000,
+        "unique_cell_count": 1256,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-34": {
+        "run_kind": "bootstrap",
+        "seed": 35093,
+        "cell_count": 2000,
+        "unique_cell_count": 1260,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-35": {
+        "run_kind": "bootstrap",
+        "seed": 35094,
+        "cell_count": 2000,
+        "unique_cell_count": 1256,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-36": {
+        "run_kind": "bootstrap",
+        "seed": 35095,
+        "cell_count": 2000,
+        "unique_cell_count": 1287,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-37": {
+        "run_kind": "bootstrap",
+        "seed": 35096,
+        "cell_count": 2000,
+        "unique_cell_count": 1271,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-38": {
+        "run_kind": "bootstrap",
+        "seed": 35097,
+        "cell_count": 2000,
+        "unique_cell_count": 1257,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-39": {
+        "run_kind": "bootstrap",
+        "seed": 35098,
+        "cell_count": 2000,
+        "unique_cell_count": 1254,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-40": {
+        "run_kind": "bootstrap",
+        "seed": 35099,
+        "cell_count": 2000,
+        "unique_cell_count": 1255,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-41": {
+        "run_kind": "bootstrap",
+        "seed": 35100,
+        "cell_count": 2000,
+        "unique_cell_count": 1258,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-42": {
+        "run_kind": "bootstrap",
+        "seed": 35101,
+        "cell_count": 2000,
+        "unique_cell_count": 1280,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-43": {
+        "run_kind": "bootstrap",
+        "seed": 35102,
+        "cell_count": 2000,
+        "unique_cell_count": 1267,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-44": {
+        "run_kind": "bootstrap",
+        "seed": 35103,
+        "cell_count": 2000,
+        "unique_cell_count": 1259,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-45": {
+        "run_kind": "bootstrap",
+        "seed": 35104,
+        "cell_count": 2000,
+        "unique_cell_count": 1254,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-46": {
+        "run_kind": "bootstrap",
+        "seed": 35105,
+        "cell_count": 2000,
+        "unique_cell_count": 1256,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-47": {
+        "run_kind": "bootstrap",
+        "seed": 35106,
+        "cell_count": 2000,
+        "unique_cell_count": 1270,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-48": {
+        "run_kind": "bootstrap",
+        "seed": 35107,
+        "cell_count": 2000,
+        "unique_cell_count": 1246,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-49": {
+        "run_kind": "bootstrap",
+        "seed": 35108,
+        "cell_count": 2000,
+        "unique_cell_count": 1260,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      },
+      "bootstrap-50": {
+        "run_kind": "bootstrap",
+        "seed": 35109,
+        "cell_count": 2000,
+        "unique_cell_count": 1272,
+        "total_cell_count": 2000,
+        "gene_count": 19,
+        "max_regulators_per_target": 19,
+        "sampling_with_replacement": true,
+        "sample_size_fraction": 1.0,
+        "resampling_scheme": "cell_bootstrap_with_replacement_v1",
+        "resource_allocation": {
+          "host_cpu_count": 128,
+          "host_memory_mb": 1031668,
+          "effective_concurrency": 2,
+          "cpu_budget": 4,
+          "memory_budget_mb": 8192,
+          "trajectory_workers": 4
+        },
+        "status": "Skipped",
+        "reason": "confidence_early_stopping",
+        "completed_at": "2026-11-06 09:53:33",
+        "completed_at_timestamp": 1793930013.6614883,
+        "elapsed_seconds": 0
+      }
+    }
+  },
+  "warnings": [],
+  "failure": null,
+  "support_files": [
+    {
+      "path": "artifacts/config.yaml",
+      "size_bytes": 1126,
+      "sha256": "8db1aaf3414eed590b0aaff4c9bd3d426a251f09cfe7586a2c529760c0db8c14"
+    },
+    {
+      "path": "artifacts/logs/stderr.log",
+      "size_bytes": 819,
+      "sha256": "cf895eb99db07392e14d9eb9d008dea2aab9e0a0e723ecb8c2120fda0d801c0f"
+    },
+    {
+      "path": "artifacts/logs/stdout.log",
+      "size_bytes": 258,
+      "sha256": "0c9546f2b4d57293ede9c1521c9dedbe53fd62a8a88918fdec243c332ba0a55f"
+    },
+    {
+      "path": "artifacts/run_timings.json",
+      "size_bytes": 47467,
+      "sha256": "4fa2295f0d04ac25f382926e6e504db000b34cef96ef72e43308c93ded4ef515"
+    },
+    {
+      "role": "combined_result",
+      "run_id": null,
+      "scope_id": "global",
+      "path": "results/rankedEdges.csv",
+      "size_bytes": 65603,
+      "sha256": "0d3f7fe25f90e4f75a255eda200b777f7b3da8b876a2c5d3b6434ef9f7d863ca"
+    },
+    {
+      "role": "run_result",
+      "run_id": "bootstrap-1",
+      "scope_id": "global",
+      "path": "results/runs/bootstrap-1/rankedEdges.csv",
+      "size_bytes": 10040,
+      "sha256": "5390bd89916b5ddd4b5d70dfc4a3f28ce1964d31162ea76a5478aea7ee57b401"
+    },
+    {
+      "role": "run_result",
+      "run_id": "bootstrap-2",
+      "scope_id": "global",
+      "path": "results/runs/bootstrap-2/rankedEdges.csv",
+      "size_bytes": 10046,
+      "sha256": "6262418497184e4ec3701ed0cd2a185fe1409c9b55fd6b82f94e2f0bae0223ed"
+    },
+    {
+      "role": "run_result",
+      "run_id": "bootstrap-3",
+      "scope_id": "global",
+      "path": "results/runs/bootstrap-3/rankedEdges.csv",
+      "size_bytes": 10031,
+      "sha256": "b0b5a0623d0d8007f5db992a48a0e17f0f67995be18d5a8932e113f956e21904"
+    }
+  ]
+}

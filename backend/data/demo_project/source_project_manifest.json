@@ -1,0 +1,164 @@
+{
+  "project": {
+    "name": "ExpressionData"
+  },
+  "created_at": "2026-11-07 14:42:20 EST",
+  "dataset": {
+    "species": "human",
+    "matrix_state": "log_normalized",
+    "cell_count": 2000,
+    "gene_count_before_filtering": 19,
+    "gene_count_after_filtering": 19,
+    "preprocessing_steps": [
+      "detection"
+    ],
+    "pseudotime_source": "estimated"
+  },
+  "files": {
+    "original_uploads": [
+      {
+        "role": "expression",
+        "path": "inputs/original/expression/ExpressionData.csv",
+        "size_bytes": 768024
+      },
+      {
+        "role": "ground_truth",
+        "path": "inputs/original/ground_truth/GroundTruthNetwork.csv",
+        "size_bytes": 1122
+      }
+    ],
+    "preprocessed": [
+      {
+        "role": "project_preprocessing",
+        "path": "inputs/preprocessed/ExpressionData.csv",
+        "size_bytes": 521236
+      },
+      {
+        "role": "project_preprocessing",
+        "path": "inputs/preprocessed/PseudoTime.csv",
+        "size_bytes": 54924
+      },
+      {
+        "role": "project_preprocessing",
+        "path": "inputs/preprocessed/gene_selection_audits/detection.json",
+        "size_bytes": 1581,
+        "portable_copy": true
+      },
+      {
+        "role": "project_preprocessing",
+        "path": "inputs/preprocessed/manifest.json",
+        "size_bytes": 1827,
+        "portable_copy": true
+      },
+      {
+        "role": "project_preprocessing",
+        "path": "inputs/preprocessed/pseudotime_manifest.json",
+        "size_bytes": 599,
+        "portable_copy": true
+      },
+      {
+        "role": "trajectory_embedding",
+        "path": "inputs/preprocessed/trajectory_embedding/SlingshotEmbedding.csv",
+        "size_bytes": 91864
+      },
+      {
+        "role": "trajectory_curves",
+        "path": "inputs/preprocessed/trajectory_curves/SlingshotCurves.csv",
+        "size_bytes": 20378
+      }
+    ]
+  },
+  "algorithms": [
+    {
+      "id": "CELLORACLE",
+      "status": "Completed",
+      "runtime_seconds": 88,
+      "result_run_count": 3,
+      "manifest": "algorithms/CELLORACLE/run_manifest.json"
+    },
+    {
+      "id": "GENIE3",
+      "status": "Completed",
+      "runtime_seconds": 127,
+      "result_run_count": 3,
+      "manifest": "algorithms/GENIE3/run_manifest.json"
+    },
+    {
+      "id": "GRISLI",
+      "status": "Completed",
+      "runtime_seconds": 2027,
+      "result_run_count": 5,
+      "manifest": "algorithms/GRISLI/run_manifest.json"
+    },
+    {
+      "id": "GRNBOOST2",
+      "status": "Completed",
+      "runtime_seconds": 162,
+      "result_run_count": 3,
+      "manifest": "algorithms/GRNBOOST2/run_manifest.json"
+    },
+    {
+      "id": "GRNVBEM",
+      "status": "Completed",
+      "runtime_seconds": 73303,
+      "result_run_count": 5,
+      "manifest": "algorithms/GRNVBEM/run_manifest.json"
+    },
+    {
+      "id": "LEAP",
+      "status": "Completed",
+      "runtime_seconds": 73,
+      "result_run_count": 3,
+      "manifest": "algorithms/LEAP/run_manifest.json"
+    },
+    {
+      "id": "PEARSON",
+      "status": "Completed",
+      "runtime_seconds": 7,
+      "result_run_count": 3,
+      "manifest": "algorithms/PEARSON/run_manifest.json"
+    },
+    {
+      "id": "PIDC",
+      "status": "Completed",
+      "runtime_seconds": 56,
+      "result_run_count": 3,
+      "manifest": "algorithms/PIDC/run_manifest.json"
+    },
+    {
+      "id": "PPCOR",
+      "status": "Completed",
+      "runtime_seconds": 27,
+      "result_run_count": 5,
+      "manifest": "algorithms/PPCOR/run_manifest.json"
+    },
+    {
+      "id": "SCODE",
+      "status": "Completed",
+      "runtime_seconds": 451,
+      "result_run_count": 6,
+      "manifest": "algorithms/SCODE/run_manifest.json"
+    },
+    {
+      "id": "SCRIBE",
+      "status": "Completed",
+      "runtime_seconds": 96,
+      "result_run_count": 6,
+      "manifest": "algorithms/SCRIBE/run_manifest.json"
+    },
+    {
+      "id": "SINCERITIES",
+      "status": "Completed",
+      "runtime_seconds": 42,
+      "result_run_count": 6,
+      "manifest": "algorithms/SINCERITIES/run_manifest.json"
+    },
+    {
+      "id": "SINGE",
+      "status": "Completed",
+      "runtime_seconds": 256,
+      "result_run_count": 4,
+      "manifest": "algorithms/SINGE/run_manifest.json"
+    }
+  ]
+}

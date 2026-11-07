@@ -1,0 +1,65 @@
+{
+  "signature": {
+    "source_expression_path": "${SOURCE_PROJECT_DIR}/expression__ExpressionData.csv",
+    "source_expression_size": 768024,
+    "source_expression_mtime_ns": 1793929694675663916,
+    "matrix_transformation": {
+      "engine": "scanpy",
+      "version": 2,
+      "matrix_state": "log_normalized",
+      "operations": [],
+      "normalization_target_sum": null
+    },
+    "detection_filter": {
+      "engine": "grnscope",
+      "version": 3,
+      "enabled": true,
+      "minimum_cell_percent": 10.0
+    },
+    "trajectory_filter": {
+      "engine": "grnscope",
+      "version": 3,
+      "enabled": false,
+      "gene_ordering_source": null,
+      "p_value_threshold": null,
+      "bonferroni_correction": null,
+      "retain_significant_tfs": null,
+      "gene_ordering_path": null,
+      "pseudotime_path": null
+    },
+    "variance_filter": {
+      "engine": "grnscope",
+      "version": 3,
+      "enabled": false,
+      "gene_count": null,
+      "include_known_tfs": null,
+      "configured_include_known_tfs": null,
+      "retain_significant_trajectory_tfs": null,
+      "known_tf_gene_names_sha256": null
+    }
+  },
+  "transformation": {
+    "engine": "scanpy",
+    "version": 2,
+    "matrix_state": "log_normalized",
+    "operations": [],
+    "normalization_target_sum": null
+  },
+  "gene_selection": [
+    {
+      "stage": "detection",
+      "minimum_cell_percent": 10.0,
+      "minimum_detected_cell_count": 200,
+      "input_gene_count": 19,
+      "retained_gene_count": 19,
+      "removed_gene_count": 0,
+      "cell_count": 2000,
+      "gene_audit_available": true
+    }
+  ],
+  "generated_gene_ordering": null,
+  "created_at": 1793929728.0748491,
+  "gene_count": 19,
+  "cell_count": 2000,
+  "preprocessed_expression_path": "${PROJECT_DIR}/preprocessed/ExpressionData.csv"
+}

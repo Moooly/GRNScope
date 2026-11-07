@@ -22,6 +22,7 @@ from ..services.gene_coordinate_service import (get_gene_coordinate, get_coordin
 from ..repositories.project_repository import read_project_manifest
 from ..services.demo_service import (
     get_demo_algorithm_ids,
+    get_demo_tasks,
     get_demo_algorithm_result_path,
     get_demo_project_root,
     get_demo_ranked_edges_path,
@@ -644,7 +645,8 @@ async def get_project_results(project_id: str, request: Request, response: Respo
     owner_id = get_or_create_client_id(request, response)
     if is_demo_project(project_id):
         results = []
-        for algorithm_id in get_demo_algorithm_ids():
+        for task in get_demo_tasks():
+            algorithm_id = task["algorithm_id"]
             try:
                 result_path = get_demo_algorithm_result_path(algorithm_id)
                 status = "Completed"
@@ -661,11 +663,10 @@ async def get_project_results(project_id: str, request: Request, response: Respo
                     "algorithm_id": algorithm_id,
                     "status": status,
                     "result_path": str(result_path) if result_path else None,
-                    "started_at": None,
-                    "started_at_timestamp": None,
-                    "completed_at": "demo",
-                    "completed_at_timestamp": None,
-                    "elapsed_seconds": 0,
+                    **{key: task[key] for key in (
+                        "started_at", "started_at_timestamp", "completed_at",
+                        "completed_at_timestamp", "elapsed_seconds",
+                    )},
                     "progress_percent": 100 if status == "Completed" else 0,
                     "progress_label": status,
                 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -94,3 +95,27 @@ def get_demo_input_file_path(filename: str) -> Path:
 
 def get_demo_project_root() -> Path:
     return DEMO_PROJECT_ROOT
+
+
+def get_demo_tasks() -> list[dict[str, Any]]:
+    """Expose archived timings without reading every full network payload."""
+    manifest = load_demo_manifest()
+    tasks = []
+    for algorithm_id in manifest.get("algorithms", []):
+        runtime = manifest.get("algorithm_runs", {}).get(algorithm_id, {})
+        task = {
+            "algorithm_id": algorithm_id,
+            "status": "Completed",
+            "elapsed_seconds": runtime.get("elapsed_seconds", 0),
+            "error_message": None,
+            "error_type": None,
+            "result_path": None,
+            "progress_percent": 100,
+            "progress_label": "Completed",
+        }
+        for event in ("started_at", "completed_at"):
+            value = runtime.get(event)
+            task[event] = value
+            task[f"{event}_timestamp"] = datetime.fromisoformat(value).timestamp() if value else None
+        tasks.append(task)
+    return tasks

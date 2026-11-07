@@ -47,6 +47,8 @@ def _existing_path(
         raw_path = manifest.get(key)
         if raw_path:
             candidate = Path(str(raw_path))
+            if not candidate.is_absolute():
+                candidate = project_dir / candidate
             if candidate.exists():
                 return candidate
             local_candidate = project_dir / candidate.name

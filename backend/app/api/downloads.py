@@ -590,7 +590,7 @@ async def download_analysis_metadata_file(
                     {
                         "algorithm_name": algorithm_id,
                         "docker_version": docker_version,
-                        "parameters": resolved_parameters,
+                        "parameters": manifest.get("algorithm_parameters", {}).get(algorithm_id, resolved_parameters),
                         "customized_parameters": [],
                     }
                 )
@@ -610,12 +610,8 @@ async def download_analysis_metadata_file(
                     "pseudotime_filename": dataset.get("pseudotime_file", "PseudoTime.csv"),
                     "dimensions": dataset.get("dimensions"),
                 },
-                "preprocessing": {
-                    "schema_version": 1,
-                    "matrix_state": "log_normalized",
-                    "dataset_species": "human",
-                    "enabled_stages": [],
-                },
+                "preprocessing": manifest.get("preprocessing", {}),
+                "provenance": manifest.get("provenance", {}),
                 "algorithms": algorithms_summary,
                 "current_export_settings": {
                     "selected_view": selected_view,

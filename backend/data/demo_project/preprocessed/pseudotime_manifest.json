@@ -1,0 +1,23 @@
+{
+  "signature": {
+    "version": 1,
+    "source_pseudotime": {
+      "path": "${SOURCE_PROJECT_DIR}/PseudoTime.csv",
+      "size": 67588,
+      "mtime_ns": 1793929726151535353
+    },
+    "source_expression": {
+      "path": "${SOURCE_PROJECT_DIR}/expression__ExpressionData.csv",
+      "size": 768024,
+      "mtime_ns": 1793929694675663916
+    },
+    "expression_cell_count": 2000
+  },
+  "source_format": "cell_id_trajectory_columns",
+  "trajectory_count": 2,
+  "cell_count": 2000,
+  "trajectory_names": [
+    "PseudoTime1",
+    "PseudoTime2"
+  ]
+}
