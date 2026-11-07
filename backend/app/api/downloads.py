@@ -32,6 +32,14 @@ from ..services.run_manifest_service import (
     write_run_manifest_zip,
 )
 
+from ..services.project_data_service import (
+    ProjectDataNotReady,
+    load_project_data,
+    project_data_inventory,
+    project_data_name,
+    write_project_data_zip,
+)
+
 router = APIRouter()
 
 
@@ -81,6 +89,48 @@ async def _run_manifest_zip_response(
         media_type="application/zip",
         background=BackgroundTask(temporary_path.unlink, missing_ok=True),
     )
+
+
+def _project_data_snapshot(project_id: str, request: Request, response: FastAPIResponse) -> dict:
+    owner_id = get_or_create_client_id(request, response)
+    demo = is_demo_project(project_id)
+    project_dir = PROJECTS_ROOT / project_id
+    if not demo:
+        require_project_owner(project_dir, owner_id)
+    return load_project_data(project_dir, demo=demo)
+
+
+@router.get("/api/projects/{project_id}/project-data")
+async def get_project_data_inventory(project_id: str, request: Request, response: FastAPIResponse):
+    snapshot = await asyncio.to_thread(_project_data_snapshot, project_id, request, response)
+    return project_data_inventory(snapshot)
+
+
+@router.get("/api/projects/{project_id}/download/project-data")
+async def download_project_data(
+    project_id: str,
+    request: Request,
+    response: FastAPIResponse,
+    original: bool = True,
+    prepared: bool = True,
+    manifest: bool = True,
+):
+    snapshot = await asyncio.to_thread(_project_data_snapshot, project_id, request, response)
+    descriptor, name = tempfile.mkstemp(prefix="grnscope-project-data-", suffix=".zip")
+    os.close(descriptor)
+    path = Path(name)
+    try:
+        await asyncio.to_thread(write_project_data_zip, snapshot, path, original=original, prepared=prepared, manifest=manifest)
+    except ProjectDataNotReady as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+    return FileResponse(path=path, filename=project_data_name(snapshot) + ".zip", media_type="application/zip", background=BackgroundTask(path.unlink, missing_ok=True))
 
 
 @router.get("/api/projects/{project_id}/download/expression")

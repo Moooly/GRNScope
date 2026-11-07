@@ -61,7 +61,7 @@ export default function AnalysisSetupSection({
 
         {/* Let status-area clicks reach the header toggle. Keep this wrapper
             unpositioned so the progress track anchors to the full header. */}
-        <div className="pointer-events-none z-10 ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 px-4 py-2 sm:flex-1 sm:px-5">
+        <div className="pointer-events-none z-50 ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 px-4 py-2 sm:flex-1 sm:px-5">
           <div className="contents [&>*]:!order-none [&>*]:!m-0 [&>*]:!p-0 [&_button]:pointer-events-auto">
             {status}
           </div>

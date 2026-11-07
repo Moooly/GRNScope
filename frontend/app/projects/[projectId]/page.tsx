@@ -8,7 +8,6 @@ import ProjectHeader from "./_components/ProjectHeader";
 import ResultsControlsSection from "./_components/ResultsControlsSection";
 import NetworkVisualizationSection from "./_components/NetworkVisualizationSection";
 import AlgorithmErrorPopover from "./_components/AlgorithmErrorPopover";
-import ConfirmDownloadModal from "./_components/ConfirmDownloadModal";
 import FileDownloadMenuModal from "./_components/FileDownloadMenuModal";
 import ResultsGuideModal from "./_components/ResultsGuideModal";
 import AlgorithmCardsSection from "./_components/AlgorithmCardsSection";
@@ -91,22 +90,6 @@ function writeResultSettings(projectId: string, value: StoredResultSettings) {
 const GENERAL_ALGORITHM_FAILURE_MESSAGE =
   "This algorithm couldn't finish. This is usually a temporary processing issue on our side, not a problem with your data. Try running it again, and contact us if it keeps failing.";
 const CELLORACLE_SPECIES_ERROR_TYPE = "celloracle_species_mismatch";
-
-function runManifestArchiveFilename(projectName: string | null | undefined) {
-  const safeProjectName = (projectName?.trim() || "GRNScope-project")
-    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-")
-    .replace(/\s+/g, " ")
-    .replace(/^[ .-]+|[ .-]+$/g, "") || "GRNScope-project";
-  return `${safeProjectName.slice(0, 100)}_run-manifests.zip`;
-}
-
-function runManifestDownloadUrl(projectId: string) {
-  const timezoneName = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const timezoneQuery = timezoneName
-    ? `?timezone=${encodeURIComponent(timezoneName)}`
-    : "";
-  return `${API_BASE}/projects/${projectId}/download/run-manifests${timezoneQuery}`;
-}
 
 function markJobTasksStopping(
   job: ProjectJob | null,
@@ -234,8 +217,6 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
   const [perturbationGenes, setPerturbationGenes] = useState<string[]>([]);
   const [isolatedGene, setIsolatedGene] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
-  const [pendingDownload, setPendingDownload] = useState<{ label: string; href: string; filename: string } | null>(null);
-  const [isDownloadModalClosing, setIsDownloadModalClosing] = useState(false);
   const [isResultsGuideOpen, setIsResultsGuideOpen] = useState(false);
   const [isApplyingConfidenceRecoveryRank, setIsApplyingConfidenceRecoveryRank] = useState(false);
   const [confidenceRecoveryRankError, setConfidenceRecoveryRankError] = useState("");
@@ -1776,22 +1757,6 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
     loadedCompletedAlgorithmCount,
   ]);
 
-  const openDownloadModal = (label: string, href: string, filename: string) => {
-    setIsDownloadModalClosing(false);
-    setPendingDownload({ label, href, filename });
-  };
-
-  const closeDownloadModal = () => {
-    if (!pendingDownload) return;
-
-    setIsDownloadModalClosing(true);
-
-    window.setTimeout(() => {
-      setPendingDownload(null);
-      setIsDownloadModalClosing(false);
-    }, 280);
-  };
-
   const requestAlgorithmAction = (
     type: "stop" | "rerun",
     task: { algorithmId: string; algorithmName: string }
@@ -2261,28 +2226,7 @@ useEffect(() => {
                   ? "Completed analysis"
                   : "Analysis details"}
                 downloadMenu={(
-                  <FileDownloadMenuModal
-                    analysisPackage={isDemoProject ? undefined : {
-                      href: runManifestDownloadUrl(projectId),
-                      filename: runManifestArchiveFilename(project?.project_name),
-                      disabled: !allJobTasks.some((task) =>
-                        ["Completed", "Failed", "Stopped"].includes(task.status),
-                      ),
-                    }}
-                    projectId={projectId}
-                    apiBase={API_BASE}
-                    expressionFilename={metadata?.expression_filename || project?.expression_filename}
-                    pseudotimeFilename={metadata?.pseudotime_filename || project?.pseudotime_filename}
-                    hasPseudotime={metadata?.has_pseudotime}
-                    activeAlgorithmIds={activeAlgorithmIds}
-                    selectedResultScopeId={selectedResultScopeId}
-                    evidenceThreshold={evidenceThreshold}
-                    confidenceThreshold={confidenceThreshold}
-                    directionConfidenceThreshold={directionConfidenceThreshold}
-                    signConfidenceThreshold={signConfidenceThreshold}
-                    consensusThreshold={consensusThreshold}
-                    onOpenDownload={openDownloadModal}
-                  />
+                  <FileDownloadMenuModal key={projectId} projectId={projectId} apiBase={API_BASE} />
                 )}
                 status={(
                   projectSetupError ? (
@@ -2544,12 +2488,6 @@ useEffect(() => {
             open={isResultsGuideOpen}
             onClose={() => setIsResultsGuideOpen(false)}
           />
-          <ConfirmDownloadModal
-            pendingDownload={pendingDownload}
-            isClosing={isDownloadModalClosing}
-            onClose={closeDownloadModal}
-          />
-
           <AlgorithmErrorPopover
             task={activeAlgorithmError?.task ?? null}
             anchorElement={activeAlgorithmError?.anchorElement ?? null}
