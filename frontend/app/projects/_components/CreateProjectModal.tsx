@@ -59,6 +59,8 @@ function EditableChip({
   onChange,
   unsetLabel,
   ariaLabel,
+  displayLabel,
+  title,
   detecting = false,
 }: {
   value: string;
@@ -66,6 +68,8 @@ function EditableChip({
   onChange: (value: string) => void;
   unsetLabel: string;
   ariaLabel: string;
+  displayLabel?: string;
+  title?: string;
   detecting?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -114,22 +118,23 @@ function EditableChip({
   const current = options.find((option) => option.value === value);
 
   return (
-    <span className="inline-block">
+    <span className="inline-block max-w-full">
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((previous) => !previous)}
         aria-label={ariaLabel}
+        title={title}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold transition ${
+        className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold transition ${
           current
             ? "border-slate-200 bg-white text-slate-700 hover:border-[#1b75a6]/40 hover:text-[#155f87]"
             : "border-[#1b75a6]/50 bg-[#eef7fc] text-[#1b75a6] hover:bg-[#e2f1fa]"
         }`}
       >
-        {current ? current.label : unsetLabel}
-        <span aria-hidden="true" className="text-[0.6em] opacity-70">
+        <span className="truncate">{displayLabel ?? (current ? current.label : unsetLabel)}</span>
+        <span aria-hidden="true" className="shrink-0 text-[0.6em] opacity-70">
           ▼
         </span>
       </button>
@@ -138,6 +143,7 @@ function EditableChip({
             <div
               ref={menuRef}
               role="listbox"
+              aria-label={ariaLabel}
               style={{
                 position: "fixed",
                 top: menuPos.top,
@@ -264,7 +270,6 @@ interface CreateProjectModalProps {
   setConfidenceRunMode: (value: "automatic" | "fixed") => void;
   setConfidenceBootstrapRuns: (value: string) => void;
   setHasCellOracleSettingsConfigured: (value: boolean) => void;
-  clearPseudotimeFile: () => void;
   clearGroundTruthFile: () => void;
   clearClusterLabelsFile: () => void;
 }
@@ -356,12 +361,12 @@ export default function CreateProjectModal({
   setConfidenceRunMode,
   setConfidenceBootstrapRuns,
   setHasCellOracleSettingsConfigured,
-  clearPseudotimeFile,
   clearGroundTruthFile,
   clearClusterLabelsFile,
 }: CreateProjectModalProps) {
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSelectedDatasetRef = useRef<string | null>(null);
+  const pseudotimeInputRef = useRef<HTMLInputElement | null>(null);
   const [isOutsideClosing, setIsOutsideClosing] = useState(false);
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [isCustomTfHelpOpen, setIsCustomTfHelpOpen] = useState(false);
@@ -586,11 +591,6 @@ export default function CreateProjectModal({
     "No gene filtering"
   );
   const optionalInputsSummaryItems = [
-    pseudotimeFileName
-      ? "Pseudotime uploaded"
-      : estimatePseudotime
-        ? "Pseudotime will be estimated"
-        : "No pseudotime",
     groundTruthFileName ? "Ground truth uploaded" : "No ground truth",
     hasCellOracleSettingsConfigured
       ? "CellOracle configured"
@@ -660,14 +660,14 @@ export default function CreateProjectModal({
           <div>
             {expressionFileName ? (
               <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60">
-                <div className="flex min-h-28 items-center justify-between gap-5 px-5 py-4">
+                <div className="relative min-h-28 px-5 py-4">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
+                    <p className="pr-36 text-xs font-semibold uppercase tracking-[0.14em] text-[#1b75a6]">
                       Expression matrix
                       {expressionMatrixFormat === "h5ad" ? " · AnnData" : ""}
                     </p>
                     <p
-                      className="mt-1 truncate text-sm font-semibold text-slate-800"
+                      className="mt-1 truncate pr-36 text-sm font-semibold text-slate-800"
                       title={expressionFileName}
                     >
                       {formatFileNameForDisplay(expressionFileName, 42)}
@@ -707,6 +707,33 @@ export default function CreateProjectModal({
                         ariaLabel="Matrix values"
                         detecting={isMatrixStateDetecting && !matrixState}
                       />
+                      <EditableChip
+                        value={pseudotimeFileName ? "upload" : "estimate"}
+                        options={[
+                          { value: "estimate", label: "Slingshot (automatic)" },
+                          { value: "upload", label: pseudotimeFileName ? "Replace pseudotime CSV…" : "Upload pseudotime CSV…" },
+                        ]}
+                        onChange={(value) => {
+                          if (value === "estimate") onToggleEstimatePseudotime(true);
+                          else pseudotimeInputRef.current?.click();
+                        }}
+                        displayLabel={`Pseudotime: ${pseudotimeFileName ? formatFileNameForDisplay(pseudotimeFileName, 24) : "Slingshot"}`}
+                        unsetLabel="Pseudotime: Slingshot"
+                        ariaLabel="Pseudotime source"
+                        title={pseudotimeFileName || "Slingshot will estimate pseudotime when the analysis starts."}
+                      />
+                      <input
+                        ref={pseudotimeInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        aria-label="Upload pseudotime CSV"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.currentTarget.files?.[0];
+                          if (file) selectPseudotimeFile(file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
                     </div>
                     {expressionMatrixFormat === "h5ad" &&
                     expressionMatrixOptions.length > 0 ? (
@@ -739,7 +766,7 @@ export default function CreateProjectModal({
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div className="absolute right-5 top-4 flex items-center gap-3">
                     <label className="cursor-pointer text-sm font-semibold text-[#1b75a6] transition hover:text-[#155f87]">
                       Replace
                       <input
@@ -967,10 +994,6 @@ export default function CreateProjectModal({
                     setGeneOrderingFile(file);
                     setGeneOrderingFileName(file?.name ?? "");
                   }}
-                  onOpenOptionalInputs={() => {
-                    setIsCustomizeOpen(true);
-                    setOpenAdvancedSection("inputs");
-                  }}
                   onTrajectoryPValueChange={setTrajectoryPValue}
                   onTrajectoryBonferroniChange={setTrajectoryBonferroni}
                   onIncludeSignificantTFsChange={setIncludeSignificantTFs}
@@ -988,16 +1011,11 @@ export default function CreateProjectModal({
                 }
               >
                 <OptionalInputsPanel
-                  pseudotimeFileName={pseudotimeFileName}
                   groundTruthFileName={groundTruthFileName}
                   cellOracleConfigLabel={cellOracleConfigLabel}
                   cellOracleBaseGrnSource={cellOracleBaseGrnSource}
                   cellOracleSpecies={cellOracleSpecies}
                   clusterLabelsFileName={clusterLabelsFileName}
-                  estimatePseudotime={estimatePseudotime}
-                  onToggleEstimatePseudotime={onToggleEstimatePseudotime}
-                  onSelectPseudotime={selectPseudotimeFile}
-                  onClearPseudotime={clearPseudotimeFile}
                   onSelectGroundTruth={selectGroundTruthFile}
                   onClearGroundTruth={clearGroundTruthFile}
                   onActivateCellOracle={() => {
@@ -1381,16 +1399,11 @@ function AdvancedAccordionSection({
 }
 
 function OptionalInputsPanel({
-  pseudotimeFileName,
   groundTruthFileName,
   cellOracleConfigLabel,
   cellOracleBaseGrnSource,
   cellOracleSpecies,
   clusterLabelsFileName,
-  estimatePseudotime,
-  onToggleEstimatePseudotime,
-  onSelectPseudotime,
-  onClearPseudotime,
   onSelectGroundTruth,
   onClearGroundTruth,
   onActivateCellOracle,
@@ -1399,16 +1412,11 @@ function OptionalInputsPanel({
   onClearClusterLabels,
   onShowCellOracleHelp,
 }: {
-  pseudotimeFileName: string;
   groundTruthFileName: string;
   cellOracleConfigLabel: string;
   cellOracleBaseGrnSource: CellOracleBaseGrnSource;
   cellOracleSpecies: string;
   clusterLabelsFileName: string;
-  estimatePseudotime: boolean;
-  onToggleEstimatePseudotime: (value: boolean) => void;
-  onSelectPseudotime: (file: File | null) => void;
-  onClearPseudotime: () => void;
   onSelectGroundTruth: (file: File | null) => void;
   onClearGroundTruth: () => void;
   onActivateCellOracle: () => void;
@@ -1420,14 +1428,6 @@ function OptionalInputsPanel({
   return (
     <div className="-mx-1">
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <PseudotimeInputRow
-          fileName={pseudotimeFileName}
-          estimate={estimatePseudotime}
-          onSelect={onSelectPseudotime}
-          onClear={onClearPseudotime}
-          onToggleEstimate={onToggleEstimatePseudotime}
-        />
-
         <GroundTruthInputRow
           fileName={groundTruthFileName}
           onSelect={onSelectGroundTruth}
@@ -1843,7 +1843,6 @@ function GeneSelectionPanel({
   onIncludeAllTFsChange,
   onGeneOrderingSourceChange,
   onGeneOrderingFileChange,
-  onOpenOptionalInputs,
   onTrajectoryPValueChange,
   onTrajectoryBonferroniChange,
   onIncludeSignificantTFsChange,
@@ -1865,7 +1864,6 @@ function GeneSelectionPanel({
   onIncludeAllTFsChange: (value: boolean) => void;
   onGeneOrderingSourceChange: (value: "calculate" | "upload") => void;
   onGeneOrderingFileChange: (file: File | null) => void;
-  onOpenOptionalInputs: () => void;
   onTrajectoryPValueChange: (value: string) => void;
   onTrajectoryBonferroniChange: (value: boolean) => void;
   onIncludeSignificantTFsChange: (value: boolean) => void;
@@ -2071,18 +2069,9 @@ NR5A1,0.05,0.8`}</pre>
                     ? "Uses the uploaded pseudotime file."
                     : estimatePseudotime
                       ? "Slingshot will estimate pseudotime when the analysis starts."
-                      : "Upload pseudotime or choose Slingshot in Optional biological inputs."}
+                      : "Choose a pseudotime source beside the expression matrix."}
                 </p>
               </div>
-              {!hasPseudotimeSource ? (
-                <button
-                  type="button"
-                  onClick={onOpenOptionalInputs}
-                  className="shrink-0 text-xs font-bold text-[#1b75a6] transition hover:text-[#155f87]"
-                >
-                  Configure pseudotime
-                </button>
-              ) : null}
             </div>
           ) : null}
 
@@ -2412,142 +2401,6 @@ function CompactNumberField({
   );
 }
 
-
-function PseudotimeInputRow({
-  fileName,
-  estimate,
-  onSelect,
-  onClear,
-  onToggleEstimate,
-}: {
-  fileName: string;
-  estimate: boolean;
-  onSelect: (file: File | null) => void;
-  onClear: () => void;
-  onToggleEstimate: (value: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [source, setSource] = useState<"upload" | "estimate" | null>(() =>
-    fileName ? "upload" : estimate ? "estimate" : null,
-  );
-  const compactFileName = formatFileNameForDisplay(fileName, 28);
-  const summary = fileName
-    ? compactFileName
-    : estimate
-      ? "Estimate with Slingshot"
-      : "Not provided";
-
-  return (
-    <section>
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="grid w-full cursor-pointer gap-3 px-4 py-4 text-left transition hover:bg-slate-50/70 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-        aria-expanded={open}
-      >
-        <span>
-          <span className="block text-sm font-semibold text-slate-900">
-            Pseudotime
-          </span>
-          <span className="mt-1 block text-sm leading-5 text-slate-500">
-            Used by trajectory-aware methods.
-          </span>
-        </span>
-        <span className="flex min-w-0 items-center justify-end gap-2">
-          <span
-            className={`max-w-56 truncate text-xs font-semibold ${
-              fileName || estimate ? "text-[#1b75a6]" : "text-slate-400"
-            }`}
-            title={fileName || summary}
-          >
-            {summary}
-          </span>
-          <span
-            className={`text-slate-400 transition ${
-              open ? "text-[#1b75a6]" : ""
-            }`}
-            aria-hidden="true"
-          >
-            <DisclosureChevron open={open} />
-          </span>
-        </span>
-      </button>
-
-      {open ? (
-        <div className="border-t border-slate-100 bg-slate-50/55 px-4 py-4 pl-[3.25rem]">
-          <p className="text-sm font-semibold text-slate-800">
-            Pseudotime source
-          </p>
-          <div className="mt-3 flex flex-wrap items-start gap-x-7 gap-y-3">
-            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
-              <input
-                type="radio"
-                name="pseudotime-source"
-                checked={source === "upload"}
-                onChange={() => {
-                  setSource("upload");
-                  onToggleEstimate(false);
-                }}
-                className="h-4 w-4 accent-[#1b75a6]"
-              />
-              Upload CSV
-            </label>
-            <label className="flex max-w-md cursor-pointer items-start gap-2 text-slate-700">
-              <input
-                type="radio"
-                name="pseudotime-source"
-                checked={source === "estimate"}
-                onChange={() => {
-                  setSource("estimate");
-                  if (fileName) onClear();
-                  onToggleEstimate(true);
-                }}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[#1b75a6]"
-              />
-              <span>
-                <span className="block text-sm font-medium">
-                  Estimate with Slingshot
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  No pseudotime? Slingshot will calculate it when this analysis
-                  starts.
-                </span>
-              </span>
-            </label>
-          </div>
-
-          {source === "upload" ? (
-            <div className="mt-4 border-t border-slate-200/70 pt-4">
-              <div className="flex items-stretch gap-2">
-                <div className="min-w-0 flex-1">
-                  <FileDropZone
-                    fileName={fileName}
-                    fileLabel="pseudotime CSV"
-                    accept=".csv,text/csv"
-                    onSelect={(file) => {
-                      setSource("upload");
-                      onToggleEstimate(false);
-                      onSelect(file);
-                    }}
-                  />
-                </div>
-                {fileName ? (
-                  <button
-                    type="button"
-                    onClick={onClear}
-                    className="shrink-0 self-center px-2 text-xs font-semibold text-slate-500 transition hover:text-rose-600"
-                  >
-                    Remove
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
 
 function CellOracleHelpButton({
   label,

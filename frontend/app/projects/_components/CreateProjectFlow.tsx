@@ -194,7 +194,7 @@ export default function CreateProjectFlow({
   const [expressionFile, setExpressionFile] = useState<File | null>(null);
   const [pseudotimeFile, setPseudotimeFile] = useState<File | null>(null);
   const [groundTruthFile, setGroundTruthFile] = useState<File | null>(null);
-  const [estimatePseudotime, setEstimatePseudotime] = useState(false);
+  const [estimatePseudotime, setEstimatePseudotime] = useState(true);
   const [clusterLabelsFile, setClusterLabelsFile] = useState<File | null>(null);
   const [expressionFileName, setExpressionFileName] = useState("");
   const [expressionMatrixFormat, setExpressionMatrixFormat] =
@@ -469,7 +469,7 @@ export default function CreateProjectFlow({
     setExpressionFile(null);
     setPseudotimeFile(null);
     setGroundTruthFile(null);
-    setEstimatePseudotime(false);
+    setEstimatePseudotime(true);
     setClusterLabelsFile(null);
     setExpressionFileName("");
     setExpressionMatrixFormat("csv");
@@ -766,11 +766,6 @@ export default function CreateProjectFlow({
     setEnsembleEnabled(allCompatibleIds.length >= 2);
   };
 
-  const clearPseudotimeFile = () => {
-    setPseudotimeFile(null);
-    setPseudotimeFileName("");
-  };
-
   const clearGroundTruthFile = () => {
     setGroundTruthFile(null);
     setGroundTruthFileName("");
@@ -779,7 +774,7 @@ export default function CreateProjectFlow({
   // Uploading a pseudotime file and estimating one are mutually exclusive.
   const handleSetPseudotimeFile = (file: File | null) => {
     setPseudotimeFile(file);
-    if (file) setEstimatePseudotime(false);
+    setEstimatePseudotime(!file);
   };
 
   const handleToggleEstimatePseudotime = (next: boolean) => {
@@ -1214,7 +1209,6 @@ export default function CreateProjectFlow({
       setConfidenceRunMode={setConfidenceRunMode}
       setConfidenceBootstrapRuns={setConfidenceBootstrapRuns}
       setHasCellOracleSettingsConfigured={setHasCellOracleSettingsConfigured}
-      clearPseudotimeFile={clearPseudotimeFile}
       clearGroundTruthFile={clearGroundTruthFile}
       clearClusterLabelsFile={clearClusterLabelsFile}
     />
