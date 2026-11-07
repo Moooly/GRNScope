@@ -1873,6 +1873,7 @@ function GeneSelectionPanel({
   const [expandedStage, setExpandedStage] =
     useState<GeneSelectionStage | null>(null);
   const [isFilteringRulesOpen, setIsFilteringRulesOpen] = useState(false);
+  const [isGeneOrderingHelpOpen, setIsGeneOrderingHelpOpen] = useState(false);
   const stageOrder: GeneSelectionStage[] = [
     "detection",
     "trajectory",
@@ -1963,12 +1964,53 @@ function GeneSelectionPanel({
           }
         >
           <div role="radiogroup" aria-labelledby="gene-ordering-source-label">
-            <p
-              id="gene-ordering-source-label"
-              className="text-sm font-semibold text-slate-800"
-            >
-              Gene ordering
-            </p>
+            <div className="flex items-center gap-2">
+              <p
+                id="gene-ordering-source-label"
+                className="text-sm font-semibold text-slate-800"
+              >
+                Gene ordering
+              </p>
+              <CellOracleHelpButton
+                label="Gene ordering CSV format"
+                onClick={() => setIsGeneOrderingHelpOpen((current) => !current)}
+                expanded={isGeneOrderingHelpOpen}
+                controls="gene-ordering-format-help"
+              />
+            </div>
+
+            {isGeneOrderingHelpOpen ? (
+              <div
+                id="gene-ordering-format-help"
+                role="region"
+                aria-label="Gene ordering CSV format"
+                className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600"
+              >
+                <p>
+                  Use one row per gene, with columns in this order:
+                </p>
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li><strong className="font-semibold text-slate-800">gene</strong>: the gene identifier used in your expression matrix.</li>
+                  <li><strong className="font-semibold text-slate-800">p_val</strong>: the gene&apos;s p-value for association with pseudotime, from 0 to 1.</li>
+                  <li><strong className="font-semibold text-slate-800">variance</strong> (optional): a non-negative numeric value.</li>
+                </ol>
+                <div>
+                  <p className="font-semibold text-slate-800">Example CSV</p>
+                  <pre className="mt-2 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-6 text-slate-700">{`gene,p_val,variance
+GATA4,0.001,2.5
+SOX9,0.02,1.25
+NR5A1,0.05,0.8`}</pre>
+                </div>
+                <p>
+                  Replace the example genes with your own identifiers. Gene names must be unique;
+                  genes absent from the expression matrix are ignored. A header is recommended,
+                  but headerless files are also accepted. You can omit the variance column.
+                </p>
+                <p>
+                  Don&apos;t have this file? Choose <strong className="font-semibold text-slate-800">Calculate from pseudotime</strong> instead.
+                </p>
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-start gap-x-7 gap-y-3">
               <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
                 <input
@@ -2045,41 +2087,29 @@ function GeneSelectionPanel({
           ) : null}
 
           {geneOrderingSource === "upload" ? (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-4">
-              <span
-                className={`min-w-0 truncate text-xs font-medium ${
-                  geneOrderingFileName ? "text-[#178a62]" : "text-slate-400"
-                }`}
-                title={geneOrderingFileName || "No GeneOrdering CSV selected"}
-              >
-                {geneOrderingFileName
-                  ? formatFileNameForDisplay(geneOrderingFileName, 36)
-                  : "No CSV selected"}
-              </span>
-              <span className="flex flex-wrap items-center gap-2">
-                <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-[#1b75a6] transition hover:border-[#1b75a6]/30 hover:bg-[#f2f9fc]">
-                  {geneOrderingFileName ? "Replace" : "Upload"}
-                  <input
-                    type="file"
-                    accept=".csv"
-                    className="hidden"
-                    onChange={(event) => {
+            <div className="mt-4 border-t border-slate-200/70 pt-4">
+              <div className="flex items-stretch gap-2">
+                <div className="min-w-0 flex-1">
+                  <FileDropZone
+                    fileName={geneOrderingFileName}
+                    fileLabel="gene-ordering CSV"
+                    accept=".csv,text/csv"
+                    onSelect={(file) => {
                       onGeneOrderingSourceChange("upload");
-                      onGeneOrderingFileChange(event.target.files?.[0] ?? null);
-                      event.currentTarget.value = "";
+                      onGeneOrderingFileChange(file);
                     }}
                   />
-                </label>
+                </div>
                 {geneOrderingFileName ? (
                   <button
                     type="button"
                     onClick={() => onGeneOrderingFileChange(null)}
-                    className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                    className="self-center text-xs font-semibold text-slate-500 transition hover:text-rose-600"
                   >
                     Remove
                   </button>
                 ) : null}
-              </span>
+              </div>
             </div>
           ) : null}
 
