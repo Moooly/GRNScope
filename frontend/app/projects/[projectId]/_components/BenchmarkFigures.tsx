@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useRef, useState, type Ref } from "react";
+import type { BootstrapBenchmark } from "../_lib/types";
 
 const FONT = "Arial, Helvetica, sans-serif";
 const INK = "#1a1a1a";
@@ -56,6 +57,7 @@ export type FigureRow = {
   inhibition: number | null;
   stability: number | null;
   runtime: number | null;
+  bootstrap?: BootstrapBenchmark | null;
   pr: CurvePoint[];
   roc: CurvePoint[];
 };
@@ -95,6 +97,7 @@ export function SummaryHeatmap({
   showStability: boolean;
   svgRef?: Ref<SVGSVGElement>;
 }) {
+  const showStats = true;
   const [boxWidth, measure] = useWidth();
   const columns: SummaryColumn[] = [
     { group: "Accuracy", key: "auprcRatio", title: ["AUPRC", "ratio"], random: 1, palette: BLUES },
@@ -119,12 +122,13 @@ export function SummaryHeatmap({
 
   const nameW = Math.min(170, 24 + Math.max(...display.map((row) => label(row).length)) * 7.4);
   const rankW = 132;
-  // Use the available panel width for the remaining metric columns.
-  const groupGap = 18;
-  const groupGaps = columns.filter((column, index) => index > 0 && columns[index - 1].group !== column.group).length;
-  const baseW = nameW + rankW + 18 + columns.length * 84 + groupGaps * groupGap + 8;
+  // Fill the panel: spare width widens the metric columns first, then the
+  // bootstrap range track, each up to a comfortable maximum.
+  const baseW = nameW + rankW + 18 + columns.length * 84 + 3 * 18 + (showStats ? 26 + 180 + 14 + 112 + 50 : 8);
   const spare = Math.max(0, (boxWidth || baseW) - baseW - 4);
-  const colW = 84 + Math.min(52, spare / columns.length);
+  const colW = 84 + Math.min(36, (spare * 0.55) / columns.length);
+  const forestExtra = Math.min(160, spare - (colW - 84) * columns.length);
+  const groupGap = 18;
   const rowH = 32;
   const top = 54;
   const consensusGap = consensus ? 10 : 0;
@@ -135,8 +139,20 @@ export function SummaryHeatmap({
     colX.push(x);
     x += colW;
   });
-  const W = x + 8;
-  const H = top + display.length * rowH + consensusGap + 12;
+  // Descriptive median and observed range of scores from saved bootstrap fits.
+  const forestX = x + groupGap + 8;
+  const forestW = 180 + Math.max(0, forestExtra);
+  // Axis spans the data (and 1×, random), not 0 to max, so the intervals use the width.
+  const ciValues = rows.flatMap((row) => (row.bootstrap?.run_count && row.bootstrap.minimum !== null && row.bootstrap.maximum !== null ? [row.bootstrap.minimum, row.bootstrap.maximum] : []));
+  const ciMin = showStats ? Math.max(0, Math.min(1, Math.floor(Math.min(1, ...ciValues) * 4) / 4 - 0.25)) : 0;
+  const ciMax = showStats ? Math.max(1.5, Math.ceil(Math.max(1, ...ciValues) * 4) / 4 + 0.25) : 2;
+  const ciStep = ciMax - ciMin > 2 ? 0.5 : 0.25;
+  const fx = (value: number) => forestX + ((Math.max(ciMin, Math.min(ciMax, value)) - ciMin) / (ciMax - ciMin)) * forestW;
+  const ciTextX = forestX + forestW + 14;
+  const pX = ciTextX + 112;
+  const W = showStats ? pX + 50 : x + 8;
+  const axisH = showStats ? 34 : 0;
+  const H = top + display.length * rowH + consensusGap + 12 + axisH;
   const rowY = (index: number) => top + index * rowH + (consensus && index === display.length - 1 ? consensusGap : 0);
 
   return (
@@ -153,6 +169,39 @@ export function SummaryHeatmap({
         </>
       ) : null}
       <text x={nameW + 8} y={top - 10} fontSize="11" fill={MUTED}>Overall rank</text>
+      {showStats ? (
+        <g>
+          <text x={ciTextX + 50} y={20} fontSize="11" textAnchor="middle" fill={INK}>
+            <tspan x={ciTextX + 50}>Median ratio</tspan>
+            <tspan x={ciTextX + 50} dy={13}>[min–max]</tspan>
+          </text>
+          <text x={forestX + forestW / 2} y={20} fontSize="11" textAnchor="middle" fill={INK}>
+            <tspan x={forestX + forestW / 2}>AUPRC ratio</tspan>
+            <tspan x={forestX + forestW / 2} dy={13}>bootstrap range</tspan>
+          </text>
+          <text x={pX + 30} y={20} fontSize="11" textAnchor="middle" fill={INK}>
+            <tspan x={pX + 30}>Runs</tspan>
+            <tspan x={pX + 30} dy={13}>scored</tspan>
+          </text>
+          <line x1={fx(1)} x2={fx(1)} y1={top} y2={top + display.length * rowH + consensusGap} stroke={FAINT} strokeDasharray="4 3" />
+          {(() => {
+            const y = top + display.length * rowH + consensusGap + 6;
+            const ticks: number[] = [];
+            for (let v = Math.ceil(ciMin / ciStep) * ciStep; v <= ciMax + 1e-9; v += ciStep) ticks.push(Number(v.toFixed(2)));
+            return (
+              <g>
+                <line x1={fx(ciMin)} x2={fx(ciMax)} y1={y} y2={y} stroke={INK} />
+                {ticks.map((tick) => (
+                  <g key={tick}>
+                    <line x1={fx(tick)} x2={fx(tick)} y1={y} y2={y + 4} stroke={INK} />
+                    <text x={fx(tick)} y={y + 16} fontSize="10.5" textAnchor="middle" fill={INK}>{`${tick}×`}</text>
+                  </g>
+                ))}
+              </g>
+            );
+          })()}
+        </g>
+      ) : null}
       {columns.map((column, index) => (
         <text key={column.key} x={colX[index] + colW / 2} y={20} fontSize="11" textAnchor="middle" fill={INK}>
           {column.title.map((line, lineIndex) => (
@@ -203,6 +252,35 @@ export function SummaryHeatmap({
                 </g>
               );
             })}
+            {showStats ? (() => {
+              const b = row.bootstrap;
+              const usable = b && b.run_count > 0 && b.median !== null && b.minimum !== null && b.maximum !== null;
+              if (!usable) return <g>
+                <title>{`${label(row)}: saved bootstrap performance unavailable`}</title>
+                <text x={forestX + forestW / 2} y={y + 4} fontSize="11" textAnchor="middle" fill={FAINT}>unavailable</text>
+                <text x={ciTextX + 50} y={y + 4} fontSize="11" textAnchor="middle" fill={FAINT}>n/a</text>
+                <text x={pX + 30} y={y + 4} fontSize="11" textAnchor="middle" fill={FAINT}>{row.consensus ? "n/a" : "0"}</text>
+              </g>;
+              const lo = b.minimum!, hi = b.maximum!, mid = b.median!;
+              const color = row.consensus ? CONSENSUS : INK;
+              return (
+                <g>
+                  <title>{`${label(row)}: median bootstrap AUPRC ratio ${mid.toFixed(2)}×; observed range ${lo.toFixed(2)}–${hi.toFixed(2)}; ${b.run_count} scored runs${b.unavailable_run_count ? `; ${b.unavailable_run_count} unavailable` : ""}. Not a confidence interval.`}</title>
+                  {b.run_count > 1 ? <>
+                    <line x1={fx(lo)} x2={fx(hi)} y1={y} y2={y} stroke={color} strokeWidth="1.6" />
+                    <line x1={fx(lo)} x2={fx(lo)} y1={y - 4} y2={y + 4} stroke={color} strokeWidth="1.6" />
+                    <line x1={fx(hi)} x2={fx(hi)} y1={y - 4} y2={y + 4} stroke={color} strokeWidth="1.6" />
+                  </> : null}
+                  <rect x={fx(mid) - 4.5} y={y - 4.5} width={9} height={9} fill={color} />
+                  <text x={ciTextX + 50} y={y + 4} fontSize="11" textAnchor="middle" fill={INK}>
+                    {b.run_count > 1 ? `${mid.toFixed(2)} [${lo.toFixed(2)}–${hi.toFixed(2)}]` : `${mid.toFixed(2)} [one run]`}
+                  </text>
+                  <text x={pX + 30} y={y + 4} fontSize="11" textAnchor="middle" fill={INK}>
+                    {`${b.run_count}${b.unavailable_run_count ? "*" : ""}`}
+                  </text>
+                </g>
+              );
+            })() : null}
           </g>
         );
       })}

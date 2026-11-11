@@ -12,6 +12,7 @@ from ..config import PROJECTS_ROOT
 from .client_identity import get_or_create_client_id, require_project_owner
 from ..repositories.job_repository import read_jobs_manifest
 from ..services.result_service import read_algorithm_result
+from ..services.bootstrap_benchmark_service import saved_bootstrap_benchmark
 from ..services.beeline_service import (
     FULL_DATA_RUN_ID,
     BOOTSTRAP_NETWORK_ESTIMATOR,
@@ -117,6 +118,7 @@ def attach_beeline_path_stats(result: dict, project_dir: Path) -> dict:
             return None
 
     enriched = dict(result)
+    enriched["bootstrap_benchmark"] = saved_bootstrap_benchmark(project_dir, result, reference_edges)
     global_stats = stats_for_payload(result)
     if global_stats is not None:
         enriched["beeline_path_stats"] = global_stats
@@ -129,6 +131,7 @@ def attach_beeline_path_stats(result: dict, project_dir: Path) -> dict:
                 enriched_scopes[scope_id] = scope_payload
                 continue
             enriched_scope = dict(scope_payload)
+            enriched_scope["bootstrap_benchmark"] = saved_bootstrap_benchmark(project_dir, scope_payload, reference_edges)
             scope_stats = stats_for_payload(scope_payload)
             if scope_stats is not None:
                 enriched_scope["beeline_path_stats"] = scope_stats
@@ -411,6 +414,7 @@ def compact_result_for_client(result: dict) -> dict:
                     scope_payload.get("run_ranked_edges_paths"),
                 ),
                 "beeline_path_stats": scope_payload.get("beeline_path_stats"),
+                "bootstrap_benchmark": scope_payload.get("bootstrap_benchmark"),
                 "top_edges": compact_edges_for_client(scope_edges),
             }
 
@@ -433,6 +437,7 @@ def compact_result_for_client(result: dict) -> dict:
             result.get("run_ranked_edges_paths"),
         ),
         "beeline_path_stats": result.get("beeline_path_stats"),
+        "bootstrap_benchmark": result.get("bootstrap_benchmark"),
         "top_edges": compact_edges,
         "scope_order": result.get("scope_order"),
         "scopes": compact_scopes or None,

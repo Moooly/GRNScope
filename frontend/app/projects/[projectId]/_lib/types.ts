@@ -225,6 +225,7 @@ export type AlgorithmStoredResult = {
   confidence_summary?: ConfidenceSummary | null;
   algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
   beeline_path_stats?: BeelinePathStats | null;
+  bootstrap_benchmark?: BootstrapBenchmark | null;
 };
 
 export type AlgorithmResultScope = {
@@ -241,7 +242,19 @@ export type AlgorithmResultScope = {
   confidence_summary?: ConfidenceSummary | null;
   algorithm_preprocessing?: AlgorithmPreprocessingSummary | null;
   beeline_path_stats?: BeelinePathStats | null;
+  bootstrap_benchmark?: BootstrapBenchmark | null;
   top_edges?: AlgorithmResultEdge[];
+};
+
+export type BootstrapBenchmark = {
+  method: "saved_cell_bootstrap_performance_v1";
+  status: "available" | "partial" | "unavailable";
+  run_count: number;
+  unavailable_run_count: number;
+  median: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  runs: Array<{ run_id: string; auprc_ratio: number }>;
 };
 
 export type BeelinePathStats = {

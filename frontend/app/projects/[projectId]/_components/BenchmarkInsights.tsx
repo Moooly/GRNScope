@@ -382,6 +382,26 @@ function BenchmarkSummaryHelpModal({
           </section>
 
           <section className="mt-5 border-t border-slate-100 pt-5">
+            <h4 className="font-extrabold text-slate-900">Bootstrap performance range</h4>
+            <p className="mt-2">
+              Each archived cell-bootstrap network is scored against the same reference
+              and candidate genes. The square is the median AUPRC ratio across available
+              runs; whiskers show the observed minimum and maximum. The Runs column
+              reports how many saved networks were scored. This is a descriptive range,
+              not a 95% confidence interval or a significance test. A single saved run
+              has a square but no whiskers. The dashed line at 1 is the random baseline.
+              Other accuracy columns still describe the final aggregated network.
+            </p>
+            <p className="mt-2">
+              Missing or unreadable run files are excluded; an asterisk beside the
+              run count marks an incomplete archive (hover for the missing count).
+              The Consensus row has no bootstrap range because it combines the final
+              method networks; a consensus range cannot be obtained by averaging the
+              methods’ benchmark scores. Early-stopped runs describe only the fits that
+              completed, and cell resampling does not measure between-donor uncertainty.
+            </p>
+          </section>
+          <section className="mt-5 border-t border-slate-100 pt-5">
             <h4 className="font-extrabold text-slate-900">Reading and downloading the summary</h4>
             <p className="mt-2">
               Methods are ranked by their mean rank over AUPRC ratio, early precision ratio
@@ -389,8 +409,8 @@ function BenchmarkSummaryHelpModal({
               the methods: larger and darker is better. Grey dots mark values no better than
               random; n/a means the metric is unavailable for that method or reference. The Consensus row is
               the rank average of all selected methods, as in DREAM5. Hover a circle for the
-              exact value. The CSV keeps the raw metrics, ratios, selected-edge counts,
-              directionality, stability and runtime.
+              exact value. The CSV keeps the raw metrics, ratios, bootstrap medians, ranges and run counts,
+              selected-edge counts, directionality, stability and runtime.
             </p>
           </section>
         </div>
@@ -1022,6 +1042,8 @@ export default function BenchmarkInsights({
       return {
         rows: [] as BenchmarkRow[],
         consensus: null as BenchmarkRow | null,
+        candidateGenes: new Set<string>(),
+        truth: new Set<string>(),
         eligibleReferenceEdges: 0,
         uploadedReferenceEdges: 0,
         excludedReferenceEdges: 0,
@@ -1122,6 +1144,8 @@ export default function BenchmarkInsights({
     return {
       rows,
       consensus,
+      candidateGenes,
+      truth,
       eligibleReferenceEdges: truth.size,
       uploadedReferenceEdges:
         groundTruth?.edge_count ?? truthEdges.length,
@@ -1143,6 +1167,11 @@ export default function BenchmarkInsights({
     tasks,
   ]);
 
+  const bootstrapPerformance = useMemo(() => new Map(activeAlgorithmIds.map(id => {
+    const result = algorithmResults[id];
+    const scoped = selectedResultScopeId !== "global" ? result?.scopes?.[selectedResultScopeId] : null;
+    return [id, selectedResultScopeId === "global" ? result?.bootstrap_benchmark : scoped?.status === "Completed" ? scoped.bootstrap_benchmark : null];
+  })), [activeAlgorithmIds, algorithmResults, selectedResultScopeId]);
   const summarySvgRef = useRef<SVGSVGElement | null>(null);
   const curveSvgRef = useRef<SVGSVGElement | null>(null);
   const motifSvgRef = useRef<SVGSVGElement | null>(null);
@@ -1211,6 +1240,7 @@ export default function BenchmarkInsights({
     inhibition: row.inhibitionEpr,
     stability: isConsensus ? null : stabilityOf(row.algorithmId),
     runtime: isConsensus ? null : row.runtimeSeconds,
+    bootstrap: isConsensus ? null : bootstrapPerformance.get(row.algorithmId) ?? null,
     pr: row.pr,
     roc: row.roc,
   });
@@ -1267,6 +1297,14 @@ export default function BenchmarkInsights({
             items={[
               ...figureItems("summary", "benchmark-summary"),
               {
+                label: "Bootstrap run scores",
+                format: "CSV",
+                onSelect: () => downloadCsv("benchmark-bootstrap-runs.csv", [
+                  ["algorithm", "scope", "run_id", "auprc_ratio"],
+                  ...activeAlgorithmIds.flatMap(id => (bootstrapPerformance.get(id)?.runs ?? []).map(run => [id, selectedResultScopeId, run.run_id, run.auprc_ratio])),
+                ]),
+              },
+              {
                 label: "Complete benchmark table",
                 format: "CSV",
                 description: "All displayed and supporting BEELINE metrics.",
@@ -1283,6 +1321,11 @@ export default function BenchmarkInsights({
                       "overall_rank",
                       "auprc",
                       "auprc_ratio",
+                      "bootstrap_auprc_ratio_median",
+                      "bootstrap_auprc_ratio_minimum",
+                      "bootstrap_auprc_ratio_maximum",
+                      "bootstrap_run_count",
+                      "bootstrap_unavailable_run_count",
                       "early_precision",
                       "early_precision_ratio",
                       "early_precision_selected_edges",
@@ -1297,6 +1340,7 @@ export default function BenchmarkInsights({
                       "runtime_seconds",
                     ],
                     ...allRows.map((row) => {
+                      const u = bootstrapPerformance.get(row.algorithmId);
                       const isConsensus = row.algorithmId === CONSENSUS_ID;
                       return [
                         row.algorithmId,
@@ -1309,6 +1353,11 @@ export default function BenchmarkInsights({
                         (ranks.get(row.algorithmId) ?? 0).toFixed(2),
                         row.auprc.toFixed(3),
                         row.auprcRatio.toFixed(3),
+                        u?.median?.toFixed(3) ?? "",
+                        u?.minimum?.toFixed(3) ?? "",
+                        u?.maximum?.toFixed(3) ?? "",
+                        u?.run_count ?? 0,
+                        u?.unavailable_run_count ?? 0,
                         row.precisionAtK.toFixed(3),
                         row.earlyPrecisionRatio.toFixed(3),
                         row.earlyPrecisionSelectedCount,
@@ -1357,6 +1406,10 @@ export default function BenchmarkInsights({
         <div className="mt-4">
           <SummaryHeatmap rows={figureRows} showSigned={signedMetricsAvailable} showStability={showStability} svgRef={summarySvgRef} />
         </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          Square: median across saved bootstrap runs; whiskers: observed min–max, not a 95% CI.
+          Other accuracy columns describe the final network. * Marks missing run files.
+        </p>
       </Panel>
       {isBenchmarkHelpOpen && typeof document !== "undefined" ? (
         <BenchmarkSummaryHelpModal
