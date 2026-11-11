@@ -24,7 +24,7 @@ import {
   type BenchmarkCurvePoint,
   type ReferenceSign,
 } from "../_lib/benchmark";
-import { downloadSvg, downloadSvgPng } from "../_lib/downloads";
+import { useFileDownloads } from "./OutputExportContext";
 import DownloadMenu from "./DownloadMenu";
 import {
   CurveSmallMultiples,
@@ -102,25 +102,6 @@ function edgeKey(source: string, target: string) {
   return benchmarkEdgeKey(source, target);
 }
 
-function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
-  const content = rows
-    .map((row) =>
-      row
-        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-  const url = URL.createObjectURL(
-    new Blob([content], { type: "text/csv;charset=utf-8" }),
-  );
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
@@ -1029,6 +1010,7 @@ export default function BenchmarkInsights({
   /** Repeat-run stability per algorithm (from the Comparison tab's data). */
   stability?: StabilityPoint[];
 }) {
+  const { downloadCsv, downloadSvg, downloadSvgPng } = useFileDownloads();
   const [isBenchmarkHelpOpen, setIsBenchmarkHelpOpen] = useState(false);
   const [isCurveHelpOpen, setIsCurveHelpOpen] = useState(false);
   const [additionalBenchmarkHelp, setAdditionalBenchmarkHelp] = useState<

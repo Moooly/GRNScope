@@ -1,4 +1,5 @@
 export const WEBSITE_FONT_FAMILY = "Arial, Helvetica, sans-serif";
+export type FileSink = (blob: Blob, filename: string) => void;
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -14,6 +15,7 @@ export function downloadBlob(blob: Blob, filename: string) {
 export function downloadCsv(
   filename: string,
   rows: Array<Array<string | number | null | undefined>>,
+  emit: FileSink = downloadBlob,
 ) {
   const content = rows
     .map((row) =>
@@ -22,7 +24,7 @@ export function downloadCsv(
         .join(","),
     )
     .join("\n");
-  downloadBlob(
+  emit(
     new Blob([content], { type: "text/csv;charset=utf-8" }),
     filename,
   );
@@ -89,9 +91,9 @@ function serializedSvg(svg: SVGSVGElement) {
   };
 }
 
-export function downloadSvg(svg: SVGSVGElement, filename: string) {
+export function downloadSvg(svg: SVGSVGElement, filename: string, emit: FileSink = downloadBlob) {
   const { markup } = serializedSvg(svg);
-  downloadBlob(
+  emit(
     new Blob([markup], { type: "image/svg+xml;charset=utf-8" }),
     filename,
   );
@@ -101,6 +103,7 @@ export async function downloadSvgPng(
   svg: SVGSVGElement,
   filename: string,
   scale = 3,
+  emit: FileSink = downloadBlob,
 ) {
   const { markup, width, height } = serializedSvg(svg);
   const sourceUrl = URL.createObjectURL(
@@ -129,7 +132,7 @@ export async function downloadSvgPng(
         "image/png",
       );
     });
-    downloadBlob(blob, filename);
+    emit(blob, filename);
   } finally {
     URL.revokeObjectURL(sourceUrl);
   }

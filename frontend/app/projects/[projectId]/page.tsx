@@ -2226,7 +2226,35 @@ useEffect(() => {
                   ? "Completed analysis"
                   : "Analysis details"}
                 downloadMenu={(
-                  <FileDownloadMenuModal key={projectId} projectId={projectId} apiBase={API_BASE} />
+                  <FileDownloadMenuModal key={projectId} projectId={projectId} apiBase={API_BASE} outputData={{
+                    insights: {
+                      algorithmEdgeRows: standardizedAlgorithmEdgeRows,
+                      algorithmMetaMap,
+                      algorithmResults,
+                      activeAlgorithmIds,
+                      selectedResultScopeId,
+                      tasks: allJobTasks,
+                      visualizationContext,
+                      isContextLoading: isVisualizationContextLoading,
+                    },
+                    methodRows: standardizedAlgorithmEdgeRows,
+                    consensusRows: consensusCandidateRows,
+                    filteredRows: activeEdges,
+                    settings: {
+                      job_id: latestJob?.job_id,
+                      scope: selectedResultScopeId,
+                      methods: activeAlgorithmIds,
+                      evidence_threshold: evidenceThreshold,
+                      confidence_threshold: confidenceThreshold,
+                      direction_confidence_threshold: directionConfidenceThreshold,
+                      sign_confidence_threshold: signConfidenceThreshold,
+                      minimum_method_support: consensusThreshold,
+                      comparison: { top_edges: 100, mode: "topology", metric: "jaccard" },
+                      trajectory_genes: visualizationContext?.trajectory?.genes ?? [],
+                      trajectory_lineage: visualizationContext?.trajectory?.lineages?.[0]?.name,
+                    },
+                    loading: isPreparingFinishedResults || isVisualizationContextLoading,
+                  }} />
                 )}
                 status={(
                   projectSetupError ? (

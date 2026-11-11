@@ -43,6 +43,7 @@ type Props = {
   contextKey?: string;
   onOverview?: () => void;
   edgeHoverHint?: boolean;
+  onExportFigure?: (figure: SVGSVGElement | null) => void;
 };
 
 type View = "overview" | "links" | "genes";
@@ -71,7 +72,7 @@ export function GeneGlyph({ tf, size = 14, T }: { tf: boolean; size?: number; T:
   return <svg width={size} height={size} aria-hidden="true"><circle cx={r} cy={r} r={r} fill={tf ? T.tf : T.node} /></svg>;
 }
 
-export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE, overviewContent, contextHeader, contextKey, onOverview, edgeHoverHint = true }: Props) {
+export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE, overviewContent, contextHeader, contextKey, onOverview, edgeHoverHint = true, onExportFigure }: Props) {
   const T = PALETTES[palette];
   const [view, setView] = useState<View>("overview");
   const [linkSort, setLinkSort] = useState<{ key: LinkKey; desc: boolean }>({ key: "evidence", desc: true });
@@ -281,7 +282,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
             <button type="button" role="menuitem" onClick={() => { setFigureMenu(false); if (figureRef.current) void downloadSvgPng(figureRef.current, "evidence-confidence.png"); }}>PNG</button>
             <button type="button" role="menuitem" onClick={() => { setFigureMenu(false); if (figureRef.current) downloadSvg(figureRef.current, "evidence-confidence.svg"); }}>SVG</button>
           </div>}
-          <svg ref={figureRef} viewBox={`0 0 ${W} ${H}`} width="100%" role="img" fontFamily={FIG_FONT}
+        <svg ref={node => { figureRef.current = node; onExportFigure?.(node); }} viewBox={`0 0 ${W} ${H}`} width="100%" role="img" fontFamily={FIG_FONT}
             aria-label="Number of displayed edges by evidence score (bars up) and by bootstrap confidence (bars down), on one axis from 0 to 1">
             {(["e", "c"] as SeriesKey[]).map((k, n) => <g key={k}>
               <rect x={4 + n * 118} y="6" width="10" height="10" fill={SERIES[k].fill} />

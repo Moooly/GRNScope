@@ -25,7 +25,8 @@ import TrajectoryInsights, {
 } from "./TrajectoryInsights";
 import DownloadMenu from "./DownloadMenu";
 import { AgreementDetailPanel, AgreementHeatmap, EulerDiagram, RegulatorHeatmap, UpSetPlot, agreementHeatmapLayout, clusterMethods, formatRank, rankRegulators, regulatorLabelWidth, regulatorPlotTop, upsetPlotTop } from "./AgreementFigures";
-import { downloadSvg as downloadSvgFile, downloadSvgPng } from "../_lib/downloads";
+import { downloadCsv } from "../_lib/downloads";
+import { useFileDownloads } from "./OutputExportContext";
 import { median as scoreMedian } from "../_lib/resultScores";
 
 export type VisualizationContext = {
@@ -69,26 +70,6 @@ function plural(value: number, singular: string, pluralForm = `${singular}s`) {
 
 function median(values: number[]) {
   return scoreMedian(values) ?? 0;
-}
-
-function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
-  const content = rows
-    .map((row) =>
-      row
-        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-  const url = URL.createObjectURL(
-    new Blob([content], { type: "text/csv;charset=utf-8" }),
-  );
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 
@@ -1577,6 +1558,7 @@ function RepeatRunStabilityPanel({
   activeAlgorithmIds: string[];
   selectedResultScopeId: string;
 }) {
+  const { downloadCsv, downloadSvg: downloadSvgFile, downloadSvgPng } = useFileDownloads();
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const rows = useMemo(
@@ -1640,9 +1622,9 @@ function RepeatRunStabilityPanel({
   };
 
   const figureRef = useRef<SVGSVGElement | null>(null);
-  const handleDownloadPng = () => {
+  const handleDownloadFigure = async (format: "png" | "svg") => {
     const svg = figureRef.current;
-    if (!svg) return;
+    if (!svg) throw new Error("The repeat-run stability figure is not available.");
     const box = svg.viewBox.baseVal;
     const clone = svg.cloneNode(true) as SVGSVGElement;
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
@@ -1656,33 +1638,8 @@ function RepeatRunStabilityPanel({
       node.setAttribute("stroke-width", node.getAttribute("stroke-width") === "1.4" ? "0.8" : node.getAttribute("stroke-width") ?? "0.8");
     });
     clone.querySelectorAll("[data-hl] text[data-name]").forEach((node) => node.setAttribute("fill", "#000"));
-    const source = new XMLSerializer().serializeToString(clone);
-    const image = new Image();
-    const url = URL.createObjectURL(new Blob([source], { type: "image/svg+xml;charset=utf-8" }));
-    image.onload = () => {
-      const scale = 4; // ~300 dpi at a single-column print width
-      const canvas = document.createElement("canvas");
-      canvas.width = box.width * scale;
-      canvas.height = box.height * scale;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const href = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = href;
-        link.download = "repeat-run-stability.png";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(href);
-      }, "image/png");
-    };
-    image.src = url;
+    if (format === "svg") downloadSvgFile(clone, "repeat-run-stability.svg");
+    else await downloadSvgPng(clone, "repeat-run-stability.png", 4);
   };
 
   return (
@@ -1710,7 +1667,15 @@ function RepeatRunStabilityPanel({
                 label: "Figure",
                 format: "PNG",
                 description: "Publication-style box plot of every run pair.",
-                onSelect: handleDownloadPng,
+                disabled: !rows.some(row => row.pairRhos.length || row.medianRho !== null),
+                onSelect: () => handleDownloadFigure("png"),
+              },
+              {
+                label: "Figure",
+                format: "SVG",
+                description: "Editable vector version.",
+                onSelect: () => handleDownloadFigure("svg"),
+                disabled: !rows.some(row => row.pairRhos.length || row.medianRho !== null),
               },
               {
                 label: "Complete table",
@@ -1747,6 +1712,7 @@ function AgreementView({
   activeAlgorithmIds: string[];
   selectedResultScopeId: string;
 }) {
+  const { downloadCsv, downloadSvg: downloadSvgFile, downloadSvgPng } = useFileDownloads();
   const [topK, setTopK] = useState(100);
   const [metric, setMetric] = useState<AgreementMetric>("jaccard");
   const [mode, setMode] = useState<ComparisonMode>("topology");
@@ -1941,17 +1907,18 @@ function AgreementView({
                             }
                           />
                         ) : null;
-  const handleDownloadOverlap = (format: "svg" | "png") => {
+  const handleDownloadOverlap = async (format: "svg" | "png") => {
     const svg = overlapSvgRef.current;
     if (!svg) return;
     const filename = `method-overlap-${overlapLabel.toLowerCase()}-${mode}-top-${topK}.${format}`;
     if (format === "svg") downloadSvgFile(svg, filename);
-    else void downloadSvgPng(svg, filename, 3);
+    else await downloadSvgPng(svg, filename, 3);
   };
-  const handleDownloadAgreementPng = () => {
+  const handleDownloadAgreementFigure = async (format: "png" | "svg") => {
     const svg = heatmapSvgRef.current;
     if (!svg) return;
-    void downloadSvgPng(svg, `method-agreement-${metric}-${mode}-top-${topK}.png`, 3);
+    if (format === "svg") downloadSvgFile(svg, `method-agreement-${metric}-${mode}-top-${topK}.svg`);
+    else await downloadSvgPng(svg, `method-agreement-${metric}-${mode}-top-${topK}.png`, 3);
   };
 
   // Default selection: the first off-diagonal cell (first two methods in the
@@ -2078,12 +2045,12 @@ function AgreementView({
       formatRank(row.median),
     ]),
   ];
-  const handleDownloadRegulators = (format: "svg" | "png") => {
+  const handleDownloadRegulators = async (format: "svg" | "png") => {
     const svg = regulatorSvgRef.current;
     if (!svg) return;
     const filename = `key-regulators-top-${topK}.${format}`;
     if (format === "svg") downloadSvgFile(svg, filename);
-    else void downloadSvgPng(svg, filename, 3);
+    else await downloadSvgPng(svg, filename, 3);
   };
   const percent = (value: number, total: number) => `${Math.round((value / total) * 100)}%`;
 
@@ -2143,7 +2110,12 @@ function AgreementView({
                         label: "Agreement matrix",
                         format: "PNG",
                         description: "Symmetric agreement matrix, at print resolution.",
-                        onSelect: handleDownloadAgreementPng,
+                        onSelect: () => handleDownloadAgreementFigure("png"),
+                      },
+                      {
+                        label: "Agreement matrix",
+                        format: "SVG",
+                        onSelect: () => handleDownloadAgreementFigure("svg"),
                       },
                       {
                         label: "Complete matrix",

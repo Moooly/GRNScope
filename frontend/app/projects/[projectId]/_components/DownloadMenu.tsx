@@ -2,10 +2,13 @@
 
 import {
   useEffect,
+  useContext,
+  useId,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { OutputExportContext } from "./OutputExportContext";
 
 export type DownloadMenuItem = {
   label: string;
@@ -60,6 +63,21 @@ export default function DownloadMenu({
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const exportContext = useContext(OutputExportContext);
+  const exportId = useId();
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const exportSignature = JSON.stringify(items.map(({ label, format, disabled }) => ({ label, format, disabled })));
+  useEffect(() => {
+    if (!exportContext) return;
+    return exportContext.registry.register(exportId, itemsRef.current.flatMap((item, index) => item.disabled ? [] : [{
+      id: `${exportContext.section}/${exportId}/${index}`,
+      label: `${ariaLabel.replace(/^Download\s+/i, "")} — ${item.label}`,
+      format: item.format.toLowerCase(),
+      section: exportContext.section,
+      run: () => itemsRef.current[index].onSelect(),
+    }]));
+  }, [exportContext, exportId, exportSignature, ariaLabel]);
 
   useEffect(() => {
     if (!isOpen) return;

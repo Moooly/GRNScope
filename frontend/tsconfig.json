@@ -43,6 +43,7 @@
     "node_modules",
     ".next-dev",
     ".next/types/**/* *.ts",
-    ".next/dev/types/**/* *.ts"
+    ".next/dev/types/**/* *.ts",
+    ".next/dev/types/validator.ts"
   ]
 }

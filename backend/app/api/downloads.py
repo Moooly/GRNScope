@@ -39,8 +39,20 @@ from ..services.project_data_service import (
     project_data_name,
     write_project_data_zip,
 )
+from ..services.project_output_service import perturbation_download_inventory
 
 router = APIRouter()
+
+
+@router.get("/api/projects/{project_id}/output-files")
+async def get_project_output_files(project_id: str, request: Request, response: FastAPIResponse):
+    owner_id = get_or_create_client_id(request, response)
+    project_dir = PROJECTS_ROOT / project_id
+    demo = is_demo_project(project_id)
+    if not demo:
+        require_project_owner(project_dir, owner_id)
+    files = await asyncio.to_thread(perturbation_download_inventory, project_dir, demo=demo)
+    return {"perturbations": files}
 
 
 def _latest_manifest_job_id(project_dir: Path, requested_job_id: str | None) -> str | None:

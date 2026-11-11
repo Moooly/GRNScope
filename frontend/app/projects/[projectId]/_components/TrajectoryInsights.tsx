@@ -3,11 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  downloadCsv,
-  downloadSvg,
-  downloadSvgPng,
-} from "../_lib/downloads";
+import { useFileDownloads } from "./OutputExportContext";
 import DownloadMenu from "./DownloadMenu";
 import {
   CascadeHeatmap,
@@ -1169,6 +1165,7 @@ export default function TrajectoryInsights({
   /** Directed network edges, best-supported first, for regulator timing. */
   edges?: TimingEdge[];
 }) {
+  const { downloadCsv, downloadSvg, downloadSvgPng } = useFileDownloads();
   const [requestedTarget, setRequestedTarget] = useState<string | null>(null);
   const [pathPicks, setPathPicks] = useState<{ key: string; direct: string[]; upstream: string[]; focus: string | null } | null>(null);
   const timingChartRef = useRef<HTMLDivElement | null>(null);
