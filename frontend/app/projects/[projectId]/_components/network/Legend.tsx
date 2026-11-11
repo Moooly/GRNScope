@@ -2,7 +2,7 @@
 
 import { PALETTES, DEFAULT_PALETTE, type PaletteName } from "./theme";
 import {
-  CONFIDENCE_LABELS, EVIDENCE_LABELS, WIDTH_STEPS, supportLabels,
+  CONFIDENCE_LABELS, EVIDENCE_LABELS, ELASTIC_NET_LABELS, WIDTH_STEPS, supportLabels,
   NODE_SIZE_OPTIONS, type EdgeWidthBy, type EffectFilter, type FigureCounts, type NodeSizeBy,
 } from "./encoding";
 
@@ -72,8 +72,9 @@ const SIZE_ORDER: NodeSizeBy[] = ["all", "out", "in"];
 export function NetworkKey({ hasUndirected, widthBy, methodCount, counts, palette = DEFAULT_PALETTE, signs, sizeBy, onSizeByChange, sizeChoice = true, onWidthByChange, filter }: KeyProps) {
   const T = PALETTES[palette];
   const support = widthBy === "support" && methodCount > 1;
-  const steps = support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
-  const widthTip = [support ? "Line width: number of selected methods reporting the edge" : "Line width: evidence (per-target rank, 0–1)",
+  const elastic = widthBy === "elasticNet";
+  const steps = elastic ? [...ELASTIC_NET_LABELS] : support ? supportLabels(methodCount) : [...EVIDENCE_LABELS];
+  const widthTip = [elastic ? "Line width: absolute standardized Elastic Net coefficient |β|. Unresolved directions use the larger fit. Unavailable values use the thinnest line." : support ? "Line width: number of selected methods reporting the edge" : "Line width: evidence (per-target rank, 0–1)",
     ...WIDTH_STEPS.map((_, i) => steps[i] ? `${steps[i]}${counts ? `: ${plural(counts.width[i], "edge")}` : ""}` : "").filter(Boolean)].join("\n");
   const fadeTip = ["Opacity: bootstrap confidence", ...CONFIDENCE_LABELS.map((label, i) => `${label}${counts ? `: ${plural(counts.confidence[i], "edge")}` : ""}`), "Edges without a verified value are drawn solid."].join("\n");
   const controls = Boolean((sizeBy && onSizeByChange) || onWidthByChange || filter);
@@ -93,7 +94,7 @@ export function NetworkKey({ hasUndirected, widthBy, methodCount, counts, palett
         <svg width="24" height="8" aria-hidden="true"><path d="M1 4H23" stroke={T.activates} strokeWidth="1.6" strokeDasharray="4 3"/></svg>
         <span>direction unknown</span>
       </span>}
-      {!onWidthByChange && <span className="key-group" title={widthTip}>{support ? "Line width: methods agreeing" : "Line width: evidence score"}</span>}
+      {!onWidthByChange && <span className="key-group" title={widthTip}>{elastic ? "Line width: Elastic Net |β|" : support ? "Line width: methods agreeing" : "Line width: evidence score"}</span>}
       {counts?.hasConfidence && <span className="key-group" title={fadeTip}>
         <svg width="30" height="8" aria-hidden="true">{[0.2, 0.5, 1].map((o, i) => <path key={i} d={`M${1 + i * 10} 4h8`} stroke={T.activates} strokeWidth="2" opacity={o}/>)}</svg>
         <span>faded = low confidence</span>
@@ -113,9 +114,10 @@ export function NetworkKey({ hasUndirected, widthBy, methodCount, counts, palett
       {onWidthByChange && <label className="key-control" title={widthTip}>
         <svg width="20" height="12" aria-hidden="true"><path d="M1 10L19 10" stroke="#5f6b72" strokeWidth=".8"/><path d="M1 2H19" stroke="#5f6b72" strokeWidth="2.6"/></svg>
         <span className="key-control-name">Line width</span>
-        <select value={support ? "support" : "evidence"} onChange={event => onWidthByChange(event.target.value as EdgeWidthBy)} aria-label="Line width">
+        <select value={elastic ? "elasticNet" : support ? "support" : "evidence"} onChange={event => onWidthByChange(event.target.value as EdgeWidthBy)} aria-label="Line width">
           <option value="evidence">evidence score</option>
           <option value="support" disabled={methodCount <= 1}>methods agreeing</option>
+          <option value="elasticNet">Elastic Net |β|</option>
         </select>
       </label>}
     </div>}

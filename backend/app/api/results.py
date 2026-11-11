@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 
 from ..api_contracts import AlgorithmResultResponse, ProjectResultsResponse
 from ..config import PROJECTS_ROOT
@@ -38,6 +39,36 @@ from ..services.visualization_context_service import (
 
 
 router = APIRouter()
+
+
+class ElasticNetPair(BaseModel):
+    source: str = Field(min_length=1, max_length=512)
+    target: str = Field(min_length=1, max_length=512)
+
+
+class ElasticNetRequest(BaseModel):
+    scope_id: str = Field(default="global", min_length=1, max_length=256)
+    pairs: list[ElasticNetPair] = Field(max_length=100000)
+
+
+@router.post("/api/projects/{project_id}/elastic-net")
+def get_elastic_net(project_id: str, payload: ElasticNetRequest, request: Request, response: Response):
+    from ..services.elastic_net_service import project_elastic_net
+
+    owner_id = get_or_create_client_id(request, response)
+    if is_demo_project(project_id):
+        project_dir = get_demo_project_root()
+    else:
+        project_dir = PROJECTS_ROOT / project_id
+        require_project_owner(project_dir, owner_id)
+    try:
+        return {"ok": True, **project_elastic_net(
+            project_dir, [(pair.source, pair.target) for pair in payload.pairs], payload.scope_id,
+        )}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 CLIENT_RESULT_EDGE_FIELDS = {
     "rank",

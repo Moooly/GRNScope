@@ -19,11 +19,11 @@ export type PaperContext = {
   effect: "all" | "activation" | "repression" | "unknown";
   palette: "soft" | "contrast";
   sizeBy: NodeSizeBy;
-  widthBy: "evidence" | "support";
+  widthBy: "evidence" | "support" | "elasticNet";
   exportedAt?: Date;
 };
 
-export type LinkRow = { regulator: string; target: string; effect: string; directed: boolean; evidence: number; confidence: number | null; methods: number; methodNames: string[] };
+export type LinkRow = { regulator: string; target: string; effect: string; directed: boolean; evidence: number; confidence: number | null; methods: number; methodNames: string[]; beta: number | null; reverseBeta: number | null };
 export type GeneRow = { gene: string; tf: boolean; targets: number; regulators: number; unknown: number; links: number };
 
 export function linkRows(edges: NetworkEdge[]): LinkRow[] {
@@ -34,6 +34,7 @@ export function linkRows(edges: NetworkEdge[]): LinkRow[] {
       effect: e.sign === 1 ? "activation" : e.sign === -1 ? "repression" : "unknown",
       directed, evidence: e.score, confidence: e.bootstrapVerified ? e.confidence : null,
       methods: e.count, methodNames: e.supportingAlgorithms,
+      beta: e.elasticNetBeta ?? null, reverseBeta: e.elasticNetReverseBeta ?? null,
     };
   });
 }
@@ -50,9 +51,9 @@ export function activeFilters(filters: string) {
   return filters.split(";").map(s => s.trim()).filter(s => s && !/≥ 0%$/.test(s) && !/^support ≥ 1$/i.test(s) && !/≥ 0\.00$/.test(s));
 }
 
-const LINK_HEAD = ["regulator", "target", "effect", "direction_resolved", "evidence", "bootstrap_confidence", "methods_agreeing", "methods"];
+const LINK_HEAD = ["regulator", "target", "effect", "direction_resolved", "evidence", "bootstrap_confidence", "methods_agreeing", "methods", "elastic_net_beta", "elastic_net_reverse_beta"];
 function linkCells(r: LinkRow): (string | number)[] {
-  return [r.regulator, r.target, r.effect, r.directed ? "yes" : "no", Number(r.evidence.toFixed(3)), r.confidence === null ? "" : Number(r.confidence.toFixed(3)), r.methods, r.methodNames.join("; ")];
+  return [r.regulator, r.target, r.effect, r.directed ? "yes" : "no", Number(r.evidence.toFixed(3)), r.confidence === null ? "" : Number(r.confidence.toFixed(3)), r.methods, r.methodNames.join("; "), r.beta ?? "", r.reverseBeta ?? ""];
 }
 
 export function linksCsv(edges: NetworkEdge[]) {
@@ -79,7 +80,7 @@ export function figureLegend(nodes: NetworkNode[], edges: NetworkEdge[], ctx: Pa
       + `${ctx.effect !== "all" ? `; ${ctx.effect === "unknown" ? "edges of unknown sign" : `${ctx.effect} edges`} only` : ""}.`,
     `${soft ? "Blue" : "Orange"} circles, transcription factors; ${soft ? "yellow" : "grey"} circles, other genes; circle size, ${ctx.sizeBy === "out" ? "number of target genes" : ctx.sizeBy === "in" ? "number of regulators" : "number of edges"}.`,
     [signs.has(1) ? "Arrowheads, activation" : "", signs.has(-1) ? "bars, repression" : "", signs.has(0) ? "no tip, sign unknown" : "", undirected ? "dashed lines, direction not resolved" : ""].filter(Boolean).join("; ").replace(/^./, c => c.toUpperCase()) + ".",
-    `Line width, ${ctx.widthBy === "support" ? "number of methods reporting the edge" : "evidence (per-target rank, 0–1)"}${faded ? "; faded lines, bootstrap confidence below 0.8" : ""}.`,
+    `Line width, ${ctx.widthBy === "elasticNet" ? "absolute standardized Elastic Net coefficient (|beta|; unresolved edges use the larger directional fit; unavailable fits use the thinnest line)" : ctx.widthBy === "support" ? "number of methods reporting the edge" : "evidence (per-target rank, 0–1)"}${faded ? "; faded lines, bootstrap confidence below 0.8" : ""}.`,
   ].filter(s => s !== ".");
   return `Gene regulatory network inferred with GRNScope. ${sentences.join(" ")}`;
 }
@@ -122,7 +123,7 @@ export async function supplementaryWorkbook(nodes: NetworkNode[], edges: Network
   const num = (v: number | "") => v === "" ? "" : { v, s: 3 };
   const linkSheet: Cell[][] = [head(LINK_HEAD), ...links.map(r => {
     const c = linkCells(r);
-    return [gene(r.regulator), gene(r.target), c[2], c[3], num(r.evidence), r.confidence === null ? "" : num(r.confidence), r.methods, c[7]] as Cell[];
+    return [gene(r.regulator), gene(r.target), c[2], c[3], num(r.evidence), r.confidence === null ? "" : num(r.confidence), r.methods, c[7], r.beta === null ? "" : num(r.beta), r.reverseBeta === null ? "" : num(r.reverseBeta)] as Cell[];
   })];
   const geneSheet: Cell[][] = [head(["gene", "transcription_factor", "targets", "regulators", "direction_unknown", "edges"]),
     ...genes.map(g => [gene(g.gene), g.tf ? "yes" : "no", g.targets, g.regulators, g.unknown, g.links] as Cell[])];
@@ -131,6 +132,7 @@ export async function supplementaryWorkbook(nodes: NetworkNode[], edges: Network
     ["Project", `${ctx.projectName} (${ctx.projectId})`],
     ["Exported", `${when.toISOString().slice(0, 16).replace("T", " ")} UTC`],
     ["Software", "GRNScope"],
+    ["Elastic Net", "Standardized beta; jointly fitted candidate regulators before display filters; L1 ratio 0.5, alpha selected by 3-fold CV. Reverse beta is provided only for unresolved directions. Empty = unavailable; zero = shrunk to zero."],
     ["Methods", `${ctx.methods.join(", ")} (${ctx.methods.length})`],
     ["Scope", ctx.scope],
     ["Filters", ctx.filters || "None"],
@@ -145,7 +147,7 @@ export async function supplementaryWorkbook(nodes: NetworkNode[], edges: Network
   ];
   const aboutSheet: Cell[][] = about.map(([k, v]) => [{ v: k, s: 5 }, { v, s: 4 }]);
   const sheets = [
-    { name: "Edges", xml: sheetXml(linkSheet, [14, 14, 12, 18, 10, 20, 17, 44], true) },
+    { name: "Edges", xml: sheetXml(linkSheet, [14, 14, 12, 18, 10, 20, 17, 44, 18, 24], true) },
     { name: "Genes", xml: sheetXml(geneSheet, [14, 20, 10, 12, 18, 8], true) },
     { name: "About", xml: sheetXml(aboutSheet, [22, 100], false) },
   ];

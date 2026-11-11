@@ -12,6 +12,10 @@ export type NetworkNode = {
 };
 
 export type NetworkEdge = {
+  /** Standardized beta in the displayed direction; unresolved links carry both fits. */
+  elasticNetBeta?: number | null;
+  elasticNetReverseBeta?: number | null;
+  elasticNetReason?: string;
   key: string;
   source: string;
   target: string;
@@ -57,7 +61,7 @@ export type NetworkGraphProps = {
   totalRelationships?: number;
   /** What node size encodes: genes it regulates, all connections, or its regulators. */
   sizeBy?: import("./network/encoding").NodeSizeBy;
-  /** What edge width encodes: evidence or method support. */
+  /** What edge width encodes: evidence, method support or Elastic Net |β|. */
   widthBy?: import("./network/encoding").EdgeWidthBy;
   onSizeByChange?: (value: import("./network/encoding").NodeSizeBy) => void;
   onWidthByChange?: (value: import("./network/encoding").EdgeWidthBy) => void;

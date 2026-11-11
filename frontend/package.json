@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:network": "node --test scripts/benchmark-uncertainty.test.cjs scripts/trajectory-orientation.test.cjs scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/paper-export.test.cjs scripts/result-scores.test.cjs scripts/genome-coordinates.test.cjs",
+    "test:network": "node --test scripts/elastic-net.test.cjs scripts/benchmark-uncertainty.test.cjs scripts/trajectory-orientation.test.cjs scripts/network-visuals.test.cjs scripts/galaxy.test.cjs scripts/paper-export.test.cjs scripts/result-scores.test.cjs scripts/genome-coordinates.test.cjs",
     "check": "npm run lint && npm run typecheck && npm run test:network && npm run test:loading && npm run test:downloads && npm run build",
     "compare:network": "node scripts/compare-network-layouts.cjs",
     "test:loading": "node --test scripts/project-loading.test.cjs scripts/glob-compat.test.cjs",

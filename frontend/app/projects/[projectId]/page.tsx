@@ -1534,6 +1534,10 @@ function ProjectDetailContent({ projectId, routeProjectId, isDemoRoute }: {
   }, [activeAlgorithmIds, consensusRows, displayAlgorithmEdgeRows]);
 
   const activeEdges = uncappedActiveEdges;
+  const elasticNetCandidates = useMemo(() => activeAlgorithmIds.length >= 2
+    ? consensusCandidateRows
+    : standardizedAlgorithmEdgeRows[activeAlgorithmIds[0]] ?? [],
+  [activeAlgorithmIds, consensusCandidateRows, standardizedAlgorithmEdgeRows]);
 
   // First open: seed the result filters from each project's own edge
   // distribution so the network opens on a small, legible set of the strongest
@@ -2475,6 +2479,8 @@ useEffect(() => {
                       <NetworkVisualizationSection
                       projectName={project?.project_name?.trim() || (isDemoProject ? "Demo Project" : "Untitled project")}
                       projectId={projectId ?? ""}
+                      elasticNetCandidates={elasticNetCandidates}
+                      scopeId={selectedResultScopeId}
                       selectedAlgorithmIds={activeAlgorithmIds}
                       scopeLabel={availableResultScopes.find(scope => scope.id === selectedResultScopeId)?.label ?? selectedResultScopeId}
                       filterSummary={`Evidence ≥ ${evidenceThreshold.toFixed(2)}; confidence ≥ ${Math.round(confidenceThreshold * 100)}%; direction confidence ≥ ${Math.round(directionConfidenceThreshold * 100)}%; sign confidence ≥ ${Math.round(signConfidenceThreshold * 100)}%; support ≥ ${consensusThreshold}`}

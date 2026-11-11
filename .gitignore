@@ -94,3 +94,6 @@ Thumbs.db
 # Server-specific deployment settings and data-disk link
 /server.env
 /workspace
+
+# Automatically generated demo analysis cache
+/backend/data/demo_project/derived/

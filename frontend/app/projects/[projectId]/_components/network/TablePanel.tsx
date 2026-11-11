@@ -6,7 +6,8 @@ import { hasDirection } from "../networkVisualEncoding";
 import { PALETTES, DEFAULT_PALETTE, type Palette, type PaletteName } from "./theme";
 import { nodeDegrees } from "./model";
 import { downloadSvg, downloadSvgPng } from "../../_lib/downloads";
-import { SCORE_BIN_COUNT, SCORE_BIN_STEP, scoreDistributions } from "./encoding";
+import ElasticNetOverview, { ElasticNetDetails, type ElasticNetState } from "./ElasticNetOverview";
+import { elasticNetMagnitude, SCORE_BIN_COUNT, SCORE_BIN_STEP, scoreDistributions } from "./encoding";
 
 /** Ink, grid and hues of the Comparison and Benchmark figures: evidence in
  * their blue, confidence in their orange. */
@@ -22,6 +23,7 @@ const FIG_FONT = "Arial, Helvetica, sans-serif", FIG_INK = "#1a1a1a", FIG_SUB = 
  * link on the canvas; the figure's link filter sits at the top of the sheet.
  */
 type Props = {
+  elasticNetState?: ElasticNetState;
   edges: NetworkEdge[];
   nodes: NetworkNode[];
   methodCount: number;
@@ -47,7 +49,7 @@ type Props = {
 };
 
 type View = "overview" | "links" | "genes";
-type LinkKey = "regulator" | "target" | "evidence" | "confidence" | "methods";
+type LinkKey = "regulator" | "target" | "evidence" | "confidence" | "methods" | "elasticNet";
 type GeneKey = "gene" | "targets" | "regulators" | "unknown" | "total";
 type Row = { edge: NetworkEdge; regulator: string; target: string; directed: boolean };
 type GeneRow = { id: string; tf: boolean; targets: number; regulators: number; unknown: number; total: number };
@@ -72,7 +74,7 @@ export function GeneGlyph({ tf, size = 14, T }: { tf: boolean; size?: number; T:
   return <svg width={size} height={size} aria-hidden="true"><circle cx={r} cy={r} r={r} fill={tf ? T.tf : T.node} /></svg>;
 }
 
-export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE, overviewContent, contextHeader, contextKey, onOverview, edgeHoverHint = true, onExportFigure }: Props) {
+export default function NetworkTablePanel({ edges, nodes, methodCount, selectedGene, selectedEdgeKey, onSelectGene, onSelectEdge, onHoverEdge, onHighlightEdges, onHide, onFocus, filter, palette = DEFAULT_PALETTE, overviewContent, contextHeader, contextKey, onOverview, edgeHoverHint = true, onExportFigure, elasticNetState }: Props) {
   const T = PALETTES[palette];
   const [view, setView] = useState<View>("overview");
   const [linkSort, setLinkSort] = useState<{ key: LinkKey; desc: boolean }>({ key: "evidence", desc: true });
@@ -93,7 +95,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
   const byEvidence = useMemo(() => [...allRows].sort((a, b) => b.edge.score - a.edge.score), [allRows]);
   const rows = useMemo(() => {
     const value = (r: Row): number | string => linkSort.key === "regulator" ? r.regulator : linkSort.key === "target" ? r.target
-      : linkSort.key === "evidence" ? r.edge.score : linkSort.key === "confidence" ? (r.edge.bootstrapVerified ? r.edge.confidence : -1) : r.edge.count;
+      : linkSort.key === "elasticNet" ? elasticNetMagnitude(r.edge) ?? -1 : linkSort.key === "evidence" ? r.edge.score : linkSort.key === "confidence" ? (r.edge.bootstrapVerified ? r.edge.confidence : -1) : r.edge.count;
     return [...allRows].sort((a, b) => {
       const x = value(a), y = value(b);
       const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
@@ -173,8 +175,8 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
 
   const download = (what: "links" | "genes", subset?: Row[], name?: string) => {
     const data = what === "links"
-      ? [["regulator", "target", "effect", "direction_resolved", "evidence", "bootstrap_confidence", "methods", "method_names"],
-         ...(subset ?? rows).map(r => [r.regulator, r.target, r.edge.sign === 1 ? "activation" : r.edge.sign === -1 ? "repression" : "unknown", r.directed ? "yes" : "no", r.edge.score.toFixed(3), r.edge.bootstrapVerified ? r.edge.confidence.toFixed(3) : "", String(r.edge.count), r.edge.supportingAlgorithms.join(";")])]
+      ? [["regulator", "target", "effect", "direction_resolved", "evidence", "bootstrap_confidence", "methods", "method_names", "elastic_net_beta", "elastic_net_reverse_beta"],
+         ...(subset ?? rows).map(r => [r.regulator, r.target, r.edge.sign === 1 ? "activation" : r.edge.sign === -1 ? "repression" : "unknown", r.directed ? "yes" : "no", r.edge.score.toFixed(3), r.edge.bootstrapVerified ? r.edge.confidence.toFixed(3) : "", String(r.edge.count), r.edge.supportingAlgorithms.join(";"), String(r.edge.elasticNetBeta ?? ""), String(r.edge.elasticNetReverseBeta ?? "")])]
       : [["gene", "transcription_factor", "targets", "regulators", "direction_unknown", "total_edges"], ...genes.map(g => [g.id, g.tf ? "yes" : "no", String(g.targets), String(g.regulators), String(g.unknown), String(g.total)])];
     const url = URL.createObjectURL(new Blob([csv(data)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = `network-${name ?? what}.csv`;
@@ -209,6 +211,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         <dt>Sign</dt><dd>{e.sign === 0 ? "not resolved" : `${e.sign === 1 ? "activation" : "repression"} · ${pct(e.signConfidence)} stable`}</dd>
         <dt>Methods</dt><dd>{e.supportingAlgorithms.length ? e.supportingAlgorithms.join(", ") : "—"}</dd>
       </dl>
+      {elasticNetState && <ElasticNetDetails edge={e} state={elasticNetState} />}
     </div>;
   };
 
@@ -317,6 +320,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
           </tr>)}</tbody></table>}
         </div>
       </section>}
+      <ElasticNetOverview edges={edges} state={elasticNetState} onSelectEdge={onSelectEdge} onHoverEdge={onHoverEdge} />
       {top.length > 0 && <section className="tp-section">
         <div className="tp-section-head"><h4>Top {top.length} {anyDirected ? "regulators" : "hubs"}</h4><button type="button" className="tp-more-link" onClick={() => setView("genes")}>All genes →</button></div>
         <table><tbody>{top.map(g => {
@@ -346,11 +350,12 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
         <th onClick={() => sortLink("target")}>{anyDirected ? "Target" : "Gene"}{arrow(linkSort.key === "target", linkSort.desc)}</th>
         <th className="n" onClick={() => sortLink("evidence")}>Evidence{arrow(linkSort.key === "evidence", linkSort.desc)}</th>
         <th className="n" onClick={() => sortLink("confidence")} title="Bootstrap confidence">Conf{arrow(linkSort.key === "confidence", linkSort.desc)}</th>
+        <th className="n" onClick={() => sortLink("elasticNet")} title="Absolute standardized Elastic Net coefficient; larger of both fits when direction is unresolved">|β|{arrow(linkSort.key === "elasticNet", linkSort.desc)}</th>
         <th className="n" onClick={() => sortLink("methods")}>Methods{arrow(linkSort.key === "methods", linkSort.desc)}</th>
       </tr></thead>
       <tbody>{shownRows.map(r => <tr key={r.edge.key} {...rowEvents(r)} className={r.edge.key === selectedEdgeKey ? "is-sel" : undefined}>
         <td>{gene(r.regulator)}</td><td className="tp-gl">{glyph(r)}</td><td>{gene(r.target)}</td>
-        <td className="n">{evidence(r.edge.score)}</td><td className="n">{confidence(r.edge)}</td><td className="n">{methodSupport(r.edge.count)}</td>
+        <td className="n">{evidence(r.edge.score)}</td><td className="n">{confidence(r.edge)}</td><td className="n">{elasticNetMagnitude(r.edge)?.toFixed(3) ?? "—"}</td><td className="n">{methodSupport(r.edge.count)}</td>
       </tr>)}</tbody>
     </table>
     {rows.length > LIMIT && !showAll && <button type="button" className="tp-more" onClick={() => setShowAll(true)}>Show all {rows.length.toLocaleString()} edges</button>}
@@ -390,7 +395,7 @@ export default function NetworkTablePanel({ edges, nodes, methodCount, selectedG
     {filter && <div className="tp-filter">{filter}</div>}
     {contextHeader}
     <div className="tp-body" ref={bodyRef} onMouseLeave={() => onHoverEdge(null)}>
-      {card ?? (view === "overview" ? overviewContent ?? overview() : view === "links" ? linksTable : genesTable)}
+      {card ?? (view === "overview" ? overviewContent ? <>{overviewContent}<ElasticNetOverview edges={edges} state={elasticNetState} onSelectEdge={onSelectEdge} onHoverEdge={onHoverEdge} /></> : overview() : view === "links" ? linksTable : genesTable)}
     </div>
     {!card && view !== "overview" && <div className="tp-foot">
       <span>{view === "links" ? `${plural(rows.length, "edge")}${edgeHoverHint ? " · hover a row to see it on the network" : ""}` : plural(genes.length, "gene")}</span>

@@ -45,6 +45,7 @@ import type { AggregatedEdge, NodeInfo, GenomeReference } from "../_lib/types";
 import type { NetworkFigureContext } from "./networkFigureExport";
 import { paperFileBase, type PaperContext } from "./network/paperData";
 import "./networkWorkspace.css";
+import { useElasticNet } from "../_hooks/useElasticNet";
 
 type Layout = "force" | "hierarchical" | "concentric" | "circular" | "circos";
 type Props = {
@@ -76,6 +77,8 @@ type Props = {
   filterSummary: string;
   projectName?: string;
   projectId?: string;
+  elasticNetCandidates?: AggregatedEdge[];
+  scopeId?: string;
 };
 
 const layoutOptions = [
@@ -270,7 +273,9 @@ export default function NetworkVisualizationSection(props: Props) {
       ),
     [filteredNetworkEdges, networkNodes.length, showAllEdges, isolatedGene],
   );
-  const edges = opening.edges;
+  const elasticNet = useElasticNet(props.projectId, props.scopeId ?? "global", props.elasticNetCandidates ?? filteredNetworkEdges);
+  const { enrich } = elasticNet;
+  const edges = useMemo(() => enrich(opening.edges), [opening.edges, enrich]);
   // Rebuilt only when a number actually moves, so opening or closing the panel
   // cannot make the readout animate a change that did not happen.
   const viewCounts = useMemo<NetworkViewCounts>(
@@ -315,7 +320,7 @@ export default function NetworkVisualizationSection(props: Props) {
   );
   const figureKeyCounts = useMemo(() => {
     const degrees = nodeDegrees(edges)[effectiveSizeBy];
-    const effectiveWidth: EdgeWidthBy = selectedAlgorithmIds.length > 1 ? widthBy : "evidence";
+    const effectiveWidth: EdgeWidthBy = widthBy === "support" && selectedAlgorithmIds.length <= 1 ? "evidence" : widthBy;
     return figureCounts(visibleEdges, effectiveWidth, selectedAlgorithmIds.length, nodes.map((node) => degrees.get(node.id) ?? 0));
   }, [edges, visibleEdges, nodes, effectiveSizeBy, widthBy, selectedAlgorithmIds.length]);
   const selectedEdge =
@@ -361,7 +366,7 @@ export default function NetworkVisualizationSection(props: Props) {
     projectName: props.projectName ?? "network", projectId: props.projectId ?? "",
     methods: selectedAlgorithmIds, filters: props.filterSummary, scope: scopeLabel,
     focus: isolatedGene, effect: effectiveEffect, palette: figurePalette, sizeBy,
-    widthBy: selectedAlgorithmIds.length > 1 ? widthBy : "evidence",
+    widthBy: widthBy === "support" && selectedAlgorithmIds.length <= 1 ? "evidence" : widthBy,
   });
   const downloadPaper = async (what: "pdf" | "svg" | "png" | "xlsx" | "csv" | "zip") => {
     const graph = coreRef.current;
@@ -696,7 +701,7 @@ export default function NetworkVisualizationSection(props: Props) {
             {nodes.length > 0 && (
               <NetworkKey
                 hasUndirected={edges.some((e) => !hasDirection(e))}
-                widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
+                widthBy={widthBy === "support" && selectedAlgorithmIds.length <= 1 ? "evidence" : widthBy}
                 methodCount={selectedAlgorithmIds.length}
                 counts={figureKeyCounts}
                 palette={figurePalette}
@@ -775,7 +780,7 @@ export default function NetworkVisualizationSection(props: Props) {
                 totalRelationships={opening.total}
                 methodCount={selectedAlgorithmIds.length}
                 sizeBy={sizeBy}
-                widthBy={selectedAlgorithmIds.length > 1 ? widthBy : "evidence"}
+                widthBy={widthBy === "support" && selectedAlgorithmIds.length <= 1 ? "evidence" : widthBy}
                 onSizeByChange={setSizeBy}
                 onWidthByChange={setWidthBy}
                 effect={effectiveEffect}
@@ -811,6 +816,7 @@ export default function NetworkVisualizationSection(props: Props) {
                   if (event.key === "ArrowRight") setTableWidth((w) => Math.max(340, w - 24));
                 }} />
               <NetworkTablePanel
+                elasticNetState={elasticNet}
                 edges={circosView?.edges ?? visibleEdges}
                 nodes={circosView?.nodes ?? nodes}
                 methodCount={selectedAlgorithmIds.length}

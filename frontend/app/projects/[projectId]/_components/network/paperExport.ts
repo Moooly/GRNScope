@@ -57,7 +57,7 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
   const encoding = (source.scratch("networkEncoding") ?? {}) as { widthBy?: EdgeWidthBy; sizeBy?: NodeSizeBy; methodCount?: number };
   const sizeBy = encoding.sizeBy ?? "all";
   const methodCount = encoding.methodCount ?? 1;
-  const widthBy: EdgeWidthBy = encoding.widthBy === "support" && methodCount > 1 ? "support" : "evidence";
+  const widthBy: EdgeWidthBy = encoding.widthBy === "elasticNet" ? "elasticNet" : encoding.widthBy === "support" && methodCount > 1 ? "support" : "evidence";
 
   const edges = source.edges().filter(e => !e.data("effectHidden"));
   const nodes = source.nodes().filter(n => !n.data("effectFaded") && (edges.length === 0 || n.connectedEdges().some(e => !e.data("effectHidden")))) as unknown as NodeCollection;
@@ -153,12 +153,12 @@ export function buildPaperFigure(source: Core, options: PaperFigureOptions = {})
     const widths: Part = { w: k * 5.4, draw: (x, y) => PAPER.linkPt.map((pt, i) => `<path d="M${f(x + i * k * 1.35)} ${f(y)}H${f(x + i * k * 1.35 + k)}" stroke="${ink}" stroke-width="${f(pt * PT)}"/>`).join("") };
     const fades: Part = { w: k * 4, draw: (x, y) => [0.15, 0.45, 1].map((o, i) => `<path d="M${f(x + i * k * 1.35)} ${f(y)}H${f(x + i * k * 1.35 + k)}" stroke="${ink}" stroke-width="${f(PAPER.linkPt[2] * PT)}" opacity="${o}"/>`).join("") };
     // Plain ASCII/Latin-1 ends so the standard PDF fonts can set them.
-    const [low, high] = widthBy === "support" ? widthEnds(widthBy, methodCount) : ["<0.5", "0.9–1"];
+    const [low, high] = widthBy === "elasticNet" ? ["<0.1", ">=0.5"] : widthBy === "support" ? widthEnds(widthBy, methodCount) : ["<0.5", "0.9–1"];
     const groups: Part[][] = [
       [...(hasTF ? [dot(T.tf), text("TF")] : []), ...(hasGene ? [dot(T.node), text("Other gene")] : [])],
       [sizes, text(`${sizeLabel} (larger = more)`)],
       [...(signs.has(1) ? [act, text("Activation")] : []), ...(signs.has(-1) ? [rep, text("Repression")] : []), ...(signs.has(0) ? [plain, text("Sign unknown")] : []), ...(undirected ? [dashed, text("Direction unknown")] : [])],
-      [text(widthBy === "support" ? "Methods" : "Evidence", "#8a949e"), text(low), widths, text(high)],
+      [text(widthBy === "elasticNet" ? "Elastic Net |beta|" : widthBy === "support" ? "Methods" : "Evidence", "#8a949e"), text(low), widths, text(high)],
       ...(faded ? [[text("Confidence", "#8a949e"), text("<0.5"), fades, text("0.8–1")]] : []),
     ].filter(g => g.length);
     const gap = k * 0.45, pad = k * 1.6, lineH = k * 1.9;

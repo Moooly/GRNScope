@@ -400,6 +400,9 @@ export type AlgorithmCatalogItem = {
 };
 
 export type AggregatedEdge = {
+  elasticNetBeta?: number | null;
+  elasticNetReverseBeta?: number | null;
+  elasticNetReason?: string;
   key: string;
   source: string;
   target: string;
