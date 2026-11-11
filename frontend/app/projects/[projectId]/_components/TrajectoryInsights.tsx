@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFileDownloads } from "./OutputExportContext";
 import DownloadMenu from "./DownloadMenu";
+import { trajectoryDisplayOrientation } from "../_lib/trajectoryOrientation";
 import {
   CascadeHeatmap,
   GeneTrendPlot,
@@ -310,7 +311,10 @@ function TrajectoryHelpModal({
                     biological change between adjacent values.
                   </li>
                   <li>
-                    The {trajectory.embedding?.method ?? "2D"} axes are embedding
+                    The view is rotated so the trajectory progresses from left to right.
+                    This preserves distances, cell ordering, and pseudotime values. The
+                    rotated axes are combinations of the saved embedding axes; the CSV
+                    download retains the original coordinates. These are embedding
                     coordinates, not pseudotime axes. Both use the same scale so the cloud
                     is not stretched; local neighborhoods are generally more meaningful
                     than long-range distances.
@@ -527,12 +531,26 @@ function TrajectoryHelpModal({
 }
 
 function CellTrajectoryChart({
-  embedding,
+  embedding: savedEmbedding,
   lineageName,
 }: {
   embedding: NonNullable<TrajectoryData["embedding"]>;
   lineageName: string;
 }) {
+  const { embedding, rotated } = useMemo(() => {
+    const orientation = trajectoryDisplayOrientation(savedEmbedding.paths);
+    return {
+      rotated: orientation.rotated,
+      embedding: {
+        ...savedEmbedding,
+        points: savedEmbedding.points.map(point => ({ ...point, ...orientation.project(point) })),
+        paths: savedEmbedding.paths.map(path => ({
+          ...path,
+          points: path.points.map(point => ({ ...point, ...orientation.project(point) })),
+        })),
+      },
+    };
+  }, [savedEmbedding]);
   // Embedding coordinates are arbitrary, so there are no tick values to leave
   // room for: the gutters hold only the axis titles, at the canvas edge.
   const left = 30;
@@ -931,14 +949,14 @@ function CellTrajectoryChart({
             fill={FIG_INK}
           />
           <text x={left + 6} y={top + plotHeight + 14} fontSize="14" fill={FIG_MUTED}>
-            {embedding.method} 1
+            {rotated ? `Rotated ${embedding.method} x` : `${embedding.method} 1`}
           </text>
           <text
             transform={`translate(${left - 6} ${top + plotHeight - 6}) rotate(-90)`}
             fontSize="14"
             fill={FIG_MUTED}
           >
-            {embedding.method} 2
+            {rotated ? `Rotated ${embedding.method} y` : `${embedding.method} 2`}
           </text>
         </g>
 
@@ -1406,7 +1424,7 @@ export default function TrajectoryInsights({
     {
       key: "cells",
       title: "Cell trajectory",
-      description: `${trajectory.embedding?.method ?? "2D"} view of cells coloured by pseudotime, with the lineage path and cell density along pseudotime.`,
+      description: `${trajectory.embedding?.method ?? "2D"} view oriented from early cells on the left toward later cells on the right, coloured by pseudotime.`,
       chips: [
         pseudotimeSourceLabel,
         `${lineage.cell_count.toLocaleString()} lineage cells`,
@@ -1416,6 +1434,7 @@ export default function TrajectoryInsights({
           hasEmbedding && trajectory.embedding ? (
             <div ref={cellChartRef}>
               <CellTrajectoryChart
+                key={`${lineage.name}-${trajectory.embedding.method}`}
                 embedding={trajectory.embedding}
                 lineageName={lineage.name}
               />
