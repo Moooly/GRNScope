@@ -42,7 +42,7 @@ export default function FileDownloadMenuModal({ projectId, apiBase, outputData }
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState<ProjectDownloadData | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
-  const [selection, setSelection] = useState({ original: true, prepared: true });
+  const [inputsSelected, setInputsSelected] = useState(true);
   const [outputSelection, setOutputSelection] = useState<Record<string, boolean>>({});
   const [generatedOutputs, setGeneratedOutputs] = useState<PackageOutput[]>([]);
   const [savedOutputs, setSavedOutputs] = useState<SavedOutput[]>([]);
@@ -75,7 +75,7 @@ export default function FileDownloadMenuModal({ projectId, apiBase, outputData }
       }).then(data => {
         if (controller.signal.aborted) return;
         setInventory(data);
-        setSelection({ original: data.groups.original.available, prepared: data.groups.prepared.available });
+        setInputsSelected(data.groups.original.available || data.groups.prepared.available);
       }).catch(caught => { if (!controller.signal.aborted) setError(caught.message); });
     const loadOutputs = apiFetch(`${apiBase}/projects/${projectId}/output-files`, { signal: controller.signal })
       .then(async response => {
@@ -134,7 +134,8 @@ export default function FileDownloadMenuModal({ projectId, apiBase, outputData }
   }, [session, generatedOutputs, savedOutputs, apiBase, projectId]);
   const selectedOutputs = useMemo(() => outputs.filter(output => outputSelection[output.id] ?? true), [outputs, outputSelection]);
   const outputReady = !!session && !session.loading && renderReady;
-  const hasSelection = selection.original || selection.prepared || selectedOutputs.length > 0;
+  const inputsAvailable = !!inventory && (inventory.groups.original.available || inventory.groups.prepared.available);
+  const hasSelection = (inputsSelected && inputsAvailable) || selectedOutputs.length > 0;
   const close = () => { if (!downloading) { setOpen(false); triggerRef.current?.focus(); } };
   const selectOutputs = (items: PackageOutput[], checked: boolean) => setOutputSelection(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.id, checked])) }));
   const openPanel = () => {
@@ -147,7 +148,7 @@ export default function FileDownloadMenuModal({ projectId, apiBase, outputData }
     setDownloading(true); setError(""); setProgress("Preparing inputs…");
     try {
       // The configuration is an automatic companion to every selection.
-      const query = new URLSearchParams({ original: String(selection.original), prepared: String(selection.prepared), manifest: "true" });
+      const query = new URLSearchParams({ original: String(inputsSelected && inventory.groups.original.available), prepared: String(inputsSelected && inventory.groups.prepared.available), manifest: "true" });
       const response = await apiFetch(`${apiBase}/projects/${projectId}/download/project-data?${query}`, { signal: controller.signal });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
@@ -173,13 +174,10 @@ export default function FileDownloadMenuModal({ projectId, apiBase, outputData }
       <div ref={panelRef} tabIndex={-1} id={panelId} role="dialog" aria-label="Download project" aria-busy={loading || downloading} style={placement} className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-xl shadow-slate-900/15">
         <h3 className="mb-3 shrink-0 py-1 text-base font-bold">Download project</h3>
         {loading ? <p role="status" className="py-4 text-sm text-slate-500">Checking project files…</p> : inventory && <>
-          {(["original", "prepared"] as const).map(key => {
-            const group = inventory.groups[key];
-            return <label key={key} className={`${DOWNLOAD_ROW_CLASS} ${group.available ? "cursor-pointer" : "text-slate-400"}`}>
-              <Checkbox aria-label={key === "original" ? "Original inputs" : "Prepared inputs"} checked={selection[key] && group.available} disabled={!group.available || downloading} onChange={event => setSelection(current => ({ ...current, [key]: event.target.checked }))} />
-              <span className={DOWNLOAD_LABEL_CLASS}>{key === "original" ? "Original inputs" : "Prepared inputs"}</span>
-            </label>;
-          })}
+          <label className={`${DOWNLOAD_ROW_CLASS} ${inputsAvailable ? "cursor-pointer" : "text-slate-400"}`}>
+            <Checkbox aria-label="Inputs" checked={inputsSelected && inputsAvailable} disabled={!inputsAvailable || downloading} onChange={event => setInputsSelected(event.target.checked)} />
+            <span className={DOWNLOAD_LABEL_CLASS}>Inputs</span>
+          </label>
           <div className={`${DOWNLOAD_ROW_CLASS} shrink-0`}>
             <label className="flex flex-1 cursor-pointer items-center gap-3">
               <Checkbox aria-label="Select all analysis outputs" checked={outputs.length > 0 && selectedOutputs.length === outputs.length}
