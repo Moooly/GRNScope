@@ -49,6 +49,65 @@ def test_defaults_and_invalid_settings(installation):
         i.load()
 
 
+def test_hk_configuration_pins_data_mount_and_uses_sibling_beeline(installation):
+    path = installation.repo / 'hong-kong.env'
+    deploy.configure_hk(path, 'https://grnscope.institute.edu', installation.repo)
+    config = deploy.read_config(path, installation.repo)
+    assert config['DATA_ROOT'] == '/data2/platform/grnscope'
+    assert config['DATA_MOUNT'] == '/data2'
+    assert config['BEELINE_ROOT'] == str(installation.repo.parent / 'Beeline')
+    assert config['CONDA_EXE'] == '/apps/software/Miniconda3/4.9.2/bin/conda'
+    assert config['NODE_BIN'] == '/home/platform/.nvm/versions/node/v20.18.0/bin'
+    assert config['PUBLIC_URL'] == 'https://grnscope.institute.edu'
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_hk_configuration_never_overwrites_existing_file_or_symlink(installation):
+    path = installation.repo / 'server.env'
+    original = path.read_bytes()
+    with pytest.raises(ValueError, match='already exists'):
+        deploy.configure_hk(path, 'https://grnscope.institute.edu', installation.repo)
+    assert path.read_bytes() == original
+    link = installation.repo / 'dangling.env'
+    link.symlink_to(installation.repo / 'missing.env')
+    with pytest.raises(ValueError, match='already exists'):
+        deploy.configure_hk(link, 'https://grnscope.institute.edu', installation.repo)
+    assert link.is_symlink()
+
+
+@pytest.mark.parametrize('url', ['', 'https://example.edu/subpath',
+                                 'https://example.edu\nWORKER_COUNT=99'])
+def test_hk_configuration_validates_before_creating_file(installation, url):
+    path = installation.repo / 'invalid.env'
+    with pytest.raises(ValueError):
+        deploy.configure_hk(path, url, installation.repo)
+    assert not path.exists()
+
+
+def test_configure_hk_dispatches_without_installing_or_reading_existing_config(installation):
+    with (patch.object(deploy.sys, 'argv', ['server.py', 'configure-hk', '--public-url',
+                                          'https://grnscope.institute.edu']),
+          patch.object(deploy, 'configure_hk') as configure,
+          patch.object(deploy.Server, 'install') as install):
+        assert deploy.main() == 0
+    configure.assert_called_once_with(deploy.REPO / 'server.env', 'https://grnscope.institute.edu')
+    install.assert_not_called()
+
+
+def test_archive_source_version_does_not_query_a_parent_git_repository(installation):
+    with patch.object(installation.server, 'run') as runner:
+        version = installation.server.source_version(installation.repo)
+    assert version == 'unknown (source archive without Git metadata)'
+    runner.assert_not_called()
+
+
+def test_checkout_source_version_still_records_commit(installation):
+    (installation.repo / '.git').mkdir()
+    with patch.object(installation.server, 'run', return_value=SimpleNamespace(stdout='abc123\n')) as runner:
+        assert installation.server.source_version(installation.repo) == 'abc123'
+    runner.assert_called_once_with(['git', '-C', installation.repo, 'rev-parse', 'HEAD'], capture=True)
+
+
 @pytest.mark.parametrize('cpus,memory,workers,cpu_budget,memory_budget', [
     (1, 2048, 1, 1, 1024), (2, 4096, 1, 1, 2048),
     (4, 16384, 2, 1, 4096), (128, 1048576, 2, 4, 8192),
@@ -333,6 +392,10 @@ def test_install_and_enable_scoped_to_project(installation, minimal):
         s.install()
     assert not (s.frontend / '.env.local').exists()
     assert json.loads((s.settings / 'installation.json').read_text()) == s.c
+    assert json.loads((s.settings / 'source-versions.json').read_text()) == {
+        'GRNScope': 'unknown (source archive without Git metadata)',
+        'Beeline': 'unknown (source archive without Git metadata)',
+    }
     assert deploy.read_config(s.repo / 'server.env', s.repo) == s.c
     assert not any(cmd[0] in {'sudo', 'apt', 'apt-get'} for cmd in calls)
     assert any('redis>=7,<8' in cmd for cmd in calls)

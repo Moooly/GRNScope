@@ -1,5 +1,8 @@
 # Deploy GRNScope on a shared Linux server
 
+For the server-specific handoff, use the new [Hong Kong installation guide](INSTALL_HONG_KONG.md).
+It includes `configure-hk`, source-archive installation, and acceptance checks.
+
 This guide targets the Hong Kong server: **Ubuntu 20.04 x86-64**, user `platform`,
 existing Conda/NVM, and Apache for HTTPS. The application uses Next.js, FastAPI,
 a dedicated Redis queue, and Docker algorithm containers.

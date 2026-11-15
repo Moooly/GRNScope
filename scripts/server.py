@@ -156,6 +156,37 @@ def private_write(path, text):
         stream.write(text)
 
 
+def configure_hk(path, public_url, repo=REPO):
+    """Create a reviewable configuration for 620b without touching its services."""
+    if not public_url or any(char.isspace() for char in public_url):
+        raise ValueError("Supply the final website address with --public-url https://your-hostname")
+    if path.exists() or path.is_symlink():
+        raise ValueError("Configuration already exists; edit it instead: " + str(path))
+    settings = {
+        "DATA_ROOT": "/data2/platform/grnscope",
+        # Pin the intended disk so a missing /data2 mount cannot fall back to /.
+        "DATA_MOUNT": "/data2",
+        "PUBLIC_URL": public_url,
+        "CONDA_EXE": "/apps/software/Miniconda3/4.9.2/bin/conda",
+        "NODE_BIN": "/home/platform/.nvm/versions/node/v20.18.0/bin",
+        "BEELINE_ROOT": str(repo.resolve().parent / "Beeline"),
+    }
+    contents = ("# GRNScope configuration for the Hong Kong 620b server.\n"
+                "# Review these paths before running check and install.\n"
+                + "".join(key + "=" + shlex.quote(value) + "\n" for key, value in settings.items()))
+    with tempfile.TemporaryDirectory(prefix="grnscope-config-") as temporary:
+        candidate = Path(temporary) / "server.env"
+        candidate.write_text(contents)
+        read_config(candidate, repo)
+    # Exclusive creation also protects a file created after the check above.
+    descriptor = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w") as stream:
+        stream.write(contents)
+    print("Created " + str(path))
+    print(contents, end="")
+    print("Next: python3 scripts/server.py check")
+
+
 class Server:
     def __init__(self, config, repo=REPO):
         self.c = config
@@ -411,11 +442,18 @@ class Server:
         self.render()
         frozen = self.run([self.python, "-m", "pip", "freeze"], capture=True, env=env).stdout
         (self.settings / "python-installed.txt").write_text(frozen)
-        versions = {name: self.run(["git", "-C", path, "rev-parse", "HEAD"], capture=True).stdout.strip()
+        versions = {name: self.source_version(Path(path))
                     for name, path in (("GRNScope", self.repo), ("Beeline", Path(self.c["BEELINE_ROOT"])))}
         (self.settings / "source-versions.json").write_text(json.dumps(versions, indent=2) + "\n")
         (self.settings / "installation.json").write_text(json.dumps(self.c, indent=2) + "\n")
         print("Installation prepared. Next: python3 scripts/server.py enable")
+
+    def source_version(self, path):
+        # A normal ZIP/tar handoff has no .git directory. Do not fail a completed
+        # build or accidentally report a containing repository's commit as ours.
+        if not (path / ".git").exists():
+            return "unknown (source archive without Git metadata)"
+        return self.run(["git", "-C", path, "rev-parse", "HEAD"], capture=True).stdout.strip()
 
     def enable(self):
         self.check(free_ports=False)
@@ -483,13 +521,21 @@ class Server:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("install-conda", "check", "install", "enable", "verify", "status", "logs", "stop", "restart"))
+    parser.add_argument("command", choices=("configure-hk", "install-conda", "check", "install", "enable", "verify", "status", "logs", "stop", "restart"))
     parser.add_argument("service", nargs="?", choices=SERVICES)
     parser.add_argument("--config", type=Path, default=REPO / "server.env")
+    parser.add_argument("--public-url", help="Final website address; only used by configure-hk")
     args = parser.parse_args()
     if args.service and args.command not in {"status", "logs", "stop", "restart"}:
         parser.error("A service name is only supported with status/logs/stop/restart")
+    if args.command == "configure-hk" and not args.public_url:
+        parser.error("configure-hk requires --public-url https://your-hostname")
+    if args.public_url and args.command != "configure-hk":
+        parser.error("--public-url is only supported with configure-hk; otherwise edit server.env")
     try:
+        if args.command == "configure-hk":
+            configure_hk(args.config, args.public_url)
+            return 0
         server = Server(read_config(args.config))
         if args.command in {"status", "logs", "stop", "restart"}:
             server.manage(args.command, args.service)
