@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFileDownloads } from "./OutputExportContext";
 import DownloadMenu from "./DownloadMenu";
+import { useElasticNet } from "../_hooks/useElasticNet";
 import { trajectoryDisplayOrientation } from "../_lib/trajectoryOrientation";
 import {
   CascadeHeatmap,
@@ -1169,11 +1170,15 @@ function LineageMenu({
 }
 
 export default function TrajectoryInsights({
+  projectId,
+  scopeId = "global",
   trajectory,
   loading,
   onGenesChange,
   edges = [],
 }: {
+  projectId?: string;
+  scopeId?: string;
   trajectory?: TrajectoryData;
   loading: boolean;
   onGenesChange: (genes: string[]) => void;
@@ -1181,6 +1186,7 @@ export default function TrajectoryInsights({
   edges?: TimingEdge[];
 }) {
   const { downloadCsv, downloadSvg, downloadSvgPng } = useFileDownloads();
+  const elasticNet = useElasticNet(trajectory?.available ? projectId : undefined, scopeId, edges);
   const [requestedTarget, setRequestedTarget] = useState<string | null>(null);
   const [pathPicks, setPathPicks] = useState<{ key: string; direct: string[]; upstream: string[]; focus: string | null } | null>(null);
   const timingChartRef = useRef<HTMLDivElement | null>(null);
@@ -1352,7 +1358,7 @@ export default function TrajectoryInsights({
         : `gene-expression-timeline-by-${lineage.name}`;
   const downloadTimingCsv = () =>
     downloadCsv(`regulator-timing-${lineage.name}.csv`, [
-      ["regulator", "target", "methods_supporting", "directed_methods", "sign", "regulator_onset", "target_onset", "onset_lag"],
+      ["regulator", "target", "methods_supporting", "directed_methods", "sign", "regulator_onset", "target_onset", "onset_lag", "elastic_net_beta", "elastic_net_reason"],
       ...timingRows.map((row) => [
         row.source,
         row.target,
@@ -1362,6 +1368,8 @@ export default function TrajectoryInsights({
         row.regulatorOnset.toFixed(2),
         row.targetOnset.toFixed(2),
         row.lag.toFixed(2),
+        elasticNet.coefficientFor(row.source, row.target)?.beta ?? "",
+        elasticNet.coefficientFor(row.source, row.target)?.reason ?? elasticNet.error,
       ]),
     ]);
   const downloadChart = async (panel: PanelKey, format: "svg" | "png") => {
@@ -1603,6 +1611,8 @@ export default function TrajectoryInsights({
               {/* Choose on the left of the figure, read the curves on the right. */}
               <div ref={timingChartRef}>
                 <RegulatorPathFigure
+                  coefficientFor={elasticNet.coefficientFor}
+                  betaLoading={elasticNet.loading}
                   lineage={cascadeLineages[lineageIndex]}
                   target={timingTarget}
                   targets={timingTargets}
@@ -1619,6 +1629,7 @@ export default function TrajectoryInsights({
                   onUpstream={toggleUpstream}
                 />
               </div>
+              {elasticNet.error && <p className="mt-3 text-xs text-slate-500" role="status">{elasticNet.error} <button type="button" onClick={elasticNet.retry} className="font-semibold text-[#087ead]">Retry β calculation</button></p>}
             </div>
           ) : (
             <EmptyTrajectory

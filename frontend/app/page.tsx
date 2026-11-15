@@ -494,7 +494,7 @@ export default function HomePage() {
                 className="group/demo flex items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-[#edf6fb] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[#1b75a6]/15"
               >
                 <span className="text-sm font-bold text-slate-900">
-                  Explore demo results
+                  Demo
                 </span>
                 <span aria-hidden="true" className="shrink-0 text-[#1b75a6] transition group-hover/demo:translate-x-0.5">
                   <svg viewBox="0 0 16 28" className="h-4 w-2.5" fill="none">

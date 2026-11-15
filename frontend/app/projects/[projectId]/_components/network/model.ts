@@ -3,7 +3,7 @@ import type { NetworkEdge, NetworkNode } from "../networkGraphTypes";
 import { hasDirection, edgeMetric } from "../networkVisualEncoding";
 import type { GalaxyInput } from "./galaxyGeometry";
 import { nodeDiameter } from "./presentation";
-import { CONFIDENCE_OPACITY, WIDTH_STEPS, confidenceBand, evidenceStep, elasticNetStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
+import { CONFIDENCE_OPACITY, WIDTH_STEPS, confidenceBand, evidenceStep, supportStep, type EdgeWidthBy, type NodeSizeBy } from "./encoding";
 
 export type GalaxyOptions = { sizeBy?: NodeSizeBy; widthBy?: EdgeWidthBy; methodCount?: number; nodeMin?: number };
 
@@ -54,7 +54,7 @@ export function galaxyElements(nodes: NetworkNode[], edges: NetworkEdge[], optio
       const tip = e.sign === -1 ? "tee" : e.sign === 1 ? "triangle" : "none";
       const evidence = edgeMetric(e, "evidence", 1) ?? 0;
       const confidence = edgeMetric(e, "confidence", 1);
-      const widthStep = widthBy === "elasticNet" ? elasticNetStep(e) : widthBy === "support" ? supportStep(e.count, methodCount) : evidenceStep(evidence);
+      const widthStep = widthBy === "support" ? supportStep(e.count, methodCount) : evidenceStep(evidence);
       const band = confidenceBand(confidence);
       return { data: { id: e.key, source: e.source, target: e.target, sign: e.sign,
         direction: directed ? e.direction : 0,

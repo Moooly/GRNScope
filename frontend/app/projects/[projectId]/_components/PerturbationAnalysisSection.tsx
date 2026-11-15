@@ -1302,9 +1302,9 @@ function SelectedResultHeader({
     },
   ];
 
-  const perturbationValue = result.perturbation_value.toLocaleString(undefined, {
-    maximumFractionDigits: 3,
-  });
+  const treatmentLabel = result.perturbation_value === 0
+    ? "Knockout"
+    : `Expression set to ${formatScientific(result.perturbation_value)}`;
 
   return (
     <div>
@@ -1312,9 +1312,12 @@ function SelectedResultHeader({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-slate-950 sm:text-[1.7rem]">
-                {result.gene} <span className="px-0.5 font-semibold text-[#087ead]">→</span> {perturbationValue}
+              <h2 className="text-2xl font-extrabold italic tracking-[-0.03em] text-slate-950 sm:text-[1.7rem]">
+                {result.gene}
               </h2>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {treatmentLabel}
+              </span>
               {result.clip_delta_x ? (
                 <span className="rounded-full bg-[#eef8f5] px-2.5 py-1 text-[11px] font-semibold text-[#217a68]">
                   Range clipped

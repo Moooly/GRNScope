@@ -1685,30 +1685,17 @@
 .dl-pill.is-done { border-color: #3d8a5f; color: #2f7a50; }
 .dl-fmt:disabled, .dl-pill:disabled { opacity: .5; cursor: progress; }
 .dl-busy { padding: 6px 12px 8px; font-size: 12px; color: #7a8591; }
-/* Elastic Net lives in the existing sheet and line-width control. */
-.en-overview { display: grid; gap: 16px; margin: 0 6px; padding: 16px 4px 4px; border-top: 1px solid #e2e9ed; }
-.tp-card > .en-overview { margin-inline: 0; }
-.en-heading, .en-top-heading, .en-distribution figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.en-overview .en-heading h4 { margin: 0; padding: 0; }
-.en-coverage, .en-status { color: #6b7a86; font-size: 11px; }
-.en-coverage { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.en-status { margin: 0; text-align: left; line-height: 1.5; }
-.en-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: 12px 0; border-block: 1px solid #e2e9ed; }
-.en-counts > div { display: flex; flex-direction: column-reverse; gap: 4px; padding-inline: 12px; border-left: 1px solid #e2e9ed; }
-.en-counts > div:first-child { padding-left: 0; border-left: 0; }
-.en-counts dt { color: #6b7a86; font-size: 11px; }
-.en-counts dd { margin: 0; color: #334652; font-size: 20px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.en-distribution { margin: 0; }
-.en-distribution figcaption { margin-bottom: 8px; color: #6b7a86; font-size: 11px; }
-.en-distribution svg { display: block; width: 100%; }
-.en-top { padding-top: 14px; border-top: 1px solid #e2e9ed; }
-.en-top-heading { margin-bottom: 6px; padding-inline: 2px; color: #6b7a86; font-size: 11px; }
-.en-top-heading h5 { margin: 0; color: #52616d; font-size: 11px; font-weight: 600; }
-.en-top ol { margin: 0; padding: 0; list-style: none; }
-.en-top li + li { border-top: 1px solid #e9edf0; }
-.en-top button { display: grid; grid-template-columns: minmax(0, 1fr) 52px; align-items: baseline; gap: 12px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 4px; padding: 10px 2px; color: #334652; cursor: pointer; font: inherit; font-size: 12px; }
-.en-top button:hover { color: #087ead; background: #edf2f5; }
-.en-top button:focus-visible { outline: 2px solid #087ead; outline-offset: 2px; }
-.en-top button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.en-top b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-.en-detail dd { font-variant-numeric: tabular-nums; }
+.edge-distributions { position: relative; min-width: 0; margin: 0 6px; padding: 4px; }
+.ed-heading { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+.ed-heading h3 { margin: 0; color: #334652; font-size: 14px; font-weight: 500; }
+.ed-heading > span { margin-left: auto; color: #6b7a86; font-size: 12px; white-space: nowrap; }
+.ed-download { padding: 0 4px; border: 0; background: transparent; color: #6b7a86; font: inherit; cursor: pointer; }
+.edge-distributions > svg { display: block; height: auto; overflow: visible; }
+.ed-hit { cursor: pointer; }
+.ed-hit:focus-visible { outline: 2px solid #087ead; outline-offset: -2px; }
+.ed-signs { display: flex; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid #e2e9ed; color: #6b7a86; font-size: 12px; }
+.ed-signs b { color: #334652; font-weight: 500; font-variant-numeric: tabular-nums; }
+.ed-detail, .ed-status { margin: 12px 0 0; color: #6b7a86; font-size: 11px; line-height: 1.5; }
+.ed-edge-list { margin-top: 8px; }
+.ed-edge-list > button { display: block; width: 100%; padding: 7px 2px; border: 0; border-bottom: 1px solid #e2e9ed; background: transparent; text-align: left; color: #334652; font: inherit; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.ed-edge-list > button:hover { background: #fff; }

@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE } from "../../../_lib/apiConfig";
 import { apiFetch } from "../../../_lib/clientIdentity";
-import type { NetworkEdge } from "../_components/networkGraphTypes";
-import { attachElasticCoefficients, elasticNetPairs, elasticPairKey, type ElasticNetCoefficient } from "../_lib/elasticNet";
+import { elasticNetPairs, elasticPairKey, type ElasticNetPair, type ElasticNetCoefficient } from "../_lib/elasticNet";
 
 type Result = { key: string; rows?: ElasticNetCoefficient[]; error?: string };
 
 /** Candidate edges precede display thresholds, so filtering cannot refit beta. */
-export function useElasticNet(projectId: string | undefined, scopeId: string, candidates: NetworkEdge[]) {
+export function useElasticNet(projectId: string | undefined, scopeId: string, candidates: ElasticNetPair[]) {
   const pairsJson = useMemo(() => JSON.stringify(elasticNetPairs(candidates)), [candidates]);
   const requestKey = JSON.stringify([projectId, scopeId, pairsJson]);
   const [result, setResult] = useState<Result | null>(null);
@@ -37,9 +36,9 @@ export function useElasticNet(projectId: string | undefined, scopeId: string, ca
   }, [projectId, scopeId, pairsJson, requestKey, attempt]);
   const current = result?.key === requestKey ? result : null;
   const coefficients = useMemo(() => new Map((current?.rows ?? []).map(row => [elasticPairKey(row.source, row.target), row])), [current?.rows]);
-  const enrich = useCallback(<E extends NetworkEdge>(edges: E[]): E[] => attachElasticCoefficients(edges, coefficients), [coefficients]);
+  const coefficientFor = useCallback((source: string, target: string) => coefficients.get(elasticPairKey(source, target)), [coefficients]);
   return {
-    enrich, loading: Boolean(projectId && pairsJson !== "[]" && !current),
+    coefficientFor, loading: Boolean(projectId && pairsJson !== "[]" && !current),
     error: current?.error ?? "", ready: Boolean(current?.rows),
     retry: () => { setResult(null); setAttempt(value => value + 1); },
   };

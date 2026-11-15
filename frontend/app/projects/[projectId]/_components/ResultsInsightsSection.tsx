@@ -52,6 +52,7 @@ export type VisualizationContext = {
 type InsightView = Exclude<ResultsHubView, "network" | "perturbation">;
 
 type ResultsInsightsSectionProps = {
+  projectId?: string;
   view: InsightView;
   algorithmEdgeRows: Record<string, AggregatedEdge[]>;
   algorithmMetaMap: Map<string, AlgorithmCatalogItem>;
@@ -2579,6 +2580,7 @@ function AgreementView({
 }
 
 export default function ResultsInsightsSection({
+  projectId,
   view,
   algorithmEdgeRows,
   algorithmMetaMap,
@@ -2638,6 +2640,8 @@ export default function ResultsInsightsSection({
   if (view === "trajectory") {
     return (
       <TrajectoryInsights
+        projectId={projectId}
+        scopeId={selectedResultScopeId}
         trajectory={visualizationContext?.trajectory}
         loading={isContextLoading}
         onGenesChange={onTrajectoryGenesChange}

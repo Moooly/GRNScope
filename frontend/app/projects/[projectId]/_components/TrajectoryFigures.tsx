@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useId, useRef, useState, type Ref } from "react";
+import { betaText, type ElasticNetCoefficient } from "../_lib/elasticNet";
 
 const FONT = "Arial, Helvetica, sans-serif";
 const INK = "#1a1a1a";
@@ -424,6 +425,8 @@ const PATH_COLORS = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56
 const FAINT = "#b4bcc4";
 
 export function RegulatorPathFigure({
+  coefficientFor,
+  betaLoading = false,
   lineage,
   target,
   direct,
@@ -439,6 +442,8 @@ export function RegulatorPathFigure({
   targets,
   onTarget,
 }: {
+  coefficientFor?: (source: string, target: string) => ElasticNetCoefficient | undefined;
+  betaLoading?: boolean;
   lineage: CascadeLineage;
   target: string;
   /** Genes that can be chosen as the target, from the menu on the target box. */
@@ -464,11 +469,14 @@ export function RegulatorPathFigure({
   const [boxWidth, measure] = useWidth();
   const [hover, setHover] = useState<string | null>(null);
   const uid = useId().replace(/:/g, "");
-  const W = Math.max(840, Math.min(1100, boxWidth || 900));
+  const W = Math.max(coefficientFor ? 1000 : 840, Math.min(1100, boxWidth || 900));
   const longest = Math.max(...[target, ...direct, ...upstream].map((gene) => gene.length));
   const cw = Math.max(84, Math.min(128, longest * 7.4 + 38));
-  const gap = 44;
-  const rowH = 34;
+  // Reserve a numeric column after each regulator box. Curves start beyond
+  // that column, so neither their bends nor their convergence cross a value.
+  const betaColumnEnd = 54;
+  const gap = coefficientFor ? 104 : 44;
+  const rowH = coefficientFor ? 40 : 34;
   const X = [12, 12 + cw + gap, 12 + 2 * (cw + gap)];
   const left = X[2] + cw + 76;
   const pw = W - left - 18;
@@ -523,6 +531,8 @@ export function RegulatorPathFigure({
     ...(focus
       ? upstream.map((gene) => ({
           key: `u-${gene}`,
+          source: gene,
+          target: focus,
           x1: X[0] + cw,
           y1: upstreamY(gene),
           x2: X[1] - 3,
@@ -533,6 +543,8 @@ export function RegulatorPathFigure({
       : []),
     ...direct.map((gene) => ({
       key: `d-${gene}`,
+      source: gene,
+      target,
       x1: X[1] + cw,
       y1: directY(gene),
       x2: X[2] - 3,
@@ -624,20 +636,33 @@ export function RegulatorPathFigure({
           <text x={X[0] + cw / 2} y={directY(focus) + 4} fontSize="10.5" textAnchor="middle" fill={MUTED}>none found</text>
         ) : null}
         <text x={X[1] + cw / 2} y={ty - 22} fontSize="11" textAnchor="middle" fill={MUTED}>Direct regulators</text>
+        {coefficientFor && [0, 1].map(column => column === 0 && !upstream.length ? null : (
+          <text key={column} x={X[column] + cw + betaColumnEnd} y={ty - 22} fontSize="11" textAnchor="end" fill={MUTED} data-beta-heading="true">
+            β<title>Standardized Elastic Net coefficient</title>
+          </text>
+        ))}
         <text x={X[2] + cw / 2} y={ty - 22} fontSize="11" textAnchor="middle" fill={MUTED}>Target</text>
         <text x={X[2] + cw / 2} y={targetY + 26} fontSize="10" textAnchor="middle" fill={MUTED} data-ui="true">click to change</text>
         {arrows.map((arrow) => {
-          const mx = (arrow.x1 + arrow.x2) / 2;
+          const startX = arrow.x1 + (coefficientFor ? betaColumnEnd + 10 : 0);
+          const mx = (startX + arrow.x2) / 2;
+          const coefficient = coefficientFor?.(arrow.source, arrow.target);
+          const beta = betaLoading ? "…" : betaText(coefficient?.beta);
           return (
-            <path
-              key={arrow.key}
-              d={`M${arrow.x1} ${arrow.y1}C${mx} ${arrow.y1} ${mx} ${arrow.y2} ${arrow.x2} ${arrow.y2}`}
-              fill="none"
-              stroke={arrow.on ? INK : FAINT}
-              strokeWidth={arrow.on ? 1.6 : 0.9}
-              strokeDasharray={arrow.ordered ? undefined : "3 2.5"}
-              markerEnd={`url(#${uid}-${arrow.on ? "d" : "f"})`}
-            />
+            <g key={arrow.key} aria-label={`${arrow.source} → ${arrow.target}${coefficientFor ? `, Elastic Net β ${beta}` : ""}`}>
+              <path
+                d={`M${startX} ${arrow.y1}C${mx} ${arrow.y1} ${mx} ${arrow.y2} ${arrow.x2} ${arrow.y2}`}
+                fill="none"
+                stroke={arrow.on ? INK : FAINT}
+                strokeWidth={arrow.on ? 1.6 : 0.9}
+                strokeDasharray={arrow.ordered ? undefined : "3 2.5"}
+                markerEnd={`url(#${uid}-${arrow.on ? "d" : "f"})`}
+              />
+              {coefficientFor && <text x={arrow.x1 + betaColumnEnd} y={arrow.y1 + 4} textAnchor="end" fontSize="11" fill={arrow.on ? INK : MUTED} style={{ fontVariantNumeric: "tabular-nums" }} data-edge-beta={`${arrow.source}→${arrow.target}`}>
+                {beta}
+                <title>{coefficient?.reason ?? "Standardized Elastic Net β from the selected result scope. Joint expression fit; not a pseudotime-specific or causal effect."}</title>
+              </text>}
+            </g>
           );
         })}
         {upstream.map((gene) => box("u", gene, X[0], upstreamY(gene)))}

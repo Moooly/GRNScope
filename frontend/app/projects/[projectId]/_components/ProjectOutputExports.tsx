@@ -7,7 +7,7 @@ import { OutputExportContext, useFileDownloads, type OutputAction, type OutputFi
 import type { PackageOutput } from "../_lib/projectPackage";
 import type { AggregatedEdge } from "../_lib/types";
 import NetworkTablePanel from "./network/TablePanel";
-import { SCORE_BIN_STEP, scoreDistributions } from "./network/encoding";
+import { edgeDistributions } from "./network/distributions";
 import DownloadMenu from "./DownloadMenu";
 
 export type ProjectInsightsExportProps = Omit<ComponentProps<typeof ResultsInsightsSection>, "view" | "onTrajectoryGenesChange">;
@@ -29,8 +29,8 @@ function NetworkDistributionExports({ edges, methodCount }: { edges: AggregatedE
       { label: "Figure", format: "PNG", onSelect: () => chart("png") },
       { label: "Figure", format: "SVG", onSelect: () => chart("svg") },
       { label: "Distribution table", format: "CSV", onSelect: () => {
-        const distribution = scoreDistributions(edges);
-        downloadCsv("evidence-confidence.csv", [["bin_start", "bin_end", "evidence_edges", "verified_confidence_edges"], ...distribution.evidence.map((bin, index) => [index * SCORE_BIN_STEP, (index + 1) * SCORE_BIN_STEP, bin.length, distribution.confidence[index].length])]);
+        const [evidence, confidence] = edgeDistributions(edges);
+        downloadCsv("evidence-confidence.csv", [["bin_start", "bin_end", "evidence_edges", "verified_confidence_edges"], ...evidence.bins.map((bin, index) => [index / evidence.bins.length, (index + 1) / evidence.bins.length, bin.length, confidence.bins[index].length])]);
       } },
     ]} />
   </>;

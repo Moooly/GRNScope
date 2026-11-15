@@ -1,7 +1,7 @@
 /** One meaning per channel. These rules are shared by the canvas, its legend
  * and the exported figure so the three can never disagree. */
 export type NodeSizeBy = "out" | "all" | "in";
-export type EdgeWidthBy = "evidence" | "support" | "elasticNet";
+export type EdgeWidthBy = "evidence" | "support";
 
 export const NODE_SIZE_OPTIONS: Record<NodeSizeBy, { label: string; scale: string; legend: string; help: string }> = {
   out: { label: "Targets", scale: "Targets", legend: "Size: genes it regulates", help: "Node size: number of displayed genes this gene regulates (outgoing edges)." },
@@ -11,7 +11,6 @@ export const NODE_SIZE_OPTIONS: Record<NodeSizeBy, { label: string; scale: strin
 
 /** End labels for the compact width scale. */
 export function widthEnds(widthBy: EdgeWidthBy, methodCount: number): [string, string] {
-  if (widthBy === "elasticNet") return ["<0.1", "≥0.5 |β|"];
   if (widthBy === "support" && methodCount > 1) return ["1", `${methodCount}`];
   return ["<0.5", "≥0.9"];
 }
@@ -21,15 +20,6 @@ export function widthEnds(widthBy: EdgeWidthBy, methodCount: number): [string, s
 export const WIDTH_STEPS = [1, 1.6, 2.4, 3.6] as const;
 export const EVIDENCE_BREAKS = [0.5, 0.75, 0.9] as const;
 export const EVIDENCE_LABELS = ["< 0.5", "0.5–0.75", "0.75–0.9", "≥ 0.9"] as const;
-export const ELASTIC_NET_LABELS = ["|β| < 0.1 or unavailable", "0.1–0.25", "0.25–0.5", "|β| ≥ 0.5"] as const;
-export function elasticNetMagnitude(edge: { elasticNetBeta?: number | null; elasticNetReverseBeta?: number | null }): number | null {
-  const values = [edge.elasticNetBeta, edge.elasticNetReverseBeta].filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  return values.length ? Math.max(...values.map(Math.abs)) : null;
-}
-export function elasticNetStep(edge: Parameters<typeof elasticNetMagnitude>[0]) {
-  const v = elasticNetMagnitude(edge) ?? 0;
-  return v >= 0.5 ? 3 : v >= 0.25 ? 2 : v >= 0.1 ? 1 : 0;
-}
 
 export function evidenceStep(value: number | null | undefined) {
   const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -66,13 +56,13 @@ export function confidenceBand(value: number | null | undefined) {
  * only defining its symbols. Uses exactly the rules the canvas draws with. */
 export type FigureCounts = { width: number[]; confidence: number[]; hasConfidence: boolean; size: { min: number; max: number } };
 export function figureCounts(
-  edges: Array<{ score: number; count: number; confidence: number; bootstrapVerified?: boolean; elasticNetBeta?: number | null; elasticNetReverseBeta?: number | null }>,
+  edges: Array<{ score: number; count: number; confidence: number; bootstrapVerified?: boolean }>,
   widthBy: EdgeWidthBy, methodCount: number, sizeValues: number[],
 ): FigureCounts {
   const width = [0, 0, 0, 0], confidence = [0, 0, 0];
   let hasConfidence = false;
   for (const e of edges) {
-    width[widthBy === "elasticNet" ? elasticNetStep(e) : widthBy === "support" ? supportStep(e.count, methodCount) : evidenceStep(e.score)]++;
+    width[widthBy === "support" ? supportStep(e.count, methodCount) : evidenceStep(e.score)]++;
     if (e.bootstrapVerified === true) { hasConfidence = true; confidence[confidenceBand(e.confidence)]++; }
   }
   return { width, confidence, hasConfidence, size: { min: sizeValues.length ? Math.min(...sizeValues) : 0, max: sizeValues.length ? Math.max(...sizeValues) : 0 } };

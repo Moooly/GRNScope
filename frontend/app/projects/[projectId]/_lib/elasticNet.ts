@@ -1,25 +1,15 @@
-import type { NetworkEdge } from "../_components/networkGraphTypes";
-import { displayEndpoints, hasDirection } from "../_components/networkVisualEncoding";
-
-export type ElasticNetCoefficient = { source: string; target: string; beta: number | null; reason: string | null };
+export type ElasticNetPair = { source: string; target: string };
+export type ElasticNetCoefficient = ElasticNetPair & { beta: number | null; reason: string | null };
 export const elasticPairKey = (source: string, target: string) => JSON.stringify([source, target]);
 
-export function elasticNetPairs(candidates: NetworkEdge[]) {
+/** Trajectory arrows already specify regulator → target; never add a reverse fit. */
+export function elasticNetPairs(candidates: ElasticNetPair[]) {
   const pairs = new Map<string, { source: string; target: string }>();
-  for (const edge of candidates) {
-    const { source, target } = displayEndpoints(edge);
-    pairs.set(elasticPairKey(source, target), { source, target });
-    if (!hasDirection(edge)) pairs.set(elasticPairKey(target, source), { source: target, target: source });
+  for (const { source, target } of candidates) {
+    if (source !== target) pairs.set(elasticPairKey(source, target), { source, target });
   }
   return [...pairs.values()].sort((a, b) => elasticPairKey(a.source, a.target).localeCompare(elasticPairKey(b.source, b.target)));
 }
 
-export function attachElasticCoefficients<E extends NetworkEdge>(edges: E[], coefficients: Map<string, ElasticNetCoefficient>): E[] {
-  return edges.map(edge => {
-    const { source, target } = displayEndpoints(edge);
-    const forward = coefficients.get(elasticPairKey(source, target));
-    const reverse = !hasDirection(edge) ? coefficients.get(elasticPairKey(target, source)) : undefined;
-    return { ...edge, elasticNetBeta: forward?.beta, elasticNetReverseBeta: reverse?.beta,
-      elasticNetReason: forward?.reason ?? reverse?.reason ?? undefined };
-  });
-}
+export const betaText = (value: number | null | undefined) => typeof value !== "number" || !Number.isFinite(value) ? "—"
+  : value === 0 ? "0.000" : Math.abs(value) < 0.001 ? value.toExponential(2) : `${value > 0 ? "+" : ""}${value.toFixed(3)}`;

@@ -55,7 +55,7 @@ test("tables list the figure's edges strongest first, oriented regulator → tar
   const rows = linkRows(edges);
   assert.deepEqual(rows.map(r => [r.regulator, r.target]), [["SOX9", "DKK1"], ["SRY", "SOX9"], ["SOX9", "FGF9"]]);
   assert.equal(geneRows(nodes, edges)[0].gene, "SOX9");
-  assert.equal(linksCsv(edges).split("\n")[0], "regulator,target,effect,direction_resolved,evidence,bootstrap_confidence,methods_agreeing,methods,elastic_net_beta,elastic_net_reverse_beta");
+  assert.equal(linksCsv(edges).split("\n")[0], "regulator,target,effect,direction_resolved,evidence,bootstrap_confidence,methods_agreeing,methods");
 });
 
 test("the workbook has Edges, Genes and About sheets", async () => {
